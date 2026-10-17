@@ -204,12 +204,12 @@ FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view
 # own code raised (``model_error``), or the CAD kernel or library it called refused what it asked (``kernel_error``:
 # a fillet or a boolean that failed); cadgen refused what the model declared or returned, or what a command was
 # given (``refused``: raised on purpose in cadgen's code); the script did not compile (``script_error``); its
-# arguments were refused (``arguments``); a model it composes failed (``child_failed``). The machine's: a module
+# arguments were refused (``arguments``). The machine's: a module
 # that is not installed (``missing_module``), a file that is not there (``missing_file``), another file error -- a
 # file locked or unwritable, a full disk (``io_error``) -- or out of time (``timeout``) or memory (``memory``).
 # cadgen's: the kernel failed under cadgen's own code, writing or meshing what the model made (``export_error``),
 # or a mistake in cadgen's code (``bug``, reported as an ``exception`` too). ``other``: none of these.
-BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments", "child_failed",
+BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments",
                             "missing_module", "missing_file", "io_error", "timeout", "memory", "export_error", "bug",
                             "other"})
 # Why a snapshot failed (``snapshot_failure``), decided as it failed: its request was refused (``bad_request``), a
@@ -251,7 +251,7 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 # given (a model that failed, a file that is not there, an argument it cannot take). Where cadgen reports a
 # failure to the person anyway -- a build's, a command's -- only these are crashes, and only where Python
 # raised them in cadgen's own code: never at a ``raise`` (``_RAISED``), where cadgen says the person's
-# mistake in these words too ("@step returned a dict" is a TypeError). So cadgen code that takes what the
+# mistake in these words too ("@step must return a build123d Shape" is a TypeError). So cadgen code that takes what the
 # person gave it -- a value, a name to forward (``cadgen.build123d``) -- checks it and says so at a raise:
 # Python's error from using it unchecked would read as cadgen's own mistake.
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
@@ -388,7 +388,8 @@ def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> d
 
 
 # What an environment says (``_environment``): forwarded with every build a client asks the daemon for
-# (``cadgen.daemon.client.FORWARDED_ENV_VARS``), so a client's no holds for its builds there too.
+# (the client's environment travels whole, ``cadgen.daemon.client.forwarded_env``), so a client's no
+# holds for its builds there too.
 ENVIRONMENT = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
 
 
@@ -809,7 +810,7 @@ _BECAUSE = "__cadgen_failure__"
 # asked for the name, decided below.
 _BUILD_ERRORS: tuple[tuple[type[BaseException] | str, str], ...] = (
     (SyntaxError, "script_error"), (ModuleNotFoundError, "missing_module"), (FileNotFoundError, "missing_file"),
-    ("cadgen.assets.AssetMissing", "missing_file"), ("cadgen.store.lazy.ChildBuildError", "child_failed"),
+    ("cadgen.assets.AssetMissing", "missing_file"),
     (TimeoutError, "timeout"), (MemoryError, "memory"), (OSError, "io_error"))
 
 

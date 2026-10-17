@@ -8,6 +8,9 @@ export const TREE_ROW_HEIGHT = 24;
 export const TREE_ROW_DENSE_HEIGHT = 24;
 /** What each level of a tree adds to a row's indent: little, its rows hung from a faint line (`TreeRowGuides`). */
 export const TREE_INDENT_PX = 10;
+/** Where a row's glyph starts: centred under the filter row's search icon, and as far in from the row's left end as
+ * the icons of its actions sit from its right end (`treeRowActionsClass`). */
+export const TREE_ROW_INSET_PX = 5;
 /** A row's glyph — its disclosure chevron, its kind's icon — small and light, 12px. */
 export const TREE_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground/70';
 /** A kind icon's line: lighter than lucide's own, so the names carry the tree. */
@@ -20,7 +23,7 @@ export const TreeRowSurface = forwardRef(function TreeRowSurface({
   as: Component = 'div', active = false, cursor = false, dense = false, className, style, children, ...props
 }, ref) {
   return <Component ref={ref} className={cn(
-    'relative flex min-w-0 w-full items-center gap-1.5 rounded-md pr-2 text-left font-normal transition-colors', dense ? 'text-tiny' : 'text-xs',
+    'relative flex min-w-0 w-full items-center gap-1 rounded-md pr-2 text-left font-normal transition-colors', dense ? 'text-tiny' : 'text-xs',
     active ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
     cursor && !active && 'bg-accent/30', className
   )} style={{ height: dense ? TREE_ROW_DENSE_HEIGHT : TREE_ROW_HEIGHT, ...style }} {...props}>{children}</Component>;
@@ -57,7 +60,7 @@ export const ROW_NAME_UNDER_ACTIONS = {
 
 /** The actions' box over the row's right end: shown on hover or keyboard focus, and kept while one is on (`persistent`). */
 export function treeRowActionsClass(persistent) {
-  return cn('absolute inset-y-0 right-0 flex items-center pl-0.5 pr-1 transition-opacity',
+  return cn('absolute inset-y-0 right-0 flex items-center pl-0.5 pr-[3px] transition-opacity',
     persistent ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100');
 }
 

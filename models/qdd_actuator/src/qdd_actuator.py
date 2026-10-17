@@ -1016,220 +1016,107 @@ KINEMATICS = {
 }
 
 
-ANIMATION_JS = r'''// Choreography for the QDD actuator.
-//
-// Two clips: the drive train running at its 4.5:1 reduction, and the same
-// cycle while the stack separates into its documented exploded stations.
-// Choreography is deliberately independent of the model's mates: the ratios
-// below re-describe the same gear train in a few lines of arithmetic.
+# ---------------------------------------------------------------------------
+# Animation: clips sampled to keyframes when the model builds
+# ---------------------------------------------------------------------------
+# The drive train running at its 4.5:1 reduction, the same cycle while the
+# stack separates into its documented exploded stations, and a full teardown.
+# Animation knows nothing of the mates; it turns every member through the SAME
+# per-input-turn angles the "drive" coupling gears them with, and lifts each to
+# its EXPLODE_OFFSETS station, so nothing is restated. Groups are targeted by
+# name, like parts.
 
-const Z = [0, 0, 1];
-const ORIGIN = [0, 0, 0];
+# Rebase the stations so the lowest is 0: every part explodes upward or stays
+# put, relative spacing unchanged, and nothing sinks through the viewer floor.
+_FLOOR_LIFT = -min(EXPLODE_OFFSETS.values())
+# "Keep gear mesh" station: ring, sun and planets lift together as one meshed
+# cluster so the tooth engagement stays watchable; the carrier still lifts to
+# its own station so its plate does not cover the mesh.
+_GEAR_CLUSTER = 210.0
 
-const SUN_TEETH = 24;
-const PLANET_TEETH = 30;
-const RING_TEETH = 84;
-const REDUCTION_RATIO = 1 + RING_TEETH / SUN_TEETH; // 4.5:1, fixed ring
-const PLANET_CENTER_R = 27;
-const PLANET_Z = 14.5;
-const PLANET_ANGLES_DEG = [90, 210, 330];
 
-// 4.5 sun revolutions per cycle returns the carrier to exactly 360 deg. The
-// rotor/sun end 180 deg from start, which is invisible: every rotating part is
-// 180-deg symmetric, so the loop is seamless at tooth/pole phase.
-const DRIVE_CYCLE_DEG = REDUCTION_RATIO * 360;
-const BALL_CAGE_RATIO = 4 / 9;
-const ROLLER_CAGE_RATIO = 0.5;
+def _drive_train(m, turns: float, explode: float, keep_mesh: bool) -> None:
+    """One frame: ``turns`` input revolutions of the rotor, ``explode`` 0..1 of
+    the axial explosion, and with ``keep_mesh`` the planetary stage lifted as
+    one meshed cluster."""
+    rotor = turns * _ROTOR_DEG
+    carrier = turns * _CARRIER_DEG
 
-// Documented axial explosion stations (mm along Z at explode = 1), from the
-// model's own EXPLODE_OFFSETS, verified pairwise non-overlapping there.
-const STATION = {
-  connectorPower: -82,
-  connectorSignal: -82,
-  rearCover: -64,
-  driverPcb: -46,
-  encoderPcb: -32,
-  housing: 0,
-  encoderMagnetRing: 70,
-  rearBearing: 78,
-  stator: 94,
-  rotor: 128,
-  frontBearing: 154,
-  ringGear: 168,
-  sunGear: 196,
-  planetGear: 222,
-  carrier: 250,
-  crossRollerBearing: 280,
-  frontRetainer: 298,
-  retainerScrews: 312,
-  torqueSensor: 330,
-  outputFlange: 348,
-  cableTube: 360,
-};
+    def lift(station: str) -> tuple[float, float, float]:
+        return (0.0, 0.0, (EXPLODE_OFFSETS[station] + _FLOOR_LIFT) * explode)
 
-// Rebase so the lowest station is 0: every part explodes upward or stays put,
-// relative spacing unchanged, and nothing sinks through the viewer floor.
-const FLOOR_LIFT = -Math.min(...Object.values(STATION));
+    def gear_lift(station: str) -> tuple[float, float, float]:
+        return (0.0, 0.0, (_GEAR_CLUSTER + _FLOOR_LIFT) * explode) if keep_mesh else lift(station)
 
-// "Keep gear mesh" station: ring, sun, and planets lift together as one meshed
-// cluster so the tooth engagement stays watchable; the carrier still lifts to
-// its own station so its plate does not cover the mesh.
-const GEAR_CLUSTER = 210;
-const PLANET_RADIAL = 14;
+    # Input group: rotor bell and magnets, encoder target ring, sun gear.
+    m.get("#rotor").rotate(_Z, rotor).translate(lift("rotor"))
+    m.get("#encoder_magnet_ring").rotate(_Z, rotor).translate(lift("encoder_magnet_ring"))
+    m.get("#sun_gear").rotate(_Z, rotor).translate(gear_lift("sun_gear"))
 
-// Occurrence targets. Parts are named by label; groups (subassemblies) must be
-// named by occurrence id, which is what the label vocabulary cannot reach.
-const T = {
-  housing: "housing",
-  frontRetainer: "front_retainer",
-  retainerScrews: "#o1.4",
-  rearCover: "rear_cover",
-  connectorPower: "#o1.5",
-  connectorSignal: "#o1.6",
-  driverPcb: "#o1.7",
-  encoderPcb: "#o1.8",
-  encoderMagnetRing: "encoder_magnet_ring",
-  stator: "#o1.10",
-  rotor: "#o1.11",
-  rearInner: "inner_race:rear",
-  rearOuter: "outer_race:rear",
-  rearBalls: "#o1.12.3",
-  frontInner: "inner_race:front",
-  frontOuter: "outer_race:front",
-  frontBalls: "#o1.13.3",
-  sunGear: "sun_gear",
-  ringGear: "ring_gear",
-  carrier: "planet_carrier",
-  xrollerInner: "inner_ring",
-  xrollerOuter: "outer_ring",
-  xrollerRollers: "#o1.20.3",
-  torqueSensor: "#o1.21",
-  outputFlange: "output_flange",
-  cableTube: "cable_tube",
-};
+    # Rotor support bearings: inner races spin with the hub, ball rings orbit
+    # at cage speed, outer races stay seated in the housing sleeve.
+    for side in ("rear", "front"):
+        station = lift(f"rotor_bearing_{side}")
+        m.get(f"#inner_race:{side}").rotate(_Z, rotor).translate(station)
+        m.get(f"#balls:{side}").rotate(_Z, turns * _BALL_CAGE_DEG).translate(station)
+        m.get(f"#outer_race:{side}").translate(station)
 
-function planetCenter(angleDeg) {
-  const a = (angleDeg * Math.PI) / 180;
-  return [PLANET_CENTER_R * Math.cos(a), PLANET_CENTER_R * Math.sin(a), PLANET_Z];
+    # Planets: the mesh-relative spin about their own axis, a radial step out
+    # when exploded, then the orbit with the carrier. Successive calls
+    # PREMULTIPLY, so the spin and the radial step both ride the orbit.
+    radial = 0.0 if keep_mesh else PLANET_EXPLODE_RADIAL
+    rise = gear_lift("planet_gear")[2]
+    for i, psi in enumerate(PLANET_ANGLES_DEG, start=1):
+        a = math.radians(psi)
+        step_out = (math.cos(a) * radial * explode, math.sin(a) * radial * explode, rise)
+        planet = m.get(f"#planet_gear:p{i}").rotate(_Z, turns * _PLANET_DEG, _planet_center(psi))
+        planet.translate(step_out).rotate(_Z, carrier)
+
+    # Output group at carrier speed; the roller ring orbits at cage speed.
+    for name in ("planet_carrier", "torque_sensor", "output_flange"):
+        m.get(f"#{name}").rotate(_Z, carrier).translate(lift(name))
+    bearing = lift("cross_roller_bearing")
+    m.get("#inner_ring").rotate(_Z, carrier).translate(bearing)
+    m.get("#rollers").rotate(_Z, turns * _ROLLER_CAGE_DEG).translate(bearing)
+    m.get("#outer_ring").translate(bearing)
+
+    # Static members take their exploded station only.
+    m.get("#housing").translate(lift("housing"))
+    m.get("#ring_gear").translate(gear_lift("ring_gear"))
+    for name in ("stator", "front_retainer", "retainer_screws", "rear_cover"):
+        m.get(f"#{name}").translate(lift(name))
+    for kind in CONNECTOR_ANGLES:
+        m.get(f"#connector:{kind}").translate(lift(f"connector_{kind}"))
+    for name in ("driver_pcb", "encoder_pcb", "cable_tube"):
+        m.get(f"#{name}").translate(lift(name))
+
+
+def _drive(t: float, m) -> None:
+    # One closed cycle, 4.5 input turns run straight through: the carrier comes
+    # back to 360 deg and the rotor and sun end 180 deg from their start, which
+    # is invisible -- every rotating part is 180-deg symmetric, so the loop is
+    # seamless at tooth/pole phase.
+    _drive_train(m, _INPUT_TURNS * (t / 12.0), 0.0, keep_mesh=True)
+
+
+def _inspect(t: float, m) -> None:
+    phase = t / 12.0
+    _drive_train(m, _INPUT_TURNS * phase, math.sin(math.pi * phase), keep_mesh=True)
+
+
+def _teardown(t: float, m) -> None:
+    phase = t / 10.0
+    _drive_train(m, 0.0, math.sin(math.pi * phase), keep_mesh=False)
+
+
+ANIMATION = {
+    "drive": cadgen.clip(_drive, duration=12, label="Drive 4.5:1 reduction"),
+    "inspect": cadgen.clip(_inspect, duration=12, label="Exploded drive inspection"),
+    "teardown": cadgen.clip(_teardown, duration=10, label="Full teardown"),
 }
 
-function radialUnit(angleDeg) {
-  const a = (angleDeg * Math.PI) / 180;
-  return [Math.cos(a), Math.sin(a), 0];
-}
 
-/**
- * One frame of the drive train.
- *
- * @param m       the occurrence handle factory
- * @param drive   rotor/sun input angle in degrees
- * @param explode 0..1 axial explosion
- * @param keepMesh explode the planetary stage as one meshed cluster
- */
-function frame(m, drive, explode, keepMesh) {
-  const carrier = drive / REDUCTION_RATIO;
-  // Mesh-consistent planet spin about its own moving axis, relative to the
-  // carrier frame: the external sun/planet mesh reverses the relative rotation.
-  const planetSpin = -(SUN_TEETH / PLANET_TEETH) * (drive - carrier);
-  const ballOrbit = drive * BALL_CAGE_RATIO;
-  const rollerOrbit = carrier * ROLLER_CAGE_RATIO;
-
-  const lift = (key) => (STATION[key] + FLOOR_LIFT) * explode;
-  const gearLift = (key) => (keepMesh ? (GEAR_CLUSTER + FLOOR_LIFT) * explode : lift(key));
-  const planetRadial = keepMesh ? 0 : PLANET_RADIAL;
-
-  // Input group: rotor bell + magnets, encoder target ring, sun gear.
-  m.get(T.rotor).rotate(Z, drive, ORIGIN).translate([0, 0, lift("rotor")]);
-  m.get(T.encoderMagnetRing)
-    .rotate(Z, drive, ORIGIN)
-    .translate([0, 0, lift("encoderMagnetRing")]);
-  m.get(T.sunGear).rotate(Z, drive, ORIGIN).translate([0, 0, gearLift("sunGear")]);
-
-  // Rotor support bearings: inner races spin with the hub, ball rings orbit at
-  // cage speed, outer races stay seated in the housing sleeve.
-  for (const [inner, balls, outer, key] of [
-    [T.rearInner, T.rearBalls, T.rearOuter, "rearBearing"],
-    [T.frontInner, T.frontBalls, T.frontOuter, "frontBearing"],
-  ]) {
-    m.get(inner).rotate(Z, drive, ORIGIN).translate([0, 0, lift(key)]);
-    m.get(balls).rotate(Z, ballOrbit, ORIGIN).translate([0, 0, lift(key)]);
-    m.get(outer).translate([0, 0, lift(key)]);
-  }
-
-  // Planets: spin about their own axis, separate radially when exploded, then
-  // orbit the sun axis with the carrier. Successive calls PREMULTIPLY, so the
-  // spin and the radial offset both ride the orbit.
-  for (let i = 0; i < PLANET_ANGLES_DEG.length; i += 1) {
-    const psi = PLANET_ANGLES_DEG[i];
-    const radial = radialUnit(psi);
-    m.get(`planet_gear:p${i + 1}`)
-      .rotate(Z, planetSpin, planetCenter(psi))
-      .translate([
-        radial[0] * planetRadial * explode,
-        radial[1] * planetRadial * explode,
-        gearLift("planetGear"),
-      ])
-      .rotate(Z, carrier, ORIGIN);
-  }
-
-  // Output group at carrier speed; the roller ring orbits at cage speed.
-  m.get(T.carrier).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("carrier")]);
-  m.get(T.torqueSensor).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("torqueSensor")]);
-  m.get(T.outputFlange).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("outputFlange")]);
-  m.get(T.xrollerInner)
-    .rotate(Z, carrier, ORIGIN)
-    .translate([0, 0, lift("crossRollerBearing")]);
-  m.get(T.xrollerRollers)
-    .rotate(Z, rollerOrbit, ORIGIN)
-    .translate([0, 0, lift("crossRollerBearing")]);
-  m.get(T.xrollerOuter).translate([0, 0, lift("crossRollerBearing")]);
-
-  // Static members take their exploded station only.
-  m.get(T.housing).translate([0, 0, lift("housing")]);
-  m.get(T.ringGear).translate([0, 0, gearLift("ringGear")]);
-  m.get(T.stator).translate([0, 0, lift("stator")]);
-  m.get(T.frontRetainer).translate([0, 0, lift("frontRetainer")]);
-  m.get(T.retainerScrews).translate([0, 0, lift("retainerScrews")]);
-  m.get(T.rearCover).translate([0, 0, lift("rearCover")]);
-  m.get(T.connectorPower).translate([0, 0, lift("connectorPower")]);
-  m.get(T.connectorSignal).translate([0, 0, lift("connectorSignal")]);
-  m.get(T.driverPcb).translate([0, 0, lift("driverPcb")]);
-  m.get(T.encoderPcb).translate([0, 0, lift("encoderPcb")]);
-  m.get(T.cableTube).translate([0, 0, lift("cableTube")]);
-}
-
-export const clips = {
-  drive: {
-    label: "Drive 4.5:1 reduction",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      frame(m, ((t / 12) % 1) * DRIVE_CYCLE_DEG, 0, true);
-    },
-  },
-  inspect: {
-    label: "Exploded drive inspection",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      const phase = (t / 12) % 1;
-      frame(m, phase * DRIVE_CYCLE_DEG, Math.sin(phase * Math.PI), true);
-    },
-  },
-  teardown: {
-    label: "Full teardown",
-    duration: 10,
-    loop: true,
-    update(t, m) {
-      const phase = (t / 10) % 1;
-      frame(m, 0, Math.sin(phase * Math.PI), false);
-    },
-  },
-};
-'''
-
-
-@step(out="../STEP/qdd_actuator.step", kinematics=KINEMATICS, animation=ANIMATION_JS)
+@step(out="../STEP/qdd_actuator.step", kinematics=KINEMATICS, animation=ANIMATION)
 def qdd_actuator():
     return build_actuator(explode=0.0)
 

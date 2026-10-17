@@ -23,7 +23,7 @@ test("viewer render-state normalization preserves current theme and display beha
     clip: {
       enabled: true,
       axis: "z",
-      offset: 0.4,
+      at: 0.4,
       invert: true
     }
   };
@@ -38,7 +38,7 @@ test("viewer render-state normalization preserves current theme and display beha
   assert.deepEqual(state.clipSettings, normalizeStepClipSettings({
     enabled: true,
     axis: "z",
-    offset: 0.4,
+    at: 0.4,
     invert: true
   }));
 });

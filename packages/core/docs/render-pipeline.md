@@ -87,12 +87,13 @@ until explicitly supplied. Surface opacity multiplies authored source opacity;
 color modes change presentation without mutating authored materials.
 
 Clip keeps coordinates below its plane by default (`invert: false`); Flip keeps
-coordinates above it. Its offset remains measured from the bounds minimum to
-maximum regardless of Flip. The neutral boundary is therefore offset 1 normally,
-or offset 0 when flipped. Interactive viewers and snapshots share this policy;
-orbiting the camera never changes the clipped half. Clip coordinates use original
-model bounds in both snapshot and interactive paths; posing or exploding the
-model cannot silently change the plane represented by a slider/input value. A
+coordinates above it. The plane stands at `at`, a coordinate on its axis in the
+model's millimetres, or without one at the middle of the model at rest; Flip never
+moves it. Interactive viewers and snapshots share this policy;
+orbiting the camera never changes the clipped half. The default plane and the
+Clip amount are measured against the model at rest in both snapshot and
+interactive paths; posing or exploding the model cannot silently change the
+plane represented by a slider/input value. A
 snapshot cuts and caps with the viewer's own sync (`syncRuntimeStepClipPlane`,
 its plane measured against `restBounds`) on a renderer with local clipping on.
 
@@ -129,9 +130,10 @@ Lighting quality is `preview` or `final`, mapping to standard/high scene policy.
 The viewer passes `lightingQuality: "preview"`; the CLI baseline is `final`.
 That environment default also feeds Custom comparison and does not pin a saved
 override. An explicit `lighting.quality` wins in either context.
-Final uses the bounded L3 mesh rung, a 0.25px viewport target, 4096px spotlight
-shadows, a 512px procedural environment and 2x snapshot capture. Technical
-`quality.tessellation` and `output.renderScale` remain explicit overrides.
+Final uses 4096px spotlight shadows, a 512px procedural environment and 2x
+snapshot capture. Every still draws each part at its display mesh, which cadgen
+derived at its display tolerance (`cadgen.tessellation_policy`); the job names no
+tolerance. `output.renderScale` remains an explicit override.
 PNG output retains requested dimensions by resampling the full drawing buffer.
 
 The two studios use one physical Render pipeline. A neutral HDR key card, a rear
@@ -255,8 +257,8 @@ robot description's colour, else its link mesh's own).
 Snapshots use the same grouped display contract. Photographic lighting supports
 only the `view` capture mode. Camera,
 selection, clipping, exploded view, guides, part colour, animation, video,
-kinematics, robot joints, tessellation quality, per-output cameras and output
-sizing remain composable.
+kinematics, robot joints, per-output cameras and output sizing remain
+composable.
 
 Photographic lighting creates its WebGL renderer with
 `logarithmicDepthBuffer: false`. Three's logarithmic depth shader path does not
@@ -280,10 +282,7 @@ perspective camera every edge failed its depth test against the surfaces.
 ### `common/source.js`
 
 ```js
-import {
-  loadSource,
-  stepParameterRuntime
-} from "@text-to-cad/core/common/source.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
 ```
 
 `loadSource(input, options)` returns a normalized STEP render source:
@@ -293,45 +292,45 @@ import {
   kind,
   meshData,
   selectorRuntime,
-  displayEdgeRuntime,
-  stepParameterSource,
+  pose,        // {articulation, values} or null: what buildModel's stepParameters takes
+  animation,   // the baked animation section, or null
   resolved,
-  url,
-  glbUrl,
   cadPath
 }
 ```
 
 Accepted input fields:
 
-- `kind`: `step` or `stp`, or inferred from a URL. A GLB, STL, 3MF, URDF, SRDF
-  or SDF is refused by name: it is drawn by its own scene builder
+- `kind`: `step` or `stp`. A GLB, STL, 3MF, URDF, SRDF or SDF, named by its kind or
+  by a URL's extension, is refused by name: it is drawn by its own scene builder
   (`common/headlessScene.js`), never flattened into mesh data here.
-- `meshData`: already-loaded mesh data. If present, no mesh URL fetch is needed.
-- `glbUrl` or `resolved.glbUrl`: STEP/STP hidden GLB sidecar URL.
+- `package` or `resolved.package`: the document's tree (`descriptor`, as cadgen serves
+  it for display) and, off a static host, each component's mesh file (`meshUrls`,
+  which `packageSourceFromBaseUrl` maps from a package directory). Each component is
+  drawn from its part's stored mesh, composed in world space. A component cadgen
+  could not mesh carries why (`failure`) and is left out on its own, as the viewer's
+  progressive loader leaves out a component whose part failed (`componentFailed`):
+  the rest are drawn, and only when every component failed is the first failure the
+  load's. A snapshot job always carries one.
+- `meshData`: already-loaded mesh data, in place of a package.
 - `cadPath` or `resolved.inputPath`: CAD path used by STEP selectors.
-- A caller that passes a `resolved` packet together with any source URL must also pass
-  `resolved.inputPath`. Render asset caches are page-lifetime, so a resolved job has to name the
-  source its cache entries belong to; a resolved job without `inputPath` is rejected rather than
-  cached under an unidentified source. Callers with no `resolved` packet (the interactive viewer and
-  the docs hero renderer) render one source per page and need nothing.
-- `selectorRuntime` and `displayEdgeRuntime`: preloaded runtimes when a caller
-  already owns sidecar loading.
-- `kinematics`: pose values for the model's kinematics — a declared preset name,
-  or `{dof: value}`. Same spelling as the `--kinematics` flag, the snapshot job
-  key and the sidecar section.
-- `stepParameterUrl` or `resolved.stepParameterUrl`: model sidecar
-  (`.step.json`) URL, whose `kinematics` section is compiled here.
-- `quality.tessellation`: explicit STEP tolerances in every preset. When
-  omitted, enabled `display.lighting.quality` selects the bounded preview/final
-  mesh rung.
+- `selectorRuntime`: a selector runtime the caller already holds; `loadSource`
+  composes none.
+- `articulation` or `resolved.articulation`: cadgen's articulation of the model's
+  kinematics (`cadgen.articulation`), and `controls` or `resolved.controls`: the
+  control vector to pose it at, which cadgen resolved from the job's `kinematics`
+  (a preset name or `{dof: value}`) and validated. A model with no articulation
+  and control values is refused. Together they are the source's `pose`.
+- `sourceAnimation` or `resolved.animation`: the model's baked animation section,
+  which the source carries as it is (`loadSourceAnimation` compiles it). A job's own
+  top-level `animation` is its frame request, not the section.
 
 STEP-only options are rejected for non-STEP sources. The old shared `params`
 field is rejected, and so is the retired `stepParameters` spelling; use
 `kinematics`.
 
-Use `stepParameterRuntime(stepParameterSource)` to turn the loaded parameter
-source into the runtime object `buildModel` accepts.
+A source's `pose` (`{articulation, values}`, or null) is the `stepParameters`
+object `buildModel` accepts.
 
 ### `common/cadScene.js`
 
@@ -389,9 +388,9 @@ Common settings:
   filter rendered parts before records are built. Viewer-only fields such as
   `selectedPartIds`, `hiddenPartIds`, and `showEdges` affect visual state.
 - `clip`: normalized clip-plane settings.
-- `stepParameters`: compiled kinematics runtime object, from
-  `stepParameterRuntime()`.
-- `parameterSetup`: set `false` to skip sidecar setup lifecycle calls.
+- `stepParameters`: the pose, `{articulation, values}` (a source's `pose`):
+  cadgen's articulation at a control vector, which the one effects pass plays
+  (`applySceneState`) before a clip's frame is merged over it.
 - `renderPartsIndividually`: build per-part records instead of a whole mesh.
 - `edgeRendering`: declarative edge rendering configuration.
 
@@ -444,14 +443,14 @@ loading the photographic studio.
 `resolveDisplayMaterialSettings()` applies the shared Original, Single color
 and Color by part policy without app state.
 
-**Scene geometry is the tessellator's INDEXED output.** A surf component's
-`meshData` shares the tessellation's vertex, normal and index buffers by
-reference (a decoded `.tess` cache entry is copied out of its one entry
-buffer) and is never expanded per triangle corner.
+**Scene geometry is the stored mesh's INDEXED arrays.** A component's
+`meshData` takes the vertex, normal and index buffers of the mesh cadgen made
+(copied out of the decoded GLB body's one buffer, its u16 indices widened to
+u32) and is never expanded per triangle corner.
 
-**CAD edges are not a surface shader.** `surfMeshData.js` emits indexed line
+**CAD edges are not a surface shader.** `partMeshData.js` emits indexed line
 segments (`cadEdgePositions` + `cadEdgeIndices` + `cadEdgeClassRanges`, from
-the same tessellation's boundary polylines, ~1.5 bytes per surface triangle)
+the same mesh's edge table and points, ~1.5 bytes per surface triangle)
 and `cadScene.js` draws them as ONE instanced screen-space line draw per
 component (`cadEdgeInstances.js`): the instances are every (segment,
 occurrence) pair, decoded in the vertex shader from a per-component segment
@@ -495,8 +494,8 @@ draw call (+1 while any occurrence is highlighted).
 
 **One upload per component.** Geometry built from a shared component is cached
 on the component object (`part.sourceMesh`), never on the composed package
-`meshData`: a package is re-composed on every progressive publish and LOD swap,
-and every occurrence, publish and swap reuses the one upload. A publish of the
+`meshData`: a package is re-composed on every progressive publish, and every
+occurrence and publish reuses the one upload. A publish of the
 same model reaches the live scene through `api.update({ source })`, which
 reconciles records by occurrence id — records already on screen keep their
 mesh, materials, visual and deformation state and BVH; only new occurrences are
@@ -506,8 +505,8 @@ positions or normals acquire writable attributes before deforming them;
 material refreshes leave component data unchanged. This keeps large assemblies
 from duplicating these buffers for display. Assemblies keep geometry in their
 component buffers; they allocate no combined copy of all positions, normals and
-indices. Rendering and section views visit the placed components directly, and
-the Viewer accepts that component geometry.
+indices. Rendering visits the placed components directly, and the Viewer
+accepts that component geometry.
 
 ### `common/renderModel.js`
 
@@ -567,15 +566,14 @@ import {
   renderJobContext,
   modelOptionsForRenderJob,
   renderModel,
-  captureModel,
-  renderMeshJob
+  captureModel
 } from "@text-to-cad/core/common/renderMeshScene.js";
 ```
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
 snapshot-owned output policy: display, camera, quality, scene scale, outputs,
 STEP topology edge visibility, and warnings. Studio scene quality comes from enabled
-`display.lighting.quality`; `job.quality` contains technical tessellation only. A
+`display.lighting.quality`. A
 family scene passes `{ bounds }` for `meshData`; its job's kind resolves the view
 features, and anything but a STEP gets the viewer's `EDGELESS_VIEW_FEATURES` (no edges,
 clip or explode).
@@ -618,18 +616,16 @@ that rest box.
 `captureModel(viewport, { job })` returns data only:
 
 - `mode: "view"`: PNG data URLs in `outputs`.
-- `mode: "section"`: PNG data URLs or SVG text in `outputs`.
-- `mode: "list"`: part list and bounds. A CAD model lists its composed part
-  occurrences; a family scene lists what it drew, one row per mesh, in its scene
-  graph's order (a robot's scene attaches a link's meshes before the joints it
-  carries, so its rows run down the tree from the root).
+- `mode: "list"`: a family scene's part list and bounds: what it drew, one row
+  per mesh, in its scene graph's order (a robot's scene attaches a link's meshes
+  before the joints it carries, so its rows run down the tree from the root).
+
+A STEP model's list is cadgen's facts and never reaches this module: cadgen
+answers `--mode list` from the tree and the store (`cadgen.snapshot_parts`).
 
 It does not write files. The CAD skill snapshot CLI writes the returned data to
 disk. Consumers use compiled `@text-to-cad/core` exports; generated snapshot browser assets
 bundle this entrypoint into cadgen's packaged runtime (`cadgen/_runtime/browser`).
-
-`renderMeshJob(meshData, job)` is a compatibility wrapper that builds a context,
-builds a model, renders/captures it, and disposes owned resources.
 
 ### `common/headlessScene.js`
 
@@ -639,8 +635,11 @@ STL and 3MF; URDF, SRDF and SDF), or null for a STEP document. A family is
 `{ load(job, { resources }), build(THREE, loaded, job), release(loaded) }`, each a call to
 the module the viewer's renderer calls: `loadRenderGlbDocument` + `createGlbScene`,
 `loadRenderMeshByUrl` + `buildMeshScene`, `loadRobot` + `createRobotScene`. A robot is
-posed as it is built, at `robotOpeningPose` (every joint's default, then an SRDF's `home`
-group state: where the viewer opens it) with the job's `jointValues` on top.
+drawn from the payload cadgen resolved for it (`resolved.robot`: the articulation, the
+visuals at their rest placements, each mesh by a URL the snapshot's asset server answers)
+and posed as it is built, at the articulation's opening (every control at rest, then an
+SRDF's `home` group state: where the viewer opens it) with the job's `resolved.controls` on
+top — the `--joint-values` as cadgen validated them against the articulation.
 
 `headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings))` dresses the
 scene exactly as the viewer's viewport dresses one it adopts, with the look
@@ -664,13 +663,10 @@ Two names, two things, and they are not interchangeable:
   Animation envelopes (`animate`, `fps`, `durationSeconds`, `duration`, `loop`)
   are retired and throw: a still renders one frame at the given values.
 
-* `stepParameters` is the compiled RUNTIME OBJECT that `buildModel()` takes,
-  produced by `stepParameterRuntime(source.stepParameterSource)`.
-
-`common/stepParameters.js` validates the pose values against the loaded
-definition and normalizes defaults.
-`loadSource()` uses it to populate `source.stepParameterSource`; callers then
-pass `stepParameterRuntime()` into `buildModel()`.
+* `stepParameters` is the POSE that `buildModel()` takes: `source.pose`,
+  `{articulation, values}` — cadgen's articulation at the control vector cadgen
+  resolved the job's `kinematics` into (`resolved.controls`), every control
+  present and within its limits (`common/articulation.js`).
 
 ## Examples
 
@@ -678,23 +674,27 @@ Interactive viewer/docs usage:
 
 ```js
 import * as THREE from "three";
-import { loadSource, stepParameterRuntime } from "@text-to-cad/core/common/source.js";
+import { loadSource, packageSourceFromBaseUrl } from "@text-to-cad/core/common/source.js";
 import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 
+// A static package: its tree beside each component's mesh. `articulation` and
+// `sourceAnimation` are what cadgen resolved the model's sidecar into: a catalog entry's,
+// a snapshot job's `resolved`, or a static package's files.
+const descriptor = await (await fetch("/models/part/assembly.json")).json();
 const source = await loadSource({
-  kind: "step",
-  glbUrl: "/models/.part.step.glb",
-  sourceSidecarUrl: "/models/part.step.json",
+  ...packageSourceFromBaseUrl("/models/part", descriptor),
   cadPath: "models/part.step",
-  kinematics: { drive: 180 }
+  articulation,
+  controls: { drive: 180 },
+  sourceAnimation
 });
 
 const model = buildModel(THREE, source, {
   theme,
   displayMode: "shaded_edges",
   edgeSettings,
-  stepParameters: stepParameterRuntime(source.stepParameterSource)
+  stepParameters: source.pose
 });
 
 const viewport = renderModel(THREE, model, {

@@ -50,7 +50,7 @@ test("Axes and Grid share their default color in both appearances", () => {
 });
 
 test("Custom compares effective preset values and excludes model tools", () => {
-  const tools = { clip: { enabled: true, offsets: { x: 0.2 } }, exploded: { enabled: true, amount: 0.5 } };
+  const tools = { clip: { enabled: true, at: 0.2 }, exploded: { enabled: true, amount: 0.5 } };
   assert.equal(viewSettingsAreCustom({ mode: "solid", ...tools }), false);
   assert.equal(viewSettingsAreCustom({ mode: "solid", surfaces: { opacity: 1 } }), false);
   assert.equal(viewSettingsAreCustom({ mode: "solid", appearance: "dark" }, { appearance: "dark" }), false);
@@ -81,18 +81,35 @@ test("snapshot public boundary rejects removed camera fields and explicit null d
   ]) assert.throws(() => renderJobContext(mesh(), job));
 });
 
-test("public scalar clip reaches the correct geometric plane and inversion", () => {
+test("a clip is placed at its coordinate in millimetres, else through the middle", () => {
   const bounds = { min: [-10, 2, 100], max: [30, 12, 200] };
+  const modelOffset = new THREE.Vector3(5, 5, -150);
   for (const invert of [false, true]) {
-    const view = resolveViewSettings({ clip: { enabled: true, axis: "z", offset: 0.25, invert } });
-    const plane = buildStepClipPlane(THREE, view.clip, bounds);
-    assert.equal(plane.distanceToPoint(new THREE.Vector3(0, 0, 125)), 0);
-    assert.equal(Math.sign(plane.distanceToPoint(new THREE.Vector3(0, 0, 150))), invert ? 1 : -1);
+    const view = resolveViewSettings({ clip: { axis: "z", at: 137.5, invert } });
+    assert.equal(view.clip.enabled, true, "a supplied clip cuts");
+    const plane = buildStepClipPlane(THREE, view.clip, bounds, modelOffset);
+    assert.equal(plane.distanceToPoint(new THREE.Vector3(0, 0, 137.5 - 150)), 0);
+    assert.equal(Math.sign(plane.distanceToPoint(new THREE.Vector3(0, 0, 160 - 150))), invert ? 1 : -1,
+      "the lower side is kept unless inverted");
+    const middle = buildStepClipPlane(THREE, resolveViewSettings({ clip: { axis: "z", invert } }).clip, bounds, modelOffset);
+    assert.equal(middle.distanceToPoint(new THREE.Vector3(0, 0, 150 - 150)), 0);
   }
-  const neutral = resolveViewSettings({ clip: { enabled: true, axis: "z", offset: 1 } });
-  assert.equal(buildStepClipPlane(THREE, neutral.clip, bounds), null, "maximum offset keeps the default side without a shader plane");
-  const defaultZero = resolveViewSettings({ clip: { enabled: true, axis: "z", offset: 0 } });
-  assert.equal(buildStepClipPlane(THREE, defaultZero.clip, bounds).distanceToPoint(new THREE.Vector3(0, 0, 150)), -50);
+  const middleX = resolveViewSettings({ clip: {} }).clip;
+  assert.equal(buildStepClipPlane(THREE, middleX, bounds).distanceToPoint(new THREE.Vector3(10, 0, 0)), 0, "{} halves it along x");
+  assert.equal(resolveViewSettings({}).clip.enabled, false, "no clip at all is no clip");
+  assert.equal(buildStepClipPlane(THREE, { axis: "z", at: 120 }, null).distanceToPoint(new THREE.Vector3(0, 0, 120)), 0,
+    "a placed plane needs no bounds");
+  assert.equal(buildStepClipPlane(THREE, { axis: "z", at: 0 }, bounds).distanceToPoint(new THREE.Vector3(0, 0, 150)), -150,
+    "below the model it cuts everything away");
+});
+
+test("a plane that cuts nothing activates no clipping", () => {
+  const bounds = { min: [-10, 2, 100], max: [30, 12, 200] };
+  assert.equal(buildStepClipPlane(THREE, { axis: "z", at: 200 }, bounds), null, "at the top, keeping the lower side");
+  assert.equal(buildStepClipPlane(THREE, { axis: "z", at: 250 }, bounds), null, "past the top");
+  assert.equal(buildStepClipPlane(THREE, { axis: "z", at: 100, invert: true }, bounds), null, "at the bottom, inverted");
+  assert.ok(buildStepClipPlane(THREE, { axis: "z", at: 200, invert: true }, bounds));
+  assert.equal(buildStepClipPlane(THREE, { enabled: false, axis: "z", at: 150 }, bounds), null);
 });
 
 test("default grouped edges preserve the original class palette in both appearances", () => {

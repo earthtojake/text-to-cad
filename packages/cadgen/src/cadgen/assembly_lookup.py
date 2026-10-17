@@ -1,33 +1,26 @@
-"""Selector resolution across a component package's INSTANCE TREE.
+"""Selector resolution across a tree's INSTANCE TREE.
 
-An assembly is described by two artifacts that answer different questions, and until this module
-they disagreed about what an occurrence is:
+An assembly is described by two artifacts that answer different questions:
 
-* ``assembly.json`` -- the materialized tree. Knows the instance tree: 160 occurrences for
-  ``tom_v2``, ids ``o1.1.1``/``o1.12``/``o1.11.7.1.1.1.2``, each naming a component and carrying
-  its placement. This is what ``snapshot --mode list`` enumerates and what the CAD Viewer hands
+* ``assembly.json`` -- the flattened tree. Knows the instance tree: 160 occurrences for
+  ``tom_v2``, each named by its token (``o:…``), each naming a component and carrying its
+  placement. This is what ``snapshot --mode list`` enumerates and what the CAD Viewer hands
   the user when they click a part.
-* the flat selector index -- historically a ``topology.glb`` sidecar extracted from the COMPOSED
-  compound (now synthesized from the per-component ``.surf`` files). A compound has no instance
-  tree, so it flattens to ONE occurrence (``o1``) holding every solid: 162 shapes, 13866 faces,
-  in a single namespace ``o1.s1``/``o1.f19``.
+* each component's selector table -- ``components/<cid>.selectors.json``, one of its part's
+  two objects (``_internal/selector_table``, ``store.parts``) and the same table the CAD Viewer
+  reads. It knows the component's own topology: every face, edge and vertex with its name
+  (``f:…``, ``e:…``, ``v:…``), its facts and its adjacency, placed nowhere.
 
-``lookup.build_selector_index`` reads the second. So every ref the first hands out -- every ref a
-user can actually pick -- resolved to an error, and ``inspect refs --facts`` reported
-``occurrenceCount: 1`` for a 160-part assembly (issue 0b in tom-cad's FEEDBACK.md). The user's
-workaround was to re-identify each face by area and position in the owning part's own namespace,
-which is guesswork whenever a part appears at more than one occurrence.
-
-The fix needs no new data. Each occurrence names a component, and each ``components/<cid>.surf``
-already carries that part's own complete topology -- the yoke's component has its 66 faces sitting
-there unused. So this module ADDS the instance-tree occurrences to the flat index rather than
-replacing it: ``#o1.f19`` keeps resolving exactly as before, and ``#o1.12`` starts resolving.
+This module composes the two: for each occurrence, its component's rows placed into world
+coordinates and keyed by ``<occurrence token>/<element name>`` -- the one composition rule,
+which the page applies to the same table (``selectors/runtime.js``). So a ref the viewer shows
+resolves here to the entity it names there, and a ref copied from a build's preview resolves
+against the saved document: the saved document's components are the preview's (README law 20).
 
 Coordinates are WORLD AT REST: occurrence transforms applied, parameter-sidecar poses not.
 That is the frame the viewer shows when the ref is picked and the frame ``snapshot --mode list``
-already reports its bounds in, so the two tools now agree. Reporting component-local coordinates
-instead would recreate the frame confusion that FEEDBACK.md P2 documents costing a wrong edit and
-a full revert.
+already reports its bounds in, so the two tools agree. Reporting component-local coordinates
+instead would recreate a frame confusion that has cost a wrong edit and a full revert.
 """
 
 from __future__ import annotations
@@ -37,6 +30,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from cadgen.cad_ref_syntax import element_ref
 from cadgen.lookup import SelectorIndex
 
 COMPONENTS_DIRNAME = "components"
@@ -108,15 +102,14 @@ def transform_bbox(matrix: list[float], bbox: object) -> dict[str, list[float]] 
 # uniform across surface and curve types: a plane and a cylinder both carry `origin`/`axis`, a
 # line carries `origin`/`direction`, and a cylinder's `radius` is a length that a rigid transform
 # does not change. Anything unlisted is carried through untouched, which is right for ordinals,
-# counts, flags and areas -- and is why `params` is transformed key-by-key rather than wholesale.
+# counts, flags and lengths -- and is why `params` is transformed key-by-key rather than wholesale.
 #
 # The param key sets are the COMPLETE vocabulary of `step_scene_geometry._curve_params` and
-# `_surface_params`, which is what writes the `params` this places (and the same set
-# `step_scene_geometry._transform_param_dict` classifies). A point is spelled `origin`
+# `_surface_params`, which is what writes the `params` this places. A point is spelled `origin`
 # (plane/cylinder/cone/line) or `center` (circle/ellipse/hyperbola/parabola/sphere/torus),
 # never both, so a list that knows only one spelling silently leaves half the analytic types
-# in component-local coordinates -- which is what sent `inspect measure` between a circular
-# edge and a line 37 mm apart on an axis where they touch (tom-cad FEEDBACK issue 2). Any new
+# in component-local coordinates -- which is what once measured a circular edge and a line
+# 37 mm apart on an axis where they touch (tom-cad FEEDBACK issue 2). Any new
 # analytic type must land in one of these lists or be a scalar; that is the review question.
 _POINT_FIELDS = ("center",)
 _POINT_PARAM_KEYS = ("origin", "center", "location")
@@ -145,8 +138,8 @@ def _transform_params(matrix: list[float], params: object) -> object:
 
     Leaving these in component-local coordinates while `center` and `bbox` are placed would be
     the worst of both: a cylinder whose centre is in the assembly and whose axis origin is in the
-    part, with nothing in the payload saying so. That is the frame mismatch FEEDBACK.md P2 charges
-    a wrong edit and a full revert to.
+    part, with nothing in the payload saying so: a frame mismatch that has cost a wrong edit and
+    a full revert.
     """
     if not isinstance(params, Mapping):
         return params
@@ -169,7 +162,7 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
     would publish a component-local coordinate in a row whose every other number is in assembly
     space, with nothing marking which is which -- and it would be the same object shared by every
     occurrence of that component, so the two identical spacers would report one position. The
-    frames must not mix silently; that is what FEEDBACK.md P2 cost a wrong edit and a revert.
+    frames must not mix silently; mixing them has cost a wrong edit and a revert.
     """
     placed = dict(row)
     for field in _POINT_FIELDS:
@@ -197,21 +190,22 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
     return placed
 
 
-def _read_component_bundle(package_dir: Path, component: str):
-    """A component's topology bundle, from its exact-surface artifact.
-    Pre-surf packages fail the schema gate and rebuild before ever reaching
-    here, so .surf is the only form."""
-    surf_path = package_dir / COMPONENTS_DIRNAME / f"{component}.surf"
-    if not surf_path.is_file():
+def _read_component_table(package_dir: Path, component: str) -> dict[str, Any] | None:
+    """A component's selector table, as the view carries it (``store.view``): the
+    one table the page reads too, so a ref resolves here to the entity it names
+    there. None when the view holds none or it does not read."""
+    from cadgen._internal.selector_table import read_selector_table
+    from cadgen.store.view import SELECTOR_TABLE_SUFFIX
+
+    path = package_dir / COMPONENTS_DIRNAME / f"{component}{SELECTOR_TABLE_SUFFIX}"
+    try:
+        return read_selector_table(path.read_bytes())
+    except (OSError, ValueError):
         return None
-    from cadgen._internal.surf_tables import read_component_topology_bundle
-
-    return read_component_topology_bundle(surf_path)
 
 
-def _component_occurrence_bbox(bundle: object) -> object:
+def _component_occurrence_bbox(manifest: object) -> object:
     """The component's own root-occurrence bbox, in component-local coordinates."""
-    manifest = getattr(bundle, "manifest", None)
     if not isinstance(manifest, Mapping):
         return None
     columns = manifest.get("tables")
@@ -226,20 +220,69 @@ def _component_occurrence_bbox(bundle: object) -> object:
     return row.get("bbox")
 
 
+def _tree_nodes(descriptor: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], str | None]]:
+    """Every node of the descriptor's assembly tree with its parent's id, in tree order."""
+    root = descriptor.get("assembly")
+    root = root.get("root") if isinstance(root, Mapping) else None
+    if not isinstance(root, Mapping):
+        return []
+    found: list[tuple[Mapping[str, Any], str | None]] = []
+    stack: list[tuple[Mapping[str, Any], str | None]] = [(root, None)]
+    while stack:
+        node, parent = stack.pop()
+        found.append((node, parent))
+        node_id = str(node.get("id") or "").strip() or None
+        children = node.get("children")
+        children = [child for child in children if isinstance(child, Mapping)] if isinstance(children, list) else []
+        stack.extend((child, node_id) for child in reversed(children))
+    return found
+
+
+def assembly_group_members(descriptor: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Every tree node's leaf occurrences by token, in tree order, the root first (a leaf's
+    are itself): what a group ref covers. The tree's ``leafPartIds`` where the node carries
+    them, its leaves walked otherwise."""
+    members: dict[str, list[str]] = {}
+
+    def visit(node: Mapping[str, Any]) -> list[str]:
+        node_id = str(node.get("id") or "").strip()
+        if node_id:
+            members[node_id] = []  # entered now, so the mapping is in tree order, a node before its children
+        children = [child for child in node.get("children") or [] if isinstance(child, Mapping)]
+        declared = node.get("leafPartIds")
+        if children:
+            found: list[str] = []
+            for child in children:
+                found.extend(visit(child))
+            leaves = [str(leaf) for leaf in declared] if isinstance(declared, list) and declared else found
+        else:
+            leaves = [node_id] if node_id else []
+        if node_id:
+            members[node_id] = leaves
+        return leaves
+
+    root = descriptor.get("assembly")
+    root = root.get("root") if isinstance(root, Mapping) else None
+    if isinstance(root, Mapping):
+        visit(root)
+    return members
+
+
 def assembly_occurrence_rows(
     descriptor: Mapping[str, Any],
     package_dir: Path | None,
 ) -> list[dict[str, Any]]:
-    """Instance-tree occurrences as selector-index rows, in world coordinates at rest.
+    """Instance-tree occurrences as selector-index rows, in world coordinates at rest, in the
+    descriptor's order: each leaf's token (``id``), name, the token of the node above it
+    (``parentId``, None for a root leaf), placement, placed box and component.
 
-    Column names mirror the topology sidecar's ``occurrenceColumns`` so that consumers written
-    against that table (``entry_summary``, ``reporting``) need no special case for assemblies.
-    With ``package_dir`` None no component's ``.surf`` is read and no row has a ``bbox``: the
+    With ``package_dir`` None no component's table is read and no row has a ``bbox``: the
     rows are the occurrence namespace alone, what a kinematics mate's ends resolve in.
     """
     rows = descriptor.get("occurrences")
     if not isinstance(rows, list):
         return []
+    parents = {str(node.get("id") or ""): parent for node, parent in _tree_nodes(descriptor)}
     bbox_by_component: dict[str, object] = {}
     materialized: list[dict[str, Any]] = []
     for entry in rows:
@@ -255,85 +298,44 @@ def assembly_occurrence_rows(
             if component not in bbox_by_component:
                 # Deduped by content hash: tom_v2 has 160 occurrences over 65 components, and
                 # the whole set reads in well under a second.
-                bundle = _read_component_bundle(package_dir, component) if package_dir is not None else None
-                bbox_by_component[component] = _component_occurrence_bbox(bundle)
+                table = _read_component_table(package_dir, component) if package_dir is not None else None
+                bbox_by_component[component] = _component_occurrence_bbox(table)
             local_bbox = bbox_by_component[component]
         materialized.append(
             {
                 "id": occurrence_id,
-                "path": occurrence_id,
                 "name": str(entry.get("name") or occurrence_id),
                 "sourceName": str(entry.get("name") or occurrence_id),
-                "parentId": occurrence_id.rpartition(".")[0] or None,
+                "parentId": parents.get(occurrence_id),
                 "transform": matrix,
                 "bbox": transform_bbox(matrix, local_bbox),
                 "component": component or None,
-                # Entity ranges belong to phase 2; a reader must not mistake 0 for "has none".
-                "shapeStart": 0,
-                "shapeCount": 0,
-                "faceStart": 0,
-                "faceCount": 0,
-                "edgeStart": 0,
-                "edgeCount": 0,
             }
         )
     return materialized
 
 
-def _component_index(package_dir: Path, component: str, cache: dict[str, Any]) -> Any:
-    """The component's own selector index, loaded once per content hash.
+def _component_rows(package_dir: Path, component: str, cache: dict[str, Any]) -> dict[str, list[dict[str, Any]]] | None:
+    """The component's own table rows by kind, loaded once per content hash.
 
     tom_v2 places 160 occurrences over 65 distinct components, so the cache is most of the cost:
     the whole set reads in about 0.2 s.
     """
     if component in cache:
         return cache[component]
-    from cadgen.lookup import build_selector_index
+    from cadgen.lookup import _table_rows
 
-    bundle = _read_component_bundle(package_dir, component)
-    manifest = getattr(bundle, "manifest", None)
-    built = None
-    if isinstance(manifest, Mapping):
-        built = build_selector_index(dict(manifest), buffers=getattr(bundle, "buffers", None))
-    cache[component] = built
-    return built
-
-
-def _entity_id(occurrence_id: str, local_id: object, kind: str, ordinal: object) -> str | None:
-    """``o1.f19`` inside a component becomes ``o1.12.f19`` in the assembly.
-
-    Prefers the row's own ordinal over re-parsing its id, so the assembly ref keeps the number
-    the component's own namespace uses -- which is what makes a translated ref checkable by hand
-    against the part file, the exact step users were doing manually.
-
-    None when neither an ordinal nor a suffix is available. Naming it ``o1.12.f`` instead would
-    be a selector that cannot be parsed AND that every unnamed row of that component would
-    share, so the first would silently stand in for the rest.
-    """
-    if ordinal is not None:
-        try:
-            return f"{occurrence_id}.{kind}{int(ordinal)}"
-        except (TypeError, ValueError):
-            pass
-    _, _, suffix = str(local_id or "").rpartition(".")
-    return f"{occurrence_id}.{suffix}" if suffix else None
-
-
-def _rebase(row: dict, field: str, offset: int) -> None:
-    """Shift a range field that indexes a list we are concatenating into."""
-    if field in row:
-        try:
-            row[field] = offset + int(row[field] or 0)
-        except (TypeError, ValueError):
-            row[field] = offset
-
-
-# Offsets into the component's OWN proxy buffers (mesh triangles, edge polylines, surface
-# half-edges). The merged index carries the flat assembly's buffers, not the component's, so a
-# start copied across points into unrelated data. Dropped rather than rebased: there is nothing
-# in this index for them to point AT. Absent raises a KeyError at the reader; stale silently
-# returns the wrong triangles.
-_BUFFER_START_FIELDS = ("triangleStart", "segmentStart", "surfaceHalfEdgeStart")
+    table = _read_component_table(package_dir, component)
+    rows = None
+    if table is not None:
+        rows = {
+            "shapes": _table_rows(table, "shapes", "shapeColumns"),
+            "faces": _table_rows(table, "faces", "faceColumns"),
+            "edges": _table_rows(table, "edges", "edgeColumns"),
+            "vertices": _table_rows(table, "vertices", "vertexColumns"),
+        }
+    cache[component] = rows
+    return rows
 
 
 def merge_assembly_entities(
@@ -341,19 +343,17 @@ def merge_assembly_entities(
     descriptor: Mapping[str, Any],
     package_dir: Path,
 ) -> SelectorIndex:
-    """Add each occurrence's shapes/faces/edges/vertices, placed into world coordinates.
+    """Add each occurrence's faces, edges and vertices, placed into world coordinates.
 
-    This is what makes a ref picked in the viewer measurable: `#o1.12.f19` is face 19 of that
-    occurrence's component, and until now only the flat whole-assembly namespace resolved, whose
-    numbering does not agree with the component's (FEEDBACK.md: "the assembly's f18 is the wall's
-    face; the part's f18 is a 17.085 mm2 cylinder").
-
-    Every id and every RANGE is re-based as the tables concatenate. A component's rows index its
-    own tables: a face's `edgeStart` points into that component's faceEdgeRows, a shape's
-    `faceStart` slices that component's face list, an edge's `shapeId` names that component's
-    solid. Copied across unchanged they all still resolve -- against the wrong thing, which is
-    worse than not resolving. `#o1.12.f19` reported `shapeId s1`, and `s1` in the merged index is
-    a solid 40 mm away.
+    This is what makes a ref picked in the viewer measurable: ``#o:…/f:…`` is the face of that
+    occurrence's component whose name that is. The components themselves are kept, as a tree
+    lists them, for a ref by geometry (``lookup.index_space``). Every element row is keyed by
+    ``<occurrence token>/<element name>`` and carries ``occurrenceId`` (the occurrence that
+    places it) and ``shapeId`` (the occurrence's solid, by the component's own ordinal);
+    its range columns (``faceStart``, ``edgeCount``, ...) are copied as the component's table
+    wrote them: they index that table, and nothing here reads them. The shapes of every
+    occurrence are listed too, placed, for the facts a solid gives (its box); they carry no
+    ref of their own: the occurrence names a body.
     """
     occurrences = descriptor.get("occurrences")
     if not isinstance(occurrences, list) or not occurrences:
@@ -363,15 +363,9 @@ def merge_assembly_entities(
     faces = list(index.faces)
     edges = list(index.edges)
     vertices = list(index.vertices)
-    shape_by_id = dict(index.shape_by_id)
     face_by_id = dict(index.face_by_id)
     edge_by_id = dict(index.edge_by_id)
     vertex_by_id = dict(index.vertex_by_id)
-    occurrence_by_id = dict(index.occurrence_by_id)
-    occurrence_rows = list(index.occurrences)
-    relations = {name: list(rows) for name, rows in index.relations.items()}
-    for name in ("faceEdgeRows", "edgeFaceRows", "edgeVertexRows", "vertexEdgeRows"):
-        relations.setdefault(name, [])
     cache: dict[str, Any] = {}
     added = 0
 
@@ -382,141 +376,55 @@ def merge_assembly_entities(
         component = str(entry.get("component") or "").strip()
         if not occurrence_id or not component:
             continue
-        component_index = _component_index(package_dir, component, cache)
-        if component_index is None:
+        component_rows = _component_rows(package_dir, component, cache)
+        if component_rows is None:
             continue
         matrix = _matrix(entry.get("transform"))
 
-        shape_offset = len(shapes)
-        face_offset = len(faces)
-        edge_offset = len(edges)
-        vertex_offset = len(vertices)
-        face_edge_offset = len(relations["faceEdgeRows"])
-        edge_face_offset = len(relations["edgeFaceRows"])
-        edge_vertex_offset = len(relations["edgeVertexRows"])
-        vertex_edge_offset = len(relations["vertexEdgeRows"])
-
-        # A face names its owning solid by id, so the rename has to be known before the faces
-        # are written or `shapeId` keeps pointing at the flat namespace.
-        shape_id_map: dict[str, str] = {}
-        for row in component_index.shapes:
-            new_id = _entity_id(occurrence_id, row.get("id"), "s", row.get("ordinal"))
-            if new_id is not None:
-                shape_id_map[str(row.get("id"))] = new_id
-
-        for row in component_index.shapes:
-            new_id = shape_id_map.get(str(row.get("id")))
-            if new_id is None:
-                continue
+        for row in component_rows["shapes"]:
             placed = _place_entity_row(matrix, row)
-            placed["id"] = new_id
             placed["occurrenceId"] = occurrence_id
-            _rebase(placed, "faceStart", face_offset)
-            _rebase(placed, "edgeStart", edge_offset)
+            placed["shapeId"] = f"{occurrence_id}#{row.get('ordinal')}"
             shapes.append(placed)
-            shape_by_id.setdefault(str(placed["id"]), placed)
             added += 1
-        for row in component_index.faces:
-            new_id = _entity_id(occurrence_id, row.get("id"), "f", row.get("ordinal"))
-            if new_id is None:
-                continue
-            placed = _place_entity_row(matrix, row)
-            placed["id"] = new_id
-            placed["occurrenceId"] = occurrence_id
-            if placed.get("shapeId") is not None:
-                placed["shapeId"] = shape_id_map.get(str(placed["shapeId"]), placed["shapeId"])
-            _rebase(placed, "edgeStart", face_edge_offset)
-            for field in _BUFFER_START_FIELDS:
-                placed.pop(field, None)
-            faces.append(placed)
-            face_by_id.setdefault(str(placed["id"]), placed)
-            added += 1
-        for row in component_index.edges:
-            new_id = _entity_id(occurrence_id, row.get("id"), "e", row.get("ordinal"))
-            if new_id is None:
-                continue
-            placed = _place_entity_row(matrix, row)
-            placed["id"] = new_id
-            placed["occurrenceId"] = occurrence_id
-            if placed.get("shapeId") is not None:
-                placed["shapeId"] = shape_id_map.get(str(placed["shapeId"]), placed["shapeId"])
-            _rebase(placed, "faceStart", edge_face_offset)
-            _rebase(placed, "vertexStart", edge_vertex_offset)
-            for field in _BUFFER_START_FIELDS:
-                placed.pop(field, None)
-            edges.append(placed)
-            edge_by_id.setdefault(str(placed["id"]), placed)
-            added += 1
-        for row in component_index.vertices:
-            new_id = _entity_id(occurrence_id, row.get("id"), "v", row.get("ordinal"))
-            if new_id is None:
-                continue
-            placed = _place_entity_row(matrix, row)
-            placed["id"] = new_id
-            placed["occurrenceId"] = occurrence_id
-            _rebase(placed, "edgeStart", vertex_edge_offset)
-            vertices.append(placed)
-            vertex_by_id.setdefault(str(placed["id"]), placed)
-            added += 1
-
-        component_relations = component_index.relations
-        relations["faceEdgeRows"].extend(
-            edge_offset + int(value) for value in component_relations.get("faceEdgeRows", [])
-        )
-        relations["edgeFaceRows"].extend(
-            face_offset + int(value) for value in component_relations.get("edgeFaceRows", [])
-        )
-        relations["edgeVertexRows"].extend(
-            vertex_offset + int(value) for value in component_relations.get("edgeVertexRows", [])
-        )
-        relations["vertexEdgeRows"].extend(
-            edge_offset + int(value) for value in component_relations.get("vertexEdgeRows", [])
-        )
-
-        # The occurrence's own ranges, now that its rows exist. Phase 1 wrote zeros because it
-        # had no entities to point at, and a zero range reads as "this occurrence has no faces".
-        # A COPY. These row dicts are shared with the index we were handed, and
-        # SelectorIndex is a frozen value: writing ranges into them in place would leave the
-        # caller's index claiming slices of lists it does not have.
-        occurrence_row = occurrence_by_id.get(occurrence_id)
-        if isinstance(occurrence_row, dict):
-            occurrence_row = dict(occurrence_row)
-            occurrence_by_id[occurrence_id] = occurrence_row
-            for position, existing in enumerate(occurrence_rows):
-                if existing is not None and str(existing.get("id")) == occurrence_id:
-                    occurrence_rows[position] = occurrence_row
-                    break
-            occurrence_row.update(
-                {
-                    "shapeStart": shape_offset,
-                    "shapeCount": len(component_index.shapes),
-                    "faceStart": face_offset,
-                    "faceCount": len(component_index.faces),
-                    "edgeStart": edge_offset,
-                    "edgeCount": len(component_index.edges),
-                }
-            )
+        for kind, rows, by_id in (("faces", faces, face_by_id), ("edges", edges, edge_by_id),
+                                  ("vertices", vertices, vertex_by_id)):
+            for row in component_rows[kind]:
+                name = str(row.get("name") or "").strip()
+                if not name:
+                    continue
+                placed = _place_entity_row(matrix, row)
+                placed["id"] = element_ref(occurrence_id, name)
+                placed["occurrenceId"] = occurrence_id
+                placed["shapeId"] = f"{occurrence_id}#{row.get('shape')}"
+                rows.append(placed)
+                by_id.setdefault(placed["id"], placed)
+                added += 1
 
     if not added:
         return index
+    from cadgen.store.parts import geometry_entry
+
+    # A view lists a component with its BREP as ``brepObject``, a flattened tree as ``brep``.
+    components = dict(index.components)
+    for cid, entry in (descriptor.get("components") or {}).items():
+        if isinstance(entry, Mapping) and (entry.get("brepObject") or entry.get("brep")):
+            components.setdefault(str(cid), geometry_entry(dict(entry)) if entry.get("brepObject") else dict(entry))
     return replace(
         index,
-        occurrences=occurrence_rows,
-        occurrence_by_id=occurrence_by_id,
         shapes=shapes,
         faces=faces,
         edges=edges,
         vertices=vertices,
-        shape_by_id=shape_by_id,
         face_by_id=face_by_id,
         edge_by_id=edge_by_id,
         vertex_by_id=vertex_by_id,
-        relations=relations,
+        components=components,
     )
 
 
 def assembly_group_nodes(descriptor: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """The instance tree's INTERIOR nodes, keyed by occurrence id.
+    """The instance tree's INTERIOR nodes, keyed by token, in tree order.
 
     The assembly.json's ``occurrences`` table is leaves only (a leaf is what owns geometry),
     so a subassembly node appears nowhere a selector row can find it. Its identity --
@@ -528,17 +436,10 @@ def assembly_group_nodes(descriptor: Mapping[str, Any]) -> dict[str, dict[str, A
     carries its own; a synthesised value would be a guess presented as a measurement, and
     a caller can tell "no stored frame" from a wrong one only if we decline to invent it.
     """
-    root = descriptor.get("assembly")
-    root = root.get("root") if isinstance(root, Mapping) else None
-    if not isinstance(root, Mapping):
-        return {}
     nodes: dict[str, dict[str, Any]] = {}
-    stack: list[Mapping[str, Any]] = [root]
-    while stack:
-        node = stack.pop()
+    for node, _parent in _tree_nodes(descriptor):
         children = node.get("children")
         children = [child for child in children if isinstance(child, Mapping)] if isinstance(children, list) else []
-        stack.extend(children)
         node_id = str(node.get("id") or "").strip()
         if not node_id or not children:
             continue  # a leaf; its row is in the occurrences table
@@ -560,60 +461,48 @@ def merge_assembly_occurrences(
     descriptor: Mapping[str, Any],
     package_dir: Path | None,
 ) -> SelectorIndex:
-    """Add the instance-tree occurrences to a flat whole-assembly index.
+    """Add the instance-tree occurrences, its group nodes, every node's members and every
+    node's names to an index.
 
-    ADDITIVE on purpose. The flat namespace (``#o1.f19``, ``#o1.s3``) is what every existing
-    caller and test resolves against, and ``single_occurrence_id`` is what lets a bare ``#f19``
-    canonicalize; replacing the index would break both to fix a third thing.
+    ADDITIVE: rows the index already holds under an id stay as they are.
     """
+    from cadgen.refs import descriptor_nodes
+
     rows = assembly_occurrence_rows(descriptor, package_dir)
-    if not rows:
-        return index
     group_nodes = assembly_group_nodes(descriptor)
+    members = assembly_group_members(descriptor)
+    names = descriptor_nodes(descriptor)[1]
+    if not rows:
+        return replace(index, group_nodes=group_nodes, members=members, names=names) if members else index
     occurrences = list(index.occurrences)
     occurrence_by_id = dict(index.occurrence_by_id)
-    added = 0
     for row in rows:
         occurrence_id = str(row.get("id") or "")
         if not occurrence_id or occurrence_id in occurrence_by_id:
             continue
         occurrences.append(row)
         occurrence_by_id[occurrence_id] = row
-        added += 1
-    if not added:
-        return replace(index, group_nodes=group_nodes) if group_nodes else index
-    # occurrenceCount came from the sidecar's stats and said 1 for a 160-part assembly, which is
-    # what `inspect refs --facts` reported. It is a count of what this index can resolve.
-    # It stays a LEAF count: a group ref resolves by expanding to the leaves already
-    # counted here, so counting the interior nodes too would double-count the tree.
-    manifest = dict(index.manifest)
-    stats = dict(manifest.get("stats")) if isinstance(manifest.get("stats"), Mapping) else {}
-    stats["occurrenceCount"] = len(occurrences)
-    # The rows are the tree's leaves (groups travel separately as group_nodes). A
-    # document with exactly one leaf -- a part -- keeps the bare grammar: `#f19`
-    # canonicalizes to that leaf's `f19`, which is what single_occurrence_id is for.
-    leaf_ids = [str(row.get("id")) for row in rows if row.get("id")]
-    stats["leafOccurrenceCount"] = len(leaf_ids)
-    manifest["stats"] = stats
-    single = index.single_occurrence_id or (leaf_ids[0] if len(leaf_ids) == 1 else "")
     return replace(
         index,
-        manifest=manifest,
         occurrences=occurrences,
         occurrence_by_id=occurrence_by_id,
         group_nodes=group_nodes,
-        leaf_occurrence_ids=leaf_ids,
-        single_occurrence_id=single,
+        members=members,
+        names=names,
     )
 
 
-def _index_with_assembly_occurrences(index: SelectorIndex, artifact: object) -> SelectorIndex:
+def index_with_assembly_occurrences(index: SelectorIndex, artifact: object) -> SelectorIndex:
+    """The whole instance tree -- occurrences AND their entities -- keyed off a
+    ``StepArtifact``: what a snapshot's ``--focus`` and ``--hide`` resolve their refs in
+    (``snapshot_cli.artifact_selector_index``). It lives here, beside the composition a
+    build's mate axes use (:func:`merge_assembly_occurrences`, :func:`merge_assembly_entities`),
+    so that no reader of a ref builds an index of its own that can drift from the others.
+    """
     if index is None or artifact is None:
         return index
     # Every tree's selector tables live in its components and are composed here per
-    # occurrence -- a part's single component included. Skipping parts left them with
-    # the empty base index: no occurrence, face or edge resolved and the facts
-    # counted zero faces.
+    # occurrence -- a part's single component included.
     package_dir = getattr(artifact, "artifact_path", None)
     if not isinstance(package_dir, Path):
         return index
@@ -626,25 +515,3 @@ def _index_with_assembly_occurrences(index: SelectorIndex, artifact: object) -> 
         return index
     merged = merge_assembly_occurrences(index, descriptor, package_dir)
     return merge_assembly_entities(merged, descriptor, package_dir)
-
-
-def index_with_assembly_occurrences(index: SelectorIndex, artifact: object) -> SelectorIndex:
-    """The whole instance tree -- occurrences AND their entities -- keyed off a
-    ``StepTopologyArtifact``, plus the label aliases for whatever rows survive.
-
-    Lives here rather than at either call site because there are TWO of them and they had already
-    drifted: ``snapshot_cli.artifact_selector_index`` serves ``--focus``/``--hide``, while
-    ``inspect refs`` builds its own index from the same bundle. Fixing one would have left the
-    other reporting the bug, which is how 0b presented as three separate tool failures.
-
-    Label aliases are attached on EVERY return path, including the early ones for part entries,
-    for the same reason: this is the one function both call sites already funnel through, so
-    attaching here is what keeps them from drifting again. Aliases must be computed after the
-    assembly merge, because the merge is what decides the final row set.
-
-    Anything that is not an assembly package keeps its own occurrence rows, so part entries are
-    unaffected other than gaining aliases.
-    """
-    from cadgen.label_refs import attach_label_aliases
-
-    return attach_label_aliases(_index_with_assembly_occurrences(index, artifact))

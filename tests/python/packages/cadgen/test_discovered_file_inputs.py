@@ -281,10 +281,11 @@ class OwnOutputAsInputTests(unittest.TestCase):
             if __name__ == "__main__":
                 ouro()
             '''), encoding="utf-8")
-        # Seed the output so the refusal is about ownership, not a missing file.
-        seed = "import build123d as bd, sys\nbd.export_step(bd.Box(6, 6, 6), sys.argv[1])\n"
-        subprocess.run([sys.executable, "-c", seed, str(self.project / "ouro.step")],
-                       env=self.environment, capture_output=True, text=True, check=True)
+        # Seed the output so the refusal is about ownership, not a missing file. Any
+        # tool's STEP will do; this process imports build123d for its own tests anyway.
+        import build123d
+
+        build123d.export_step(build123d.Box(6, 6, 6), str(self.project / "ouro.step"))
         before = (self.project / "ouro.step").read_bytes()
 
         completed = self._run("ouro.py")
@@ -444,6 +445,48 @@ class FileTraceTests(unittest.TestCase):
         files, _folders = trace.inputs()
         self.assertEqual(files, {edited: filetrace.CHANGED, removed: filetrace.CHANGED})
 
+    def test_a_nested_capture_is_its_own(self) -> None:
+        """A child model built inside its parent's body opens a capture of its own:
+        what it reads, lists, starts and takes from the environment is the child's,
+        and the parent's capture sees none of it."""
+        from cadgen._internal import filetrace
+        from cadgen._internal.source_hash import _sha256_file
+
+        before, inner, after = (self._file(name, "1") for name in ("before.json", "inner.json", "after.json"))
+        listed = self.root / "profiles"
+        listed.mkdir()
+        with mock.patch.dict(os.environ, {"CADGEN_NESTED_INPUT": "yes"}), filetrace.capture() as outer:
+            before.read_text(encoding="utf-8")
+            with filetrace.capture() as nested:
+                inner.read_text(encoding="utf-8")
+                os.listdir(listed)
+                os.environ.get("CADGEN_NESTED_INPUT")
+                subprocess.run([sys.executable, "-c", "pass"], check=True)
+            after.read_text(encoding="utf-8")
+        self.assertEqual(outer.inputs(), ({before: _sha256_file(before), after: _sha256_file(after)}, set()))
+        self.assertEqual(outer.environment, {})
+        self.assertEqual(outer.programs, [])
+        self.assertEqual(nested.inputs(), ({inner: _sha256_file(inner)}, {listed}))
+        self.assertEqual(nested.environment, {"CADGEN_NESTED_INPUT": "yes"})
+        self.assertEqual(nested.programs, [Path(sys.executable).name])
+
+    def test_a_capture_opened_under_a_pause_records_and_the_pause_resumes_after_it(self) -> None:
+        """A child's pipeline runs under its parent's pause -- cadgen's own reading --
+        and the child's body, a capture inside that pause, records all the same."""
+        from cadgen._internal import filetrace
+        from cadgen._internal.source_hash import _sha256_file
+
+        gate, body, export, parent = (self._file(name, "1") for name in ("gate.json", "body.json", "export.json", "parent.json"))
+        with filetrace.capture() as outer:
+            with filetrace.paused():
+                gate.read_text(encoding="utf-8")
+                with filetrace.capture() as nested:
+                    body.read_text(encoding="utf-8")
+                export.read_text(encoding="utf-8")
+            parent.read_text(encoding="utf-8")
+        self.assertEqual(outer.inputs(), ({parent: _sha256_file(parent)}, set()))
+        self.assertEqual(nested.inputs(), ({body: _sha256_file(body)}, set()))
+
     def test_the_daemon_key_read_on_a_job_thread_is_not_an_input(self) -> None:
         """A parent submitting a child connects to the daemon on a job thread,
         reading its key; that is cadgen's, on any thread."""
@@ -495,17 +538,6 @@ class FileTraceTests(unittest.TestCase):
         with filetrace.capture() as trace:
             list(os.fwalk(profiles))
         self.assertEqual(trace.inputs()[1], {profiles})
-
-    def test_captures_nest(self) -> None:
-        from cadgen._internal import filetrace
-
-        outer_file, inner_file = self._file("outer.txt"), self._file("inner.txt")
-        with filetrace.capture() as outer:
-            outer_file.read_text(encoding="utf-8")
-            with filetrace.capture() as inner:
-                inner_file.read_text(encoding="utf-8")
-        self.assertEqual(set(inner.inputs()[0]), {inner_file})
-        self.assertEqual(set(outer.inputs()[0]), {outer_file, inner_file})
 
     def test_a_folder_the_model_code_lists_is_an_input_and_an_import_listing_is_not(self) -> None:
         import importlib
@@ -564,6 +596,7 @@ class OldRecordTests(unittest.TestCase):
         from cadgen.store.gate import stale
         from cadgen.store.objects import put_object, read_verified_object
         from cadgen.store.records import note_document_tree, read_record, write_record
+        from cadgen.store.results import producer_versions
         from tests.python.support.tmp_root import generated_cad_directory
 
         with generated_cad_directory(prefix="old-record-admission-") as folder:
@@ -584,7 +617,8 @@ class OldRecordTests(unittest.TestCase):
                 payload = b"immutable saved geometry"
                 tree = put_object(payload)
                 note_document_tree(document_hash, tree)
-                record = {"tree": None, "closure": closure.as_json(), "children": [], "outputs": {}}
+                record = {"tree": None, "closure": closure.as_json(), "children": [], "outputs": {},
+                          "producer": producer_versions()}
                 with mock.patch("cadgen.store.records.RECORD_SCHEMA_VERSION", 5):
                     write_record(script, record)
                     self.assertFalse(stale(script).stale, "precondition: the old record falsely passes")

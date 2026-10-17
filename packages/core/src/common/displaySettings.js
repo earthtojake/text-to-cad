@@ -120,7 +120,7 @@ export const DISPLAY_GRID_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled", "color
 export const DISPLAY_AXIS_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled", "color", "opacity"]);
 export const DISPLAY_PART_COLOR_SETTINGS_KEYS = Object.freeze(["mode", "color", "colors"]);
 export const DISPLAY_EXPLODED_SETTINGS_KEYS = Object.freeze(["enabled", "amount"]);
-export const DISPLAY_CLIP_SETTINGS_KEYS = Object.freeze(["enabled", "axis", "offset", "offsets", "invert"]);
+export const DISPLAY_CLIP_SETTINGS_KEYS = Object.freeze(["enabled", "axis", "at", "invert"]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -170,12 +170,6 @@ export function normalizeDisplayMode(value, { fallback = CAD_DISPLAY_MODE.SHADED
   const normalized = normalizeModeText(value);
   if (!normalized) {
     return fallback;
-  }
-  if (normalized === "rendered") {
-    throw new Error("Display mode 'rendered' was removed; use 'shaded'.");
-  }
-  if (normalized === "solid") {
-    throw new Error("Display mode 'solid' was removed; use 'shaded_edges'.");
   }
   if (!CAD_DISPLAY_MODE_VALUES.includes(normalized)) {
     throw new Error(`Unknown display mode '${value}'. Expected one of: ${CAD_DISPLAY_MODE_VALUES.join(", ")}`);
@@ -253,14 +247,11 @@ export function validateDisplaySettings(value) {
     if (Object.prototype.hasOwnProperty.call(clip, "axis") && !["x", "y", "z"].includes(clip.axis)) {
       throw new Error("display.clip.axis must be 'x', 'y', or 'z'");
     }
-    if (Object.prototype.hasOwnProperty.call(clip, "offset")) {
-      validateStrictNumber(clip.offset, "display.clip.offset", 0, 1);
-    }
-    if (Object.prototype.hasOwnProperty.call(clip, "offsets")) {
-      const offsets = validateStrictObject(clip.offsets, "display.clip.offsets");
-      validateObjectKeys(offsets, ["x", "y", "z"], "display.clip.offsets");
-      validatePresent(offsets, ["x", "y", "z"],
-        (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.clip.offsets");
+    if (Object.prototype.hasOwnProperty.call(clip, "at")) {
+      // The plane's coordinate on its axis, in millimetres in the model's frame.
+      if (typeof clip.at !== "number" || !Number.isFinite(clip.at)) {
+        throw new Error("display.clip.at must be a finite number: the plane's coordinate on its axis, in millimetres");
+      }
     }
   }
   if (Object.prototype.hasOwnProperty.call(source, "exploded")) {

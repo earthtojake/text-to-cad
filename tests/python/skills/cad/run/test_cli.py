@@ -1,8 +1,8 @@
 """The direct-run front door: `python <model>.py` (cadgen.cli._run_model).
 
-The gen CLI is retired (library-first); a model script dispatches its own argv
-through the @step/@dxf decorator into this runner. These tests pin the argv
-contract and the teaching errors that route agents to the migration doc.
+A model script dispatches its own argv through the @step/@dxf decorator into
+this runner. These tests pin the argv contract, and that a script failing it
+gets the current contract's own errors.
 """
 
 from __future__ import annotations
@@ -65,7 +65,6 @@ class RunModelArgvTests(unittest.TestCase):
         self.assertEqual([str(script)], generate.call_args.args[0])
         self.assertTrue(generate.call_args.kwargs["force"])
         self.assertTrue(generate.call_args.kwargs["json_output"])
-        self.assertFalse(generate.call_args.kwargs["step_options"].has_metadata)
 
     def test_out_kwarg_is_the_declared_output(self) -> None:
         script = self._write(
@@ -195,11 +194,8 @@ class TheUsersFlagsEndInTheirOwnProcess(unittest.TestCase):
         # is the pipeline's routing flag.
         self.assertNotIn("script", usage)
         self.assertNotIn("--model", text)
-        # Two different values get two different names, and every flag says what it does.
-        self.assertIn("--mesh-tolerance CHORD", text)
-        self.assertIn("--mesh-angular-tolerance RADIANS", text)
-        self.assertIn("RELATIVE", text)
-        for flag in ("--force", "--verbose", "--json"):
+        # Every flag says what it does.
+        for flag in ("--force", "--verbose", "--json", "--profile"):
             line = next(line for line in text.splitlines() if line.strip().startswith(flag))
             self.assertGreater(len(line.split(None, 1)), 1, f"{flag} has no help text")
 
@@ -220,15 +216,6 @@ class TheUsersFlagsEndInTheirOwnProcess(unittest.TestCase):
         proc = self._run(script, "--write", "elsewhere.step")
         self.assertEqual(2, proc.returncode, proc.stdout + proc.stderr)
         self.assertIn("unrecognized arguments", proc.stderr)
-        self.assertTrue(self._no_daemon_was_started())
-
-    def test_an_absolute_looking_mesh_tolerance_is_refused_before_any_handoff(self) -> None:
-        script = self.root / "pair.py"
-        script.write_text(TWO_MODELS, encoding="utf-8")
-        proc = self._run(script, "--mesh-tolerance", "1")
-        self.assertEqual(2, proc.returncode, proc.stdout + proc.stderr)
-        self.assertIn("RELATIVE", proc.stderr)
-        self.assertIn("at most 0.05", proc.stderr)
         self.assertTrue(self._no_daemon_was_started())
 
     def test_a_declaration_failure_under_json_is_the_doors_envelope(self) -> None:

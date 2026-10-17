@@ -4,7 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from cadgen.srdf_source import SrdfSourceError, parse_srdf_file, read_srdf_source
+from cadgen.findings import format_findings
+from cadgen.srdf_source import parse_srdf_file
 
 
 SAMPLE_SRDF = """\
@@ -32,8 +33,9 @@ class SrdfSourceTests(unittest.TestCase):
             srdf_path = Path(tempdir) / "robot.srdf"
             srdf_path.write_text(SAMPLE_SRDF, encoding="utf-8")
 
-            source = read_srdf_source(srdf_path)
+            source, result = parse_srdf_file(srdf_path)
 
+            self.assertEqual([], result.errors)
             self.assertEqual(source.robot_name, "sample")
             self.assertEqual(source.planning_groups[0].name, "arm")
             self.assertEqual(source.planning_groups[0].joint_names, ("shoulder", "elbow"))
@@ -62,8 +64,9 @@ class SrdfSourceTests(unittest.TestCase):
             srdf_path = Path(tempdir) / "robot.srdf"
             srdf_path.write_text("<sdf/>", encoding="utf-8")
 
-            with self.assertRaisesRegex(SrdfSourceError, "root element must be <robot>"):
-                read_srdf_source(srdf_path)
+            _source, result = parse_srdf_file(srdf_path)
+
+            self.assertRegex(format_findings(result.errors), "root element must be <robot>")
 
 
 if __name__ == "__main__":

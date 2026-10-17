@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   applyTopologyDisplayEdgeSurfaceOffset,
   explodedPickSelectorRuntime,
-  displayEdgeRuntimeWithSelectorVisibilityClasses,
   resolveTopologyDisplayEdgeRuntimes,
   rowMajorArrayFromMatrix4,
   selectorTransformsFromDisplayRecords,
@@ -29,7 +28,7 @@ const TRANSLATE_3_4_5 = Object.freeze({
   ]
 });
 
-function displayEdgeRuntime() {
+function edgeRuntime() {
   return {
     edges: [{ occurrenceId: "part-a" }],
     proxy: {
@@ -63,32 +62,30 @@ test("selectorTransformsFromDisplayRecords reads part effect transforms", () => 
   ]);
 });
 
-test("resolveTopologyDisplayEdgeRuntimes prefers transformed display edges", () => {
-  const baseRuntime = displayEdgeRuntime();
+test("resolveTopologyDisplayEdgeRuntimes draws the line from the selector runtime as the records place it", () => {
+  const baseRuntime = edgeRuntime();
   const resolved = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: baseRuntime,
-    selectorRuntime: { proxy: {} },
+    selectorRuntime: baseRuntime,
     displayRecords: [{ partId: "part-a", effectMatrix: TRANSLATE_2_3_4 }]
   });
   assert.equal(resolved.transformCount, 1);
-  assert.equal(resolved.topologyRuntime, resolved.displayEdgeRuntime);
-  assert.notEqual(resolved.displayEdgeRuntime, baseRuntime);
-  assert.deepEqual([...resolved.displayEdgeRuntime.proxy.edgePositions], [2, 3, 4, 3, 3, 4]);
+  assert.equal(resolved.selectorRuntime, resolved.transformedSelectorRuntime);
+  assert.notEqual(resolved.selectorRuntime, baseRuntime);
+  assert.deepEqual([...resolved.selectorRuntime.proxy.edgePositions], [2, 3, 4, 3, 3, 4]);
+  // Nothing moved: the runtime as given.
+  assert.equal(resolveTopologyDisplayEdgeRuntimes({ selectorRuntime: baseRuntime, displayRecords: [] }).selectorRuntime, baseRuntime);
 });
 
 test("resolveTopologyDisplayEdgeRuntimes reuses stable transformed runtimes", () => {
-  const baseDisplayRuntime = displayEdgeRuntime();
   const baseSelectorRuntime = {
     edges: [{ occurrenceId: "part-a" }],
     proxy: {}
   };
   const first = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: baseDisplayRuntime,
     selectorRuntime: baseSelectorRuntime,
     displayRecords: [{ partId: "part-a", effectMatrix: TRANSLATE_2_3_4 }]
   });
   const second = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: baseDisplayRuntime,
     selectorRuntime: baseSelectorRuntime,
     displayRecords: [{
       partId: "part-a",
@@ -96,75 +93,26 @@ test("resolveTopologyDisplayEdgeRuntimes reuses stable transformed runtimes", ()
     }]
   });
   const changed = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: baseDisplayRuntime,
     selectorRuntime: baseSelectorRuntime,
     displayRecords: [{ partId: "part-a", effectMatrix: TRANSLATE_3_4_5 }]
   });
 
   assert.equal(second.transformedSelectorRuntime, first.transformedSelectorRuntime);
-  assert.equal(second.transformedDisplayEdgeRuntime, first.transformedDisplayEdgeRuntime);
   assert.notEqual(changed.transformedSelectorRuntime, first.transformedSelectorRuntime);
-  assert.notEqual(changed.transformedDisplayEdgeRuntime, first.transformedDisplayEdgeRuntime);
-});
-
-test("resolveTopologyDisplayEdgeRuntimes can skip transformed display edges for record-driven overlays", () => {
-  const baseRuntime = displayEdgeRuntime();
-  const resolved = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: baseRuntime,
-    selectorRuntime: { proxy: {} },
-    displayRecords: [{ partId: "part-a", effectMatrix: TRANSLATE_2_3_4 }],
-    transformDisplayEdges: false
-  });
-
-  assert.equal(resolved.transformCount, 1);
-  assert.equal(resolved.displayEdgeRuntime, baseRuntime);
-  assert.equal(resolved.transformedDisplayEdgeRuntime, null);
-});
-
-test("display edge runtimes inherit selector visibility classes when compact payloads omit them", () => {
-  const displayRuntime = {
-    edges: [
-      { occurrenceId: "o1", segmentStart: 0, segmentCount: 1 },
-      { occurrenceId: "o1", segmentStart: 1, segmentCount: 2 }
-    ],
-    proxy: {}
-  };
-  const selectorRuntime = {
-    edges: [
-      { id: "o1.e1", visibilityClass: "feature" },
-      { id: "o1.e2", visibilityClass: "tangent" }
-    ],
-    proxy: {}
-  };
-
-  const enriched = displayEdgeRuntimeWithSelectorVisibilityClasses(displayRuntime, selectorRuntime);
-  const enrichedAgain = displayEdgeRuntimeWithSelectorVisibilityClasses(displayRuntime, selectorRuntime);
-  assert.notEqual(enriched, displayRuntime);
-  assert.equal(enrichedAgain, enriched);
-  assert.deepEqual(enriched.edges, [
-    { occurrenceId: "o1", segmentStart: 0, segmentCount: 1, visibilityClass: "feature" },
-    { occurrenceId: "o1", segmentStart: 1, segmentCount: 2, visibilityClass: "tangent" }
-  ]);
-
-  const resolved = resolveTopologyDisplayEdgeRuntimes({
-    displayEdgeRuntime: displayRuntime,
-    selectorRuntime
-  });
-  assert.deepEqual(resolved.displayEdgeRuntime.edges, enriched.edges);
 });
 
 test("shouldRenderTopologyDisplayEdges gates CAD topology overlays", () => {
-  const runtime = displayEdgeRuntime();
+  const runtime = edgeRuntime();
   assert.equal(shouldRenderTopologyDisplayEdges({
     edgesVisible: true,
     cadEdgeSource: true,
-    displayEdgeRuntime: runtime
+    selectorRuntime: runtime
   }), true);
   assert.equal(shouldRenderTopologyDisplayEdges({
     edgesVisible: true,
     wireframeMode: true,
     cadEdgeSource: true,
-    displayEdgeRuntime: runtime
+    selectorRuntime: runtime
   }), false);
   assert.equal(shouldRenderTopologyDisplayEdges({
     edgesVisible: true,

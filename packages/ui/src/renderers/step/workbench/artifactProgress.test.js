@@ -11,7 +11,7 @@ import {
 function countingPayload(overrides = {}) {
   return {
     phase: "components",
-    label: "Meshing components",
+    label: "Storing parts",
     detail: "a1b2c3",
     index: 3,
     count: 4,
@@ -26,7 +26,7 @@ function countingPayload(overrides = {}) {
 test("normalizeArtifactProgress keeps a well-formed payload", () => {
   const progress = normalizeArtifactProgress(countingPayload());
   assert.equal(progress.phase, "components");
-  assert.equal(progress.label, "Meshing components");
+  assert.equal(progress.label, "Storing parts");
   assert.equal(progress.done, 31);
   assert.equal(progress.total, 50);
   assert.equal(progress.index, 3);
@@ -64,7 +64,7 @@ test("status reads stamp freshness and a later miss retains useful work with con
     1,
     7_000
   );
-  assert.equal(missed.label, "Meshing components");
+  assert.equal(missed.label, "Storing parts");
   assert.equal(missed.detail, "a1b2c3");
   assert.equal(missed.updatedAt, 5_000);
   assert.equal(missed.refreshedAt, 6_000);

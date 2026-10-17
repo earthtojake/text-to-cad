@@ -15,14 +15,6 @@ const PopoverTrigger = React.forwardRef(function PopoverTrigger({
   return <PopoverPrimitive.Trigger ref={ref} data-slot="popover-trigger" {...props} />
 });
 
-// Positions a popover against an element that is not its trigger — used by
-// coach marks, which point at a control the user still has to be able to click.
-const PopoverAnchor = React.forwardRef(function PopoverAnchor({
-  ...props
-}, ref) {
-  return <PopoverPrimitive.Anchor ref={ref} data-slot="popover-anchor" {...props} />
-});
-
 const PopoverContent = React.forwardRef(function PopoverContent({
   className,
   align = "center",
@@ -54,4 +46,4 @@ const PopoverClose = React.forwardRef(function PopoverClose({
   return <PopoverPrimitive.Close ref={ref} data-slot="popover-close" {...props} />
 });
 
-export { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger }
+export { Popover, PopoverClose, PopoverContent, PopoverTrigger }

@@ -4,7 +4,7 @@ The supervisor owns a socket and a pool of warm workers (``cadgen.daemon.pool``)
 each a subprocess that imported cadgen / OCP / build123d once. It services
 directly-run @step/@dxf model scripts ("run") plus ``cadgen step build|compile``
 and ``cadgen stl|3mf|glb build`` invocations (snapshot orchestration stays in its
-caller; only its document compiles and surface derivations are pool jobs)
+caller; only its document compiles and display derivations are pool jobs)
 over a per-install unix socket (named pipe on Windows), so every
 call skips the multi-second interpreter+OCP startup. The supervisor itself never
 imports OCP: no amount of model badness can take it down.
@@ -13,8 +13,7 @@ Protocol — one JSON request per connection, JSON-lines response:
 
   request : {"tool": <a key of _TOOL_IMPORTS below>,
              "argv": [...], "cwd": "...", "prog": "...",
-             "store_root": "...", "root_id": "..." | null,
-             "env": {...}, "token": <client version token>}
+             "store_root": "...", "env": {...}, "token": <client version token>}
   response: {"stream": "stdout"|"stderr", "data": "..."} chunks and
             {"event": {...}} build-tree events, then {"exit": <int>} — or
             {"restart": true} when the client's version token differs from the
@@ -24,9 +23,10 @@ Protocol — one JSON request per connection, JSON-lines response:
             before that reply when nothing is running -- so the respawn binds.
 
 Routing: a request that names a model script goes to THAT model's worker
-(STORE.md §9). A busy worker means an extra, never a wait; a model with no
-worker binds a spare; no spare means a spawn. Requests that name no script
-borrow a spare for one job. Nothing here caps, counts memory or queues.
+(STORE.md §9), which builds the model and, inside its body, every child it
+calls. A busy worker means an extra, never a wait; a model with no worker binds
+a spare; no spare means a spawn. Requests that name no script borrow a spare
+for one job. Nothing here caps, counts memory or queues.
 """
 
 from __future__ import annotations
@@ -161,6 +161,7 @@ def _watch_client(
     *,
     finishes_alone: bool = False,
     left: threading.Event | None = None,
+    released: threading.Event | None = None,
 ) -> None:
     """Kill the WORKER when the requesting client vanishes mid-job.
 
@@ -176,14 +177,18 @@ def _watch_client(
     for its client: the worker stops it before its next derivation unless an identical
     request has attached, and stays warm.
 
-    ``left`` is set before a kill: the job was stopped, not lost to a crash.
+    ``left`` is set before a kill: the job was stopped, not lost to a crash. ``released``
+    is set once the job answered its client before its files were written (``--no-wait``,
+    the ``released`` frame): the client leaving is then no loss, and the worker finishes.
     """
     while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
+        if released is not None and released.is_set():
+            return
         try:
             with send_lock:
                 _send(conn, {"stream": "stdout", "data": ""})
         except OSError:
-            if done.is_set():
+            if done.is_set() or (released is not None and released.is_set()):
                 return
             if finishes_alone:
                 _log(f"{tool}: client left; worker {worker.pid} stops before its next derivation")
@@ -210,14 +215,14 @@ def _wait_for_inflight_consumer(conn: transport.Channel, entry: dict) -> int | N
 
     A request client sends no more messages, so a nonblocking receive is purely
     an EOF probe. It emits no heartbeat frames and cannot disturb other users of
-    the same in-flight entry.
+    the same in-flight entry. An artifact job's result is relayed as it lands.
     """
     result_seen = False
     while True:
-        event, done, code = _BROKER.wait_update(entry, result_seen=result_seen)
+        result, done, code = _BROKER.wait_update(entry, result_seen=result_seen)
         try:
-            if event is not None:
-                _send(conn, event if entry.get("artifact") else {"event": event})
+            if result is not None:
+                _send(conn, result)
                 result_seen = True
         except OSError:
             return None
@@ -338,9 +343,9 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     send_lock = threading.Lock()
     started = time.perf_counter()
 
-    if request.get("kind") in {"slot", "inflight"}:
-        # A worker asking for a job slot or registering a job in flight. Blocks for the
-        # lease's lifetime on this request thread.
+    if request.get("kind") == "slot":
+        # A worker asking for a job slot. Blocks for the lease's lifetime on this
+        # request thread.
         _BROKER.handle(conn, request)
         return
 
@@ -378,13 +383,9 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     subject = "" if is_artifact else model or _document_path(argv, cwd)
     closure = str(request.get("closure") or "")
     if is_artifact:
-        job = _JOBS.start_artifact(artifact, store_root=root, root_id=request.get("root_id"), dependency=request.get("dependency"))
+        job = _JOBS.start_artifact(artifact, store_root=root, dependency=request.get("dependency"))
     else:
-        job = _JOBS.start(
-            tool=tool, subject=subject, argv=argv, store_root=str(request.get("store_root") or ""),
-            editing_producer=not bool(subject and closure and request.get("coalesce")),
-            adopt_announced=True,
-        )
+        job = _JOBS.start(tool=tool, subject=subject, argv=argv, store_root=str(request.get("store_root") or ""))
     inflight = None
     if is_artifact or (subject and closure and request.get("coalesce")):
         if is_artifact:
@@ -399,7 +400,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             finally:
                 _BROKER.detach(inflight)
             if code is None:
-                _JOBS.finish(job, 1, error="client disconnected")
+                _JOBS.finish(job, 1, cancelled=True)
                 return
             if is_artifact and inflight.get("result") is not None:
                 _JOBS.record_artifact_result(job, inflight["result"]["artifactResult"])
@@ -407,8 +408,6 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             with contextlib.suppress(OSError), send_lock:
                 _send(conn, {"exit": code})
             return
-        if not is_artifact:
-            _JOBS.accept_editing_producer(job)
     build = None if is_artifact else telemetry.build(request, job)  # counted as it ends, if it is one
 
     def starting_worker() -> None:
@@ -452,7 +451,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
     # An artifact job is never killed for its client. It is a pure function of immutable
     # pins that writes each result into the store as it goes, and the CAD Viewer cancels
-    # surface requests as a matter of course, so killing the worker threw away a warm
+    # part requests as a matter of course, so killing the worker threw away a warm
     # kernel (a replacement imports it again, ~2.6 s) to save a derivation that takes a
     # fraction of that. Nor does it run on for nobody: a request names up to 64
     # components, and one the browser left kept its worker deriving them for seconds while
@@ -462,10 +461,13 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     # derived, the derivation in hand finished and the worker warm. A model build or a
     # door whose caller left is still killed: there a cancel means stop.
     finishes_alone = is_artifact
+    # Set once the job released its client before its files were written (--no-wait):
+    # the client is expected to leave, and the worker finishes the files.
+    released = threading.Event()
     watchdog = threading.Thread(
         target=_watch_client,
         args=(conn, send_lock, watchdog_done, tool, worker, preserve_coalesced_work),
-        kwargs={"finishes_alone": finishes_alone, "left": left},
+        kwargs={"finishes_alone": finishes_alone, "left": left, "released": released},
         daemon=True,
     )
     watchdog.start()
@@ -499,7 +501,6 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             "cwd": request.get("cwd"),
             "env": request.get("env"),
             "store_root": request.get("store_root"),
-            "root_id": request.get("root_id"),
             "job_id": job["id"],
             **({"artifact": artifact} if is_artifact else {}),
         })
@@ -510,11 +511,15 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                 break
             if frame.get("stream") == "stderr":
                 stderr_tail.append(str(frame.get("data") or ""))
+            if "released" in frame:
+                if is_artifact:
+                    raise _WorkerBrokeProtocol("artifact worker released its client")
+                released.set()
             if not is_artifact:
                 _JOBS.observe(frame)
             if is_artifact:
                 if "event" in frame:
-                    raise OSError("artifact worker emitted a source event")
+                    raise _WorkerBrokeProtocol("artifact worker emitted a source event")
                 if "artifactNext" in frame:
                     # Answered at once: the worker waits on it. Never relayed.
                     worker.send({"kind": "artifactNext", "goOn": wanted()})
@@ -527,20 +532,17 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                         if inflight.get("result") is not None:
                             raise ValueError("duplicate artifact result")
                     except (ValueError, RuntimeError, TypeError) as exc:
-                        raise OSError(f"invalid artifact worker result: {exc}") from exc
+                        raise _WorkerBrokeProtocol(f"invalid artifact worker result: {exc}") from exc
                     _JOBS.record_artifact_result(job, frame["artifactResult"])
                     _BROKER.publish_artifact_result(inflight, frame["artifactResult"])
-            event = frame.get("event")
-            if inflight is not None and isinstance(event, dict) and event.get("job") == job["id"]:
-                _BROKER.publish_result(inflight, event)
             if build is not None:
-                build.observe(event)
+                build.observe(frame.get("event"))
             if relay_connected:
                 try:
                     with send_lock:
                         _send(conn, frame)
                 except OSError:
-                    if finishes_alone or preserve_coalesced_work():
+                    if finishes_alone or released.is_set() or preserve_coalesced_work():
                         relay_connected = False
                     else:
                         raise
@@ -560,6 +562,18 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
                                         "exitStatus": exc.exit_status}})
+    except _WorkerBrokeProtocol as exc:
+        # The worker answered, and the answer is wrong: the job FAILED, with that reason,
+        # while its client still listens. Never a cancel (the generic OSError below, a
+        # client gone), which hides a deterministic failure as "ask again". A worker that
+        # broke the protocol mid-job is not reused.
+        _log(f"{tool}: {exc}; replacing worker {worker.pid}")
+        if worker.alive():
+            worker.kill()
+        healthy, exit_code = False, 1
+        stderr_tail.append(f"\n{exc}\n")
+        with contextlib.suppress(OSError), send_lock:
+            _send(conn, {"stream": "stderr", "data": f"{exc}\n"})
     except OSError:
         # The CLIENT went away mid-job: a relay send failed before the watchdog's probe
         # did. Same answer as the watchdog's -- the orphaned job's worker is killed, never
@@ -573,13 +587,15 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
-        # A killed worker is not reusable; release() drops it and the pool respawns.
-        _POOL.release(worker, healthy=healthy and worker.alive())
+        # A killed worker is not reusable; release() drops it and the pool respawns. A job
+        # stopped because its caller left is no crash, though its worker is killed.
+        _POOL.release(worker, healthy=healthy and worker.alive(),
+                      cancelled=ended == "cancelled" or left.is_set())
         if is_artifact and exit_code == 0 and inflight.get("result") is None:
             exit_code = 1
             stderr_tail.append("artifact worker completed without an artifact result")
         reason = failure_message("".join(stderr_tail))[0] if exit_code != 0 else None
-        _JOBS.finish(job, exit_code, error=reason or None)
+        _JOBS.finish(job, exit_code, error=reason or None, cancelled=ended == "cancelled" or left.is_set())
         if inflight is not None:
             _BROKER.finish_entry(inflight, exit_code, error=reason or None)
 
@@ -590,6 +606,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
          f"(worker {worker.pid}{' extra' if worker.extra else ''})")
     with contextlib.suppress(OSError), send_lock:
         _send(conn, {"exit": exit_code})
+
+
+class _WorkerBrokeProtocol(Exception):
+    """A worker's frame the job cannot accept: a failure of the job, not of its client."""
 
 
 _INFLIGHT: set[threading.Thread] = set()
@@ -661,6 +681,14 @@ def _bind(address: str, *, wait: float = 0.0) -> transport.Server | None:
             return None
         time.sleep(LOCK_POLL_SECONDS)
     _DAEMON_LOCK = lock  # held while this daemon serves the address
+    try:
+        # A socket moved out of a deep state directory needs a folder no one else owns.
+        transport.claim_folder(address, create=True)
+    except transport.AddressUnusable as exc:
+        _log(f"cannot bind {address}: {exc}")
+        lock.release()
+        _DAEMON_LOCK = None
+        return None
     if transport.address_is_stale(address):
         transport.clear_address(address)
     while True:
@@ -783,10 +811,11 @@ def serve() -> int:
                 gone = _INSTALLATION_GONE.is_set()
                 why = "installation gone" if gone else "version token changed"
                 token_changed = request.get("token") != token or gone
-                dependency_finishing_old_work = bool(
-                    request.get("dependency") and (state["draining"] or _active_requests())
-                )
-                if state["draining"] and not request.get("dependency"):
+                # A dependency, and a worker's slot for the job it runs, are work already
+                # under way: a drain finishes them.
+                dependency = bool(request.get("dependency") or request.get("kind") == "slot")
+                dependency_finishing_old_work = dependency and bool(state["draining"] or _active_requests())
+                if state["draining"] and not dependency:
                     with contextlib.suppress(OSError):
                         _send(conn, {"restart": True})
                     continue
@@ -794,7 +823,7 @@ def serve() -> int:
                     active = _active_requests()
                     if active:
                         # Keep the old address and singleton lock together while its
-                        # jobs finish. Their workers can still submit child/artifact
+                        # jobs finish. Their workers can still submit compile and artifact
                         # dependencies; fresh top-level calls are told to restart until
                         # the drain completes (ordinary ones run cold, artifact requests
                         # ask again until the successor binds). Closing the listener here

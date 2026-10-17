@@ -1,23 +1,24 @@
-"""The user-level cache root is a CROSS-LANGUAGE contract.
+"""The part-store contract is CROSS-LANGUAGE.
 
-Python (cadgen/_internal/cache_paths.py) and JS (cadgenCacheRootDir in
-packages/core/src/lib/surf/tessellationCacheFs.mjs) must resolve the SAME
-directory from the same environment, or the "one cache warms every consumer"
-property silently splits into per-language stores. Same spirit as
-test_render_contract_sync: a one-sided change fails here before it can ship.
-
-Also pins the mesh-cache key's tessellator-version salt across languages:
-TESSELLATION_VERSION (tessellate.js) == MESH_TESSELLATION_VERSION
-(cache_paths.py), and the tessellator's DEFAULT_OPTIONS tolerances against their
-Python mirror in cadgen/_internal/tessellation.py.
+cadgen writes each part's record and the two objects it names (cadgen/store/parts.py;
+the display mesh's codec is cadgen/store/meshes.py) and the CAD Viewer's client reads
+them (packages/core/src/lib/parts/tessellationCache.js) by the key a view names. The
+client derives no key and keeps no tolerance, so what is pinned here is what each side
+must take of the other: a body's bound, and a record cadgen stores being a row the
+client reads whole -- its fields, and the decoded size both sides compute -- naming a
+body the client matches to it. A one-sided change would split "one store warms every
+consumer" into silent misses.
 """
 
 from __future__ import annotations
 
-import os
+import base64
 import json
+import os
 import re
+import struct
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -26,116 +27,66 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen._internal import cache_paths
-
 ROOT = Path(__file__).resolve().parents[3]
-CADJS_FS = ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCacheFs.mjs"
-TESSELLATE_JS = ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellate.js"
+TESSELLATION_CACHE_JS = ROOT / "packages" / "core" / "src" / "lib" / "parts" / "tessellationCache.js"
 
 
-def _node_resolve_root(env_overrides: dict[str, str]) -> str:
-    from cadgen._internal.node_runtime import cad_node_executable
+def _unmeshed_part(fixture: dict) -> tuple[str, bytes, bytes]:
+    """Another part, whose mesh leaves its second face undrawn: its record counts it."""
+    from cadgen.store.meshes import encode_payload
 
-    env = {k: v for k, v in os.environ.items() if k not in {"CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA"}}
-    env.update(env_overrides)
-    module_url = CADJS_FS.resolve().as_uri()
-    script = f"import({module_url!r}).then(m => process.stdout.write(m.cadgenCacheRootDir()))"
-    result = subprocess.run(
-        [str(cad_node_executable()), "--input-type=module", "-e", script],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=True,
+    floats = lambda *values: struct.pack(f"<{len(values)}f", *values)  # noqa: E731
+    key = "3" * 64 + fixture["key"][64:]
+    glb = encode_payload(
+        part=key, positions=floats(0, 0, 0, 2, 0, 0, 0, 3, 0), normals=floats(0, 0, 1, 0, 0, 1, 0, 0, 1),
+        indices=struct.pack("<3I", 0, 1, 2),
+        face_ranges=[{"ord": 1, "indexStart": 0, "indexCount": 3}, {"ord": 2, "indexStart": 3, "indexCount": 0}],
+        edges=[], bounds={"min": [0, 0, 0], "max": [2, 3, 0]}, unmeshed_faces=[2],
     )
-    return result.stdout.strip()
+    return key, glb, base64.b64decode(fixture["selectors"])
 
 
-class CacheRootSyncTest(unittest.TestCase):
-    def _python_root(self, env_overrides: dict[str, str]) -> str:
-        cleared = {"CADGEN_CACHE_DIR": "", "XDG_CACHE_HOME": "", **env_overrides}
-        with mock.patch.dict(os.environ, cleared):
-            return str(cache_paths.cache_root())
+class PartStoreContractSyncTest(unittest.TestCase):
+    def test_json_bound_matches_between_python_and_js(self) -> None:
+        # A body's JSON chunk grows with its face colour palette, so its bound is
+        # a limit on the components either side takes: a body cadgen stores and
+        # the client refuses is a component the Viewer can never draw.
+        from cadgen.store.meshes import MAX_JSON_BYTES
 
-    def test_root_resolution_matches_between_python_and_js(self) -> None:
-        cases = [
-            {"CADGEN_CACHE_DIR": "/tmp/cadgen-sync-store"},
-            # CADGEN_CACHE_DIR wins over the platform convention.
-            {"CADGEN_CACHE_DIR": "/tmp/cadgen-sync-store", "XDG_CACHE_HOME": "/tmp/xdg"},
-        ]
-        if os.name != "nt":
-            cases.append({"XDG_CACHE_HOME": "/tmp/cadgen-sync-xdg"})
-            cases.append({"HOME": "/tmp/cadgen-sync-home"})
-        for overrides in cases:
-            with self.subTest(overrides=overrides):
-                self.assertEqual(
-                    self._python_root(overrides),
-                    _node_resolve_root(overrides),
-                    f"cache root diverged between Python and JS for {overrides}",
-                )
-
-    def test_tessellator_version_matches_between_python_and_js(self) -> None:
-        from cadgen.store.meshes import TESSELLATOR_VERSION
-
-        match = re.search(r"^export const TESSELLATION_VERSION = (\d+);", TESSELLATE_JS.read_text(encoding="utf-8"), re.MULTILINE)
-        assert match, "TESSELLATION_VERSION not found in tessellate.js"
+        source = TESSELLATION_CACHE_JS.read_text(encoding="utf-8")
+        match = re.search(r"^export const MESH_MAX_JSON_BYTES = (\d+) \* 1024 \* 1024;", source, re.MULTILINE)
+        assert match, "MESH_MAX_JSON_BYTES not found in tessellationCache.js"
         self.assertEqual(
-            int(match.group(1)),
-            cache_paths.MESH_TESSELLATION_VERSION,
-            "the mesh-cache tessellator-version salt diverged between languages — "
-            "bump TESSELLATION_VERSION (tessellate.js) and MESH_TESSELLATION_VERSION "
-            "(cache_paths.py) together",
+            int(match.group(1)) * 1024 * 1024,
+            MAX_JSON_BYTES,
+            "MESH_MAX_JSON_BYTES (tessellationCache.js) diverged from MAX_JSON_BYTES "
+            "(cadgen/store/meshes.py) — change both together",
         )
-        self.assertEqual(TESSELLATOR_VERSION, cache_paths.MESH_TESSELLATION_VERSION,
-                         "Python TESS payload admission must use the same algorithm version")
 
-    def test_tessellator_default_tolerances_match_between_python_and_js(self) -> None:
-        # The tessellator lives in JS; the Python constants are a MIRROR the
-        # CLI, the descriptor, and the freshness gates talk in. Nothing in
-        # Python computes them, so only a pin like this can keep them honest —
-        # its absence is how the retired absolute OCCT defaults (0.02 mm /
-        # 0.6 rad) survived as if they were tessellator defaults.
-        from cadgen._internal import tessellation
+    def test_a_record_cadgen_stores_is_a_row_the_client_reads_whole(self) -> None:
+        from cadgen.store import parts
+        from tests.python.support.tessellation import node, part_fixture, store_part
 
-        source = TESSELLATE_JS.read_text(encoding="utf-8")
-        options = re.search(r"export const DEFAULT_OPTIONS = \{(.*?)\n\};", source, re.DOTALL)
-        assert options, "DEFAULT_OPTIONS not found in tessellate.js"
-        body = options.group(1)
-        for key, mirrored in (
-            ("chordTolerance", tessellation.TESSELLATOR_CHORD_TOLERANCE),
-            ("angleTolerance", tessellation.TESSELLATOR_ANGLE_TOLERANCE),
-        ):
-            with self.subTest(option=key):
-                match = re.search(rf"^\s*{key}:\s*([0-9.eE+-]+),", body, re.MULTILINE)
-                assert match, f"{key} not found in tessellate.js DEFAULT_OPTIONS"
-                self.assertEqual(
-                    float(match.group(1)),
-                    mirrored,
-                    f"DEFAULT_OPTIONS.{key} (tessellate.js) diverged from its Python mirror in "
-                    "cadgen/_internal/tessellation.py — change both together",
-                )
-
-    def test_key_scheme_carries_the_version_salt(self) -> None:
-        # Policy: the key must salt the algorithm version. Grep-level pin so a
-        # JS-side refactor cannot drop it without failing a Python-side gate.
-        cache_js = (ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCache.js").read_text(encoding="utf-8")
-        self.assertIn("-t${TESSELLATION_VERSION}-", cache_js)
-
-    def test_complete_tessellation_keys_match_between_python_and_js(self) -> None:
-        from cadgen._internal.node_runtime import cad_node_executable
-        from cadgen.store.meshes import tessellation_key
-
-        module = ROOT / "packages/core/src/lib/surf/tessellationCache.js"
-        cases = [("a" * 64, 0.0015, 0.005), ("b" * 64, 0.00001, 0.013),
-                 ("a" * 64, 0.0015000000000000002, 0.005)]
+        fixture = part_fixture()
+        key, glb, table = _unmeshed_part(fixture)
+        with tempfile.TemporaryDirectory() as store, mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": store}):
+            stored = {fixture["key"]: (store_part(fixture), fixture["glb"]),
+                      key: (parts._write(key, glb, table), base64.b64encode(glb).decode("ascii"))}
+            self.assertEqual({part: parts.probe(part) for part in stored}, {part: row[0] for part, row in stored.items()})
+        self.assertEqual(stored[key][0]["glb"]["unmeshedFaceCount"], 1)
         script = f'''
 import fs from "node:fs";
-import {{ tessellationCacheKey }} from {json.dumps(module.as_uri())};
-console.log(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(([surfaceInput, chordTolerance, angleTolerance]) =>
-  tessellationCacheKey(surfaceInput, {{chordTolerance, angleTolerance}}))));
+import {{ partMeshMatches, partRow }} from {json.dumps(TESSELLATION_CACHE_JS.as_uri())};
+console.log(JSON.stringify(JSON.parse(fs.readFileSync(0, "utf8")).map(([part, record, glb]) => {{
+  const row = partRow(part, record);
+  return [row, row !== null && partMeshMatches(new Uint8Array(Buffer.from(glb, "base64")), row)];
+}})));
 '''
-        result = subprocess.run([str(cad_node_executable()), "--input-type=module", "-e", script],
-                                input=json.dumps(cases), text=True, capture_output=True, check=True)
-        self.assertEqual([tessellation_key(*case) for case in cases], json.loads(result.stdout))
+        result = subprocess.run([node(), "--input-type=module", "-e", script],
+                                input=json.dumps([[part, record, body] for part, (record, body) in stored.items()]),
+                                text=True, capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout),
+                         [[{"part": part, **record}, True] for part, (record, _body) in stored.items()])
 
 
 if __name__ == "__main__":

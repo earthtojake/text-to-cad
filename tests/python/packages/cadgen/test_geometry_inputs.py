@@ -1,4 +1,4 @@
-"""Geometry-complete publication and artifact-only surface readiness."""
+"""Geometry-complete publication, and display data derived from it alone."""
 from __future__ import annotations
 
 import copy
@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import struct
 import subprocess
 import sys
 import unittest
@@ -15,10 +14,11 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
+from tests.python.support.tree_ids import tokenized
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import component_package as cp
-from cadgen.store import surfaces
+from cadgen.store import parts
 from cadgen.store.build import build_document_tree, build_tree_from_compound
 from cadgen.store.materialize import materialize, materialize_descriptor
 from cadgen.store.objects import object_path, put_object, read_verified_object
@@ -35,12 +35,24 @@ def materialize_snapshot(descriptor, captured):
     return materialize_descriptor(descriptor, shapes=shapes)
 
 
+def facts_of(digest, cid):
+    """The topology facts a part's derivation takes for ``cid`` (``parts._topology``): extracted
+    in memory and stored nowhere, or an eager-only component's pinned object."""
+    entry = capture_tree(digest, retain_payloads=False)[0]["components"][cid]
+    return parts._topology(entry, None if entry["kind"] == "eager-only" else parts._decoded(entry)[0])
+
+
+def part_objects(records):
+    """Every object the part records name."""
+    return [record[role]["object"] for record in records.values() for role in ("glb", "selectors")]
+
+
 def store_component(shape, _unused=None, meta=None):
     prepared = cp.prepare_geometry_component(shape)
     entry = prepared["entry"]
     put_object(prepared["payload"], repair=True)
-    if prepared["surface"] is not None:
-        put_object(prepared["surface"], repair=True)
+    if prepared["topology"] is not None:
+        put_object(prepared["topology"], repair=True)
     return entry["contentHash"][:16], entry
 
 
@@ -87,10 +99,10 @@ class GeometryInputs(unittest.TestCase):
         export_build123d_step_file(shape,path)
         return path.read_bytes()
 
-    def test_geometry_and_native_read_do_not_extract_surfaces(self):
-        from cadgen._internal import surface_extract
+    def test_geometry_and_native_read_extract_nothing(self):
+        from cadgen._internal import topology_extract
         scene=self.scene(nested=True)
-        with mock.patch.object(surface_extract, 'extract_surface_component', side_effect=AssertionError('SURF forbidden')):
+        with mock.patch.object(topology_extract, 'extract_topology_facts', side_effect=AssertionError('extraction forbidden')):
             digest, tree=publish_document(scene)
             self.assertTrue(all(c['kind']=='native' for c in tree['components'].values()))
             shape=materialize(digest)
@@ -98,21 +110,22 @@ class GeometryInputs(unittest.TestCase):
             from cadgen._internal.step_scene_package import _scene_from_document_tree
             loaded=_scene_from_document_tree(scene.step_path,tree_hash=digest,step_hash=scene.step_hash)
             self.assertEqual(loaded.step_hash,scene.step_hash)
-            self.assertFalse((self.root/'store/index/surface').exists())
+            self.assertFalse((self.root/'store/index/part').exists())
 
-    def test_surface_loss_never_blocks_geometry_and_repairs_exactly(self):
-        from cadgen._internal import surface_extract
+    def test_display_data_loss_never_blocks_geometry_and_repairs_exactly(self):
+        from cadgen._internal import tessellate, topology_extract
         digest,tree=publish_document(self.scene(nested=True))
-        expected=surfaces.derive(digest)
-        for result in expected.values(): object_path(result['object']).unlink()
-        shutil.rmtree(self.root/'store/index/surface')
-        with mock.patch.object(surface_extract,'extract_surface_component',side_effect=AssertionError('SURF forbidden')):
+        expected=parts.derive(digest)
+        for result in part_objects(expected): object_path(result).unlink()
+        shutil.rmtree(self.root/'store/index/part')
+        with mock.patch.object(topology_extract,'extract_topology_facts',side_effect=AssertionError('extraction forbidden')), \
+             mock.patch.object(tessellate,'mesh_component',side_effect=AssertionError('mesh forbidden')):
             self.assertGreater(materialize(digest).volume,0)
-        self.assertEqual(surfaces.derive(digest),expected)
-        first=next(iter(expected.values()))
-        object_path(first['object']).write_bytes(b'corrupt')
-        self.assertEqual(surfaces.derive(digest),expected)
-        surfaces.validate_surface_bytes(read_verified_object(first['object']))
+        self.assertEqual(parts.derive(digest),expected)
+        first=part_objects(expected)[0]
+        object_path(first).write_bytes(b'corrupt')
+        self.assertEqual(parts.derive(digest),expected)
+        self.assertEqual(hashlib.sha256(object_path(first).read_bytes()).hexdigest(),first,'the damaged object is repaired')
 
     def test_effective_colors_rehash_after_reconstruction(self):
         from build123d import Solid
@@ -157,57 +170,60 @@ class GeometryInputs(unittest.TestCase):
         bad=copy.deepcopy(tree);bad['components'][next(iter(bad['components']))]['codec']='auto'
         with self.assertRaises(ValueError):capture_tree(put_object(cp.canonical_json_bytes(bad)))
 
-    def test_index_input_or_container_corruption_misses(self):
-        from cadgen.store.index import read_entry,write_entry
+    def test_record_or_object_corruption_misses_and_derives_again(self):
+        from cadgen.store.index import write_entry
         digest,tree=publish_document(self.scene())
-        expected=surfaces.derive(digest)
+        expected=parts.derive(digest)
         cid=next(iter(tree['components']));entry=tree['components'][cid]
+        key=parts.part_key(entry,parts.producer_identity())
         record=expected[cid]
-        altered=copy.deepcopy(record);altered['producer']['ocp']='wrong'
-        write_entry('surface',surfaces.surface_input(entry,surfaces.producer_identity()),altered)
-        self.assertIsNone(surfaces.lookup(entry,surfaces.producer_identity()))
-        self.assertEqual(surfaces.derive(digest),expected)
-        broken=b'SURF'+struct.pack('<II',2,2)+b'{}'
-        altered={**record,'object':put_object(broken)}
-        write_entry('surface',surfaces.surface_input(entry,surfaces.producer_identity()),altered)
-        self.assertIsNone(surfaces.lookup(entry,surfaces.producer_identity()))
-        self.assertEqual(surfaces.derive(digest),expected)
+        for altered in ({**record,'glb':{**record['glb'],'vertexCount':record['glb']['vertexCount']+1}},
+                        {**record,'selectors':{**record['selectors'],'object':put_object(b'not a selector table')}}):
+            write_entry('part',key,altered)
+            self.assertIsNone(parts.probe(key))
+            self.assertEqual(parts.derive(digest),expected)
+            self.assertEqual(parts.probe(key),record)
 
-    def test_surface_failure_never_publishes_readiness(self):
-        from cadgen._internal import surface_extract
+    def test_extraction_failure_never_publishes_a_part(self):
+        from cadgen._internal import topology_extract
         digest,tree=publish_document(self.scene())
-        with mock.patch.object(surface_extract,'extract_surface_component',side_effect=ValueError('injected extraction failure')):
-            with self.assertRaisesRegex(ValueError,'injected'):surfaces.derive(digest)
-        self.assertFalse((self.root/'store/index/surface').exists())
+        with mock.patch.object(topology_extract,'extract_topology_facts',side_effect=ValueError('injected extraction failure')):
+            with self.assertRaisesRegex(ValueError,'injected'):parts.derive(digest)
+        self.assertFalse(any((self.root/'store/index/part').glob('*')))
         self.assertGreater(materialize(digest).volume,0)
 
     def test_unknown_producer_cannot_share_persistent_namespace(self):
-        with mock.patch('cadgen.store.surfaces.kernel_versions',return_value=('1','unknown','1')):
+        with mock.patch('cadgen.store.parts.kernel_versions',return_value=('1','unknown','1')):
             digest,tree=publish_document(self.scene())
             self.assertGreater(materialize(digest).volume,0)
-            with self.assertRaises(ValueError):surfaces.derive(digest)
-        self.assertFalse((self.root/'store/index/surface').exists())
+            with self.assertRaises(ValueError):parts.derive(digest)
+        self.assertFalse((self.root/'store/index/part').exists())
 
-    def test_surface_producer_requires_exact_integer_scheme_fields(self):
-        producer = surfaces.producer_identity()
-        for name in ("scheme", "surfFormat"):
-            malformed = {**producer, name: float(producer[name])}
-            with self.assertRaisesRegex(ValueError, "unsupported surface producer"):
-                surfaces.producer_key(malformed)
+    def test_a_producer_is_the_kernel_alone(self):
+        producer = parts.producer_identity()
+        self.assertEqual(set(producer), {"build123d", "ocp", "cadqueryOcp"})
+        # An older cadgen's hint also named its extraction scheme and format.
+        for malformed in ({**producer, "scheme": 20, "surfFormat": 3}, {"build123d": producer["build123d"]}):
+            with self.assertRaisesRegex(ValueError, "unsupported producer"):
+                parts.producer_key(malformed)
 
-    def test_geometry_identity_does_not_depend_on_surface_producer(self):
+    def test_a_components_identity_does_not_depend_on_the_producer(self):
         scene=self.scene()
         first_hash,first=publish_document(scene)
-        with mock.patch('cadgen.store.surfaces.kernel_versions',return_value=('different','different','different')):
+
+        def view():
+            return parts.view_from_geometry(first_hash, capture_tree(first_hash, retain_payloads=False)[0])
+
+        with mock.patch('cadgen.store.parts.kernel_versions',return_value=('different','different','different')):
             second_hash,second=publish_document(scene)
-            changed=surfaces.request_view(first_hash)
-        normal=surfaces.request_view(first_hash)
+            changed=view()
+        normal=view()
         self.assertEqual((first_hash,first),(second_hash,second))
-        self.assertNotEqual(normal['surfaceProducer'],changed['surfaceProducer'])
+        self.assertNotEqual(normal['producer'],changed['producer'])
         cid=next(iter(first['components']))
-        self.assertNotEqual(normal['components'][cid]['surfaceInput'],changed['components'][cid]['surfaceInput'])
-        self.assertNotIn('surfaceProducer',first)
-        self.assertNotIn('surfaceInput',first['components'][cid])
+        self.assertNotEqual(normal['components'][cid]['part'],changed['components'][cid]['part'])
+        self.assertNotIn('producer',first)
+        self.assertNotIn('part',first['components'][cid])
 
     def test_same_brep_distinct_face_colors_do_not_share_topology(self):
         from build123d import Solid
@@ -231,6 +247,7 @@ class GeometryInputs(unittest.TestCase):
         tree={'kind':TREE_KIND,'schemaVersion':TREE_SCHEMA,'units':'mm','label':'colors',
               'entryKind':'assembly','components':components,'occurrences':occurrences,'links':[],
               'assembly':{'root':{'id':'o1','name':'colors','nodeType':'assembly','children':children}}}
+        tree=tokenized(tree)[0]
         digest=put_object(cp.canonical_json_bytes(tree))
         actual=materialize(digest)
         expected=self.emitted(actual,'colors-a.step')
@@ -240,14 +257,6 @@ class GeometryInputs(unittest.TestCase):
         recipes=list(parsed.prototype_face_colors.values())
         self.assertEqual(len(recipes),2)
         self.assertNotEqual(list(recipes[0].values()),list(recipes[1].values()))
-
-    def test_surface_producer_conflict_cannot_replace_expected_object(self):
-        digest,tree=publish_document(self.scene())
-        expected=surfaces.derive(digest)
-        entry=next(iter(expected.values()))
-        with self.assertRaisesRegex(ValueError,'producer conflict'):
-            surfaces.derive(digest,force=True,expected_objects={entry['surfaceInput']:'0'*64})
-        self.assertEqual(surfaces.derive(digest),expected)
 
     def test_malformed_native_or_placement_cannot_gain_materialization(self):
         digest,tree=publish_document(self.scene())
@@ -275,7 +284,7 @@ class GeometryInputs(unittest.TestCase):
             cp.decode_geometry_component(entry, payload)
         self.assertEqual(type(failure.exception.__cause__).__name__, "Standard_Failure")
 
-    def test_surface_writers_use_only_artifacts_and_racing_bytes_agree(self):
+    def test_part_writers_use_only_artifacts_and_racing_bytes_agree(self):
         digest,tree=publish_document(self.scene())
         from cadgen.store import index
         original=index.read_entry
@@ -283,18 +292,18 @@ class GeometryInputs(unittest.TestCase):
             if kind in {'model','output','component','document'}:
                 raise AssertionError(f'forbidden index {kind}')
             return original(kind,key)
-        with mock.patch.object(index,'read_entry',read),mock.patch.object(surfaces,'read_entry',read):
-            expected=surfaces.derive(digest)
-        for row in expected.values():object_path(row['object']).unlink()
-        shutil.rmtree(self.root/'store/index/surface')
-        code='from cadgen.store.surfaces import derive; import json,sys; print(json.dumps(derive(sys.argv[1]),sort_keys=True))'
+        with mock.patch.object(index,'read_entry',read):
+            expected=parts.derive(digest)
+        for digest_ in part_objects(expected):object_path(digest_).unlink()
+        shutil.rmtree(self.root/'store/index/part')
+        code='from cadgen.store.parts import derive; import json,sys; print(json.dumps(derive(sys.argv[1]),sort_keys=True))'
         processes=[subprocess.Popen([sys.executable,'-c',code,digest],env=os.environ.copy(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
                    for _ in range(2)]
         for process in processes:
             out,error=process.communicate(timeout=30)
             self.assertEqual(process.returncode,0,error)
             self.assertEqual(json.loads(out),json.loads(json.dumps(expected)))
-        self.assertEqual(surfaces.derive(digest),expected)
+        self.assertEqual(parts.derive(digest),expected)
 
     def point_box(self,parameter,location=None):
         from build123d import Solid
@@ -332,7 +341,7 @@ class GeometryInputs(unittest.TestCase):
 
     def test_actual_binary_throw_and_silent_loss_use_faithful_v3_artifacts(self):
         from cadgen._internal.component_package import _shape_brep_bytes
-        from cadgen._internal.surface_extract import extract_surface_component
+        from cadgen._internal.topology_extract import extract_topology_facts
         from cadgen._internal.component_package import _binary_v3_bytes as binary_v3_bytes
         for parameter in (1e-295,1e-300):
             with self.subTest(parameter=parameter):
@@ -344,34 +353,32 @@ class GeometryInputs(unittest.TestCase):
                 decoded=cp._decode_brep(entry['codec'],read_verified_object(entry['brep']))
                 self.assertEqual(_shape_brep_bytes(decoded),native_before)
                 self.assertEqual(binary_v3_bytes(decoded),read_verified_object(entry['brep']))
-                records=surfaces.derive(digest)
-                expected=extract_surface_component(original.wrapped,face_colors=original.cad_face_ordinal_colors)
-                self.assertEqual(read_verified_object(records[cid]['object']),expected)
-                self.assertEqual(records,surfaces.derive(digest,force=True))
+                expected=extract_topology_facts(original.wrapped)
+                self.assertEqual(facts_of(digest,cid),expected)
                 output=materialize(digest)
                 self.assertEqual(_shape_brep_bytes(output),native_before)
                 output.cad_face_ordinal_colors[1]=(0.,0.,0.,1.)
                 self.assertEqual(_shape_brep_bytes(original),native_before)
                 self.assertEqual(materialize(digest).cad_face_ordinal_colors[1],original.cad_face_ordinal_colors[1])
 
-    def test_explicit_eager_surface_is_required_and_never_lazily_extracted(self):
+    def test_explicit_eager_topology_is_required_and_never_lazily_extracted(self):
         from build123d import Solid
         from cadgen._internal import component_package as _geometry_codec
-        from cadgen._internal import surface_extract
+        from cadgen._internal import topology_extract
         shape=Solid.make_box(2,3,4)
         with mock.patch.object(_geometry_codec,'_encode_brep',side_effect=_geometry_codec.CodecFidelityError('unsupported native fidelity')):
             digest,tree,cid,entry=self.component_tree(shape)
         self.assertEqual(entry['kind'],'eager-only')
-        required=read_verified_object(entry['eagerSurface'])
-        with mock.patch.object(surface_extract,'extract_surface_component',side_effect=AssertionError('live fallback forbidden')):
-            first=surfaces.derive(digest)
-            self.assertEqual(first[cid]['object'],entry['eagerSurface'])
-            self.assertEqual(first,surfaces.derive(digest,force=True))
-        object_path(entry['eagerSurface']).unlink()
+        from cadgen._internal.topology_facts import read_topology_facts
+        required=read_verified_object(entry['topology'])
+        with mock.patch.object(topology_extract,'extract_topology_facts',side_effect=AssertionError('live fallback forbidden')):
+            first=parts.derive(digest)
+            self.assertEqual(facts_of(digest,cid),read_topology_facts(required))
+        object_path(entry['topology']).unlink()
         with self.assertRaises(FileNotFoundError):capture_tree(digest)
-        with self.assertRaises(FileNotFoundError):surfaces.derive(digest)
+        with self.assertRaises(FileNotFoundError):parts.derive(digest)
         put_object(required,repair=True)
-        self.assertEqual(first,surfaces.derive(digest))
+        self.assertEqual(first,parts.derive(digest))
 
     def test_mislabeled_but_hash_valid_codec_cannot_decode(self):
         from build123d import Solid
@@ -388,7 +395,7 @@ class GeometryInputs(unittest.TestCase):
         cid=entry['contentHash'][:16];tree['components'][cid]=entry;tree['occurrences'][0]['component']=cid
         digest=put_object(cp.canonical_json_bytes(tree))
         with self.assertRaisesRegex(ValueError,'declared codec'):materialize(digest)
-        with self.assertRaisesRegex(ValueError,'declared codec'):surfaces.derive(digest)
+        with self.assertRaisesRegex(ValueError,'declared codec'):parts.derive(digest)
 
     def test_actual_point_on_surface_needs_faithful_ascii_artifact(self):
         from OCP.BRep import BRep_PointOnSurface,BRep_Tool
@@ -401,7 +408,7 @@ class GeometryInputs(unittest.TestCase):
         from OCP.gp import gp_Pnt,gp_Dir
         from cadgen._internal.component_package import _ascii_v3_bytes as ascii_v3_bytes
         from cadgen._internal.component_package import _shape_brep_bytes
-        from cadgen._internal.surface_extract import extract_surface_component
+        from cadgen._internal.topology_extract import extract_topology_facts
         shape=self.point_box(.125)
         mapping=TopTools_IndexedMapOfShape();TopExp.MapShapes_s(shape.wrapped,TopAbs_VERTEX,mapping)
         vertex=next(TopoDS.Vertex_s(mapping.FindKey(i)) for i in range(1,mapping.Extent()+1)
@@ -417,9 +424,8 @@ class GeometryInputs(unittest.TestCase):
         decoded=cp._decode_brep(entry['codec'],payload)
         self.assertEqual(_shape_brep_bytes(decoded),original)
         self.assertEqual(ascii_v3_bytes(decoded),payload)
-        records=surfaces.derive(digest)
-        self.assertEqual(read_verified_object(records[cid]['object']),
-                         extract_surface_component(shape.wrapped,face_colors=shape.cad_face_ordinal_colors))
+        self.assertEqual(facts_of(digest,cid),
+                         extract_topology_facts(shape.wrapped))
         self.assertEqual(_shape_brep_bytes(materialize(digest)),original)
         for wrong in ('bintools-v4','bintools-v3'):
             with self.assertRaisesRegex(ValueError,'declared codec'):cp._decode_brep(wrong,payload)
@@ -432,10 +438,10 @@ class GeometryInputs(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'duplicate canonical JSON key'):
             cp.canonical_json_bytes({1:'a','1':'b'})
 
-    def test_normal_surface_bytes_match_existing_extractor(self):
+    def test_native_facts_are_the_extractors(self):
         from build123d import Box, Cylinder, Solid
         from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
-        from cadgen._internal.surface_extract import extract_surface_component
+        from cadgen._internal.topology_extract import extract_topology_facts
         for shape in (Box(2, 3, 4), Box(4, 5, 3) - Cylinder(1, 6),
                       Solid(BRepBuilderAPI_NurbsConvert(Cylinder(2, 4).wrapped, True).Shape())):
             shape.cad_face_ordinal_colors = {1: (.2, .3, .4, 1.)}
@@ -443,19 +449,19 @@ class GeometryInputs(unittest.TestCase):
             payload = read_verified_object(entry["brep"])
             self.assertEqual(payload, cp._shape_brep_bytes(shape))
             private = cp._build123d_shape_from_brep_bytes(payload)
-            expected = extract_surface_component(private.wrapped, face_colors=shape.cad_face_ordinal_colors)
-            self.assertEqual(read_verified_object(surfaces.derive(digest)[cid]["object"]), expected)
+            expected = extract_topology_facts(private.wrapped)
+            self.assertEqual(facts_of(digest, cid), expected)
 
-    def test_geometry_gc_retains_partial_closure_and_surface_is_independent(self):
+    def test_geometry_gc_retains_partial_closure_and_display_data_is_independent(self):
         from build123d import Box, Cylinder, Compound, Location
         from cadgen.store.gc import reachable_objects
         from cadgen.store.index import iter_entries, remove_entry
-        from cadgen.store.records import note_document_tree
+        from cadgen.store.records import document_key, note_document_tree
         from cadgen.store.trees import tree_complete
         shape = Compound(children=[Box(2, 3, 4), Cylinder(1, 4).moved(Location((8, 0, 0)))])
         digest, tree, _ = build_tree_from_compound(shape, root_name="root")
         note_document_tree("a" * 64, digest)
-        resolved = surfaces.derive(digest)
+        resolved = part_objects(parts.derive(digest))
         for key, _ in list(iter_entries("component")):
             remove_entry("component", key)
         entries = list(tree["components"].values())
@@ -464,54 +470,58 @@ class GeometryInputs(unittest.TestCase):
         self.assertIn(digest, live)
         self.assertIn(entries[1]["brep"], live)
         self.assertFalse(tree_complete(digest))
-        self.assertTrue(all(row["object"] in live for row in resolved.values()))
-        remove_entry("document", "a" * 64)
+        self.assertTrue(all(row in live for row in resolved))
+        remove_entry("document", document_key("a" * 64))
         live = reachable_objects()
         self.assertNotIn(digest, live)
         self.assertNotIn(entries[1]["brep"], live)
-        self.assertTrue(all(row["object"] in live for row in resolved.values()))
+        self.assertTrue(all(row in live for row in resolved), "a part keeps its objects whatever the tree's fate")
 
     def test_document_hint_is_optional_coherent_and_not_in_geometry(self):
         from build123d import Box
         from cadgen.store.records import note_document_tree, document_entry_for_hash, note_document_mesh
         first = self.component_tree(Box(1, 2, 3))[0]
         second = self.component_tree(Box(2, 3, 4))[0]
-        producer = surfaces.producer_identity()
-        note_document_tree("a" * 64, first, surface_producer=producer)
+        producer = parts.producer_identity()
+        note_document_tree("a" * 64, first, producer=producer)
         note_document_mesh("a" * 64, "external", "f" * 64)
-        with mock.patch.object(surfaces, "producer_identity", side_effect=AssertionError("kernel forbidden")):
-            note_document_tree("a" * 64, first, surface_producer=producer)
+        with mock.patch.object(parts, "producer_identity", side_effect=AssertionError("kernel forbidden")):
+            note_document_tree("a" * 64, first, producer=producer)
             note_document_tree("a" * 64, first)
             selected = document_entry_for_hash("a" * 64)
-            self.assertEqual(selected["surfaceProducer"], producer)
+            self.assertEqual(selected["producer"], producer)
             self.assertIn("meshes", selected)
-            self.assertEqual(surfaces.request_view(first, producer=producer)["tree"], first)
+            self.assertEqual(parts.view_from_geometry(first, capture_tree(first, retain_payloads=False)[0],
+                                                      producer=producer)["tree"], first)
             note_document_tree("a" * 64, second)
         changed = document_entry_for_hash("a" * 64)
-        self.assertNotIn("surfaceProducer", changed)
+        self.assertNotIn("producer", changed)
         self.assertNotIn("meshes", changed)
 
     def test_every_same_brep_variant_validates_native_kind_and_effective_recipe(self):
         from build123d import Solid
         from cadgen.store.trees import IDENTITY_16
-        from cadgen.store._descriptor_bounds import Snapshot
         shape = Solid.make_box(2, 3, 4)
         digest, source, cid, entry = self.component_tree(shape)
-        surface = surfaces.derive(digest)[cid]["object"]
+        from cadgen._internal.topology_facts import topology_facts_bytes
+        surface = put_object(topology_facts_bytes(facts_of(digest, cid)))
         for mode in ("absent-face", "eager-only"):
             with self.subTest(mode=mode):
                 tree = copy.deepcopy(source)
                 variant = copy.deepcopy(entry)
                 if mode == "absent-face":
+                    # A colour on a face the body does not have: the kernel-free checks
+                    # pass, the kernel's do not.
                     variant["faceColors"] = {999: (1., 0., 0., 1.)}
                     error = ValueError
                 else:
-                    variant.update(kind="eager-only", eagerSurface=surface)
+                    # An eager-only component: its pinned facts stand in for a decode.
+                    variant.update(kind="eager-only", topology=surface)
                     error = cp.NativeUnavailable
                 payload = read_verified_object(entry["brep"])
                 variant["contentHash"] = cp.geometry_component_hash(
                     variant["codec"], payload, variant["faceColors"], kind=variant["kind"],
-                    eager_surface=variant.get("eagerSurface"),
+                    topology=variant.get("topology"),
                 )
                 other = variant["contentHash"][:16]
                 tree["components"][other] = variant
@@ -520,30 +530,18 @@ class GeometryInputs(unittest.TestCase):
                 tree["assembly"] = {"root": {"id": "o1", "name": "root", "nodeType": "assembly", "children": [
                     {"id": f"o1.{i}", "name": f"part{i}", "nodeType": "part", "children": []} for i in (1, 2)]}}
                 tree["entryKind"] = "assembly"
+                tree = tokenized(tree)[0]
                 flat, objects = capture_tree(put_object(cp.canonical_json_bytes(tree)))
                 # Force native first so a later variant exercises the shared-BREP copy branch.
                 flat["components"] = {cid: flat["components"][cid], other: flat["components"][other]}
                 with self.assertRaises(error):
                     materialize_descriptor(flat, captured_objects=objects)
-                snapshot = Snapshot(json.dumps(flat).encode(), tuple(objects.items()), (),
-                                    tuple((key, value["brep"]) for key, value in flat["components"].items())).capture_appearance()
-                with self.assertRaises(error):
-                    snapshot.prepare_document()
                 if mode == "eager-only":
-                    with self.assertRaises(cp.NativeUnavailable):
-                        materialize_descriptor(flat, shapes={cid: shape, other: shape})
+                    # The build's own shape for its eager-only component, which only its process
+                    # holds: the document its STEP is written from is assembled with it.
+                    document = materialize_descriptor(flat, captured_objects=objects, shapes={other: shape})
+                    self.assertEqual(2, len(document.children))
 
-    def test_nonfinite_surface_index_fields_are_optional_misses_even_for_force(self):
-        from build123d import Solid
-        from cadgen.store.index import write_entry
-        digest, tree, cid, entry = self.component_tree(Solid.make_box(2, 3, 4))
-        expected = surfaces.derive(digest)
-        for value in (float("nan"), float("inf")):
-            record = copy.deepcopy(expected[cid])
-            record["faceColors"] = {"1": [value, 0, 0, 1]}
-            write_entry("surface", record["surfaceInput"], record)
-            self.assertIsNone(surfaces.lookup(entry, surfaces.producer_identity()))
-            self.assertEqual(surfaces.derive(digest, force=True), expected)
 
 if __name__ == "__main__":
     unittest.main()

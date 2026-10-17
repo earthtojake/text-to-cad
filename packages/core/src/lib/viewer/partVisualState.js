@@ -65,15 +65,11 @@ function partIdMatchesSet(partId, set) {
   if (!normalizedPartId) {
     return false;
   }
+  // The set holds leaf part ids (the tree expands a subassembly to its leaves): a token
+  // carries no hierarchy to match a prefix of.
   for (const candidate of set) {
     const normalizedCandidate = normalizePartSelector(candidate);
-    if (
-      normalizedCandidate &&
-      (
-        normalizedPartId === normalizedCandidate ||
-        normalizedPartId.startsWith(`${normalizedCandidate}.`)
-      )
-    ) {
+    if (normalizedCandidate && normalizedPartId === normalizedCandidate) {
       return true;
     }
   }

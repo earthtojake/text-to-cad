@@ -8,7 +8,7 @@ import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/vi
 /** @typedef {{enabled: boolean, quality: "preview" | "final", exposure: number, rotation: number, size: number, fill: number}} ViewLighting */
 /** @typedef {{enabled: boolean, color: string, opacity: number}} ViewPaint */
 /** @typedef {ViewPaint & {placement: "origin" | "lowest", finish: "matte" | "glossy"}} ViewFloor */
-/** @typedef {{enabled?: boolean, axis?: "x" | "y" | "z", offset?: number, offsets?: {x?: number, y?: number, z?: number}, invert?: boolean}} ViewClip */
+/** @typedef {{enabled?: boolean, axis?: "x" | "y" | "z", at?: number, invert?: boolean}} ViewClip */
 /** @typedef {{enabled?: boolean, amount?: number}} ViewExploded */
 /**
  * @typedef {Object} ViewSettings

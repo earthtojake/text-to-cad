@@ -5,7 +5,7 @@ from middle_guide_mounts import middle_guide_mounts
 from ring_guide_mounts import ring_guide_mounts
 from little_guide_mounts import little_guide_mounts
 
-@step(out='../STEP/phalanx_guide_mounts_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.18)
+@step(out='../STEP/phalanx_guide_mounts_review.step')
 def phalanx_guide_mounts_review():
     return bd.Compound(label='four_finger_phalanx_guide_mounts',children=[index_guide_mounts(),middle_guide_mounts(),ring_guide_mounts(),little_guide_mounts()])
 

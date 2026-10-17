@@ -19,7 +19,7 @@ export function shouldBuildDerivedDisplayEdges(meshData, {
 }
 
 // Record edges are drawn when the topology line pass is not: derived mesh
-// edges, the wireframe, or the CAD edge lines a surf component carries.
+// edges, the wireframe, or the CAD edge lines a part's mesh carries.
 export function shouldShowRecordDisplayEdges({
   edgesVisible = false,
   topologyDisplayEdgesVisible = false,

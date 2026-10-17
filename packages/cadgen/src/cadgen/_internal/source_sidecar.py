@@ -5,8 +5,9 @@ hash) is a pure function of the STEP file's bytes plus schema versions — the
 cache engine's world, freely evictable. The model's DECLARATIONS live in ONE
 sidecar FILE BESIDE THE MODEL, ``<name>.step.json``: KINEMATICS
 (typed mates with axes resolved to world numbers, couplings, pose presets)
-and APPEARANCE (named materials assigned to canonical document occurrences),
-plus an optional embedded ANIMATION module. The one hash here is
+and APPEARANCE (named materials assigned to the result's occurrences, by token),
+plus optional ANIMATION keyframes (the model's clips, baked at build by
+``cadgen._internal.animation_bake``). The one hash here is
 ``documentHash``: an artifact binding that prevents declarations from being
 applied to different STEP bytes after a partial copy or replacement. It is not
 source identity or provenance. No source paths, closure hashes, or timestamps
@@ -49,14 +50,14 @@ from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 # path from the artifact (:func:`source_sidecar_path`), or match the artifact
 # suffix too (`.step.json` / `.stp.json`).
 SOURCE_SIDECAR_SUFFIX = ".json"
-# 7: documentHash binds resolved kinematics to the exact STEP bytes they name.
-# 6: the animation and meshExports sections were removed. A mesh door
-#    tessellates the document's tree and writes the file
-#    it was asked for, and what a model declares lives in its record. A sidecar
-#    is written for kinematics alone. 5 moved provenance OUT of the sidecar.
-# 8: intrinsic PBR finishes were inline occurrence annotations.
-# 9: named material libraries + assignments, and embedded animation.
-SOURCE_SIDECAR_SCHEMA_VERSION = 9
+# The one schema read and written: optional kinematics (resolved mates,
+# couplings, poses), appearance (named material definitions assigned to
+# canonical leaf occurrences) and animation (keyframes baked from the model's
+# Python clips, cadgen._internal.animation_bake), bound to the saved STEP's bytes
+# by documentHash. A sidecar declaring any other schema is refused, never read.
+# 11: appearance assignments, kinematics mate ends (``parentId``/``childId``) and animation
+# tracks name occurrences by their tokens (``o:…``, README law 20), never by a position.
+SOURCE_SIDECAR_SCHEMA_VERSION = 11
 
 # What a sidecar may CONTAIN: declarations plus the exact-document binding.
 # Anything source-derived-as-provenance (paths, closure hashes, timestamps)
@@ -192,20 +193,15 @@ def normalize_materials(block: object, *, where: str = "materials") -> dict[str,
     return {"definitions": normalized_definitions, "assignments": normalized_assignments}
 
 
-def normalize_animation(block: object, *, where: str = "animation") -> dict[str, str] | None:
-    if block is None:
-        return None
-    if isinstance(block, str):
-        source = block
-        block = {"language": "javascript", "source": source}
-    if not isinstance(block, dict) or set(block) != {"language", "source"}:
-        raise ValueError(f"{where} must contain only language and source")
-    if block.get("language") != "javascript":
-        raise ValueError(f"{where}.language must be 'javascript'")
-    source = block.get("source")
-    if not isinstance(source, str) or not source.strip():
-        raise ValueError(f"{where}.source must be a nonempty JavaScript module")
-    return {"language": "javascript", "source": source}
+def normalize_animation(block: object) -> dict[str, Any] | None:
+    """The baked ``animation`` section, checked (``animation_bake`` owns its shape).
+    A malformed section is a sidecar this cadgen cannot read."""
+    from cadgen._internal.animation_bake import normalize_baked_animation
+
+    try:
+        return normalize_baked_animation(block)
+    except ValueError as exc:
+        raise SidecarSchemaError(str(exc)) from None
 
 
 def appearance_digest(block: object) -> str:
@@ -214,29 +210,16 @@ def appearance_digest(block: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _descriptor_nodes(descriptor: Mapping[str, Any]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    leaves = {str(item.get("id") or "") for item in descriptor.get("occurrences") or []}
-    by_id: dict[str, list[str]] = {}
-    by_name: dict[str, list[str]] = {}
+def animation_digest(block: object) -> str:
+    """The identity of an animation section: its canonical JSON's sha256."""
+    return hashlib.sha256(json.dumps(block, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
-    def visit(node: object) -> list[str]:
-        if not isinstance(node, Mapping):
-            return []
-        node_id = str(node.get("id") or "").strip()
-        members = [node_id] if node_id in leaves else []
-        for child in node.get("children") or []:
-            members.extend(visit(child))
-        if node_id:
-            by_id[node_id] = members
-            name = str(node.get("name") or "").strip()
-            if name:
-                by_name.setdefault(name, []).append(node_id)
-        return members
 
-    assembly = descriptor.get("assembly")
-    root = assembly.get("root") if isinstance(assembly, Mapping) else None
-    visit(root)
-    return by_id, by_name
+def bends_a_tube(block: object) -> bool:
+    """Whether an animation section has a tube track."""
+    clips = block.get("clips") if isinstance(block, Mapping) else None
+    return any(isinstance(track, Mapping) and track.get("tube") is not None
+               for clip in clips or [] if isinstance(clip, Mapping) for track in clip.get("tracks") or [])
 
 
 def _available_material_id(existing: Mapping[str, Any], requested: str, *, namespace: str) -> str:
@@ -274,51 +257,27 @@ def resolve_materials(
             materials[resolved_id] = deepcopy(definition)
         local_ids[material_id] = resolved_id
 
-    by_id, by_name = _descriptor_nodes(descriptor)
+    from cadgen.label_refs import LabelResolutionError
+    from cadgen.refs import descriptor_space, resolve
+
+    space = descriptor_space(descriptor)
     for index, assignment in enumerate(declaration["assignments"]):
         for target in assignment["targets"]:
-            selector = target[1:]
-            if selector in by_id:
-                node_ids = [selector]
-            else:
-                node_ids = by_name.get(selector) or []
-            if len(node_ids) != 1:
-                if node_ids:
-                    raise SidecarAppearanceError(
-                        f"materials.assignments[{index}] target {target!r} is ambiguous: {', '.join(node_ids)}"
-                    )
-                raise SidecarAppearanceError(
-                    f"materials.assignments[{index}] target {target!r} does not name a part or group"
-                )
-            members = by_id.get(node_ids[0]) or []
+            where = f"materials.assignments[{index}] target {target!r}"
+            try:
+                found = resolve(target, space)
+            except LabelResolutionError as error:
+                raise SidecarAppearanceError(f"{where}: {error}") from None
+            except ValueError:
+                found = None
+            if found is None or found.kind != "occurrence":
+                raise SidecarAppearanceError(f"{where} does not name a part or group")
+            members = space.members.get(found.occurrence) or []
             if not members:
-                raise SidecarAppearanceError(
-                    f"materials.assignments[{index}] target {target!r} contains no leaf occurrences"
-                )
+                raise SidecarAppearanceError(f"{where} contains no leaf occurrences")
             for occurrence_id in members:
                 assignments[occurrence_id] = local_ids[assignment["material"]]
     return normalize_appearance({"materials": materials, "assignments": assignments})
-
-
-def remap_appearance(
-    block: object, occurrence_map: Mapping[str, list[str]]
-) -> dict[str, Any] | None:
-    """Bind authored flattened leaf assignments to exact saved-document leaves."""
-    appearance = normalize_appearance(block)
-    if appearance is None:
-        return None
-    assignments: dict[str, str] = {}
-    for authored_id, material_id in appearance["assignments"].items():
-        document_ids = occurrence_map.get(authored_id) or []
-        if not document_ids:
-            raise SidecarAppearanceError(
-                f"appearance assignment {authored_id} has no exact saved-document occurrence"
-            )
-        for document_id in document_ids:
-            assignments[str(document_id)] = material_id
-    return normalize_appearance({
-        "materials": appearance["materials"], "assignments": assignments,
-    })
 
 
 def validate_appearance_targets(descriptor: Mapping[str, Any], block: object) -> dict[str, Any] | None:
@@ -334,27 +293,54 @@ def validate_appearance_targets(descriptor: Mapping[str, Any], block: object) ->
     return appearance
 
 
-def apply_appearance(descriptor: Mapping[str, Any], block: object) -> dict[str, Any]:
-    """Compose artifact annotations into an owned descriptor, never a tree object."""
+def occurrence_display(descriptor: Mapping[str, Any], block: object) -> dict[str, dict[str, Any]] | None:
+    """What the appearance section resolves to for each occurrence it assigns, for a page to
+    draw as given: the material's id and name, every finish channel with the defaults filled,
+    the authored base colour when the material has one, and the occurrence's ``opacity`` --
+    its STEP alpha times the material's opacity, the one product every export and the
+    viewport draw (``mesh_formats.occurrence_finish``). ``None`` when nothing is assigned.
+    A page joins this to the tree's occurrences by id; it decides no precedence of its own."""
     appearance = validate_appearance_targets(descriptor, block)
+    if not appearance:
+        return None
+    from cadgen._internal.mesh_formats import occurrence_finish
+
+    materials = appearance["materials"]
+    assignments = appearance["assignments"]
+    display: dict[str, dict[str, Any]] = {}
+    for occurrence in descriptor.get("occurrences") or []:
+        occurrence_id = str(occurrence.get("id") or "")
+        material_id = assignments.get(occurrence_id)
+        if material_id is None:
+            continue
+        authored = materials[material_id]
+        material = {
+            **SOURCE_MATERIAL_DEFAULTS,
+            **{key: authored[key] for key in _NUMERIC_MATERIAL_KEYS if key in authored},
+        }
+        resolved: dict[str, Any] = {
+            "materialId": material_id,
+            "materialName": authored["name"],
+            "material": material,
+            "opacity": (occurrence_finish(material, occurrence.get("color")) or {}).get("opacity", material["opacity"]),
+        }
+        if "baseColor" in authored:
+            resolved["baseColor"] = authored["baseColor"]
+        display[occurrence_id] = resolved
+    return display
+
+
+def apply_appearance(descriptor: Mapping[str, Any], block: object) -> dict[str, Any]:
+    """Compose artifact annotations into an owned descriptor, never a tree object: every
+    assigned occurrence carries what :func:`occurrence_display` resolves for it."""
+    display = occurrence_display(descriptor, block)
     result = deepcopy(dict(descriptor))
-    if appearance:
-        materials = appearance["materials"]
-        assignments = appearance["assignments"]
+    if display:
         for occurrence in result.get("occurrences") or []:
-            material_id = assignments.get(occurrence.get("id"))
-            if material_id is not None:
-                authored = materials[material_id]
-                occurrence["material"] = {
-                    **SOURCE_MATERIAL_DEFAULTS,
-                    **{key: authored[key] for key in _NUMERIC_MATERIAL_KEYS if key in authored},
-                }
-                occurrence["materialId"] = material_id
-                occurrence["materialName"] = authored["name"]
-                if "baseColor" in authored:
-                    occurrence["baseColor"] = authored["baseColor"]
-                else:
-                    occurrence.pop("baseColor", None)
+            resolved = display.get(str(occurrence.get("id") or ""))
+            if resolved is not None:
+                occurrence.pop("baseColor", None)
+                occurrence.update(deepcopy(resolved))
     return result
 
 
@@ -419,8 +405,9 @@ def read_source_sidecar(
             f"{source_sidecar_path(artifact).name}: unsupported sidecar schema {found} "
             f"(expected {SOURCE_SIDECAR_SCHEMA_VERSION}), so the kinematics, materials and "
             f"animation it declares cannot be read and this model poses and plays nothing. "
-            f"Migrate it now: rebuild the model (python {artifact.stem}.py) or re-annotate "
-            f"the document (cadgen step build)"
+            f"Migrate it now: write it again with what wrote it, the model script "
+            f"(python {artifact.stem}.py) or, for a document `cadgen step build` annotated, "
+            f"that command"
         )
     expected = _verified_document_hash(step_path, document_hash)
     found = str(payload.get("documentHash") or "").strip().lower()
@@ -429,18 +416,18 @@ def read_source_sidecar(
     unknown = set(payload) - set(_SIDECAR_SECTIONS)
     if unknown:
         raise SidecarSchemaError(f"{source_sidecar_path(step_path).name}: unknown sidecar fields: {', '.join(sorted(unknown))}")
-    if "appearance" in payload:
-        payload["appearance"] = normalize_appearance(payload["appearance"])
-    if "animation" in payload:
-        payload["animation"] = normalize_animation(payload["animation"])
+    try:
+        if "appearance" in payload:
+            payload["appearance"] = normalize_appearance(payload["appearance"])
+        if "animation" in payload:
+            payload["animation"] = normalize_animation(payload["animation"])
+    except SidecarSchemaError as exc:
+        # A section another build of cadgen wrote in a shape this one does not read.
+        raise SidecarSchemaError(
+            f"{source_sidecar_path(step_path).name}: {exc} -- write it again with the model "
+            f"script (python {Path(step_path).stem}.py)"
+        ) from None
     return payload
-
-
-def model_is_generated(step_path: Path | str) -> bool:
-    """Whether this artifact carries a sidecar this cadgen reads. Never
-    raises: classification is not a render, and the loud refusal belongs to
-    the readers of the SECTIONS."""
-    return source_sidecar_matches_document(step_path)
 
 
 def source_sidecar_matches_document(
@@ -490,15 +477,7 @@ def write_source_sidecar(
     The written ``documentHash`` describes the adjacent STEP bytes, or the
     caller's already-verified digest for those bytes. Only the FILE: the
     build's provenance record stays."""
-    body = {k: v for k, v in payload.items() if k in _SIDECAR_SECTIONS}
-    if "appearance" in body:
-        body["appearance"] = normalize_appearance(body["appearance"])
-        if body["appearance"] is None:
-            body.pop("appearance")
-    if "animation" in body:
-        body["animation"] = normalize_animation(body["animation"])
-        if body["animation"] is None:
-            body.pop("animation")
+    body = sidecar_sections(payload)
     if not sidecar_is_warranted(body):
         source_sidecar_path(step_path).unlink(missing_ok=True)
         return
@@ -513,6 +492,21 @@ def write_source_sidecar(
     temp = target.with_name(f".{target.name}{temp_suffix()}")
     temp.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
     replace_atomic(temp, target)
+
+
+def sidecar_sections(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """The sections of ``payload`` a sidecar carries, normalized: what
+    :func:`write_source_sidecar` writes, and what decides whether one is warranted."""
+    body = {k: v for k, v in payload.items() if k in _SIDECAR_SECTIONS}
+    if "appearance" in body:
+        body["appearance"] = normalize_appearance(body["appearance"])
+        if body["appearance"] is None:
+            body.pop("appearance")
+    if "animation" in body:
+        body["animation"] = normalize_animation(body["animation"])
+        if body["animation"] is None:
+            body.pop("animation")
+    return body
 
 
 def remove_source_sidecar(step_path: Path | str) -> None:
@@ -544,7 +538,7 @@ def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
         "sourceClosureFiles": source_files((record.get("closure") or {}).get("files") or []),
         "tree": str(record.get("tree") or ""),
     }
-    for key in ("sourceHash", "annotationHash", "kinematics", "stepHash"):
+    for key in ("sourceHash", "annotationHash", "kinematics"):
         if record.get(key) is not None:
             payload[key] = record[key]
     try:

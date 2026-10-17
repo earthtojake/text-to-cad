@@ -2,8 +2,8 @@
 
 Every function takes the crank angle `theta` in degrees (0 = cylinder 1 at
 firing TDC; the model is authored at theta = 0). Positions are engine-frame mm
-(see spec.py for the frame). `lib/animgen.py` bakes these same formulas into the
-viewer animation, and `lib/collide.py` checks the geometry they place.
+(see spec.py for the frame). The animation clips (`lib/clips.py`) pose the parts
+with these same functions, and `lib/gate.py` checks the geometry they place.
 
 Motion is planar for the crank train (everything turns about ROT_AXIS or moves
 in the y = const plane); the valvetrain is solved per cylinder in 3D.

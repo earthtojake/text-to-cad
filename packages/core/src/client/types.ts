@@ -1,5 +1,5 @@
-import type { TessellationCache } from '../lib/surf/cacheTypes.js';
-export type { TessellationCache, TessellationCacheEntry, TessellationCacheProvider, TessellatedComponent, TessellationOptions } from '../lib/surf/cacheTypes.js';
+import type { PartRow, TessellationCache } from '../lib/parts/cacheTypes.js';
+export type { PartRow, TessellationCache, TessellationCacheEntry, TessellationCacheProvider, TessellatedComponent } from '../lib/parts/cacheTypes.js';
 export type CadJson = null | boolean | number | string | CadJson[] | { [key: string]: CadJson };
 export interface CadEntry {
   /** The file's absolute path, `/`-separated. */
@@ -91,6 +91,25 @@ export interface CadDrawingPayload {
   })[];
   [key: string]: unknown;
 }
+/**
+ * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
+ * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
+ * with its colour and the URL of the mesh it draws), and what the description says about its
+ * links and joints, as written. See `packages/cadgen/src/cadgen/robot_payload.py`.
+ */
+export interface CadRobotPayload {
+  schemaVersion: number;
+  kind: 'urdf' | 'sdf' | 'srdf';
+  name: string;
+  root: string;
+  articulation: Record<string, unknown>;
+  links: { name: string; placement: number[]; visuals: unknown[]; collisions: unknown[]; inertial: unknown }[];
+  joints: Record<string, unknown>[];
+  visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
+  srdf: Record<string, unknown> | null;
+  sdf: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
 export type CadWorkerResourceTicket =
   | { kind: 'url'; url: string; headers?: Record<string, string>; cache?: RequestCache; maxBytes?: number }
@@ -102,32 +121,53 @@ export interface CadResourceProvider {
   /** Stable within one immutable authorization/generation scope; change it when that scope changes. */
   cacheKey?(url: string): string;
   readJson(url: string, options?: CadRequestOptions): Promise<unknown>;
-  readText(url: string, options?: CadRequestOptions): Promise<string>;
   readBytes(url: string, options?: CadResourceReadOptions): Promise<ArrayBuffer>;
   byteLength(url: string, options?: CadRequestOptions): Promise<number | null>;
-  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' | 'robot' }): string;
+  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' }): string;
   workerTicket(url: string, options?: CadResourceReadOptions): Promise<CadWorkerResourceTicket>;
 }
-export interface CadSurfaceProducer { scheme?: number; surfFormat?: number; producerKey?: string; [key: string]: unknown }
+/** The kernel a view's parts are derived under: opaque to the page, which only forwards it. */
+export interface CadProducer { producerKey?: string; [key: string]: unknown }
 export interface CadRuntimeView {
   tree: string;
   viewId: string;
-  surfaceProducer: CadSurfaceProducer;
-  components?: Record<string, {surfaceInput: string; surfaceObject?: string; [key: string]: unknown}>;
+  producer: CadProducer;
+  /** Each component names its part (`<digest>-v<version>`): the key its display data is read by. */
+  components?: Record<string, {part: string; [key: string]: unknown}>;
   [key: string]: unknown;
 }
-export interface CadSurfaceComponentRequest { cid: string; surfaceInput: string; surfaceObject?: string }
-export interface CadSurfaceTicket { readonly surfaceInput: string; readonly surfaceObject: string; readonly surfUrl: string; readonly byteLength: number }
-export interface CadSurfaceRequest {
-  tree: string; viewId: string; producer: CadSurfaceProducer;
-  components: {cid: string; surfaceInput: string; expectedSurfaceObject?: string}[];
+export interface CadPartComponentRequest { cid: string; part: string }
+export interface CadPartRequest {
+  tree: string; viewId: string; producer: CadProducer;
+  components: CadPartComponentRequest[];
   job?: string;
 }
-export interface CadSurfaceResponse {
+export interface CadMeasureRequest { tree: string; viewId: string; producer: CadProducer; cid: string; part: string; face: number }
+export interface CadFaceMeasure { face: number; area: number; center: [number, number, number] }
+export interface CadPartResponse {
   viewId: string; job?: string; replacementView?: CadRuntimeView;
-  components: Record<string, {state: 'pending' | 'ready' | 'failed'; surfaceInput: string; surfaceObject?: string; url?: string; byteLength?: number; job?: string; error?: string; code?: string}>;
+  components: Record<string, {state: 'pending' | 'ready' | 'failed'; part: string; record?: Omit<PartRow, 'part'>; job?: string; error?: string; code?: string}>;
 }
-/** What a build of a STEP file is doing: status only. The viewer always shows the saved file. */
+/**
+ * A build's preview revision, as its feed names it the moment the result tree exists (cadgen's
+ * `STORE.md` §9b): names of artifact-side objects a client reads as it reads any, never geometry.
+ */
+export interface CadEditingPreviewRevision {
+  /** The result tree, read as any tree is: its view at `storeTreeUrl`. */
+  tree: string;
+  /** The producer its parts are keyed under; null when the build could not name them, and the view keys them as for a saved file. */
+  producer: CadProducer | null;
+  /** The components whose part the store holds, by cid: the stored parts first, then one more each time the build derives one. */
+  parts: Record<string, string>;
+  /** Whether every component's part is named; until then the missing ones are coming. */
+  complete: boolean;
+  /** The one object the build resolved its declarations into against `tree` (`previewAnnotations`), or null until it has. */
+  annotations: string | null;
+}
+/**
+ * What a build of a STEP file is doing, and the preview revision it announced: the viewer shows the
+ * saved file, or that preview labelled as one until the file replaces it in place.
+ */
 export interface CadEditingPreview {
   feedCursor?: string;
   feedLimited?: boolean;
@@ -140,8 +180,28 @@ export interface CadEditingPreview {
   error?: string;
   output?: string;
   file?: string;
-  /** The file changed after this build finished: its failure is no longer the news. */
+  /** The file changed after this build finished: its failure and its preview are no longer the news. */
   superseded?: boolean;
+  /** The preview revision: null before the build's result exists and for a superseded build. */
+  preview?: CadEditingPreviewRevision | null;
+  /**
+   * The file the build saved, the moment it lands: the tree its bytes were written from and their
+   * digest; null while it has written nothing. A build records its result and writes the file after.
+   */
+  saved?: { tree: string; documentHash: string } | null;
+}
+/**
+ * A preview revision's annotations object (`GET /__cad/store?annotations=`): exactly the fields a
+ * catalog row carries for a saved file, resolved against the preview's tree and keyed by its tokens.
+ */
+export interface CadPreviewAnnotations {
+  kind: 'preview-annotations';
+  schemaVersion: number;
+  tree: string;
+  articulation: Record<string, unknown> | null;
+  appearance: CadJson;
+  display: Record<string, Record<string, unknown>> | null;
+  animation: Record<string, unknown> | null;
 }
 export interface CadPreviewObserverOptions {
   schedule?: typeof globalThis.setTimeout;
@@ -189,19 +249,39 @@ export interface CadWorkspaceService {
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
+  /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
+  robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   readonly resources: CadResourceProvider;
-  /** `onReady` hears each component as soon as its row is ready, while the rest are still awaited. */
-  resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[],
-    options?: CadRequestOptions & { onReady?: (cid: string, ticket: CadSurfaceTicket) => void }): Promise<Map<string, CadSurfaceTicket>>;
+  /**
+   * Each component's part row: its record, which cadgen derives in one job for a part the store
+   * lacks. `onReady` hears each component as soon as its row is ready, while the rest are still
+   * awaited. `onFailed` hears each component cadgen could not derive or mesh, with its own error,
+   * and the request resolves with the rest; without it, a failed component fails the request.
+   */
+  resolveParts(view: CadRuntimeView, requested: CadPartComponentRequest[],
+    options?: CadRequestOptions & {
+      onReady?: (cid: string, row: PartRow) => void;
+      onFailed?: (cid: string, error: Error) => void;
+    }): Promise<Map<string, PartRow>>;
   observeEditingPreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void, options?: CadPreviewObserverOptions): () => void;
+  /**
+   * Where a store tree's view is read, as a catalog row names a saved file's: `assembly.json` under
+   * it, resolved as a package asset, with the producer its parts are keyed under (a build feed's
+   * preview names both; with none, the view keys them as for a saved file).
+   */
+  storeTreeUrl(tree: string, options?: { producer?: CadProducer | null }): string;
+  /** A preview revision's annotations object, or null for one the store does not hold. */
+  previewAnnotations(object: string, options?: CadRequestOptions): Promise<CadPreviewAnnotations | null>;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
 }
 /** Reusable HTTP implementation, also used by existing catalog adapters. */
 export interface CadClient extends CadWorkspaceService {
   readonly origin: string;
-  requestSurfaces(body: CadSurfaceRequest, options?: CadRequestOptions): Promise<CadSurfaceResponse>;
-  cancelSurfaceRequest(body: { job: string }, options?: CadRequestOptions): Promise<{ok?: boolean}>;
+  requestParts(body: CadPartRequest, options?: CadRequestOptions): Promise<CadPartResponse>;
+  cancelPartRequest(body: { job: string }, options?: CadRequestOptions): Promise<{ok?: boolean}>;
+  /** One face's exact area and centroid, measured by cadgen on its component's stored BREP. */
+  measureFace(body: CadMeasureRequest, options?: CadRequestOptions): Promise<CadFaceMeasure>;
   editingPreview(file: string, options?: CadRequestOptions & { after?: string }): Promise<CadEditingPreview>;
 }
 export interface CadClientOptions {

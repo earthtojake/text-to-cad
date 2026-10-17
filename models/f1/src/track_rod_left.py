@@ -1,7 +1,7 @@
 """F1 part model: left track rod.
 
 The geometry `lib/suspension.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.23`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#track_rod_left`; rebuild `f1.py`
 to pick up a change here.
 """
 

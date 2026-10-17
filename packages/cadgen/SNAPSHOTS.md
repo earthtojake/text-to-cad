@@ -17,11 +17,22 @@ cadgen step snapshot part.step review.png --display display.json --camera front
 
 The public groups are `camera`, `surfaces`, `edges`, `lighting`, `background`,
 `floor`, `grid`, and `axes`. `clip` and `exploded` remain independent inspection
-tools. `--camera` or a job/output `camera` specifies pose and framing;
+tools. A clip keeps the part of a STEP model on the lower side of a plane across
+`axis` (`x`, `y` or `z`), or the upper side with `invert`, and fills the cut
+faces. The plane stands at `at`, its coordinate on the axis in millimetres in the
+model's own frame (the numbers `--mode list` prints as bounds), or, without
+`at`, through the middle of the model at rest. A camera facing
+the cut (`right`, `back` or `top`; `left`, `front` or `bottom` inverted) draws a
+section view. `--camera` or a job/output `camera` specifies pose and framing;
 `display.camera` specifies projection and focal length (20–200 mm). Render
 defaults to perspective; other presets use orthographic projection. Opacity is
 0 for transparent and 1 for opaque, including partially transparent PNG
-backgrounds. Unknown keys and retired modes are refused.
+backgrounds. Unknown keys and modes are refused.
+
+A STEP model with no surfaces -- empty, or only curves and points -- has nothing a
+view draws. Its snapshot is still written, with a warning that says the model has
+no surfaces, decided from the face counts the parts' records give before any
+browser starts (`snapshot_parts.has_surfaces`).
 
 `edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
 the `hidden` and `off` surface styles describe a CAD model: its topology edges,
@@ -48,11 +59,20 @@ snapshot's own.
 - An STL is one object and a 3MF one per object (and per material within one),
   each in its colour. They author no finish: `solid` wears the viewer's surface and
   `render` the studio's.
-- A robot is drawn where the viewer opens it: every joint at its default, then an
-  SRDF's `home` group state, with the joints `--joint-values` names on top. A
-  colour the description gives a visual wins over the colours its link mesh
-  carries, and a link mesh that cannot be loaded fails the snapshot rather than
-  leaving the link out.
+- A robot is drawn where the viewer opens it: every control at rest, then an
+  SRDF's `home` group state, with the joints `--joint-values` names on top.
+  cadgen resolves the description first (`cadgen.robot_payload`: the articulation
+  the page plays, the visuals it draws) and refuses, by name, what the page
+  cannot draw: a validator finding; a mesh that is not an STL, 3MF or GLB file
+  beside the description (`package://` and remote URIs are not resolved); a
+  value for a fixed joint, a mimic follower (a follower follows its leader) or a
+  `tcad:four_bar` crank (a crank follows its driver, through the linkage cadgen
+  closes); a leader value that pushes a follower past the follower's own
+  limits, or a four-bar driver outside the range the linkage was solved over. A box,
+  cylinder, sphere or capsule is meshed by cadgen into its store. A colour the
+  description gives a visual wins over the colours its link mesh carries, and a
+  link mesh that cannot be loaded fails the snapshot rather than leaving the
+  link out.
 - The ground is sized from the rest placement, so a pose never rescales it; only
   the floor's height follows a posed robot down.
 - `--mode list` lists what the scene drew, one row per mesh: a `ref` naming it,
@@ -85,9 +105,9 @@ ignored, and gone is not silent. `--camera`, `--display`, `--mode` and
 refused by name — what the flag meant, why a flat drawing has no such thing, and
 what to pass instead — rather than reported as an unrecognized argument. A job
 (or `cadgen snapshot` routing a `.dxf`) that carries `camera`,
-any `display` key but `appearance`, `mode` other than `view`, `section`,
-`scale`, an output `label`/`viewLabel`, or `output.padding`, `output.viewLabels`
-or `output.tightFrame` is refused by name with what a drawing is — in the same
+any `display` key but `appearance`, `mode` other than `view`, `scale`, an
+output `label`/`viewLabel`, or `output.padding`, `output.viewLabels` or
+`output.tightFrame` is refused by name with what a drawing is — in the same
 words, because the flag and the job key are one request arriving two ways.
 
 ## Requests and OUT
@@ -101,27 +121,47 @@ packet. Only then is OUT cleared, so a failed build or render leaves no file
 rather than the previous one. Occurrence refs are the one request check that
 needs the built tree, so they are checked after the clear.
 
-OUT's extension decides the encoding, and no job key does: view mode writes
-`.png`, section mode `.png` or `.svg`, a video `.mp4` or `.gif`. Any other
-extension is refused.
+OUT's extension decides the encoding, and no job key does: a view writes
+`.png`, a video `.mp4` or `.gif`. Any other extension is refused.
 
 A job comes from `--job FILE` or from `TARGET OUT` and the flags; there is no
 stdin form. With `--job`, each flag given overrides that setting in every job of
 the packet, and `--width`/`--height` size every output.
 
-## Section planes
+## Listing a STEP model's parts
 
-`--mode section` draws the outline a plane cuts through a STEP model.
-`--section PLANE[:OFFSET]` (job key `"section": {"plane", "offset"}`) places it:
-`PLANE` is `XY` (the default), `XZ` or `YZ`, and `OFFSET` moves it along its own
-normal in model units, defaulting to 0.
+`--mode list` on a STEP/STP input is answered by cadgen from the tree and the
+store (`cadgen.snapshot_parts`) and starts no browser. Each row is one placed
+occurrence, in the tree's order: `ref` and `name` are the occurrence's id and
+name exactly as every selector resolves them
+(`cadgen.assembly_lookup.assembly_occurrence_rows`), `bounds` is the component's
+exact box placed by the occurrence's transform (rounded to 1e-3), and
+`triangleCount`/`vertexCount` are the stored display mesh's, as its part's record
+counts them: the mesh a view draws. The build derived it; a part the store has none for is derived by one
+build-pool job before the list is read ([`STORE.md`](STORE.md) §3), as for a
+view. `--focus` and
+`--hide` narrow the rows the way they narrow a view.
 
-```bash
-cadgen step snapshot part.step cut.svg --mode section --section XZ:12.5
-```
+A part whose stored mesh leaves out a face no mesher could cover (its body's
+`unmeshedFaces`, [`STORE.md`](STORE.md) §3) is listed, counted and drawn without
+that face, never refused: the list and the view each add a warning naming the
+part's occurrences and the faces (`cadgen.snapshot_parts.unmeshed_warnings`,
+asked once the page has drawn).
 
-Those are the only two keys, a `section` outside section mode is refused, and a
-plane that misses the model returns an empty drawing with a warning.
+A part no mesh could be made of at all -- the store has no display data for it and
+the build-pool job that derives it fails -- is left out, as the CAD Viewer leaves it
+out: the view's component says why (`failure`, `cadgen.store.view`), the page draws
+every other part, and the list lists them. Each adds a warning naming the part's
+occurrences and why, in the words the build warned with
+(`#o:4b1f9e2a7c03 peg could not be meshed (MeshProductionError: ...), so the view does not draw it`;
+`cadgen.snapshot_parts.failed_part_warnings`), and the snapshot exits 0, as for any
+warning. Where every part a view or a list shows -- each one `--focus` names, else each
+one `--hide` leaves -- is such a part, there is nothing to show: it fails, naming them,
+as a snapshot of a model none of whose parts could be meshed does. A mesh export never
+leaves a part out: its file is not written.
+
+Without `--json`, a warning prints on stderr, one `warning:` line each, so stdout
+carries the saved paths, or a list's inventory, alone.
 
 ## Sizes
 
@@ -164,21 +204,23 @@ Still view renders report these measured browser durations in milliseconds:
 
 | Field | Measured work |
 | --- | --- |
-| `loadSourceMs` | Source fetch, cached-mesh decoding or tessellation, and source composition |
+| `loadSourceMs` | Source fetch, stored-mesh reads and decoding, and source composition |
 | `preparePoseMs` | Requested animation loading/frame resolution and kinematics runtime preparation |
 | `buildModelMs` | Render context and model/display-record construction |
 | `prepareViewportMs` | Viewport, renderer and scene setup; this is not a draw |
 | `waitViewportMs` | Waiting for the prepared viewport's asynchronous readiness |
 | `captureMs` | Entire capture call, including readiness and all output stages below |
 
-Exact-surface packages also report `stageTimings.sourceLoad`. Counts distinguish
-`componentCount`, `cacheBatchCount`, `cacheHitCount` and `cacheMissCount`.
-Measured durations are `probeMs` (metadata), `cacheReadMs` (bounded body fetch
-and integrity validation), `cacheDecodeMs` (component views and metadata),
-`meshBuildMs` (owned render arrays), and `composeMs` (occurrence composition).
-Misses additionally measure `surfaceReadMs` (fetch and parse), `tessellateMs`
-and `cacheWriteMs`. Miss-stage times sum per-component intervals across the
-small concurrent pool, so they can overlap; absent stages are omitted.
+STEP packages also report `stageTimings.sourceLoad`. Counts distinguish
+`componentCount`, `cacheBatchCount`, `cacheHitCount` and `cacheMissCount`. The
+page only reads stored meshes, by each component's part: the build derived them,
+and a part the store lacked was derived before the page opened, while the
+snapshot resolved its view. Measured durations are `probeMs` (the parts' records),
+`cacheReadMs` (bounded body fetch and integrity validation), `cacheDecodeMs`
+(component views and metadata), `meshBuildMs` (owned render arrays), and
+`composeMs` (occurrence composition). A static package's own mesh files measure
+`meshReadMs`; those times sum per-component intervals across a small concurrent
+pool, so they can overlap. Absent stages are omitted.
 
 `stageTimings.outputs` contains one measured entry per image, in output order,
 with its `path` and these durations:
@@ -189,15 +231,15 @@ with its `path` and these durations:
 | `frameCameraMs` | Camera selection/fitting, including visible-vertex tight framing when enabled, and the camera's depth range when there is no studio |
 | `prepareStudioMs` | Camera depth and photographic studio setup; absent without a studio |
 | `drawSubmitMs` | The renderer's synchronous draw call |
-| `encodeImageMs` | Image readback, optional view label and PNG/data-URL encoding |
+| `encodeImageMs` | Reading the image off the GPU, optional view label and PNG/data-URL encoding |
 
 WebGL submission may return before GPU work finishes. `encodeImageMs` can
 include waiting for that work; these fields are browser wall times, not GPU
 profiler measurements. `captureMs` contains `waitViewportMs` and the output
 stages, so do not add those overlapping durations together.
 
-Only stages actually reported by the runtime are included. List, section and
-video results do not invent still-image measurements. Invalid/nonfinite
+Only stages actually reported by the runtime are included. List and video
+results do not invent still-image measurements. Invalid/nonfinite
 values and image payloads are excluded from diagnostic output. Measurements
 belong to one render call and cannot carry over from a previous job.
 

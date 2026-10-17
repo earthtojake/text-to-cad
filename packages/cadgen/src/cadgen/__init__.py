@@ -37,6 +37,7 @@ __all__ = [
     "cylindrical",
     "fastened",
     "couple",
+    "clip",
     "build123d",
     "srgb",
     "MateTarget",
@@ -46,7 +47,6 @@ __all__ = [
     "StepScene",
     "Occurrence",
     "Selection",
-    "ensure_step_topology_artifact",
     "label_text",
     "label_shape",
     "report",
@@ -70,6 +70,12 @@ def __getattr__(name: str):
         from cadgen import kinematics
 
         return getattr(kinematics, name)
+    if name == "clip":
+        # Animation clips for the animation= dict on @step, baked to keyframes
+        # when the model builds.
+        from cadgen.animation import clip
+
+        return clip
     if name == "build123d":
         # `from cadgen import build123d as bd` — the lazy transparent re-export.
         # Importing the submodule is cheap; the real build123d import happens on
@@ -77,10 +83,6 @@ def __getattr__(name: str):
         import cadgen.build123d as _bd
 
         return _bd
-    if name == "ensure_step_topology_artifact":
-        from cadgen.step_topology_artifact import ensure_step_topology_artifact
-
-        return ensure_step_topology_artifact
     if name in {"AssemblyHelper", "MateTarget", "label_shape", "label_text", "target"}:
         from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
 
@@ -91,8 +93,7 @@ def __getattr__(name: str):
             "label_shape": label_shape,
             "target": target,
         }[name]
-    if name in {"read_step", "read_scene", "StepScene", "Occurrence", "Selection",
-                "load_step_scene", "located_shape", "occurrence_selector_id", "scene_occurrence_shape"}:
+    if name in {"read_step", "read_scene", "StepScene", "Occurrence", "Selection"}:
         from cadgen import step_scene
 
         return getattr(step_scene, name)
@@ -115,9 +116,8 @@ def __getattr__(name: str):
 
 if TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root exports
-    # without importing OCP. Every name here must have a branch there. An earlier version
-    # of this block pulled two names from the api alias module, since deleted -- they come
-    # from their real modules now.
+    # without importing OCP. Every name here must have a branch there, and comes from the
+    # module that defines it.
     from cadgen import build123d, dxf, glb, step, stl, threemf
     from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
     from cadgen.color import (
@@ -127,6 +127,7 @@ if TYPE_CHECKING:
         linear_to_srgb as linear_to_srgb,
         srgb_to_linear as srgb_to_linear,
     )
+    from cadgen.animation import clip
     from cadgen.kinematics import couple, cylindrical, fastened, revolute, slider
     from cadgen.instances import compound_from_instances
     from cadgen.progress import report, track
@@ -137,7 +138,6 @@ if TYPE_CHECKING:
         Occurrence,
         Selection,
     )
-    from cadgen.step_topology_artifact import ensure_step_topology_artifact
 
 
 @_cache

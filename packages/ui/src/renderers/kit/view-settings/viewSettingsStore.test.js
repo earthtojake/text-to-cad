@@ -22,7 +22,7 @@ test("successive control and agent actions compose atomically without writing re
 });
 
 test("enable is idempotent, and every gate discards its old values including Clip", () => {
-  const store = createViewSettingsStore({ floor: { opacity: 0.8 }, clip: { enabled: true, offsets: { x: 0.4 }, invert: true } });
+  const store = createViewSettingsStore({ floor: { opacity: 0.8 }, clip: { enabled: true, at: 0.4, invert: true } });
   let updates = 0;
   store.subscribe(() => updates++);
   store.setEnabled("floor", true);
@@ -34,7 +34,7 @@ test("enable is idempotent, and every gate discards its old values including Cli
   assert.equal(store.getSnapshot().scene.view.floor.opacity, 0.6);
   store.setEnabled("clip", false);
   store.setEnabled("clip", true);
-  assert.equal(store.getSnapshot().scene.view.clip.offsets.x, 0.5);
+  assert.equal(store.getSnapshot().scene.view.clip.at, undefined, "through the middle again");
   assert.equal(store.getSnapshot().scene.view.clip.invert, false);
 });
 
@@ -48,7 +48,7 @@ test("every disabled group reopens with preset defaults, including restored stal
     floor: { placement: "lowest", color: "#abcdef", opacity: 0.9 },
     grid: { color: "#abcdef", opacity: 0.9 },
     axes: { color: "#abcdef", opacity: 0.9 },
-    clip: { offsets: { x: 0.4, z: 0.7 }, invert: true },
+    clip: { axis: "z", at: 0.7, invert: true },
     exploded: { amount: 0.7 }
   };
   for (const mode of ["solid", "render"]) {
@@ -68,7 +68,7 @@ test("every disabled group reopens with preset defaults, including restored stal
 });
 
 test("preset selection preserves tools; Reset disables them", () => {
-  const store = createViewSettingsStore({ clip: { enabled: true, offsets: { z: 0.3 } }, exploded: { enabled: true, amount: 0.4 } });
+  const store = createViewSettingsStore({ clip: { enabled: true, axis: "z", at: 0.3 }, exploded: { enabled: true, amount: 0.4 } });
   const tools = store.getSnapshot().display;
   store.patch({ camera: { projection: "perspective" }, surfaces: { opacity: 0.5 } });
   store.selectPreset("solid");
@@ -88,7 +88,7 @@ test("Clip edits preserve all unrelated renderer inputs through both resolution 
     const resolve = createViewerRenderStateResolver();
     const before = store.getSnapshot();
     const oldRuntime = resolve({ themeSettings: before.scene.theme, displaySettings: before.scene.display });
-    store.patch({ clip: { enabled: true, offsets: { x: 0.4 } } });
+    store.patch({ clip: { enabled: true, at: 0.4 } });
     const after = store.getSnapshot();
     const newRuntime = resolve({ themeSettings: after.scene.theme, displaySettings: after.scene.display });
     for (const name of ["theme", "camera", "render", "quality"]) assert.equal(after.scene[name], before.scene[name], name);

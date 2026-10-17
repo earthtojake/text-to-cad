@@ -9,7 +9,7 @@ is declared once, beside the verb, in
 
 The mesh half of ``cadgen step snapshot``, re-homed: 3MF is a format with a
 door (``cadgen 3mf build``), so its snapshot belongs behind the same door. Its
-verb is the MESH shape: no kinematics, section mode or selection flags.
+verb is the MESH shape: no kinematics or selection flags.
 ``--display`` takes ``solid`` or ``render``; the display settings that describe a
 CAD model (edges, clip, exploded, the edge-made modes, hidden/off surfaces) are
 refused by name rather than ignored.

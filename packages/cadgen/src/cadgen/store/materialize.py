@@ -56,10 +56,19 @@ class _ComponentIdentity:
     brep: str
     codec: str
     face_colors: tuple[tuple[int, tuple[float, float, float, float]], ...]
+    # What the component's build named it by, as its tree carries it (README law 20):
+    # the entry a reuse hands the packager is the published entry, these included.
+    construction: str = ""
+    lineage: str = ""
 
     def entry(self) -> dict[str, Any]:
-        return {"kind": "native", "codec": self.codec, "brep": self.brep,
-                "faceColors": dict(self.face_colors), "contentHash": self.content_hash}
+        entry = {"kind": "native", "codec": self.codec, "brep": self.brep,
+                 "faceColors": dict(self.face_colors), "contentHash": self.content_hash}
+        if self.construction:
+            entry["construction"] = self.construction
+        if self.lineage:
+            entry["lineage"] = self.lineage
+        return entry
 
 
 class _Partner:
@@ -155,14 +164,14 @@ def _native_children(shape: Any) -> list[Any]:
     return children
 
 
-def _geometry_fingerprint(shape: Any, memo: dict | None = None) -> str | tuple | None:
+def _geometry_digest(shape: Any, memo: dict | None = None) -> str | tuple | None:
     """Read geometry through a private topology copy, never change caller flags.
 
     copyGeom=False shares only curves/surfaces, which this function only reads.
     Every copied TShape is fresh. Meshing data is omitted and Checked is
     normalized on these private TShapes, so measurement/meshing stays intact.
 
-    A native Compound contains only an ordered child graph. Fingerprint that
+    A native Compound contains only an ordered child graph. Digest that
     graph explicitly, including each child's exact native identity, orientation
     and local placement. This catches structural and aliasing edits without
     serializing all geometry again at every assembly depth. Its native leaves
@@ -186,11 +195,11 @@ def _geometry_fingerprint(shape: Any, memo: dict | None = None) -> str | tuple |
     try:
         if shape.ShapeType() == TopAbs_COMPOUND:
             children = tuple(
-                (_native_key(child), _geometry_fingerprint(child, memo))
+                (_native_key(child), _geometry_digest(child, memo))
                 for child in _native_children(shape)
             )
             result = ("compound", int(shape.Orientation()), children) if all(
-                fingerprint is not None for _, fingerprint in children
+                digest is not None for _, digest in children
             ) else None
             memo[key] = result
             return result
@@ -221,10 +230,6 @@ def _materialized_metadata(node: Any, *, root: bool) -> tuple:
     if color is not None and type(color) is not Color:
         raise ValueError("materialized color is not a build123d Color")
     rgba = None if color is None else tuple(float(v) for v in color)
-    if "cad_material" in node.__dict__:
-        raise ValueError(
-            "cad_material authoring was removed; declare named materials with @step(materials=...)"
-        )
     authored_material = node.__dict__.get("_cadgen_material")
     if authored_material is None:
         authored_material = {}
@@ -271,7 +276,7 @@ def _capture_materialized_state(
     shape = node.wrapped
     return _MaterializedState(
         shape=shape,
-        geometry=_geometry_fingerprint(shape, geometry_memo),
+        geometry=_geometry_digest(shape, geometry_memo),
         metadata=_materialized_metadata(node, root=root),
         children=tuple(
             _capture_materialized_state(child, root=False, geometry_memo=geometry_memo)
@@ -551,12 +556,6 @@ def _material_from_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
     return resolved or None
 
 
-def tree_tag(shape: Any) -> str | None:
-    """The tree hash a materialized compound carries, or None."""
-    tag = getattr(shape, TREE_TAG, None)
-    return str(tag) if tag else None
-
-
 def materialize(tree_hash: str, *, label: str | None = None) -> Any:
     """A ``Compound`` for the tree. Raises FileNotFoundError when the tree or a
     component object is missing (the gate should have said stale)."""
@@ -573,16 +572,18 @@ def materialize_descriptor(
     captured_objects: dict[str, bytes] | None = None,
     label: str | None = None,
     tree_hash: str | None = None,
+    placed: dict[int, str] | None = None,
 ) -> Any:
     """:func:`materialize` of a FLATTENED descriptor (``flatten``/``flatten_tree``).
 
-    ``shapes`` supplies unlocated build123d shapes by cid for components that
-    are not in the store yet — the build's own, before it publishes them
-    (``cadgen.store.build`` assembles the STEP it writes from exactly this);
-    every other component is read from its declared BREP codec and the
-    immutable intrinsic face-color recipe. Each occurrence owns its metadata even when two components
-    share identical BREP bytes. The result is tagged as a materialized tree
-    only when ``tree_hash`` names one."""
+    ``shapes`` supplies unlocated build123d shapes by cid for components the store
+    cannot decode -- the build's own eager-only ones, which its STEP is written from
+    (``store/exports.py``) -- or does not hold yet; every other component is read from
+    its declared BREP codec and the immutable intrinsic face-color recipe. Each
+    occurrence owns its metadata even when two components share identical BREP bytes.
+    ``placed``, when given, is told the cid of every placed leaf, by the leaf's ``id``:
+    what the STEP writer names it by. The result is tagged as a materialized tree only
+    when ``tree_hash`` names one."""
     from build123d import Compound
 
     from cadgen._internal.component_package import (
@@ -599,20 +600,20 @@ def materialize_descriptor(
     decoded_by_object: dict[str, Any] = {}
     face_colors_by_cid: dict[str, dict[int, tuple[float, float, float, float]]] = {}
     for cid, entry in components.items():
-        if entry.get("kind") == "eager-only":
+        if entry.get("kind") == "eager-only" and cid not in shapes:
             raise NativeUnavailable("eager-only component has no admitted native representation")
-        if entry.get("kind") != "native":
+        if entry.get("kind") not in ("native", "eager-only"):
             raise ValueError("unsupported geometry component kind")
         if cid in shapes:
-            # Unpublished own shapes have no SURF object yet. Their extraction
-            # input is authoritative, and normalization takes a private copy.
+            # Unpublished own shapes have no published component yet. Their
+            # face colours are authoritative, and normalization takes a private copy.
             face_colors_by_cid[cid] = _normalized_face_colors(
                 getattr(shapes[cid], "cad_face_ordinal_colors", None)
             )
             continue
         brep = str((entry or {}).get("brep") or "")
         if not brep:
-            raise FileNotFoundError(f"tree {tree_hash}: component {cid} has no brep object")
+            raise FileNotFoundError(f"tree {tree_hash or descriptor.get('tree')}: component {cid} has no brep object")
         shape = decoded_by_object.get(brep)
         if shape is None:
             shape = decode_geometry_component(entry, captured_objects[brep] if captured_objects is not None else _bytes_for_object(brep))
@@ -637,7 +638,7 @@ def materialize_descriptor(
         cid = str(occurrence.get("component") or "")
         base = shapes.get(cid)
         if base is None:
-            raise FileNotFoundError(f"tree {tree_hash}: missing component {cid}")
+            raise FileNotFoundError(f"tree {tree_hash or descriptor.get('tree')}: missing component {cid}")
         child = _placed_copy(base, _location_from_matrix(occurrence.get("transform")))
         child.label = str(occurrence.get("name") or occurrence.get("id") or "")
         color = _color_from_entry(occurrence) or _color_from_entry(components.get(cid) or {})
@@ -667,10 +668,14 @@ def materialize_descriptor(
             child.__dict__["__cadgen_component_identity__"] = _ComponentIdentity(
                 cid=cid, content_hash=content_hash, brep=brep,
                 codec=components[cid]["codec"], face_colors=tuple(sorted(face_colors.items())),
+                construction=str(components[cid].get("construction") or ""),
+                lineage=str(components[cid].get("lineage") or ""),
             )
         else:
             child.__dict__.pop("__cadgen_component_identity__", None)
         placed_by_id[str(occurrence.get("id") or "")] = child
+        if placed is not None:
+            placed[id(child)] = cid
 
     def build_node(node: dict[str, Any]):
         node_type = str(node.get("nodeType") or "")

@@ -5,15 +5,11 @@ import * as THREE from "three";
 import { VIEWER_PICK_MODE } from "@text-to-cad/core/lib/viewer/constants.js";
 import { syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
 import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
-import { resetStepModuleRecordEffects } from "@text-to-cad/core/common/stepModuleEffects.js";
-import { loadTubeDeformation } from "@text-to-cad/core/common/tubeDeformationChunk.js";
-
-// `deformTube` needs the lazy tube runtime, which production loads through
-// compileAnimationSource. This clip is built by hand, so load it here.
-await loadTubeDeformation();
+import { resetRecordEffects } from "@text-to-cad/core/common/recordEffects.js";
+import { attachTubeSkins } from "@text-to-cad/core/common/tubeSkin.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "./viewerPickMode.js";
 
-test("Render retains picking proxies while STEP transforms and tube deformation still apply", () => {
+test("Render retains picking proxies while STEP transforms and tube skins still apply", () => {
   const selectors = { proxy: {
     edgePositions: new Float32Array([0, 0, 0, 10, 0, 0]), edgeIndices: new Uint32Array([0, 1]),
     vertexPositions: new Float32Array([0, 0, 0])
@@ -34,7 +30,25 @@ test("Render retains picking proxies while STEP transforms and tube deformation 
     syncSelectorPickGroups(runtime, selectorRuntime);
     assert.ok(runtime.edgePickGroup.children.length > 0);
     const path = y => ({ normal: [0, 0, 1], segments: [{ kind: "line", start: [0, y, 0], end: [10, y, 0] }] });
-    const clip = { duration: 1, update(t, model) { model.get("rope").deformTube({ rest: path(0), path: path(t * 10) }).translate([0, 0, 5]); } };
+    // The rope lifts 5 mm and its centreline slides 10 mm sideways over the second: its two
+    // joints, at either end, move 10 mm in y between the keys (cadgen's skin, written out).
+    const clip = { id: "lift", label: "Lift", duration: 1, loop: true, tracks: [
+      { targets: ["o1"], times: [0, 1], rest: path(0), maxSegmentLength: 10,
+        tube: [{ path: path(0), twistDeg: 0 }, { path: path(10), twistDeg: 0 }] },
+      { targets: ["o1"], times: [0], pivot: [0, 0, 0], transform: [[0, 0, 5, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]] }
+    ] };
+    const joint = (x, y) => [x, y, 0, 0, 0, 0, 1];
+    attachTubeSkins({ lift: clip }, {
+      bindings: [{
+        occurrence: "o1", joints: 2, rest: new Float32Array([...joint(0, 0), ...joint(10, 0)]),
+        positions: new Float32Array([0, 0, 1, 5, 0, 1, 10, 0, 1]), normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]), sourceTriangles: new Uint32Array([0]), along: new Float32Array([0, 0.5, 1]),
+        material: new Float32Array(9), edgePositions: new Float32Array(0), edgeAlong: new Float32Array(0),
+        edgeOrdinals: new Uint32Array(0), edgeClasses: new Uint8Array(0)
+      }],
+      tracks: [{ clip: "lift", track: 0, bindings: [0],
+        keys: new Float32Array([...joint(0, 0), ...joint(10, 0), ...joint(0, 10), ...joint(10, 10)]) }]
+    });
     const result = applySceneState(THREE, {
       runtime, meshData: { parts: [{ id: "o1", label: "rope" }] }, selectorRuntime,
       animation: { clip, elapsedSec: 0.5 }, onError: ({ error }) => { throw error; }
@@ -43,7 +57,7 @@ test("Render retains picking proxies while STEP transforms and tube deformation 
     assert.deepEqual(new THREE.Vector3().applyMatrix4(record.effectMatrix).toArray(), [0, 0, 5]);
     assert.deepEqual(Array.from(record.geometry.attributes.position.array.slice(0, 3)), [0, 5, 1]);
   } finally {
-    resetStepModuleRecordEffects([record], THREE);
+    resetRecordEffects([record], THREE);
     geometry.dispose();
     mesh.material.dispose();
   }

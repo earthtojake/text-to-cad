@@ -2,7 +2,7 @@
 
 A sub-assembly of the engine: the parts `lib/bottom_end.py` builds, as one model
 with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.2`; rebuild `w16.py` to pick up a change here.
+`#crank`; rebuild `w16.py` to pick up a change here.
 """
 
 from __future__ import annotations
@@ -15,8 +15,7 @@ from lib import spec as S
 from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/crank.step", materials=materials_for_system("crank"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@step(out="../STEP/crank.step", materials=materials_for_system("crank"))
 def crank():
     parts = bottom_end_lib.build(S.SECTIONED)
     if not parts:

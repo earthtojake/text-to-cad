@@ -106,9 +106,28 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("died mid-job", err)
         self.assertIn("killed by SIGKILL (signal 9)", err)
-        self.assertIn("Running it cold now", err)
+        self.assertEqual(err.count("Running it cold now"), 1, err)
         self.assertNotIn("NOT retried", err)
         self.assertNotIn("CADGEN_DAEMON=0", err)
+
+    def test_a_daemon_lost_mid_request_says_the_job_runs_again_cold(self):
+        """The daemon itself killed mid-build: the client reran the whole build in its
+        own process and said nothing, so a rerun from the start read as a slow build."""
+        outcome, out, err = self._run([{"stream": "stdout", "data": ""}])  # then the connection closes
+
+        self.assertIsNone(outcome, "the ordinary fallback still runs it cold")
+        self.assertEqual(out, "")
+        self.assertIn("lost the build service running `cadgen step compile tmp/noexh/noexh.step --force`", err)
+        self.assertIn("closed the connection", err)
+        self.assertIn("Running it cold now, in this process", err)
+
+    def test_ctrl_c_while_waiting_on_the_daemon_is_the_interrupt_a_cold_run_raises(self):
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "1"}), \
+                mock.patch.object(client, "_run_with_retry", side_effect=KeyboardInterrupt):
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            with self.assertRaises(KeyboardInterrupt) as stop:
+                client.run_via_daemon("run", ["/w/box.py"], "/w", prog="python box.py")
+        self.assertTrue(stop.exception.__suppress_context__, "no traceback through the wait")
 
     def test_a_job_with_no_prog_is_named_by_its_tool(self):
         payload = {**PAYLOAD, "tool": "probe", "prog": None, "argv": ["a b.step"]}
@@ -132,6 +151,13 @@ class DeadWorkerMessage(unittest.TestCase):
         outcome, _out, err = self._run([{"stream": "stderr", "data": "hello\n"}, {"exit": 0}])
         self.assertEqual(outcome, 0)
         self.assertEqual(err, "hello\n")
+
+    def test_a_released_frame_ends_the_request_with_its_code_before_the_exit(self):
+        """``--no-wait``: the worker releases its client once the command's answer is
+        complete and writes the files after; the client returns on the frame and reads
+        nothing more (the exit frame reaches nobody)."""
+        outcome, out, _err = self._run([{"stream": "stdout", "data": "current part.step\n"}, {"released": 0}])
+        self.assertEqual((outcome, out), (0, "current part.step\n"))
 
 
 class ResidentProcessLifecycle(unittest.TestCase):
@@ -217,19 +243,48 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(connect.call_count, 2)
         self.assertEqual([frame["kind"] for frame in stale.sent + current.sent], ["status", "status"])
 
-    def test_a_build_verifies_its_read_back_exactly_when_its_caller_asked(self):
-        # CADGEN_VERIFY_READBACK is one build's request (STORE.md §10). It travels with the
-        # job, and a job whose caller did not set it runs without it, in a daemon started with it.
+    def test_a_request_built_before_an_edit_is_asked_again_as_the_code_is_now(self):
+        # A build in flight when cadgen's code changed was resent with the token it was built
+        # under, so every daemon spawned to take over exited on it: 698 in ten minutes.
+        tokens = []
+
+        class Successor(_ScriptedChannel):
+            """A daemon started after the edit: it serves the new code's token and no other."""
+
+            def send(self, raw):
+                super().send(raw)
+                tokens.append(self.sent[-1]["token"])
+                frame = {"exit": 0} if tokens[-1] == "after" else {"restart": True}
+                self._frames = [json.dumps(frame).encode("utf-8")]
+
+        with mock.patch.object(client, "compute_version_token", return_value="after"), \
+                mock.patch.object(client, "daemon_address", return_value="test-address"), \
+                mock.patch.object(client, "_connect_or_spawn", side_effect=lambda address: Successor([])), \
+                mock.patch.object(client, "request_timeout", return_value=0.0):
+            code = client._run_with_retry({**PAYLOAD, "token": "before"}, strict=True, on_stream=lambda text: None)
+        self.assertEqual(code, 0)
+        self.assertEqual(tokens, ["before", "after"])
+
+    def test_a_job_runs_in_its_callers_environment_and_the_daemon_keeps_its_own_names(self):
+        # A model reading os.environ, and a client's own choice such as CADGEN_STORE_MAX
+        # (STORE.md §8), see the caller's environment warm as cold: what the caller has is
+        # set, what it lacks is unset -- in a daemon started with it -- and the names the
+        # daemon's machinery sets for itself are neither sent nor replaced.
         import os
 
         from cadgen.daemon import worker
 
-        with mock.patch.dict("os.environ", {"CADGEN_VERIFY_READBACK": "1"}):
-            self.assertEqual(client.forwarded_env().get("CADGEN_VERIFY_READBACK"), "1")
-            worker._apply_request_env({"env": {}})
-            self.assertNotIn("CADGEN_VERIFY_READBACK", os.environ)
-            worker._apply_request_env({"env": {"CADGEN_VERIFY_READBACK": "1"}})
-            self.assertEqual(os.environ.get("CADGEN_VERIFY_READBACK"), "1")
+        with mock.patch.dict("os.environ", {"SIZE": "10", "CADGEN_STORE_MAX": "1G",
+                                            "CADGEN_DAEMON_CHILD": "1", "CADGEN_DAEMON_SOCKET": "/daemon.sock"}):
+            caller = client.forwarded_env()
+            self.assertEqual((caller["SIZE"], caller["CADGEN_STORE_MAX"]), ("10", "1G"))
+            self.assertFalse(set(caller) & client.INTERNAL_ENV_VARS)
+            caller = {name: value for name, value in caller.items() if name != "CADGEN_STORE_MAX"}
+            worker._apply_request_env({"env": {**caller, "SIZE": "20", "CADGEN_DAEMON_SOCKET": "/elsewhere.sock"}})
+            self.assertEqual(os.environ["SIZE"], "20")
+            self.assertNotIn("CADGEN_STORE_MAX", os.environ)
+            self.assertEqual((os.environ["CADGEN_DAEMON_CHILD"], os.environ["CADGEN_DAEMON_SOCKET"]),
+                             ("1", "/daemon.sock"))
 
     def test_the_daemon_popen_is_retained_by_an_owned_reaper(self):
         process = mock.Mock(pid=4321)
@@ -292,7 +347,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(died["exitStatus"], -9)
         self.assertIn(pool_mod.describe_exit(-9), died["detail"])  # the worker's own words, as this platform names the signal
         self.assertEqual(conn.frames[-1], {"exit": 1})
-        pool.release.assert_called_once_with(worker, healthy=False)
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
 
     @unittest.skipIf(os.name == "nt", "a Windows worker's exit status is a code, never a signal")
@@ -316,7 +371,78 @@ class ServerRelaysTheDeath(unittest.TestCase):
                                                   "prog": "cadgen step compile"})
                 self.assertEqual(build.finish.call_args.args[1], ended)
                 self.assertEqual(worker_died.call_args_list, [mock.call(status)] if ended == "crashed" else [])
+                # The pool's crash count (`cadgen daemon status`) agrees: a stopped job is no crash.
+                self.assertEqual(pool.release.call_args.kwargs["cancelled"], ended == "cancelled")
                 self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
+
+    def test_a_job_that_released_its_client_finishes_after_the_client_left(self):
+        """``--no-wait``: a worker that released its client goes on writing the files; the
+        client leaving after that is no loss -- the worker is not killed, its job ends with
+        its exit frame as done, not cancelled, and the ledger closes it then."""
+        class Releasing:
+            pid = 778
+            extra = False
+
+            def __init__(self) -> None:
+                self.sent: list[dict] = []
+
+            def send(self, request: dict) -> None:
+                self.sent.append(request)
+
+            def frames(self, **_kwargs):
+                yield {"stream": "stdout", "data": "built part.step\n"}
+                yield {"released": 0}
+                yield {"event": {"model": "/w/part.py", "state": "building", "phase": "STEP saved",
+                                 "saved": {"output": "/w/part.step", "tree": "t" * 64, "documentHash": "d" * 64}}}
+                yield {"exit": 0}
+
+            def alive(self) -> bool:
+                return True
+
+            def kill(self) -> None:
+                raise AssertionError("the worker was killed after releasing its client")
+
+        class Leaves(self._Conn):
+            """A client that returns on the released frame: every send after it fails."""
+
+            gone = False
+
+            def send(self, raw: bytes) -> None:
+                if self.gone:
+                    raise BrokenPipeError("the client left")
+                super().send(raw)
+                self.gone = "released" in self.frames[-1]
+
+        pool = mock.Mock()
+        worker = Releasing()
+        pool.acquire.return_value = worker
+        conn = Leaves()
+        jobs = JobLedger()
+        with mock.patch.object(server, "_JOBS", jobs), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
+            server._handle_request(conn, {"tool": "run", "argv": ["/w/part.py", "--no-wait"], "cwd": "/w",
+                                          "prog": "python part.py"})
+        self.assertEqual([next(iter(frame)) for frame in conn.frames if frame != {"stream": "stdout", "data": ""}],
+                         ["stream", "released"], "the client heard its release and nothing after")
+        pool.release.assert_called_once_with(worker, healthy=True, cancelled=False)
+        (job,) = jobs.snapshot()
+        self.assertEqual((job["state"], job["exit"]), ("done", 0))
+        self.assertEqual(job["savedResults"][os.path.realpath("/w/part.step")]["documentHash"], "d" * 64,
+                         "the save landed after the release")
+
+    def test_a_job_whose_caller_left_is_released_as_cancelled_not_crashed(self):
+        class Gone(self._Conn):
+            def send(self, raw: bytes) -> None:
+                raise BrokenPipeError("the client left")
+
+        pool = mock.Mock()
+        worker = self._DyingWorker()
+        pool.acquire.return_value = worker
+        with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
+            server._handle_request(Gone(), {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                            "prog": "cadgen step compile"})
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=True)
 
 
 class AWorkerThatCouldNotStart(unittest.TestCase):

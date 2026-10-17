@@ -42,7 +42,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const [rootRef, mobile] = useViewerMobileMeasure();
   const viewerElement = useRef<HTMLDivElement | null>(null);
   const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
-  // The navbar's box for the renderer's own view controls (the CAD viewer's Display and Preview).
+  // The navbar's box for the renderer's own view controls (the CAD viewer's Select modes, Display and Preview).
   const [navbarSlot, setNavbarSlot] = useState<HTMLDivElement | null>(null);
   // A renderer showing its file fullscreen has the page to itself, until it says otherwise or goes.
   const [fullscreen, setFullscreen] = useState(false);

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { referenceMeasurements } from "../../workbench/referenceMeasurements.js";
+import { useFaceArea } from "../../workbench/faceAreas.js";
 import { nodeVolume } from "../../workbench/partVolume.js";
+import { splitElementRef } from "@text-to-cad/core/lib/cadRefs.js";
 import { STEP_MODEL_ROOT_ID, stepTreeNodeLeafPartIds } from "@text-to-cad/core/lib/step/stepTree.js";
-import { stepPartNameFromFile, stepProductName } from "@text-to-cad/core/lib/step/productName.js";
+import { stepPartNameFromFile } from "@text-to-cad/core/lib/step/productName.js";
 
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
@@ -42,9 +44,11 @@ function MeasurementRows({rows}) {
 
 // A face's or an edge's own measurements: its area, its length, the radii of a round one, an
 // arc's sweep. Where it is (its centre, its normal), what kind it is and whose it is are the
-// heading's and the view's to say.
-function TopologyDetail({ reference }) {
-  return <MeasurementRows rows={referenceMeasurements(reference).rows} />;
+// heading's and the view's to say. A face's area is cadgen's, asked for as the face is shown and
+// listed once it has come.
+function TopologyDetail({ reference, faceAreas }) {
+  const faceArea = useFaceArea(faceAreas, reference);
+  return <MeasurementRows rows={referenceMeasurements(reference, { faceArea }).rows} />;
 }
 
 // A component's or a subassembly's: how many parts, its overall size and its volume.
@@ -84,31 +88,33 @@ function itemKey(item) {
 
 /**
  * A reference as a person reads it: its own label when it has one (a part's or subassembly's
- * name, a named face), otherwise where it is and what — "base · face 3" — from its part as the
- * tree names it (`partName`) and its selector's last token. A generated label that only
- * restates the selector ("Face o1.1.f3") is not a name, and neither is an XCAF label entry
- * (`=>[0:1:1:2]`, `stepProductName`). A single-part file's part with no name of its own is the
- * file's ("l_bracket · face 11"): the tree's root is that part, named after the file. Never the
- * raw id: that is what a copy carries, with the file it is in.
+ * name, a named face), otherwise where it is and what — "base · face f:base.extrude1.3" — from
+ * its part as the tree names it (`partName`) and its element's name, the one a copy carries
+ * too. A generated label that only restates the selector ("Face o:…/f:…") is not a name. A
+ * single-part file's part with no name of its own is the file's ("l_bracket · face f:…"): the
+ * tree's root is that part, named after the file. The occurrence token names the part only when
+ * nothing else does; the element's raw selector never names anything.
  */
 function referenceName(item, meshData, partName) {
   if (isPartNode(item)) return String(item.name || item.displayName || "").trim() || itemKey(item);
   const selector = String(item.displaySelector || item.normalizedSelector || item.id || "").split("|").pop();
-  const token = selector.split(".").filter(Boolean).pop() || "";
-  const own = [item.name, item.pickData?.name, item.label].map(stepProductName)
-    .find(value => value && !(token && value.includes(token)) && !value.includes(selector));
+  const split = splitElementRef(selector);
+  const element = split?.element || "";
+  const text = value => String(value ?? "").trim();
+  const own = [item.name, item.pickData?.name, item.label].map(text)
+    .find(value => value && !(element && value.includes(element)) && !value.includes(selector));
   if (own) return own;
   const kind = (SELECTOR_TYPE_LABELS[item.selectorType] || "Reference").toLowerCase();
-  const number = token.match(/^[a-z]+(\d+)$/i)?.[1] || "";
-  const occurrence = item.occurrenceId || selector.slice(0, -token.length - 1);
+  const number = element;
+  const occurrence = item.occurrenceId || split?.owner || "";
   const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
   const part = parts.find(entry => [entry.occurrenceId, entry.id].includes(occurrence));
   // The part's own name, where it is one: an occurrence with none goes by its id, and that is
   // the last resort here, after the name a single-part file gives its part.
-  const partLabel = [part?.name, part?.displayName].map(stepProductName).find(value => value && value !== occurrence) || "";
+  const partLabel = [part?.name, part?.displayName].map(text).find(value => value && value !== occurrence) || "";
   const fileName = stepPartNameFromFile(partName?.(STEP_MODEL_ROOT_ID));
   const parent = [item.pickData?.sourceName, item.sourceName, partName?.(occurrence), partLabel, fileName, occurrence]
-    .map(stepProductName).find(Boolean) || "";
+    .map(text).find(Boolean) || "";
   return [parent, number ? `${kind} ${number}` : kind].filter(Boolean).join(" · ");
 }
 
@@ -127,7 +133,7 @@ function referenceName(item, meshData, partName) {
  *
  * @returns {{ title: import("react").ReactNode, content: import("react").ReactNode } | null}
  */
-export function useStepReference({ references = [], meshData = null, measurements = null, partsSize = null, partName = null }) {
+export function useStepReference({ references = [], meshData = null, measurements = null, partsSize = null, partName = null, faceAreas = null }) {
   const items = useMemo(() => Array.isArray(references) ? references.filter(Boolean) : [], [references]);
   const idsKey = JSON.stringify(items.map(itemKey));
   const [browsed, setBrowsed] = useState(null);
@@ -159,7 +165,7 @@ export function useStepReference({ references = [], meshData = null, measurement
     {activeItem && (isPartNode(activeItem)
       ? <PartDetail node={activeItem} meshData={meshData} size={boxSize(activeItem) || partsSize?.(stepTreeNodeLeafPartIds(activeItem))
         || (items.length === 1 ? measurements?.size : null)}/>
-      : <TopologyDetail reference={activeItem}/>)}
+      : <TopologyDetail reference={activeItem} faceAreas={faceAreas}/>)}
   </div>;
   return { title, content };
 }

@@ -5,13 +5,15 @@ import test from "node:test";
 
 import {
   buildCadRefToken,
-  buildLabelAliasMap,
+  elementRef,
+  isElementName,
   isNativeCadSelector,
-  labelRefForOccurrence,
+  isOccurrenceToken,
   normalizeCadRefSelectors,
   parseCadRefSelector,
   parseCadRefToken,
-  resolveLabelSelector
+  sortCadRefSelectors,
+  splitElementRef
 } from "./cadRefs.js";
 
 // The same fixture the Python suite reads. It is the only thing keeping the two grammars --
@@ -21,13 +23,21 @@ const FIXTURE = JSON.parse(
   readFileSync(fileURLToPath(new URL("./cadRefs.parity.json", import.meta.url)), "utf8")
 );
 
+const O1 = "o:4b1f9e2a7c03";
+const O2 = "o:0a9e8d7c6b5f";
+const F = "f:9d2e8c1b5a70";
+const E = "e:12ab34cd56ef";
+const V = "v:fedcba987654";
+// Names by lineage: the feature that made the element, its number there, and a split piece's.
+const NAMED = ["f:dial.extrude1.3", "e:dial.extrude1.3.2", "v:lid.2"];
+
 test("every selector case parses as the shared fixture says", () => {
   for (const testCase of FIXTURE.selectorCases) {
     const parsed = parseCadRefSelector(testCase.selector);
     assert.ok(parsed, `${testCase.selector} should parse`);
     assert.equal(parsed.selectorType, testCase.selectorType, testCase.selector);
     assert.equal(parsed.occurrenceId, testCase.occurrenceId, testCase.selector);
-    assert.equal(parsed.ordinal ?? null, testCase.ordinal, testCase.selector);
+    assert.equal(parsed.element ?? "", testCase.element, testCase.selector);
     assert.equal(parsed.canonical, testCase.canonical, testCase.selector);
     assert.equal(parsed.label ?? "", testCase.label ?? "", testCase.selector);
   }
@@ -43,33 +53,9 @@ test("comma lists inherit as the shared fixture says", () => {
   }
 });
 
-test("label aliases are built exactly as the shared fixture says", () => {
-  for (const testCase of FIXTURE.aliasCases) {
-    const built = buildLabelAliasMap(testCase.rows);
-    assert.deepEqual(built.aliases, testCase.aliases, testCase.why || "");
-    assert.deepEqual(built.ambiguous, testCase.ambiguous, testCase.why || "");
-  }
-});
-
-// Backwards compatibility is the point of the parse ordering: label support must not move a
-// single ref anyone has already pasted.
-test("numeric selectors never take the label branch", () => {
-  const numeric = [
-    "o1",
-    "o1.2",
-    "o1.2.3.4.5.6",
-    "o12.f19",
-    "o1.2.s3",
-    "o1.2.e3",
-    "o1.2.v3",
-    "f45",
-    "s2",
-    "e9",
-    "v4",
-    "m1",
-    "m17"
-  ];
-  for (const selector of numeric) {
+// The parse ordering: token and name forms are tried before the label form, so neither is a label.
+test("token and name selectors never take the label branch", () => {
+  for (const selector of [O1, `${O1}/${F}`, `${O1}/${E}`, `${O1}/${V}`, F, E, V, ...NAMED, ...NAMED.map(name => `${O2}/${name}`), "m1", "m17"]) {
     const parsed = parseCadRefSelector(selector);
     assert.equal(parsed.label ?? "", "", `${selector} must not be read as a label`);
   }
@@ -81,50 +67,27 @@ test("mates stay opaque even though they match the label shape", () => {
   }
 });
 
-test("isNativeCadSelector accepts every numeric form and rejects labels", () => {
-  for (const selector of ["o1", "o1.2", "o12.f19", "f45", "s2", "e9", "v4", "m1"]) {
+test("isNativeCadSelector accepts every token and name form and rejects labels and the retired grammar", () => {
+  for (const selector of [O1, `${O1}/${F}`, `${O1}/${E}`, `${O1}/${V}`, F, E, V, ...NAMED, `${O1}/${NAMED[0]}`, "m1", "M3"]) {
     assert.ok(isNativeCadSelector(selector), selector);
   }
-  for (const selector of ["eye_shank", "servo_end_plate.f45", "", "not a selector!"]) {
+  for (const selector of ["eye_shank", `servo_end_plate/${F}`, `bracket/${NAMED[0]}`, "", "not a selector!", "o1", "o1.2",
+    "o1.2.f7", "f45", "s2", "o:4B1F9E2A7C03", "f:dial.extrude1", "f:dial.extrude1.3.2.1"]) {
     assert.ok(!isNativeCadSelector(selector), selector);
   }
+  assert.ok(isOccurrenceToken(O1) && !isOccurrenceToken(F) && !isOccurrenceToken("o1.2"));
+  for (const name of [F, E, V, ...NAMED]) assert.ok(isElementName(name), name);
+  for (const value of [O1, "f7", "f:dial.extrude1", "f:9d2e8c1b5a70.3", "x:dial.extrude1.3"]) assert.ok(!isElementName(value), value);
 });
 
-test("a unique label resolves, bare and with an entity", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1.2", name: "eye_shank" },
-    { id: "o1.3", name: "pressure_tube" }
-  ]);
-  assert.equal(resolveLabelSelector("eye_shank", aliasMap), "o1.1.2");
-  assert.equal(resolveLabelSelector("eye_shank.f45", aliasMap), "o1.1.2.f45");
-  assert.equal(resolveLabelSelector("#eye_shank.e3", aliasMap), "o1.1.2.e3");
-});
-
-test("an ambiguous or unknown label resolves to nothing rather than guessing", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.3", name: "cast_rim:5spoke" },
-    { id: "o1.7", name: "cast_rim:5spoke" }
-  ]);
-  assert.equal(resolveLabelSelector("cast_rim:5spoke", aliasMap), "", "bare duplicate must not resolve");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_1", aliasMap), "o1.3");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_2", aliasMap), "o1.7");
-  assert.equal(resolveLabelSelector("no_such_part", aliasMap), "");
-});
-
-test("numeric selectors pass through resolution untouched", () => {
-  const aliasMap = buildLabelAliasMap([{ id: "o1.1", name: "eye_shank" }]);
-  for (const selector of ["o1.2", "o12.f19", "f45", "m1"]) {
-    assert.equal(resolveLabelSelector(selector, aliasMap), selector, selector);
-  }
-});
-
-test("labelRefForOccurrence reports the paste spelling", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1", name: "eye_shank" },
-    { id: "o1.2", name: "tube" }
-  ]);
-  assert.equal(labelRefForOccurrence(aliasMap, "o1.1"), "#eye_shank");
-  assert.equal(labelRefForOccurrence(aliasMap, "o9.9"), "");
+test("an element ref is composed and split by one rule", () => {
+  assert.equal(elementRef(O1, F), `${O1}/${F}`);
+  assert.deepEqual(splitElementRef(`${O1}/${F}`), { owner: O1, element: F });
+  assert.deepEqual(splitElementRef(`#base_plate/${E}`), { owner: "base_plate", element: E });
+  assert.deepEqual(splitElementRef(`${O1}/${NAMED[1]}`), { owner: O1, element: NAMED[1] });
+  assert.equal(splitElementRef(O1), null);
+  assert.equal(splitElementRef(`${O1}/s:9d2e8c1b5a70`), null);
+  assert.equal(splitElementRef("o1.2.f7"), null);
 });
 
 test("every token case parses as the shared fixture says", () => {
@@ -141,27 +104,33 @@ test("every token case parses as the shared fixture says", () => {
 });
 
 test("a token round-trips through buildCadRefToken", () => {
-  // buildCadRefToken took a cadPath and discarded it (`void cadPath`). It no longer does, so
-  // what the viewer copies is what the grammar parses back.
-  assert.equal(buildCadRefToken({ cadPath: "plate.stl", selector: "o1.2" }), "plate.stl#o1.2");
-  assert.equal(buildCadRefToken({ selector: "o1.2" }), "#o1.2");
+  // What the viewer copies is what the grammar parses back, file prefix included.
+  assert.equal(buildCadRefToken({ cadPath: "plate.stl", selector: O1 }), `plate.stl#${O1}`);
+  assert.equal(buildCadRefToken({ selector: O1 }), `#${O1}`);
   assert.equal(buildCadRefToken({ cadPath: "plate.stl" }), "plate.stl#");
   assert.equal(buildCadRefToken({}), "#");
   assert.equal(
-    parseCadRefToken(buildCadRefToken({ cadPath: "a/b.step.py", selectors: ["o1.2", "f3"] })).cadPath,
+    parseCadRefToken(buildCadRefToken({ cadPath: "a/b.step.py", selectors: [O1, F] })).cadPath,
     "a/b.step.py"
   );
 });
 
+test("selectors sort by occurrence, then occurrence before face before edge before vertex", () => {
+  assert.deepEqual(
+    sortCadRefSelectors([`${O1}/${V}`, `${O1}/${E}`, O1, `${O1}/${F}`, `${O2}/${F}`, O2]),
+    [O2, `${O2}/${F}`, O1, `${O1}/${F}`, `${O1}/${E}`, `${O1}/${V}`]
+  );
+});
+
 test("bare tokens carry no file prefix", () => {
-  for (const text of ["#o1", "#o1.2.f3", "#f45", "#m1", "#", "#o1.2,f3"]) {
+  for (const text of [`#${O1}`, `#${O1}/${F}`, `#${F}`, "#m1", "#", `#${O1},${F}`]) {
     assert.equal(parseCadRefToken(text).cadPath, "", `${text} must carry no prefix`);
   }
 });
 
 test("imported file tokens quote and round-trip filename delimiters", () => {
   for (const cadPath of ['Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']) {
-    const token = buildCadRefToken({cadPath, selectors:['o2','o1']});
-    assert.deepEqual(parseCadRefToken(token), {token, cadPath, selectors:['o1','o2']});
+    const token = buildCadRefToken({cadPath, selectors:[O2, O1]});
+    assert.deepEqual(parseCadRefToken(token), {token, cadPath, selectors:[O2, O1]});
   }
 });

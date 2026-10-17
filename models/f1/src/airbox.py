@@ -1,7 +1,7 @@
 """F1 part model: airbox.
 
 The geometry `lib/engine_cover.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.9`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#airbox`; rebuild `f1.py`
 to pick up a change here.
 """
 

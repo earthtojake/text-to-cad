@@ -36,7 +36,8 @@ juno/
   tmp/                     snapshots and scratch
 ```
 
-- `src/juno.py` — the assembly. `@step(out="../STEP/juno.step", kinematics=…)`.
+- `src/juno.py` — the assembly.
+  `@step(out="../STEP/juno.step", kinematics=…, animation=…)`.
   Joints are authored as
   `cadgen.assembly.AssemblyHelper` revolute frames driven by the pose angles
   in `src/lib/chain.py`, and the SAME spec is read back out to build the
@@ -86,11 +87,12 @@ Check a pose: `cadgen step snapshot STEP/juno.step tmp/zero.png --kinematics zer
 
 ## Animation
 
-`ANIMATION_JS` in `src/juno.py` holds the choreography and is embedded in the
-model metadata at build time. It knows
-nothing about the mates: it runs its own chain FK each
-frame and applies, per link, the rigid delta from the baked athletic placement
-as one rotation about the model origin plus a translation. Seven clips:
+`ANIMATION` in `src/juno.py` holds seven `cadgen.clip`s, sampled when the
+model builds and baked to keyframes in the `STEP/juno.step.json` sidecar, so
+editing a clip means rebuilding `src/juno.py`. The clips know nothing about
+the mates: each runs the `lib/chain.py` chain FK at its pose and moves every
+link (`#pelvis`, `#thigh_left`, …) by the rigid delta from its baked athletic
+placement. Seven clips:
 
 - `walkLoop` — march in place, planted stance feet, no IK;
 - `strideLoop` — treadmill strides, the stance foot slides flat on the ground;
@@ -103,10 +105,9 @@ as one rotation about the model origin plus a translation. Seven clips:
 - `kickLoop` — chambered karate front kick behind a fists-up guard.
 
 All gaits share antiphase arm swing, torso counter-sway, and head
-stabilization. The retired sidecar's live `strideLength` / `legLift` /
-`armSwing` / `torsoSway` parameters are baked at their published defaults,
-because a clip is a pure function of time. Occurrence refs `#o1.1..#o1.28`
-follow the `asm.add` order in `src/juno.py`.
+stabilization. Stride length, leg lift, arm swing and torso sway are fixed at
+the defaults the retired live viewer parameters published, because a clip is
+a pure function of time.
 
 ## Conventions
 

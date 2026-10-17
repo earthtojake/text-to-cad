@@ -390,7 +390,7 @@ test("topology display edge helper renders highlighted node edges with theme set
       edges: [
         { occurrenceId: "part-a", segmentStart: 0, segmentCount: 1 },
         { occurrenceId: "part-b", segmentStart: 1, segmentCount: 1 },
-        { occurrenceId: "part-a.child", segmentStart: 2, segmentCount: 1 }
+        { occurrenceId: "part-c", segmentStart: 2, segmentCount: 1 }
       ],
       proxy: {
         edgePositions: new Float32Array([
@@ -409,7 +409,8 @@ test("topology display edge helper renders highlighted node edges with theme set
       color: "#222222",
       opacity: 0.48,
       thickness: 2.25,
-      highlightPartIds: ["part-a"],
+      // Two of the three parts: an id names exactly one part (a subassembly is its leaves).
+      highlightPartIds: ["part-a", "part-c"],
       highlightColor: "#4f9dff"
     },
     {

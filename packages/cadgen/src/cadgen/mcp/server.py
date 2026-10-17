@@ -68,7 +68,7 @@ TITLE = "CAD"
 # path (`page: viewer`) or the home (`page: home`, its recents with it), and carries what the page
 # needs to start on it alone (the server's version and platform); a view makes one call a second
 # (`cad_sync`) and reaches the viewer's routes through `cad_http`, by absolute path.
-PROTOCOL = 5
+PROTOCOL = 7
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)

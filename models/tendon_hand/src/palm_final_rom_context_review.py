@@ -3,7 +3,7 @@ from cadgen import step,read_step,build123d as bd
 from lib.finish import finish
 
 def leaves(s):return [p for c in s.children for p in leaves(c)] if s.children else [s]
-@step(out='../STEP/palm_final_rom_context_review.step',mesh_tolerance=.006,mesh_angular_tolerance=.06)
+@step(out='../STEP/palm_final_rom_context_review.step')
 def palm_final_rom_context_review():
     base=Path(__file__).resolve().parents[1]/'STEP';parts=[]
     for file in ['palm_main_final_rom_review','palm_little_comb_rom_review','palm_cradle_clearance_review','palm_hardware_review','compact_cmc_yaw_review','positive_yaw_bushing_review']:

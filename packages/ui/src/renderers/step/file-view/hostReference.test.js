@@ -13,17 +13,28 @@ import {
   resolveSelectorSelection,
 } from "./hostReference.js";
 
+// Occurrence tokens as cadgen mints them (`o:` + 12 hex) and element names (`f:`, `e:` and the
+// element's lineage); a ref is `<occurrence>/<element>`.
+const ROOT = "o:1a2b3c4d5e6f";
+const BRACKET = "o:3f2a9c1d7e5b";
+const SHAFT = "o:a1b2c3d4e5f6";
+const ELSEWHERE = "o:0f1e2d3c4b5a";
+const F3 = "f:shaft.extrude1.3";
+const F7 = "f:shaft.hole1.1";
+const F45 = "f:bracket.fillet1.2";
+const E3 = "e:bracket.extrude1.3";
+
 test("referenceFromCopyText: the file by its absolute path, the selector without its #, the text as copied", () => {
-  assert.deepEqual(referenceFromCopyText("/models/STEP/bracket.step#o1.2", "/models/STEP/bracket.step"), {
+  assert.deepEqual(referenceFromCopyText(`/models/STEP/bracket.step#${SHAFT}`, "/models/STEP/bracket.step"), {
     file: "/models/STEP/bracket.step",
-    selector: "o1.2",
-    text: "/models/STEP/bracket.step#o1.2",
+    selector: SHAFT,
+    text: `/models/STEP/bracket.step#${SHAFT}`,
   });
-  assert.deepEqual(referenceFromCopyText("#f45,e3", "/models/a.step"), { file: "/models/a.step", selector: "f45,e3", text: "#f45,e3" });
-  assert.deepEqual(referenceFromCopyText("C:/models/bracket.step#label.f45", "C:/models/bracket.step"), {
+  assert.deepEqual(referenceFromCopyText(`#${F45},${E3}`, "/models/a.step"), { file: "/models/a.step", selector: `${F45},${E3}`, text: `#${F45},${E3}` });
+  assert.deepEqual(referenceFromCopyText(`C:/models/bracket.step#label/${F45}`, "C:/models/bracket.step"), {
     file: "C:/models/bracket.step",
-    selector: "label.f45",
-    text: "C:/models/bracket.step#label.f45",
+    selector: `label/${F45}`,
+    text: `C:/models/bracket.step#label/${F45}`,
   });
   // A whole-file line has no selector; a path with no `#` is one too.
   assert.deepEqual(referenceFromCopyText("/models/bracket.step#", "/models/bracket.step"), { file: "/models/bracket.step", selector: "", text: "/models/bracket.step#" });
@@ -32,68 +43,68 @@ test("referenceFromCopyText: the file by its absolute path, the selector without
 
 test("referencesFromCopyText: one per line, blanks dropped", () => {
   assert.deepEqual(
-    referencesFromCopyText("a.step#o1\n\n a.step#o2 \n", "a.step").map((reference) => reference.selector),
-    ["o1", "o2"],
+    referencesFromCopyText(`a.step#${BRACKET}\n\n a.step#${SHAFT} \n`, "a.step").map((reference) => reference.selector),
+    [BRACKET, SHAFT],
   );
 });
 
 const TREE = {
   id: "root",
-  occurrenceId: "o1",
+  occurrenceId: ROOT,
   name: "assembly",
   children: [
-    { id: "o1.1", occurrenceId: "o1.1", name: "bracket", label: "bracket", children: [] },
+    { id: BRACKET, occurrenceId: BRACKET, name: "bracket", label: "bracket", children: [] },
     {
-      id: "o1.2",
-      occurrenceId: "o1.2",
+      id: SHAFT,
+      occurrenceId: SHAFT,
       name: "shaft",
       children: [
-        { id: "topology-face:o1.2.f3", nodeType: "topology-face", topologyReferenceId: "o1.2.f3", displaySelector: "f3", children: [] },
+        { id: `step-topology:${SHAFT}:face:${SHAFT}/${F3}`, nodeType: "topology-face", topologyReferenceId: `topology|${SHAFT}|face|${SHAFT}/${F3}`, displaySelector: `${SHAFT}/${F3}`, children: [] },
       ],
     },
   ],
 };
 
 test("referenceLabel: known parts have display names, unresolved or mixed selections do not", () => {
-  assert.equal(referenceLabel("o1.1", TREE), "bracket");
-  assert.equal(referenceLabel("o1.2", TREE), "shaft");
-  assert.equal(referenceLabel("o1.2.f3", TREE), "");
-  assert.equal(referenceLabel("o1.1,o1.2", TREE), "");
-  assert.equal(referenceLabel("o9", TREE), "");
+  assert.equal(referenceLabel(BRACKET, TREE), "bracket");
+  assert.equal(referenceLabel(SHAFT, TREE), "shaft");
+  assert.equal(referenceLabel(`${SHAFT}/${F3}`, TREE), "");
+  assert.equal(referenceLabel(`${BRACKET},${SHAFT}`, TREE), "");
+  assert.equal(referenceLabel(ELSEWHERE, TREE), "");
 });
 
-test("findStepTreeNodeForSelector: by occurrence id, name, label and topology id", () => {
-  assert.equal(findStepTreeNodeForSelector(TREE, "o1.1")?.name, "bracket");
-  assert.equal(findStepTreeNodeForSelector(TREE, "bracket")?.id, "o1.1");
-  assert.equal(findStepTreeNodeForSelector(TREE, "shaft")?.id, "o1.2");
-  assert.equal(findStepTreeNodeForSelector(TREE, "o1.2.f3")?.nodeType, "topology-face");
-  assert.equal(findStepTreeNodeForSelector(TREE, "o9"), null);
-  assert.equal(findStepTreeNodeForSelector(null, "o1"), null);
+test("findStepTreeNodeForSelector: by occurrence token, name, label and topology ref", () => {
+  assert.equal(findStepTreeNodeForSelector(TREE, BRACKET)?.name, "bracket");
+  assert.equal(findStepTreeNodeForSelector(TREE, "bracket")?.id, BRACKET);
+  assert.equal(findStepTreeNodeForSelector(TREE, "shaft")?.id, SHAFT);
+  assert.equal(findStepTreeNodeForSelector(TREE, `${SHAFT}/${F3}`)?.nodeType, "topology-face");
+  assert.equal(findStepTreeNodeForSelector(TREE, ELSEWHERE), null);
+  assert.equal(findStepTreeNodeForSelector(null, ROOT), null);
 });
 
-test("resolveSelectorSelection: reference map first, then the tree, then a labelled entity", () => {
+test("resolveSelectorSelection: reference map first, then the tree, then a labelled element", () => {
   const referenceMap = new Map([
-    ["o1.2.f7", { id: "ref:o1.2.f7" }],
-    ["f7", { id: "ref:o1.2.f7" }],
-    ["o1.1.f45", { id: "ref:o1.1.f45" }],
+    [`${SHAFT}/${F7}`, { id: `ref:${SHAFT}/${F7}` }],
+    [F7, { id: `ref:${SHAFT}/${F7}` }],
+    [`${BRACKET}/${F45}`, { id: `ref:${BRACKET}/${F45}` }],
   ]);
   const options = { referenceMap, treeRoot: TREE };
-  assert.deepEqual(resolveSelectorSelection("o1.2.f7", options), { kind: "reference", id: "ref:o1.2.f7" });
-  assert.deepEqual(resolveSelectorSelection("o1.2", options), { kind: "part", id: "o1.2" });
-  assert.deepEqual(resolveSelectorSelection("bracket", options), { kind: "part", id: "o1.1" });
-  assert.deepEqual(resolveSelectorSelection("o1.2.f3", options), { kind: "reference", id: "o1.2.f3" });
-  // `bracket.f45`: the labelled node's occurrence, then its entity in the map.
-  assert.deepEqual(resolveSelectorSelection("bracket.f45", options), { kind: "reference", id: "ref:o1.1.f45" });
+  assert.deepEqual(resolveSelectorSelection(`${SHAFT}/${F7}`, options), { kind: "reference", id: `ref:${SHAFT}/${F7}` });
+  assert.deepEqual(resolveSelectorSelection(SHAFT, options), { kind: "part", id: SHAFT });
+  assert.deepEqual(resolveSelectorSelection("bracket", options), { kind: "part", id: BRACKET });
+  assert.deepEqual(resolveSelectorSelection(`${SHAFT}/${F3}`, options), { kind: "reference", id: `topology|${SHAFT}|face|${SHAFT}/${F3}` });
+  // `bracket/f:…`: the labelled node's occurrence, then its element in the map by name.
+  assert.deepEqual(resolveSelectorSelection(`bracket/${F45}`, options), { kind: "reference", id: `ref:${BRACKET}/${F45}` });
   // A list selects its first member; nothing known is null, not a guess.
-  assert.deepEqual(resolveSelectorSelection("o1.1,o1.2", options), { kind: "part", id: "o1.1" });
-  assert.equal(resolveSelectorSelection("o7.f1", options), null);
+  assert.deepEqual(resolveSelectorSelection(`${BRACKET},${SHAFT}`, options), { kind: "part", id: BRACKET });
+  assert.equal(resolveSelectorSelection(`${ELSEWHERE}/${F3}`, options), null);
   assert.equal(resolveSelectorSelection("", options), null);
-  assert.equal(resolveSelectorSelection("o1", {}), null);
+  assert.equal(resolveSelectorSelection(ROOT, {}), null);
 });
 
 test("quoted imported paths preserve the group rather than becoming whole-file references", () => {
-  const text = '"Hex Drive Screw (2).STEP"#o1.f2,o1.f3';
+  const text = `"Hex Drive Screw (2).STEP"#${BRACKET}/${F3},${BRACKET}/${F7}`;
   assert.deepEqual(referenceFromCopyText(text, 'models/Hex Drive Screw (2).STEP'), {
-    file:'models/Hex Drive Screw (2).STEP', selector:'o1.f2,o1.f3', text,
+    file:'models/Hex Drive Screw (2).STEP', selector:`${BRACKET}/${F3},${BRACKET}/${F7}`, text,
   });
 });

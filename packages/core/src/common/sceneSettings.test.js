@@ -162,7 +162,7 @@ test("unified render display preserves the common orthographic camera and inspec
     display: {
       mode: "render",
       render: { studio: "dark", exposure: 1 },
-      clip: { enabled: true, axis: "z", offsets: { z: 0.4 } },
+      clip: { axis: "z", at: 0.4 },
       exploded: { enabled: true, amount: 0.6 },
       guides: { grid: { enabled: true }, axis: { enabled: false } },
       partColor: { mode: "single", color: "#123456" }

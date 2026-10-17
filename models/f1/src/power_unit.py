@@ -1,7 +1,7 @@
 """F1 part model: power unit.
 
 The geometry `lib/power_unit.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.13`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#power_unit`; rebuild `f1.py`
 to pick up a change here.
 """
 

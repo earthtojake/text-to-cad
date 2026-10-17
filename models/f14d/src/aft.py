@@ -1,8 +1,8 @@
 """F-14D system model: aft — speed brakes, beavertail, tailhook, dump mast.
 
 The group `lib/aft.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.7`; rebuild `f14d.py` to pick up a change here.
+with its own STEP, record and worker. `f14d.py` links it as
+`#aft`; rebuild `f14d.py` to pick up a change here.
 """
 
 from __future__ import annotations

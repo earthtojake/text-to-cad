@@ -37,7 +37,7 @@ def build(
     out: destination .3mf path. Omitted, writes one sibling .3mf beside
         TARGET. Model output declarations are not read.
     mesh_tolerance: chord deflection RELATIVE to each component's bounding
-        diagonal (default 1.5e-3), for this export only.
+        diagonal (default 5e-4, the display tolerance), for this export only.
     mesh_angular_tolerance: max normal spread across a triangle edge in
         radians (default 0.35), for this export only.
     force: re-export even where the ledger says the output is current. Never

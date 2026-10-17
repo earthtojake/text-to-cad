@@ -127,21 +127,6 @@ function DropdownMenuRadioItem({
   );
 }
 
-function DropdownMenuLabel({
-  className,
-  inset,
-  ...props
-}) {
-  return (
-    <DropdownMenuPrimitive.Label
-      data-slot="dropdown-menu-label"
-      data-inset={inset}
-      className={cn("px-2 py-1.5 text-tiny leading-4 font-normal data-[inset]:pl-8", className)}
-      {...props}
-    />
-  );
-}
-
 function DropdownMenuSeparator({
   className,
   ...props
@@ -150,19 +135,6 @@ function DropdownMenuSeparator({
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
       className={cn("-mx-1 my-1 h-px bg-border", className)}
-      {...props}
-    />
-  );
-}
-
-function DropdownMenuShortcut({
-  className,
-  ...props
-}) {
-  return (
-    <span
-      data-slot="dropdown-menu-shortcut"
-      className={cn("ml-auto text-micro tracking-widest text-muted-foreground", className)}
       {...props}
     />
   );
@@ -222,11 +194,9 @@ export {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,

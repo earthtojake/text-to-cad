@@ -11,6 +11,8 @@ function normalizePartId(value) {
   return String(value || "").trim();
 }
 
+// `filter` holds LEAF part ids (a subassembly is expanded to its leaves by whoever
+// named it, from the tree): a token carries no hierarchy to match a prefix of.
 function partIdMatchesFilter(partId, filter) {
   const normalizedPartId = normalizePartId(partId);
   if (!filter?.size) {
@@ -28,10 +30,7 @@ function partIdMatchesFilter(partId, filter) {
         ? String(candidate || "").slice(1)
         : candidate
     );
-    if (
-      normalizedPartId === normalizedCandidate ||
-      normalizedPartId.startsWith(`${normalizedCandidate}.`)
-    ) {
+    if (normalizedPartId === normalizedCandidate) {
       return true;
     }
   }

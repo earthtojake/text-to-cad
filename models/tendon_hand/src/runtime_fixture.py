@@ -1,25 +1,31 @@
 """A real continuous STEP swept tube for flexible-animation integration checks."""
+import math
+
+import cadgen
 from cadgen import build123d as bd
 from cadgen import step
 
-
-ANIMATION_JS = r'''const rest = {normal:[0,0,1],segments:[{kind:'line',start:[0,0,8],end:[60,0,8]}]};
-export const clips = {
-  bend: {
-    label:'Continuous swept tube — length 60 mm', duration:1, loop:false,
-    update(t,m) {
-      const angle=t*Math.PI/2;
-      const path=angle<1e-8?rest:{normal:[0,0,1],segments:[{
-        kind:'arc',center:[0,60/angle,8],axis:[0,0,1],start:[0,0,8],sweepDeg:angle*180/Math.PI
-      }]};
-      m.get('continuous_swept_tube').deformTube({rest,path,maxSegmentLength:.5,braid:{pitch:5,depth:.06,strands:8},twistDeg:180*t});
-    }
-  }
-};
-'''
+_REST = {"normal": [0, 0, 1], "segments": [{"kind": "line", "start": [0, 0, 8], "end": [60, 0, 8]}]}
 
 
-@step(out="../STEP/runtime_fixture.step", animation=ANIMATION_JS)
+def _bend(t, m):
+    # The 60 mm tube curls into a quarter circle, keeping its length, its braid
+    # twisting half a turn along the way.
+    angle = t * math.pi / 2
+    path = _REST if angle < 1e-8 else {"normal": [0, 0, 1], "segments": [{
+        "kind": "arc", "center": [0, 60 / angle, 8], "axis": [0, 0, 1], "start": [0, 0, 8],
+        "sweepDeg": math.degrees(angle),
+    }]}
+    m.get("#continuous_swept_tube").deform_tube(
+        rest=_REST, path=path, twist_deg=180 * t, max_segment_length=0.5,
+        braid={"pitch": 5, "depth": 0.06, "strands": 8},
+    )
+
+
+ANIMATION = {"bend": cadgen.clip(_bend, duration=1, loop=False, label="Continuous swept tube — length 60 mm")}
+
+
+@step(out="../STEP/runtime_fixture.step", animation=ANIMATION)
 def runtime_fixture():
     centerline = bd.Edge.make_line((0, 0, 8), (60, 0, 8))
     profile = bd.Plane(origin=(0, 0, 8), z_dir=(1, 0, 0)) * bd.Circle(0.8)

@@ -30,15 +30,14 @@ test("display settings own CAD presentation fields while camera owns projection"
   );
   assert.deepEqual(normalizeDisplaySettings({
     mode: "wireframe",
-    clip: { enabled: true, axis: "z", offsets: { z: 0.4 }, invert: true }
+    clip: { axis: "z", at: 12.5, invert: true }
   }), {
     mode: CAD_DISPLAY_MODE.WIREFRAME,
     clip: {
       enabled: true,
       axis: "z",
-      offset: 0.4,
-      offsets: { x: 0, y: 0, z: 0.4 },
-      invert: true
+      invert: true,
+      at: 12.5
     },
     exploded: DEFAULT_EXPLODED_VIEW_SETTINGS,
     edges: DEFAULT_DISPLAY_EDGE_SETTINGS,
@@ -89,13 +88,11 @@ test("display settings normalize exploded view, guides, and part colors", () => 
   });
 });
 
-test("display mode vocabulary is canonical and retired values teach replacements", () => {
+test("display mode vocabulary is canonical", () => {
   for (const mode of Object.values(CAD_DISPLAY_MODE)) {
     assert.equal(resolveDisplayMode({ mode }), mode);
   }
-  assert.throws(() => resolveDisplayMode({ mode: "solid" }), /use 'shaded_edges'/);
-  assert.throws(() => resolveDisplayMode({ mode: "rendered" }), /use 'shaded'/);
-  for (const alias of ["edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
+  for (const alias of ["solid", "rendered", "edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
     assert.throws(() => resolveDisplayMode({ mode: alias }), /Unknown display mode/);
   }
 });
@@ -126,7 +123,7 @@ test("render display settings share the viewer envelope and exclude camera", () 
       lighting: { rotation: 30, size: 1.5, fill: 0.4 },
       backdrop: { color: "#123456", transparent: false, ground: true, groundPlacement: "origin" }
     },
-    clip: { enabled: true, axis: "x", offsets: { x: 0.25 } },
+    clip: { enabled: true, axis: "x", at: 0.25 },
     exploded: { enabled: true, amount: 0.5 }
   });
   assert.equal(display.mode, CAD_DISPLAY_MODE.RENDER);
@@ -145,8 +142,8 @@ test("render display settings share the viewer envelope and exclude camera", () 
 
 test("display settings compare after normalization", () => {
   assert.equal(displaySettingsEqual(
-    { mode: "wireframe", clip: { enabled: true, axis: "x", offsets: { x: 0.5 } } },
-    { mode: CAD_DISPLAY_MODE.WIREFRAME, clip: { enabled: true, axis: "x", offsets: { x: 0.5 } } }
+    { mode: "wireframe", clip: { axis: "X", at: 0.5 } },
+    { mode: CAD_DISPLAY_MODE.WIREFRAME, clip: { enabled: true, axis: "x", at: 0.5, invert: false } }
   ), true);
   assert.equal(displaySettingsEqual({ mode: "shaded" }, { mode: "wireframe" }), false);
   assert.equal(displaySettingsEqual(

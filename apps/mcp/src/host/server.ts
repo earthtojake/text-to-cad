@@ -9,7 +9,7 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`.
  */
-export const PROTOCOL = 5;
+export const PROTOCOL = 7;
 
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {

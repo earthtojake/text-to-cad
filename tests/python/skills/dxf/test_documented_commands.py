@@ -16,8 +16,8 @@ Blocks fall into two kinds and are checked accordingly:
   declare a ``@dxf`` entry. Syntax and contract shape, which is what a reader
   copies out of them.
 
-Also pinned here: the retired-contract teaching error points at `SKILL.md`, so
-`SKILL.md` must teach the contract that replaced it and not the one it removed.
+Also pinned here: a drawing that fails the return contract gets that contract's
+own error and nothing else, so `SKILL.md` must teach the current contract.
 """
 
 from __future__ import annotations
@@ -368,7 +368,7 @@ class DocumentedCommandForms(_DrawingHarness):
 
 class DocumentationTeachesTheNewContract(unittest.TestCase):
     def test_the_skill_teaches_the_current_return_contract(self) -> None:
-        """The teaching error sends authors HERE, so this file has to answer."""
+        """An author who hits the return contract's error reads this file, so it has to answer."""
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("returns build123d 2D geometry", text)
         self.assertIn("read_step", text)

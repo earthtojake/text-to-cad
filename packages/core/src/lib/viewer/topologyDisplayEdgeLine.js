@@ -1,6 +1,3 @@
-// Lazy: see common/tubeDeformationChunk.js. A line object only holds tube state
-// once a deformation was applied, so a null runtime is exactly a no-op here.
-import { tubeDeformation } from "../../common/tubeDeformationChunk.js";
 import {
   applyTopologyDisplayEdgeSurfaceOffset,
   disposeTopologyDisplayEdgeObject
@@ -23,12 +20,8 @@ function partIdMatchesAny(partId, partIds = []) {
   if (!normalizedPartId) {
     return false;
   }
-  for (const candidate of partIds) {
-    if (normalizedPartId === candidate || normalizedPartId.startsWith(`${candidate}.`)) {
-      return true;
-    }
-  }
-  return false;
+  // Leaf ids on both sides: a token carries no hierarchy to match a prefix of.
+  return partIds.includes(normalizedPartId);
 }
 
 function uniqueDisplayRecordsByPartId(displayRecords = []) {
@@ -95,7 +88,6 @@ function applyRecordEffectMatrix(runtime, object, record) {
   if (!THREE || !object) {
     return false;
   }
-  tubeDeformation()?.applyTubeDeformationToLineObject(THREE, object, record?.effectDeformation || null);
   const nextMatrix = composeDisplayRecordEffectMatrix(THREE, record) || new THREE.Matrix4();
   object.matrixAutoUpdate = false;
   const targetMatrix = object.matrix instanceof THREE.Matrix4 ? object.matrix : new THREE.Matrix4();
@@ -105,7 +97,10 @@ function applyRecordEffectMatrix(runtime, object, record) {
     object.matrix = targetMatrix;
     object.matrixWorldNeedsUpdate = true;
   }
-  const nextVisible = record?.mesh?.visible !== false && record?.effectVisible !== false;
+  // A bending tube's overlay would draw its rest edges over the bent surface: the
+  // tube's own edges (its skin's) bend with it, and the overlay waits for rest.
+  const nextVisible = record?.mesh?.visible !== false && record?.effectVisible !== false
+    && record?.tubeSkinState?.active !== true;
   if (object.visible !== nextVisible) {
     object.visible = nextVisible;
     return true;

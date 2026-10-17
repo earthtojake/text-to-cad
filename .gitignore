@@ -73,9 +73,9 @@ models/**/*.mkv
 # `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
 packages/cadgen/build/
 
-# cadgen's packaged runtime: the esbuilt Node builders (node/), the headless
-# snapshot bundle (browser/) and the CAD Viewer's built client (viewer/). All
-# three are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
+# cadgen's packaged runtime: the headless snapshot bundle (browser/), the CAD
+# Viewer's built client (viewer/), the CAD app (mcp/) and the file tracers
+# (native/). All are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
 # wheel; none of them is committed. A fresh checkout has no _runtime until the
 # bundler runs, and cadgen says so by name when it needs one that is absent.
 packages/cadgen/src/cadgen/_runtime/

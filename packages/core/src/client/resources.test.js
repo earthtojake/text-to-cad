@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHttpCadResourceProvider, readCadWorkerTicket } from './resources.js';
 import { createCadClient } from './client.js';
-import { loadRenderJson, peekRenderJson, loadRenderUrdf } from '../lib/renderAssetClient.js';
+import { loadRenderJson, peekRenderJson } from '../lib/renderAssetClient.js';
 
 test('injected resource reads and URL caches remain isolated between workspace providers', async () => {
   const calls = [];
@@ -21,13 +21,13 @@ test('custom transfers use bounded owned bytes; ordinary HTTP keeps its URL work
   const custom = createHttpCadResourceProvider({fetch: async url => {
     calls.push(url); return new Response(new Uint8Array([1,2,3]));
   }});
-  const ticket = await custom.workerTicket('/component.surf', {maxBytes:3});
+  const ticket = await custom.workerTicket('/component.selectors.json', {maxBytes:3});
   assert.equal(ticket.kind, 'bytes');
   assert.deepEqual([...new Uint8Array(await readCadWorkerTicket(ticket))], [1,2,3]);
   await assert.rejects(custom.workerTicket('/too-large', {maxBytes:2}), /byte limit/);
   const direct = createHttpCadResourceProvider({origin:'https://cad.test'});
-  assert.deepEqual(await direct.workerTicket('/part.surf', {maxBytes:5}), {
-    kind:'url', url:'https://cad.test/part.surf', maxBytes:5,
+  assert.deepEqual(await direct.workerTicket('/part.selectors.json', {maxBytes:5}), {
+    kind:'url', url:'https://cad.test/part.selectors.json', maxBytes:5,
   });
   assert.equal(calls.length, 2);
 });
@@ -43,22 +43,6 @@ test('workspace disposal rejects borrowed provider late replies and does not sha
   assert.notEqual(a.resources.cacheKey('/same'), b.resources.cacheKey('/same'));
   await assert.rejects(a.resources.workerTicket('/closed'), error => error.name === 'AbortError');
   b.dispose();
-});
-
-test('robot dependencies are resolved by the injected provider', async t => {
-  const element = (tagName, attributes = {}, childNodes = []) => ({nodeType:1, tagName, localName:tagName, childNodes, getAttribute:name=>attributes[name] ?? null});
-  const root = element('robot', {name:'test'}, [element('link', {name:'base'}, [element('visual', {}, [element('geometry', {}, [element('mesh', {filename:'mesh.stl'})])])])]);
-  const previous = globalThis.DOMParser;
-  globalThis.DOMParser = class { parseFromString() { return {documentElement:root, querySelector:()=>null}; } };
-  t.after(() => { globalThis.DOMParser = previous; });
-  const resolutions=[];
-  const resources = {
-    readText: async () => '<robot name="test"><link name="base"><visual><geometry><mesh filename="mesh.stl"/></geometry></visual></link></robot>',
-    resolveDependency(source, reference, options) { resolutions.push([source,reference,options.kind]); return 'private:mesh'; },
-  };
-  const robot = await loadRenderUrdf('private:robot', {resources});
-  assert.equal(robot.links[0].visuals[0].meshUrl, 'private:mesh');
-  assert.deepEqual(resolutions, [['private:robot','mesh.stl','robot']]);
 });
 
 test('observed backend restart retires resource generation and aborts old reads', async () => {
@@ -77,13 +61,12 @@ test('observed backend restart retires resource generation and aborts old reads'
   client.dispose();
 });
 
-test('HTTP dependency resolution preserves catalog query versions, static packages and robot package URIs', () => {
+test('HTTP dependency resolution preserves catalog query versions and static packages', () => {
   const resources = createHttpCadResourceProvider({origin:'https://cad.test'});
   const asset = resources.resolveDependency('/__cad/asset?file=/models/model.gltf&v=abc', '../mesh.bin');
   assert.equal(new URL(asset).searchParams.get('file'), '/mesh.bin');
   assert.equal(new URL(asset).searchParams.get('v'), 'abc');
-  assert.equal(resources.resolveDependency('/hero/assembly', 'part.surf', {kind:'package'}), 'https://cad.test/hero/assembly/part.surf');
-  assert.equal(resources.resolveDependency('/robot.urdf', 'package://robot/mesh.stl', {kind:'robot'}), 'https://cad.test/robot/mesh.stl');
+  assert.equal(resources.resolveDependency('/hero/assembly', 'part.selectors.json', {kind:'package'}), 'https://cad.test/hero/assembly/part.selectors.json');
 });
 
 test('worker URL tickets retain the configured HTTP cache policy and headers', async t => {
@@ -92,8 +75,8 @@ test('worker URL tickets retain the configured HTTP cache policy and headers', a
     calls.push({url,options}); return new Response(new Uint8Array([1]));
   });
   const resources = createHttpCadResourceProvider({origin:'https://cad.test',cache:'no-store',headers:{'x-resource':'scoped'}});
-  const ticket = await resources.workerTicket('/part.surf');
-  assert.deepEqual(ticket,{kind:'url',url:'https://cad.test/part.surf',cache:'no-store',headers:{'x-resource':'scoped'}});
+  const ticket = await resources.workerTicket('/part.selectors.json');
+  assert.deepEqual(ticket,{kind:'url',url:'https://cad.test/part.selectors.json',cache:'no-store',headers:{'x-resource':'scoped'}});
   await readCadWorkerTicket(ticket);
   assert.equal(calls[0].options.cache,'no-store');
   assert.deepEqual(calls[0].options.headers,{'x-resource':'scoped'});
@@ -109,8 +92,8 @@ test('configured HTTP headers are confined to the provider origin for direct and
   await resources.readBytes('https://external.test/nested.bin');
   assert.deepEqual(calls[0].options.headers,{'x-private':'secret'});
   assert.deepEqual(calls[1].options.headers,{});
-  assert.deepEqual((await resources.workerTicket('/own.surf')).headers,{'x-private':'secret'});
-  const external = await resources.workerTicket('https://external.test/nested.surf');
+  assert.deepEqual((await resources.workerTicket('/own.selectors.json')).headers,{'x-private':'secret'});
+  const external = await resources.workerTicket('https://external.test/nested.selectors.json');
   assert.equal(external.headers,undefined);
   await readCadWorkerTicket(external);
   assert.equal(calls[2].options.headers,undefined);
@@ -120,7 +103,7 @@ test('an issued URL worker ticket cannot publish after its resource generation r
   const { scopeCadResources } = await import('./resources.js');
   const glb = await import('../lib/render/glbMeshWorkerClient.js');
   const stl = await import('../lib/render/stlMeshWorkerClient.js');
-  const surf = await import('../lib/surf/surfWorkerClient.js');
+  const parts = await import('../lib/parts/partWorkerClient.js');
   const original = globalThis.Worker;
   const workers=[];
   globalThis.Worker = class {
@@ -131,8 +114,15 @@ test('an issued URL worker ticket cannot publish after its resource generation r
     terminate(){}
   };
   t.after(()=>{globalThis.Worker=original;});
+  // A part worker request carries its part's stored mesh; the resource is its selector table.
+  const { encodeMeshFixture, testPartKey } = await import('../lib/parts/__tests__/meshFixtures.js');
+  const identity = { part: testPartKey('d') };
+  const entry = encodeMeshFixture({ positions: new Float32Array(9), normals: new Float32Array(9),
+    indices: new Uint32Array([0, 1, 2]), faceRanges: [{ ord: 1, color: null, indexStart: 0, indexCount: 3 }], edges: [],
+    bounds: { min: [0, 0, 0], max: [0, 0, 0] } }, identity);
+  const loadPart = (url, options) => parts.loadPartInWorker(url, { ...options, identity: { ...identity, tessellationEntry: entry.slice() } });
   for (const [load,retain] of [[glb.loadGlbMeshDataInWorker,glb.retainGlbMeshWorker],
-    [stl.loadStlMeshDataInWorker,stl.retainStlMeshWorker], [surf.loadSurfComponentInWorker,surf.retainSurfWorkerPool]]) {
+    [stl.loadStlMeshDataInWorker,stl.retainStlMeshWorker], [loadPart,parts.retainPartWorkerPool]]) {
     const lifetime = new AbortController();
     const resources = scopeCadResources(createHttpCadResourceProvider({origin:'https://cad.test'}),lifetime.signal);
     const release=retain();

@@ -7,20 +7,19 @@ import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from
 
 const part = (id, label, children = []) => ({ id: `model:${id}`, selectionId: id, kind: 'part', label, children });
 const assembly = (id, label, children) => ({ id: `model:${id}`, selectionId: id, kind: 'assembly', label, children });
-const feature = (id, kind, label, children = []) => ({ id, kind, label, faces: [1], children });
 const tree = [
   assembly('o1', 'Gripper', [
     assembly('o1.1', 'Left finger', [part('o1.1.1', 'M3 Screw'), part('o1.1.2', 'Finger pad')]),
-    part('o1.2', 'Motor mount 3', [feature('o1.2/hole:1', 'hole', 'Bore 1', [{ id: 'o1.2/curve', kind: 'curve', label: 'Bore curve' }])]),
+    part('o1.2', 'Motor mount 3'),
   ]),
   part('o2', 'Base/plate'),
   part('o3', 'M3 Screw'),
 ];
 const labels = (query, limit) => searchModelTree(buildModelTreeSearchIndex(tree), query, limit).matches.map(match => `${match.entry.prefix}${match.entry.label}`);
 
-test('indexes every collapsed assembly, part and recognized feature, and never a curve', () => {
+test('indexes every collapsed assembly and part', () => {
   const index = buildModelTreeSearchIndex(tree);
-  assert.deepEqual(index.map(entry => entry.label), ['Gripper', 'Left finger', 'M3 Screw', 'Finger pad', 'Motor mount 3', 'Bore 1', 'Base/plate', 'M3 Screw']);
+  assert.deepEqual(index.map(entry => entry.label), ['Gripper', 'Left finger', 'M3 Screw', 'Finger pad', 'Motor mount 3', 'Base/plate', 'M3 Screw']);
   assert.equal(index[2].prefix, 'Gripper/Left finger/');
   assert.equal(index[2].prefix, index[3].prefix);
 });
@@ -28,7 +27,7 @@ test('indexes every collapsed assembly, part and recognized feature, and never a
 test('names an entry\'s owners outermost first for availability', () => {
   const index = buildModelTreeSearchIndex(tree);
   assert.deepEqual(modelTreeSearchChain(index, 2).map(node => node.label), ['Gripper', 'Left finger', 'M3 Screw']);
-  assert.deepEqual(modelTreeSearchChain(index, 6).map(node => node.label), ['Base/plate']);
+  assert.deepEqual(modelTreeSearchChain(index, 5).map(node => node.label), ['Base/plate']);
 });
 
 test('finds a name from a subsequence and keeps repeated instances apart by their owners', () => {
@@ -43,10 +42,6 @@ test('ranks the word being typed above letters scattered through a longer name',
 test('an owner\'s name narrows a search without returning everything it owns', () => {
   assert.deepEqual(labels('gripper'), ['Gripper']);
   assert.deepEqual(labels('finger m3'), ['Gripper/Left finger/M3 Screw']);
-});
-
-test('finds a recognized feature inside its part', () => {
-  assert.deepEqual(labels('bore'), ['Gripper/Motor mount 3/Bore 1']);
 });
 
 test('a pasted reference names exactly its row first', () => {

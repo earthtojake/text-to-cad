@@ -66,13 +66,37 @@ function isFiniteVectorArray(value) {
 }
 
 // -- occurrence path helpers ------------------------------------------------
-// Occurrence ids look like "o1.2.3": the first segment is o<number>, the rest
-// are numeric. Non-occurrence part ids (e.g. "part:3") are opaque leaves.
+// A part id is an occurrence token (`o:` + 12 hex) and carries no hierarchy of
+// its own: the assembly tree is where a part's ancestors are. `hierarchy` maps
+// each leaf part id to its path of node ids, root first, leaf last
+// (occurrencePathsFromAssemblyRoot); a part the map lacks is an opaque leaf.
 
-export function occurrenceSegments(partId) {
+export function occurrenceSegments(partId, hierarchy = null) {
   const text = String(partId || "").trim();
-  const match = text.match(/^o\d+(?:\.\d+)*/i);
-  return match ? match[0].split(".").filter(Boolean) : [];
+  const path = text && hierarchy instanceof Map ? hierarchy.get(text) : null;
+  return Array.isArray(path) ? path.map((id) => String(id || "").trim()).filter(Boolean) : [];
+}
+
+// Each leaf part's path of node ids through `root` (the assembly tree the viewer
+// renders, `meshData.assemblyRoot`): root first, the leaf itself last. The one
+// source of hierarchy for the explode; without it every part is a sibling.
+export function occurrencePathsFromAssemblyRoot(root) {
+  const paths = new Map();
+  if (!root || typeof root !== "object") {
+    return paths;
+  }
+  const visit = (node, ancestors) => {
+    const id = String(node?.id || "").trim();
+    const path = id ? [...ancestors, id] : ancestors;
+    const children = Array.isArray(node?.children) ? node.children : [];
+    if (!children.length) {
+      if (id) paths.set(id, path);
+      return;
+    }
+    for (const child of children) visit(child, path);
+  };
+  visit(root, []);
+  return paths;
 }
 
 // -- bounds helpers ---------------------------------------------------------
@@ -137,9 +161,9 @@ export function recordCanExplode(record) {
 
 // -- hierarchy --------------------------------------------------------------
 
-// Longest occurrence-path prefix shared by every record, clamped so at least
-// one segment is left to distinguish records (an assembly of "o1.1", "o1.2"
-// has prefix ["o1"], not ["o1", "1"]).
+// Longest path prefix shared by every record, clamped so at least one segment
+// is left to distinguish records (two leaves under one root share the root
+// and nothing more).
 function commonPrefixLength(segmentLists) {
   const paths = segmentLists.filter((segments) => segments.length > 0);
   if (!paths.length) {
@@ -153,14 +177,14 @@ function commonPrefixLength(segmentLists) {
   return Math.min(length, shortest - 1);
 }
 
-// Group node entries by the next occurrence segment. Entries whose path is
-// exhausted (the record sits at this node's own path, or has a non-occurrence
-// id) become singleton leaf groups keyed by their part id.
+// Group node entries by the next node of their path. Entries whose path is
+// exhausted (the record sits at this node's own path, or has no path) become
+// singleton leaf groups keyed by their part id.
 function childGroups(entries, depth) {
   const groups = new Map();
   for (const entry of entries) {
     const key = entry.segments.length > depth
-      ? entry.segments.slice(0, depth + 1).join(".")
+      ? entry.segments.slice(0, depth + 1).join("/")
       : entry.partId;
     const group = groups.get(key) || { key, entries: [], depth: entry.segments.length > depth ? depth + 1 : depth };
     group.entries.push(entry);
@@ -369,11 +393,13 @@ function levelWindows(levelCount) {
 }
 
 // Compute the exploded-view layout for a set of display records.
+// `hierarchy` is each part's path through the assembly tree
+// (occurrencePathsFromAssemblyRoot); without it every part is a sibling.
 // Returns { entries, records, levelCount }:
 //   - entries: per moved record, the contribution list [{ vector, window }]
 //     scheduled by level windows;
 //   - records: every explodable record (moved or not), for clearing.
-export function computeExplodedViewLayout(records = [], modelBounds = null) {
+export function computeExplodedViewLayout(records = [], modelBounds = null, { hierarchy = null } = {}) {
   const explodable = (Array.isArray(records) ? records : []).filter(recordCanExplode);
   const empty = { entries: [], records: explodable, levelCount: 0 };
   if (explodable.length < 2) {
@@ -384,7 +410,7 @@ export function computeExplodedViewLayout(records = [], modelBounds = null) {
       record,
       index,
       partId: String(record.partId || "").trim(),
-      segments: occurrenceSegments(record.partId),
+      segments: occurrenceSegments(record.partId, hierarchy),
       bounds: recordBounds(record)
     }))
     .filter((entry) => entry.bounds);

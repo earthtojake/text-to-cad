@@ -21,8 +21,8 @@ TEST_PATHS=()
 SELECTED_TEST_FILES=0
 
 # The packaged runtime (packages/cadgen/src/cadgen/_runtime) is BUILT, never committed,
-# so a fresh checkout has none of it -- the snapshot suites drive the browser bundle, the
-# policy suite reads the emitted Node builders, and every build loads the file tracer.
+# so a fresh checkout has none of it -- the snapshot suites drive the browser bundle and
+# every build loads the file tracer.
 # Building it is idempotent and fast once the pinned toolchains are in place, but it is
 # not free, so this only runs when an output is missing (or the tracer's source is newer).
 #
@@ -37,10 +37,10 @@ ensure_packaged_runtime() {
   if [ "${PYTHON_TEST_RUNTIME:-1}" = "0" ]; then
     return 0
   fi
-  for name in node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
+  for name in browser/snapshot-render.js browser/render.html; do
     if [ ! -f "$runtime/$name" ]; then
       section "Building cadgen's packaged runtime (missing $name)"
-      "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser
+      "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --browser
       break
     fi
   done

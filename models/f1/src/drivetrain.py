@@ -4,8 +4,8 @@ The running gear `lib/drivetrain.py` builds (clutch, gear cluster, selectors,
 differential, driveshafts), in car coordinates, plus three child models: the
 gearbox casing, the ancillaries bolted to it, and the rear structure. The
 casing is two thirds of the drivetrain's build time, so it is its own model and
-an edit elsewhere never rebuilds it. `f1.py` links the drivetrain as occurrence
-`#o1.14`; rebuild `f1.py` to pick up a change here.
+an edit elsewhere never rebuilds it. `f1.py` links the drivetrain as
+`#drivetrain`; rebuild `f1.py` to pick up a change here.
 """
 
 from __future__ import annotations

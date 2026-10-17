@@ -10,8 +10,9 @@ occurrence-metadata tree that the tree writer consumes directly.
 
 The returned compound can be a model's whole ``@step`` shape or a child
 nested anywhere inside a plain build123d compound tree: the packager splices
-nested instance compounds into the assembly.json walk, remapping occurrence ids
-and accumulating world locations.
+nested instance compounds into the tree walk, accumulating world locations; the
+``id`` of each node here is provisional (its position), and the walk names every
+node by its token (``cadgen._internal.tree_tokens``) once the hierarchy is whole.
 """
 
 from __future__ import annotations
@@ -81,7 +82,7 @@ def _occurrence_subtree(node: Any, parent_world_loc: Location, path: str, name: 
             child,
             world_loc,
             f"{path}.{index}",
-            str(getattr(child, "label", "") or f"{path}.{index}"),
+            str(getattr(child, "label", "") or ("group" if getattr(child, "children", None) else "part")),
         )
         for index, child in enumerate(child_shapes, start=1)
     ]

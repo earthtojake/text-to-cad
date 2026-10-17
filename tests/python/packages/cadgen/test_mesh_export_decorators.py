@@ -4,10 +4,10 @@ The decorators are metadata-attachers lowered into EntrySpec.mesh_exports;
 production runs through the ONE mesh engine the `cadgen stl|3mf|glb build`
 doors use, gated by the shared content-keyed ledger. Contracts pinned here:
 stacking order is behavior-neutral (AST scanning sees the whole decorator
-list), duplicates and @dxf misuse fail loudly, bare declarations land beside
-the STEP artifact, script runs produce/heal declared exports without rebuilding
-the model, and the format door byte-matches the script run, shares its ledger,
-and writes nothing outside its own format.
+list), duplicates, @dxf misuse and a keyword @step does not take fail loudly,
+bare declarations land beside the STEP artifact, script runs produce/heal
+declared exports without rebuilding the model, and the format door byte-matches
+the script run, shares its ledger, and writes nothing outside its own format.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ MODEL = textwrap.dedent("""\
     @step(out="../STEP/widget.step")
     @stl(out="../STL/widget.stl")
     @glb
-    @threemf(out="../3MF/widget.3mf", mesh_tolerance=5e-3)
+    @threemf(out="../3MF/widget.3mf", mesh_tolerance=5e-4)
     def widget():
         body = bd.Box(SIZE, SIZE / 2, 3)
         body -= bd.Pos(0, 0, 0) * bd.Cylinder(2, 10)
@@ -77,7 +77,7 @@ class MeshExportMetadataTest(unittest.TestCase):
             self.assertEqual(set(declared), {"stl", "glb", "3mf"})
             self.assertEqual(declared["stl"].out, "../STL/widget.stl")
             self.assertIsNone(declared["glb"].out)
-            self.assertEqual(declared["3mf"].mesh_tolerance, 5e-3)
+            self.assertEqual(declared["3mf"].mesh_tolerance, 5e-4)
 
     def test_a_mesh_decorator_alone_declares_a_model_with_no_step_output(self) -> None:
         # No @step at all: still a model (format "step" -- the same tree and
@@ -135,6 +135,12 @@ class MeshExportMetadataTest(unittest.TestCase):
                         "    return bd.Rectangle(10, 5)\n"
                     )
 
+    def test_step_refuses_a_keyword_it_does_not_take(self) -> None:
+        from cadgen.authoring import step
+
+        with self.assertRaisesRegex(TypeError, "@step got an unexpected keyword argument: colour, size"):
+            step(size=1, colour="red")
+
     def test_runtime_decorators_converge_both_orders(self) -> None:
         from cadgen.authoring import step as step_deco, stl as stl_deco
 
@@ -163,45 +169,6 @@ class MeshExportMetadataTest(unittest.TestCase):
         stl_deco(out="b.stl")(above)
         model = registered_model(this_file, "above")
         self.assertEqual({d.fmt for d in model.mesh_exports}, {"stl"})
-
-
-class RunLevelToleranceTest(unittest.TestCase):
-    """`python model.py --mesh-tolerance X`: flag > declaration > @step > default,
-    decided in ONE place (generation_spec._apply_step_options_to_spec)."""
-
-    def _spec(self):
-        from cadgen._internal.generation_spec import EntrySpec, ResolvedMeshExport
-
-        step = Path("/models/widget.step")
-        return EntrySpec(
-            source_ref="widget.py", cad_ref="widget", source_path=step, display_name="widget",
-            source="generated", step_path=step, mesh_tolerance=2e-3,
-            mesh_exports=(
-                ResolvedMeshExport("stl", Path("/models/widget.stl"), mesh_tolerance=4e-4, mesh_angular_tolerance=0.2),
-                ResolvedMeshExport("glb", Path("/models/widget.glb")),
-            ),
-        )
-
-    def test_a_flag_overrides_the_model_and_every_declaration(self) -> None:
-        from cadgen._internal.generation_spec import _apply_step_options_to_spec
-        from cadgen.catalog import StepImportOptions
-
-        spec = _apply_step_options_to_spec(self._spec(), StepImportOptions(mesh_tolerance=0.01))
-        self.assertEqual(0.01, spec.mesh_tolerance)
-        self.assertEqual([0.01, 0.01], [export.mesh_tolerance for export in spec.mesh_exports])
-        # The flag that was NOT given leaves each declaration's own value alone.
-        self.assertEqual([0.2, None], [export.mesh_angular_tolerance for export in spec.mesh_exports])
-
-        angled = _apply_step_options_to_spec(self._spec(), StepImportOptions(mesh_angular_tolerance=0.1))
-        self.assertEqual([0.1, 0.1], [export.mesh_angular_tolerance for export in angled.mesh_exports])
-        self.assertEqual([4e-4, None], [export.mesh_tolerance for export in angled.mesh_exports])
-
-    def test_no_flag_changes_nothing(self) -> None:
-        from cadgen._internal.generation_spec import _apply_step_options_to_spec
-        from cadgen.catalog import StepImportOptions
-
-        spec = self._spec()
-        self.assertIs(spec, _apply_step_options_to_spec(spec, StepImportOptions()))
 
 
 class MeshExportProductionTest(unittest.TestCase):
@@ -263,71 +230,39 @@ class MeshExportProductionTest(unittest.TestCase):
         )
 
         # --force re-exports past the ledger but does NOT rebuild the model:
-        # the bytes are the same because the geometry is.
+        # the bytes are the same because the geometry is. And a door writes ONLY
+        # its own format: nothing here touches the .step or the sibling
+        # declarations of the other two formats.
         sibling_path = self.project / "STEP" / "widget.stl"
         before = sibling_path.read_bytes()
+        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
+        step_before = (self.project / "STEP" / "widget.step").read_bytes()
         forced = self._run("-c", door, "STEP/widget.step", "--force", "--verbose")
         self.assertIn("wrote STL", forced.stdout)
         self.assertNotIn("run step model", forced.stderr)
         self.assertEqual(before, sibling_path.read_bytes())
-
-        # A door writes ONLY its own format: nothing here touches the .step or
-        # the sibling declarations of the other two formats.
-        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
-        step_before = (self.project / "STEP" / "widget.step").read_bytes()
-        self._run("-c", door, "STEP/widget.step", "--force")
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
-
-    def test_a_run_level_tolerance_overrides_every_declaration_for_that_run_only(self) -> None:
-        # ONE precedence rule: run-level flag > declaration > @step > default. The
-        # 3MF DECLARES mesh_tolerance=5e-3 and the flag used to be ignored for it
-        # while applying to its unflagged neighbours.
-        meshes = {
-            "STL": self.project / "STL" / "widget.stl",
-            "GLB": self.project / "STEP" / "widget.glb",
-            "3MF": self.project / "3MF" / "widget.3mf",
-        }
-
-        def wrote(proc: subprocess.CompletedProcess) -> set[str]:
-            return {name for name in meshes if f"wrote {name}" in proc.stderr}
-
-        self.assertEqual(set(meshes), wrote(self._run("src/widget.py")))
-        declared = {name: path.read_bytes() for name, path in meshes.items()}
-
-        flagged = self._run("src/widget.py", "--mesh-tolerance", "0.02")
-        self.assertEqual(set(meshes), wrote(flagged), "the flag must reach a declaration that sets its own tolerance")
-        for name, path in meshes.items():
-            self.assertNotEqual(declared[name], path.read_bytes(), f"{name} was not re-cut at the flag's tolerance")
-        self.assertNotIn("Building geometry", flagged.stderr, "a tolerance never rebuilds the model")
-
-        # The no-op decision compares against the tolerance each file on disk was
-        # ACTUALLY written at: the same flags again write nothing...
-        self.assertEqual(set(), wrote(self._run("src/widget.py", "--mesh-tolerance", "0.02")))
-        # ...the override was temporary, so an unflagged run restores every declared
-        # export, byte for byte, exactly once...
-        self.assertEqual(set(meshes), wrote(self._run("src/widget.py")))
-        for name, path in meshes.items():
-            self.assertEqual(declared[name], path.read_bytes(), name)
-        # ...and the next unflagged run is a no-op again, not a rewrite on alternate runs.
-        self.assertEqual(set(), wrote(self._run("src/widget.py")))
 
     def test_a_declared_export_the_exporter_could_not_write_leaves_the_model_stale(self) -> None:
         # Regression: a build whose mesh export FAILED still published a record
         # listing only the STEP and its sidecar, so the next gate said "current"
-        # and the declared STL was missing forever (seen on a checkout with no
-        # node_modules). Every declared output is listed from the first publish,
-        # sha-less until written, and an unwritten one reads as stale.
+        # and the declared STL was missing forever. Every declared output is listed
+        # from the first publish, sha-less until written, and an unwritten one reads
+        # as stale. A FILE where the STL's folder should be fails the export after
+        # the STEP is saved.
         import json
 
-        broken = dict(self.env, CADGEN_NODE=str(self.project / "no-such-node"))
+        blocked = self.project / "STL"
+        blocked.write_text("not a folder", encoding="utf-8")
         failed = subprocess.run(
-            [PYTHON, "src/widget.py"], cwd=str(self.project), env=broken,
+            [PYTHON, "src/widget.py"], cwd=str(self.project), env=self.env,
             capture_output=True, text=True, timeout=600,
         )
         self.assertNotEqual(failed.returncode, 0, failed.stdout + failed.stderr)
         self.assertTrue((self.project / "STEP" / "widget.step").is_file())
         self.assertFalse((self.project / "STL" / "widget.stl").exists())
+        blocked.unlink()
 
         why = subprocess.run(
             [PYTHON, "-m", "cadgen.cli", "store", "why", "src/widget.py", "--json"],
@@ -340,7 +275,7 @@ class MeshExportProductionTest(unittest.TestCase):
         unwritten = {Path(o["path"]).name: o["why"] for o in clause5["outputs"] if o["stale"]}
         self.assertEqual(unwritten, {"widget.stl": "never written", "widget.glb": "never written", "widget.3mf": "never written"})
 
-        # With the exporter back, the gate's verdict drives the run: the meshes are written.
+        # With the folder back, the gate's verdict drives the run: the meshes are written.
         healed = self._run("src/widget.py")
         self.assertIn("wrote STL", healed.stderr)
         for rel in ("STL/widget.stl", "STEP/widget.glb", "3MF/widget.3mf"):

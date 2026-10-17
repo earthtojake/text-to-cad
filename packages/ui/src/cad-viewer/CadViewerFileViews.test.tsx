@@ -47,7 +47,7 @@ test('only the file on screen keeps its view: a reload brings it back, and a fil
   const tabStore = createTabStore(memoryTabRecord());
   tabStore.settings.update({ appearance: 'dark', library: { layout: 'list' } });
   const settings = tabStore.settings.getSnapshot();
-  const host = { files: createCadFileSource(client as never), clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+  const host = { files: createCadFileSource(client as never), clipboard: { writeText: async () => {}, writeImage: async () => {} },
     promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const } };
   const view = (file: string) => <CadViewer client={client as never} host={host} tabStore={tabStore} live={createLiveRegistry()} file={file} onShow={() => {}} />;
   const opened = () => viewer.opened.at(-1);

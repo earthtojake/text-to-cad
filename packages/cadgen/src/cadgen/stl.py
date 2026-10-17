@@ -25,8 +25,8 @@ from cadgen.results import MeshExportResult
 
 __all__ = ["build", "snapshot"]
 
-#: ``cadgen stl snapshot``'s verb: render an STL mesh. The mesh half of what
-#: ``step snapshot`` used to carry, now behind the door that writes the format.
+#: ``cadgen stl snapshot``'s verb: render an STL mesh, behind the door that
+#: writes the format.
 snapshot = mesh_snapshot_verb("stl")
 
 
@@ -45,7 +45,7 @@ def build(
     out: destination .stl path. Omitted, writes one sibling .stl beside
         TARGET. Model output declarations are not read.
     mesh_tolerance: chord deflection RELATIVE to each component's bounding
-        diagonal (default 1.5e-3), for this export only.
+        diagonal (default 5e-4, the display tolerance), for this export only.
     mesh_angular_tolerance: max normal spread across a triangle edge in
         radians (default 0.35), for this export only.
     force: re-export even where the ledger says the output is current. Never

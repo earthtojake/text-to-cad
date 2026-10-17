@@ -4,7 +4,7 @@ from lib.guide_mounts import make_phalanx_comb
 from lib.phalanx import make_phalanx
 from lib.bowden_guide import make_bowden_body
 
-@step(out='../STEP/guide_comb_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.18)
+@step(out='../STEP/guide_comb_review.step')
 def guide_comb_review():
     pieces=[make_phalanx(45,18,label='original_middle_proximal_frame')]
     pieces+=make_phalanx_comb(45,18,12.25,[-4.2,-3.,3.,4.2],'middle_mcp_outlet_comb')

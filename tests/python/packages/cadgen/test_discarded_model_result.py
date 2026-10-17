@@ -63,25 +63,25 @@ class DiscardedModelResultTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return json_from_last_line(completed.stdout)
 
-    def test_real_main_bare_call_waits_for_receipt_without_importing_lazy_geometry(self) -> None:
+    def test_real_main_bare_call_waits_for_receipt_without_importing_geometry(self) -> None:
         result = self.run_source("""
-class BlockLazy:
+class BlockGeometry:
     def find_spec(self, fullname, _path=None, _target=None):
-        if fullname == "cadgen.store.lazy" or fullname == "build123d" or fullname.startswith("OCP"):
+        if fullname == "cadgen.store.materialize" or fullname == "build123d" or fullname.startswith("OCP"):
             raise AssertionError("discarded result imported native/materialization code: " + fullname)
         return None
 
 for loaded in list(sys.modules):
-    if loaded == "cadgen.store.lazy" or loaded == "build123d" or loaded.startswith("OCP"):
+    if loaded == "cadgen.store.materialize" or loaded == "build123d" or loaded.startswith("OCP"):
         sys.modules.pop(loaded, None)
-sys.meta_path.insert(0, BlockLazy())
+sys.meta_path.insert(0, BlockGeometry())
 with mock.patch.object(authoring, "_build", return_value=0), \\
      mock.patch.object(executors, "capture_source_result", capture_source_result):
     part()
 print(json.dumps({"waits": captured.waits, "finished": captured.finished,
-                  "lazyImported": "cadgen.store.lazy" in sys.modules}))
+                  "materializeImported": "cadgen.store.materialize" in sys.modules}))
 """)
-        self.assertEqual(result, {"waits": 1, "finished": [0], "lazyImported": False})
+        self.assertEqual(result, {"waits": 1, "finished": [0], "materializeImported": False})
 
     def test_assigned_and_nested_returns_materialize(self) -> None:
         result = self.run_source("""

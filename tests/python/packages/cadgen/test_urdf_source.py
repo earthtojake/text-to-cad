@@ -1,16 +1,15 @@
 import unittest
-import warnings
 from pathlib import Path
 
 from tests.python.support.tmp_root import generated_cad_directory
 
+from cadgen.findings import format_findings
 from cadgen.urdf_source import (
     MeshUriKind,
-    UrdfSourceError,
-    UrdfSourceWarning,
+    UrdfSource,
     classify_mesh_uri,
-    read_urdf_source,
     resolve_mesh_uri,
+    validate_urdf_file,
 )
 
 
@@ -36,7 +35,18 @@ class UrdfSourceTests(unittest.TestCase):
         urdf_path.write_text(body.strip() + "\n", encoding="utf-8")
         return urdf_path
 
-    def test_read_urdf_source_accepts_valid_mesh_robot(self) -> None:
+    def validated(self, path: Path, **options) -> tuple[UrdfSource, list[str]]:
+        """The validator's source for a URDF it accepts, and its warnings' messages."""
+        source, result = validate_urdf_file(path, **options)
+        self.assertEqual([], result.errors, format_findings(result.errors))
+        return source, [finding.message for finding in result.warnings]
+
+    def assertRefused(self, path: Path, message: str) -> None:
+        """The validator refuses the URDF at ``path`` with an error that says ``message``."""
+        _source, result = validate_urdf_file(path)
+        self.assertRegex(format_findings(result.errors), message)
+
+    def test_accepts_valid_mesh_robot(self) -> None:
         mesh_path = self._write_mesh("base")
         source_path = self._write_urdf(
             "robot",
@@ -53,7 +63,7 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual(self._file_ref("robot"), Path(source.file_ref).resolve())
         self.assertEqual("sample-robot", source.robot_name)
@@ -64,7 +74,7 @@ class UrdfSourceTests(unittest.TestCase):
         self.assertEqual((mesh_path.resolve(),), source.visual_mesh_paths)
         self.assertEqual((), source.collision_mesh_paths)
 
-    def test_read_urdf_source_accepts_collision_meshes(self) -> None:
+    def test_accepts_collision_meshes(self) -> None:
         visual_mesh_path = self._write_mesh("visual")
         collision_mesh_path = self._write_mesh("collision")
         source_path = self._write_urdf(
@@ -88,7 +98,7 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual(
             (visual_mesh_path.resolve(), collision_mesh_path.resolve()),
@@ -97,7 +107,7 @@ class UrdfSourceTests(unittest.TestCase):
         self.assertEqual((visual_mesh_path.resolve(),), source.visual_mesh_paths)
         self.assertEqual((collision_mesh_path.resolve(),), source.collision_mesh_paths)
 
-    def test_read_urdf_source_accepts_primitive_collision_geometry(self) -> None:
+    def test_accepts_primitive_collision_geometry(self) -> None:
         visual_mesh_path = self._write_mesh("visual")
         source_path = self._write_urdf(
             "robot",
@@ -119,12 +129,12 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual((visual_mesh_path.resolve(),), source.mesh_paths)
         self.assertEqual((), source.collision_mesh_paths)
 
-    def test_read_urdf_source_accepts_primitive_visual_geometry(self) -> None:
+    def test_accepts_primitive_visual_geometry(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -140,12 +150,12 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual(("base_link",), source.links)
         self.assertEqual((), source.mesh_paths)
 
-    def test_read_urdf_source_accepts_non_stl_mesh_formats(self) -> None:
+    def test_accepts_non_stl_mesh_formats(self) -> None:
         visual_mesh_path = self._write_mesh("meshes/base.dae")
         collision_mesh_path = self._write_mesh("meshes/base_collision.obj")
         source_path = self._write_urdf(
@@ -168,7 +178,7 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual((visual_mesh_path.resolve(), collision_mesh_path.resolve()), source.mesh_paths)
 
@@ -196,7 +206,7 @@ class UrdfSourceTests(unittest.TestCase):
             ),
         )
 
-    def test_read_urdf_source_accepts_unresolved_package_mesh_with_warning(self) -> None:
+    def test_accepts_unresolved_package_mesh_with_warning(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -212,15 +222,12 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            source = read_urdf_source(source_path)
+        source, warnings = self.validated(source_path)
 
         self.assertEqual((), source.mesh_paths)
-        warning_messages = [str(warning.message) for warning in caught]
-        self.assertTrue(any("syntax is valid but was not resolved" in message for message in warning_messages))
+        self.assertTrue(any("syntax is valid but was not resolved" in message for message in warnings))
 
-    def test_read_urdf_source_accepts_unresolved_remote_mesh_with_warning(self) -> None:
+    def test_accepts_unresolved_remote_mesh_with_warning(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -236,15 +243,12 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            source = read_urdf_source(source_path)
+        source, warnings = self.validated(source_path)
 
         self.assertEqual((), source.mesh_paths)
-        warning_messages = [str(warning.message) for warning in caught]
-        self.assertTrue(any("is not a local mesh URI and was not resolved" in message for message in warning_messages))
+        self.assertTrue(any("is not a local mesh URI and was not resolved" in message for message in warnings))
 
-    def test_read_urdf_source_resolves_package_mesh_with_package_map(self) -> None:
+    def test_resolves_package_mesh_with_package_map(self) -> None:
         package_root = self.temp_root / "robot_description"
         mesh_path = package_root / "meshes" / "base.stl"
         mesh_path.parent.mkdir(parents=True)
@@ -264,11 +268,11 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path, package_map={"robot_description": package_root})
+        source, _ = self.validated(source_path, package_map={"robot_description": package_root})
 
         self.assertEqual((mesh_path.resolve(),), source.mesh_paths)
 
-    def test_read_urdf_source_accepts_valid_inertial(self) -> None:
+    def test_accepts_valid_inertial(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -284,11 +288,11 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual(("base_link",), source.links)
 
-    def test_read_urdf_source_rejects_nonpositive_inertial_mass(self) -> None:
+    def test_rejects_nonpositive_inertial_mass(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -303,10 +307,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "mass must be positive"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "mass must be positive")
 
-    def test_read_urdf_source_warns_on_invalid_inertia_triangle(self) -> None:
+    def test_warns_on_invalid_inertia_triangle(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -321,12 +324,10 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            read_urdf_source(source_path)
-        self.assertTrue(any("triangle" in str(warning.message) for warning in caught))
+        _, warnings = self.validated(source_path)
+        self.assertTrue(any("triangle" in message for message in warnings))
 
-    def test_read_urdf_source_warns_on_inertia_magnitude_implausible_for_box(self) -> None:
+    def test_warns_on_inertia_magnitude_implausible_for_box(self) -> None:
         # references/inertials.md's own "Sanity Gate" example: a 0.5 kg,
         # 10 cm box with ixx = 2.0 kg*m^2 is wrong by ~1000x.
         source_path = self._write_urdf(
@@ -346,12 +347,10 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            read_urdf_source(source_path)
-        self.assertTrue(any("more than 10x off" in str(warning.message) for warning in caught))
+        _, warnings = self.validated(source_path)
+        self.assertTrue(any("more than 10x off" in message for message in warnings))
 
-    def test_read_urdf_source_accepts_inertia_matching_box_geometry(self) -> None:
+    def test_accepts_inertia_matching_box_geometry(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -369,12 +368,10 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            read_urdf_source(source_path)
-        self.assertFalse(any("more than 10x off" in str(warning.message) for warning in caught))
+        _, warnings = self.validated(source_path)
+        self.assertFalse(any("more than 10x off" in message for message in warnings))
 
-    def test_read_urdf_source_skips_magnitude_check_for_mesh_geometry(self) -> None:
+    def test_skips_magnitude_check_for_mesh_geometry(self) -> None:
         # No independent size is available for a mesh without loading the
         # file, so the magnitude check should not fire here even though this
         # inertia is just as implausible as the box case above.
@@ -396,12 +393,10 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", UrdfSourceWarning)
-            read_urdf_source(source_path)
-        self.assertFalse(any("more than 10x off" in str(warning.message) for warning in caught))
+        _, warnings = self.validated(source_path)
+        self.assertFalse(any("more than 10x off" in message for message in warnings))
 
-    def test_read_urdf_source_rejects_invalid_origin_vector(self) -> None:
+    def test_rejects_invalid_origin_vector(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -417,10 +412,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "origin xyz must have 3 values"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "origin xyz must have 3 values")
 
-    def test_read_urdf_source_rejects_zero_joint_axis(self) -> None:
+    def test_rejects_zero_joint_axis(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -437,10 +431,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "axis must be nonzero"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "axis must be nonzero")
 
-    def test_read_urdf_source_rejects_invalid_mesh_scale(self) -> None:
+    def test_rejects_invalid_mesh_scale(self) -> None:
         mesh_path = self._write_mesh("base.obj")
         source_path = self._write_urdf(
             "robot",
@@ -457,10 +450,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "scale values must be nonzero"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "scale values must be nonzero")
 
-    def test_read_urdf_source_rejects_invalid_primitive_dimensions(self) -> None:
+    def test_rejects_invalid_primitive_dimensions(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -476,10 +468,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "sphere radius must be positive"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "sphere radius must be positive")
 
-    def test_read_urdf_source_rejects_missing_geometry_element(self) -> None:
+    def test_rejects_missing_geometry_element(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -491,10 +482,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "visual requires <geometry>"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "visual requires <geometry>")
 
-    def test_read_urdf_source_rejects_duplicate_links(self) -> None:
+    def test_rejects_duplicate_links(self) -> None:
         mesh_path = self._write_mesh("base")
         source_path = self._write_urdf(
             "robot",
@@ -512,10 +502,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "duplicates"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "duplicates")
 
-    def test_read_urdf_source_rejects_missing_mesh(self) -> None:
+    def test_rejects_missing_mesh(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -531,10 +520,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "missing mesh file"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "missing mesh file")
 
-    def test_read_urdf_source_rejects_missing_collision_mesh(self) -> None:
+    def test_rejects_missing_collision_mesh(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -550,10 +538,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "missing mesh file"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "missing mesh file")
 
-    def test_read_urdf_source_accepts_prismatic_joint_with_limits(self) -> None:
+    def test_accepts_prismatic_joint_with_limits(self) -> None:
         mesh_path = self._write_mesh("base")
         source_path = self._write_urdf(
             "robot",
@@ -576,13 +563,13 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual("prismatic", source.joints[0].joint_type)
         self.assertEqual(0.0, source.joints[0].lower)
         self.assertEqual(0.05, source.joints[0].upper)
 
-    def test_read_urdf_source_rejects_reversed_joint_limits(self) -> None:
+    def test_rejects_reversed_joint_limits(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -598,10 +585,9 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "lower limit exceeds upper limit"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "lower limit exceeds upper limit")
 
-    def test_read_urdf_source_rejects_unsupported_joint_type(self) -> None:
+    def test_rejects_unsupported_joint_type(self) -> None:
         mesh_path = self._write_mesh("base")
         source_path = self._write_urdf(
             "robot",
@@ -623,8 +609,7 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "unsupported type"):
-            read_urdf_source(source_path)
+        self.assertRefused(source_path, "unsupported type")
 
     def test_file_ref_ignores_neighbor_step_toml(self) -> None:
         source_path = self._write_urdf(
@@ -647,7 +632,7 @@ class UrdfSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        source = read_urdf_source(source_path)
+        source, _ = self.validated(source_path)
 
         self.assertEqual(source_path.resolve(), Path(source.file_ref).resolve())
 

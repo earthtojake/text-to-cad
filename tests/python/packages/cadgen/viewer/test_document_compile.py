@@ -195,7 +195,7 @@ class OpsWiring(CompileTestCase):
         ops = self.ops()
         self.assertEqual(
             ops.artifact_status(self.step("ok.step")),
-            {"state": "not-compiled", "reason": "missing_glb", "compile": True},
+            {"state": "not-compiled", "reason": "missing_tree", "compile": True},
         )
 
     def test_a_build_starts_the_compile_and_answers_at_once_and_a_second_press_joins_it(self):
@@ -267,7 +267,7 @@ class ReadRefusals(CompileTestCase):
             with self.subTest(name=name):
                 self.assertEqual(
                     ops.artifact_status(documents[name]),
-                    {"state": "not-compiled", "reason": "missing_glb", "compile": True},
+                    {"state": "not-compiled", "reason": "missing_tree", "compile": True},
                 )
         self.assertEqual(ops.artifact_status(documents["crash.step"])["state"], "failed")
 

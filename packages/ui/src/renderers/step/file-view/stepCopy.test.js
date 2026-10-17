@@ -4,7 +4,11 @@ import test from "node:test";
 import { STEP_MODEL_ROOT_ID } from "@text-to-cad/core/lib/step/stepTree.js";
 import { nodeCopyText, selectionCopyPayload } from "./stepCopy.js";
 
-const face = { id: "o1.1.f3", selectorType: "face", copyText: "#o1.1.f3" };
+// Occurrence tokens of two parts and a face name of the first: a ref is `<occurrence>/<element>`.
+const BASE = "o:3f2a9c1d7e5b";
+const ARM = "o:a1b2c3d4e5f6";
+const FACE = `${BASE}/f:base.extrude1.3`;
+const face = { id: FACE, selectorType: "face", copyText: `#${FACE}` };
 const context = (overrides = {}) => ({
   entry: { file: "hinge.step", kind: "assembly", fileRefPrefix: "hinge.step" }, isAssemblyView: true,
   copyReferenceMap: new Map(), referenceMap: new Map([[face.id, face]]), assemblyPartMap: new Map(), displayRoot: null, root: null,
@@ -12,9 +16,9 @@ const context = (overrides = {}) => ({
 });
 
 test("a selection copies its faces and its parts as one reference", () => {
-  const payload = selectionCopyPayload(context(), { referenceIds: ["o1.1.f3"], partIds: ["o1.2"] });
+  const payload = selectionCopyPayload(context(), { referenceIds: [FACE], partIds: [ARM] });
   assert.equal(payload.copiedCount, 2);
-  assert.deepEqual(payload.lines, ["#o1.1.f3,o1.2"]);
+  assert.deepEqual(payload.lines, [`#${FACE},${ARM}`]);
 });
 
 test("a single part's root copies as the whole file", () => {
@@ -24,8 +28,8 @@ test("a single part's root copies as the whole file", () => {
 });
 
 test("one node copies the way the Copy Reference button does: canonical, with the file's prefix", () => {
-  assert.equal(nodeCopyText(context(), "o1.1.f3", { topology: true }), "hinge.step#o1.1.f3");
-  assert.equal(nodeCopyText(context(), "o1.2"), "hinge.step#o1.2");
-  assert.equal(nodeCopyText(context({ entry: { file: "hinge.step", kind: "assembly" } }), "o1.2"), "#o1.2", "no prefix, the bare ref");
+  assert.equal(nodeCopyText(context(), FACE, { topology: true }), `hinge.step#${FACE}`);
+  assert.equal(nodeCopyText(context(), ARM), `hinge.step#${ARM}`);
+  assert.equal(nodeCopyText(context({ entry: { file: "hinge.step", kind: "assembly" } }), ARM), `#${ARM}`, "no prefix, the bare ref");
   assert.equal(nodeCopyText(context(), "  "), "");
 });

@@ -36,7 +36,7 @@ const fixtures = [
   // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
   // apply is hidden, not disabled); `threeD` has Display and Preview at the navbar's right end.
   { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true, selectModes: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
   { format: "dxf", file: "smoke.dxf", parts: false, tools: [], threeD: false, minCoverage: 0.003 },
   { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Position"], threeD: true },
@@ -131,16 +131,6 @@ async function newPage() {
     errors.push(`console: ${message.text()}${source}`);
   });
   await page.addInitScript(MODEL_BOUNDS_SCRIPT);
-  await page.addInitScript(() => {
-    window.__viewerTestCameraLodTrace = [];
-    window.addEventListener("cad:lod-status", (event) => {
-      const status = event.detail;
-      const trace = window.__viewerTestCameraLodTrace;
-      trace.push({ at: performance.now(), camera: window.__cadCamera?.(), pending: status?.pendingEvaluation,
-        occupied: status?.occupied, settled: status?.qualitySettled });
-      if (trace.length > 8) trace.shift();
-    });
-  });
   // Keep one bounded diagnostic snapshot per gate. It is written before the
   // owned context closes, so a thrown assertion still leaves its actual UI and
   // renderer state available instead of only a locator timeout.
@@ -164,9 +154,7 @@ async function newPage() {
             placement: window.__cadModelPlacement,
             canvases: [...document.querySelectorAll('canvas')].map(canvas => canvas.getBoundingClientRect().toJSON()),
             camera: window.__cadCamera?.(),
-            cameraLodTrace: window.__viewerTestCameraLodTrace,
-            lod: window.__cadViewportLod?.(),
-            quality: window.__cadViewerQuality,
+            load: window.__cadViewerLoad,
             badge: document.querySelector('[data-file-status]')?.dataset.fileStatus,
           })),
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
@@ -288,12 +276,13 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // The view's own controls, last in the navbar: Display then Preview on a 3D view, none on a
-      // drawing. The navbar's left is the logo (the app menu, the person's settings in it), the
-      // file's name and its ⋯, on every file, drawing included.
+      // The view's own controls, last in the navbar: a STEP's Select modes while Select is the tool,
+      // then Display and Preview on a 3D view; none on a drawing. The navbar's left is the logo (the
+      // app menu, the person's settings in it), the file's name and its ⋯, on every file, drawing
+      // included.
       const controls = await page.locator("[data-viewer-navbar] [data-view-controls] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Display", "Preview"] : [];
+      const expected = fixture.threeD ? [...(fixture.selectModes ? ["Select mode: All"] : []), "Display", "Preview"] : [];
       if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
       const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
       if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
@@ -403,10 +392,9 @@ async function resetView(page) {
   const box = await page.locator("canvas").first().boundingBox();
   await page.mouse.click(box.x + box.width * 0.12, box.y + box.height * 0.86, { button: "right" });
   await page.getByRole("menuitem", { name: "Zoom to fit", exact: true }).click();
-  // Reset changes framing on the presented model. The pose and zero-pose
-  // camera assertions do not require a queued LOD camera sample to finish;
-  // actual geometry adoption, presentation and camera stability still do.
-  await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
+  // Reset changes framing on the presented model: presentation and camera
+  // stability are what it waits for.
+  await settledCameraFrame(page, { stage: "reset view" });
 }
 
 // --- the camera across modes ----------------------------------------------
@@ -414,30 +402,23 @@ async function resetView(page) {
 // the camera to the other projection, keeping what it looks at and how large it
 // draws it, and converting back returns the view exactly. A model opens framed
 // against its own zero pose.
-async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
+async function settledCameraFrame(page, { projection = null, stage, timeout = 60_000 } = {}) {
   const startedAt = Date.now();
-  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection } });
   // Projection is published during scene reconciliation, before Render's
   // environment and first frame are necessarily ready. The presentation host
-  // clears aria-busy only after drawing that destination scene. Camera damping
-  // must settle for every framing assertion; mode/gesture checks also require
-  // settled LOD refinement.
-  const ready = await page.waitForFunction(({ want, requireSettledLod }) => {
+  // clears aria-busy only after drawing that destination scene. The whole model
+  // must be loaded, and camera damping must settle, for every framing assertion.
+  const ready = await page.waitForFunction(({ want }) => {
     const read = () => {
       const canvas = document.querySelector("canvas");
       const camera = window.__cadCamera?.();
-      const quality = window.__cadViewerQuality;
-      const lod = window.__cadViewportLod?.();
       if (!canvas || !camera || (want && camera.projection !== want)
         || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
         || getComputedStyle(canvas).visibility !== "visible"
-        || document.querySelector("[data-viewer-transition]")) return null;
-      const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
-      if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
-      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || lod.busy || lod.collectionPending
-        || (requireSettledLod && (!lod.qualitySettled || lod.pendingEvaluation)))) return null;
-      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts,
-        lodSettled: lod?.qualitySettled, lodPendingEvaluation: lod?.pendingEvaluation };
+        || document.querySelector("[data-viewer-transition]")
+        || !window.__cadViewerLoad?.complete) return null;
+      return { canvas, camera };
     };
     const after = read();
     if (!after) {
@@ -448,7 +429,7 @@ async function settledCameraFrame(page, { projection = null, stage, requireSettl
       ...(camera.projection === "orthographic" ? [camera.halfHeight] : [])];
     const before = window.__viewerTestCameraFrame;
     const a = before ? coordinates(before.camera) : [], b = coordinates(after.camera);
-    const stable = before?.canvas === after.canvas && before.quality === after.quality
+    const stable = before?.canvas === after.canvas
       && a.every((value, index) => Math.abs(value - b[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
     const stableFrames = stable ? before.stableFrames + 1 : 0;
     window.__viewerTestCameraFrame = { ...after, stableFrames };
@@ -457,10 +438,8 @@ async function settledCameraFrame(page, { projection = null, stage, requireSettl
     if (!gl || gl.isContextLost()) throw new Error('camera: presented canvas has no live WebGL2 context');
     gl.finish();
     delete window.__viewerTestCameraFrame;
-    return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
-      lodSettled: after.lodSettled, lodPendingEvaluation: after.lodPendingEvaluation,
-      width: after.canvas.width, height: after.canvas.height };
-  }, { want: projection, requireSettledLod }, { timeout, polling: "raf" });
+    return { camera: after.camera, width: after.canvas.width, height: after.canvas.height };
+  }, { want: projection }, { timeout, polling: "raf" });
   try {
     const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
     cameraReadiness.set(page, state);

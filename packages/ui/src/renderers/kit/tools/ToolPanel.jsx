@@ -9,10 +9,10 @@ import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
 
 /**
- * How a panel of the tool stack answers a viewer too short for every panel at its height
- * (`RendererShell.jsx` bounds the stack by the viewer). A `"fixed"` panel keeps its height. A
- * `"tree"` panel gives way first and scrolls inside itself; a `"details"` panel gives way once the
- * tree has. On mobile a tree takes at most 40% of the stack's height, however tall it is.
+ * How the panels open together share a stack too short for all of them at their height
+ * (`RendererShell.jsx` bounds the stack by the viewer; a resizable panel opens capped at all of
+ * it). A `"fixed"` panel keeps its height. A `"tree"` panel gives way first and scrolls inside
+ * itself; the `"details"` panels give way once the tree has, each in proportion to its height.
  * The shrink factors are orders of magnitude apart, so the tree absorbs nearly all of the
  * overflow until it reaches its floor and a fixed panel never scrolls a few pixels meanwhile.
  */
@@ -91,7 +91,7 @@ export function ToolPanelClose({ className }) {
  *
  * Two kinds. A fixed panel (the default) is exactly `TOOL_PANEL_WIDTH` wide and its content's
  * height. A `resizable` panel (the tree, the Reference, Position) is the person's to size, under its
- * `id`: it opens at that width and the stack's default cap for that id, and the grip at its
+ * `id`: it opens at that width and capped at the stack's height, and the grip at its
  * bottom-right corner (`ResizeGrip.jsx`, Quick Edit's) moves only it — wider (never narrower than
  * the one width) and its cap up or down — by pointer or by keyboard (arrows by 16px; Home and End
  * to the bounds), written back once when the gesture lets go. A cap is never a floor: a short tree
@@ -151,7 +151,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
   const width = size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
-  const cap = sized ? size.height ?? stack?.defaultHeight(id) ?? null : null;
+  const cap = sized ? size.height ?? stack?.defaultHeight() ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
     setDraft(null);

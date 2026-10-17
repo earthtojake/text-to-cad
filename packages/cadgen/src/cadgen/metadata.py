@@ -7,14 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cadgen.render import relative_to_cwd as _display_path
-
-
-class InvalidModelScriptError(ValueError):
-    """A script whose model DECLARATION is malformed in a way directory
-    discovery should skip-with-a-note rather than abort on (e.g. a file holding
-    several models named without its ``::function``). Contract violations inside a single model (a dict return,
-    bad decorator arguments) stay plain ValueErrors and DO abort, because an
-    explicitly-targeted build must fail loudly."""
+from cadgen.tessellation_policy import tolerance_refusal
 
 
 @dataclass(frozen=True)
@@ -24,8 +17,6 @@ class GeneratorMetadata:
     generator_names: tuple[str, ...]
     # The decorator kind this model script declares: "step" (@step) or "dxf" (@dxf).
     format: str
-    mesh_tolerance: float | None
-    mesh_angular_tolerance: float | None
     # Library-first fields: the @step/@dxf decorated entry function and its
     # statically-declared output target.
     entry_function: str | None = None
@@ -38,7 +29,6 @@ class GeneratorMetadata:
     # other whose .step is not among its outputs and is never written.
     step_output: bool = True
     materials: object | None = None
-    animation: object | None = None
 
 
 @dataclass(frozen=True)
@@ -48,7 +38,8 @@ class MeshExportDecl:
     ``fmt`` is the FORMAT name ("stl" | "3mf" | "glb"); the 3MF decorator is
     spelled ``@threemf`` (identifiers cannot start with a digit). ``out``
     is the raw script-relative target, ``None`` meaning the sibling of the
-    logical STEP artifact. Tolerances ``None`` inherit the model's policy."""
+    logical STEP artifact. A tolerance ``None`` is the display tolerance
+    (``cadgen.tessellation_policy.DISPLAY_TESSELLATION``)."""
 
     fmt: str
     out: str | None = None
@@ -59,22 +50,14 @@ class MeshExportDecl:
     kinematics: object | None = None
 
 
-
-# The largest chord tolerance the tessellator honours. The value is RELATIVE --
-# a fraction of each component's bounding diagonal -- so 0.05 already lets a
-# facet sit a twentieth of the whole part away from the true surface. Past it the
-# tessellator's base grid collapses to a cell or two while its fixed angular
-# criterion keeps bisecting the slivers that leaves: a 10x20 cylinder comes out
-# with MORE triangles and a worse volume than at the default (464 triangles at
-# 1.5e-3; 13 000 at 0.2; 20% of the volume missing at 1.0), at exit 0. A number
-# that large is, in practice, an absolute millimetre deflection carried over from
-# a mesher that took one.
-MESH_TOLERANCE_MAX = 0.05
+# What each spelling of a mesh tolerance is in the tessellation policy's terms.
+_POLICY_KEYS = {"mesh_tolerance": "chordTolerance", "mesh_angular_tolerance": "angleTolerance"}
 
 
 def normalize_mesh_numeric(value: object, *, field_name: str) -> float | None:
-    """The ONE validator of a mesh tolerance, wherever it enters: a decorator
-    argument, a model run's flag, a format door's flag or keyword."""
+    """The ONE validator of a mesh tolerance, wherever it enters: a mesh
+    decorator's argument, a mesh door's flag or keyword. Its bounds are
+    the tessellation policy's (``cadgen.tessellation_policy.tolerance_refusal``)."""
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -84,14 +67,9 @@ def normalize_mesh_numeric(value: object, *, field_name: str) -> float | None:
         raise ValueError(f"{field_name} must be finite")
     if normalized <= 0.0:
         raise ValueError(f"{field_name} must be greater than 0")
-    if field_name == "mesh_tolerance" and normalized > MESH_TOLERANCE_MAX:
-        raise ValueError(
-            f"mesh_tolerance {normalized:g} is too large: the value is RELATIVE to each "
-            "component's bounding diagonal, not millimetres, so it must be at most "
-            f"{MESH_TOLERANCE_MAX:g} (default 1.5e-3). For an "
-            "absolute chord deviation of X mm on a part whose bounding diagonal is D mm, "
-            f"pass X/D -- {normalized:g} mm on a 200 mm part is {normalized / 200.0:g}"
-        )
+    refusal = tolerance_refusal(_POLICY_KEYS[field_name], normalized, name=field_name)
+    if refusal is not None:
+        raise ValueError(refusal)
     return normalized
 
 
@@ -118,7 +96,6 @@ def resolve_model_output_path(
 
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
-_MESH_DECORATOR_FMT = {"stl": "stl", "glb": "glb", "threemf": "3mf"}
 _MESH_SUFFIX = {"stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
 
 
@@ -322,13 +299,13 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         chosen = [entry for entry in decorated if entry[0].name == function]
         if not chosen:
             declared = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
-            raise InvalidModelScriptError(
+            raise ValueError(
                 f"{_display_path(script_path)} declares no model {function}() (it declares {declared})"
             )
         decorated = chosen
     elif len(decorated) > 1:
         joined = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
-        raise InvalidModelScriptError(
+        raise ValueError(
             f"{_display_path(script_path)} declares several models ({joined}); name one as "
             f"{_display_path(script_path)}::{decorated[0][0].name}"
         )
@@ -366,15 +343,12 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         display_name=display_name,
         generator_names=(function.name,),
         format=defn.fmt,
-        mesh_tolerance=defn.mesh_tolerance,
-        mesh_angular_tolerance=defn.mesh_angular_tolerance,
         entry_function=function.name,
         out_target=defn.out,
         is_decorated=True,
         mesh_exports=tuple(defn.mesh_exports),
         step_output=bool(defn.step_output),
         materials=defn.materials,
-        animation=defn.animation,
     )
 
 
@@ -415,7 +389,7 @@ def imported_model(script_path: Path, function: str):
                 _load_generator_module(resolved)
             defn = registered_model(resolved, function)
     if defn is None:
-        raise InvalidModelScriptError(
+        raise ValueError(
             f"{_display_path(resolved)} declares {function}() but importing it registered no such model"
         )
     return defn
@@ -428,11 +402,10 @@ def _check_step_return(
 ) -> None:
     """A @step returns ONE build123d shape and nothing else.
 
-    A dict return is refused here, statically, with the decorators that replaced
-    the old ``{"shape": ..., "stl": ...}`` envelope named in the message; the
-    runtime check in ``generation_runner`` says the same thing for a dict that
-    only appears at run time. Nothing else about the return is inferred: how the
-    build packages the geometry follows the shape it actually gets.
+    A return of nothing is refused here, statically; any other value that is not
+    a shape is refused by the runtime check in ``generation_runner``. Nothing
+    else about the return is inferred: how the build packages the geometry
+    follows the shape it actually gets.
     """
     for node in ast.walk(function):
         if not isinstance(node, ast.Return):
@@ -441,52 +414,3 @@ def _check_step_return(
             raise ValueError(
                 f"{_display_path(script_path)} {function.name}() must return a build123d shape"
             )
-        if isinstance(node.value, ast.Dict):
-            raise ValueError(
-                f"{_display_path(script_path)} {function.name}() returns a dict; a @step "
-                "model returns a build123d shape and nothing else. Declare mesh exports "
-                "with @stl/@threemf/@glb stacked on the model and tolerances with "
-                "@step(mesh_tolerance=..., mesh_angular_tolerance=...)."
-            )
-
-
-def _call_tail_name(function: ast.expr) -> str | None:
-    if isinstance(function, ast.Name):
-        return function.id
-    if isinstance(function, ast.Attribute):
-        return function.attr
-    return None
-
-
-def _is_nonempty_expression(expression: ast.expr) -> bool:
-    if isinstance(expression, ast.Constant) and expression.value is None:
-        return False
-    if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
-        return bool(expression.elts)
-    return True
-
-
-def _is_multi_item_sequence_expression(
-    expression: ast.expr,
-    *,
-    local_assignments: dict[str, ast.expr],
-    seen_names: set[str] | None = None,
-) -> bool:
-    if isinstance(expression, ast.Name):
-        seen_names = set(seen_names or set())
-        if expression.id in seen_names:
-            return False
-        target = local_assignments.get(expression.id)
-        if target is None:
-            return False
-        seen_names.add(expression.id)
-        return _is_multi_item_sequence_expression(
-            target,
-            local_assignments=local_assignments,
-            seen_names=seen_names,
-        )
-    if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
-        return len(expression.elts) > 1
-    return False
-
-

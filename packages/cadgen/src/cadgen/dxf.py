@@ -5,11 +5,11 @@ same object — this module is callable (see
 :mod:`cadgen._internal.format_namespace`) — so the drawing family is one table
 row like every other format (README law 6).
 
-**There is no ``dxf.build``** (deleted, hard cutover). A ``.dxf`` has no derived
-state a door must materialize: the file IS the product, and both the CAD Viewer
-and snapshot draw it from the same server-side 2D payload
-(:mod:`cadgen.drawing_payload`). Drawings are made the way every model is made —
-by running the script: ``python drawing.py``.
+**There is no ``dxf.build``.** A ``.dxf`` has no derived state a door must
+materialize: the file IS the product, and both the CAD Viewer and snapshot draw
+it from the same server-side 2D payload (:mod:`cadgen.drawing_payload`).
+Drawings are made the way every model is made — by running the script:
+``python drawing.py``.
 
 Import discipline: nothing here may pull in ezdxf/OCP at module scope (see
 :mod:`cadgen.step`).

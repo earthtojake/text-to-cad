@@ -23,24 +23,23 @@ from tests.python.support.paths import add_repo_path, repo_path
 add_repo_path("packages/cadgen/src")
 
 RENDER_MESH_SCENE_JS = Path(repo_path("packages/core/src/common/renderMeshScene.js"))
+# A STEP model's rows come from cadgen; a GLB's, a mesh's and a robot's from the page.
+SNAPSHOT_PARTS_PY = Path(repo_path("packages/cadgen/src/cadgen/snapshot_parts.py"))
 
 # Every field a listed part may carry. Adding one is a real decision: it is multiplied by
 # the part count, so a field that duplicates another costs thousands of tokens per call.
 ALLOWED_PART_FIELDS = {"ref", "name", "triangleCount", "vertexCount", "bounds"}
-
-# Fields deleted because they carried no information. Named individually so a
-# reintroduction fails here with the reason rather than silently regrowing the payload.
-DELETED_PART_FIELDS = {
-    "id": "identical to ref without the '#' in 600/600 parts measured",
-    "occurrenceId": "identical to ref without the '#' in 600/600 parts measured",
-    "label": "identical to name in 600/600 parts measured",
-}
 
 
 def _list_parts_source() -> str:
     source = RENDER_MESH_SCENE_JS.read_text(encoding="utf-8")
     start = source.index("export function listRenderableParts")
     return source[start:source.index("\n}", start)]
+
+
+def _step_list_rows_source() -> str:
+    source = SNAPSHOT_PARTS_PY.read_text(encoding="utf-8")
+    return source[source.index("def list_rows("):]
 
 
 class ListPayloadShapeTests(unittest.TestCase):
@@ -52,21 +51,15 @@ class ListPayloadShapeTests(unittest.TestCase):
             emitted,
             "listRenderableParts emits a different field set than the budget allows",
         )
-
-    def test_the_deleted_duplicates_stay_deleted(self):
-        body = _list_parts_source()
-        for field, why in DELETED_PART_FIELDS.items():
-            with self.subTest(field=field):
-                self.assertNotRegex(
-                    body,
-                    rf"^\s{{6}}{field}:",
-                    f"{field} is back in the parts payload; it was removed because it is {why}",
-                )
+        step = set(re.findall(r'^\s{12}"(\w+)":', _step_list_rows_source(), flags=re.MULTILINE))
+        self.assertEqual(ALLOWED_PART_FIELDS, step, "list_rows emits a different field set than the budget allows")
 
     def test_coordinates_are_rounded(self):
         source = RENDER_MESH_SCENE_JS.read_text(encoding="utf-8")
         self.assertIn("LIST_BOUNDS_DECIMALS", source)
         self.assertIn("roundedBounds", _list_parts_source())
+        self.assertIn("LIST_BOUNDS_DECIMALS = 3", SNAPSHOT_PARTS_PY.read_text(encoding="utf-8"))
+        self.assertIn("_rounded(box", _step_list_rows_source())
 
 
 class CompactStdoutTests(unittest.TestCase):
@@ -125,7 +118,7 @@ class CompactStdoutTests(unittest.TestCase):
     def test_a_realistic_part_entry_stays_small(self):
         # The shape above, priced. 600 of these is the payload an agent pays for.
         entry = {
-            "ref": "#o1.1.1",
+            "ref": "#o:3f2a9c1d7e5b",
             "name": "terrain_regolith_slab",
             "triangleCount": 172,
             "vertexCount": 516,

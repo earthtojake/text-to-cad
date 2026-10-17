@@ -405,16 +405,21 @@ test("entityMeasurementFromPick reports what a single edge or face is worth on i
   assert.equal(line.length, 100);
   assert.equal(line.diameter, undefined);
 
-  const face = entityMeasurementFromPick({
-    snapKind: "face",
-    reference: { pickData: { selectorType: "face", surfaceType: "cylinder", area: 314.16, params: { radius: 5 } } }
-  });
+  // A face's area is cadgen's measure of it, as the view holds it: nothing while it comes, then its number.
+  const cylinder = { snapKind: "face", reference: { pickData: { selectorType: "face", surfaceType: "cylinder", params: { radius: 5 } } } };
+  const face = entityMeasurementFromPick(cylinder, { faceArea: { state: "ready", area: 314.16 } });
   assert.equal(face.area, 314.16);
   assert.equal(face.diameter, 10);
+  const coming = entityMeasurementFromPick(cylinder, { faceArea: { state: "pending" } });
+  assert.deepEqual([coming.area, coming.diameter], [undefined, 10]);
+  assert.equal(entityMeasurementFromPick({ ...cylinder, reference: { pickData: { selectorType: "face", surfaceType: "plane" } } },
+    { faceArea: { state: "pending" } }), null, "a plane has nothing to show until its area comes");
+  assert.equal(entityMeasurementFromPick(cylinder, { faceArea: { state: "failed" } }).area, undefined);
 
   // Nothing measurable, no reference, or a pick that never snapped yields nothing.
   assert.equal(entityMeasurementFromPick({ snapKind: "face", reference: { pickData: { selectorType: "face" } } }), null);
-  assert.equal(entityMeasurementFromPick({ snapKind: "free", reference: { pickData: { selectorType: "face", area: 1 } } }), null);
+  assert.equal(entityMeasurementFromPick({ snapKind: "free", reference: { pickData: { selectorType: "face" } } },
+    { faceArea: { state: "ready", area: 1 } }), null);
   assert.equal(entityMeasurementFromPick(null), null);
 });
 
@@ -436,19 +441,19 @@ test("formatMeasurementAngle renders degrees only when an angle exists", () => {
 });
 
 test("entityMeasurementFromPick ignores explicit null quantities rather than reporting zero", () => {
-  // The pickData constructor emits `length: null` / `area: null` for entities that
-  // have neither. Number(null) is 0, so these must be rejected before coercion.
+  // The pickData constructor emits `length: null` for entities that have none. Number(null)
+  // is 0, so it must be rejected before coercion.
   const face = entityMeasurementFromPick({
     snapKind: "face",
-    reference: { pickData: { selectorType: "face", surfaceType: "plane", area: 6000, length: null } }
-  });
+    reference: { pickData: { selectorType: "face", surfaceType: "plane", length: null } }
+  }, { faceArea: { state: "ready", area: 6000 } });
   assert.equal(face.area, 6000);
   assert.equal(face.length, undefined);
 
   const edge = entityMeasurementFromPick({
     snapKind: "edge",
     geometry: { kind: "line", direction: [1, 0, 0] },
-    reference: { pickData: { selectorType: "edge", length: 12, area: null } }
+    reference: { pickData: { selectorType: "edge", length: 12 } }
   });
   assert.equal(edge.length, 12);
   assert.equal(edge.radius, undefined);

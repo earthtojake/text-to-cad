@@ -100,24 +100,6 @@ test("status and timeout failures also identify the processing service", () => {
   }
 });
 
-test("failed STEP artifact explains what is missing and retains a renderable fallback", () => {
-  for (const [code, reason] of [["missing_glb", "Generated GLB is missing"], ["missing_step_topology", "missing STEP topology metadata"]]) {
-    const entry = { ...step, artifact: { ok: false, error: code, message: "Original diagnostic" } };
-    const alert = buildViewerMeshAlert(entry, false, "");
-    assert.equal(alert.severity, "error");
-    assert.ok(alert.message.includes(reason));
-    assert.match(alert.details, /Original diagnostic/);
-    assert.equal(buildViewerMeshAlert(entry, true, ""), null);
-    const fallback = { ...entry, url: "/models/.part.step.glb", hash: "glb-hash" };
-    const warning = buildViewerMeshAlert(fallback, false, "");
-    assert.equal(warning.severity, "warning");
-    assert.equal(warning.blocking, false);
-    const failedFallback = buildViewerMeshAlert(fallback, false, "GLB parser failed");
-    assert.equal(failedFallback.summary, "Mesh load failed");
-    assert.match(failedFallback.reason, /GLB parser failed/);
-  }
-});
-
 test("mesh errors also recognize browser transport messages", () => {
   for (const kind of ["stl", "3mf", "glb", "dxf"]) {
     const entry = { file: `parts/panel.${kind}`, kind };
@@ -176,6 +158,21 @@ test("a failed build over the model on screen keeps it and the diagnostic", () =
   assert.match(alert.details, /Revision: 8/);
 });
 
+test("a build that failed with its own preview on screen says the preview is what is shown", () => {
+  const failed = { state: "failed", error: "the save failed: disk full", file: "STEP/moonwatch.step", revision: 9 };
+  const alert = buildViewerEditAlert(failed, true, { previewShown: true });
+  assert.equal(alert.summary, "Build failed");
+  assert.equal(alert.title, "Couldn’t finish the build");
+  assert.match(alert.message, /viewing its preview, not a saved file/);
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.reason, "the save failed: disk full");
+  const service = buildViewerEditAlert({ ...failed, error: "artifact request failed or lost its protocol; no cold retry" }, true, { previewShown: true });
+  assert.equal(service.kind, "service");
+  assert.match(service.message, /viewing its preview/);
+  // With nothing drawn there is no preview to speak of.
+  assert.equal(buildViewerEditAlert(failed, false, { previewShown: true }).summary, "Open failed");
+});
+
 test("edit worker failures are distinct from invalid-model failures", () => {
   const worker = buildViewerEditAlert({
     state: "failed",
@@ -191,6 +188,38 @@ test("edit worker failures are distinct from invalid-model failures", () => {
   assert.equal(invalid.summary, "Open failed");
   assert.match(invalid.recovery, /correct the model/i);
   assert.equal(invalid.reason, "Fillet radius is too large");
+});
+
+test("parts cadgen could not mesh are a warning over the rest of the model, naming them", () => {
+  const error = "component 07f3b327472c9bec: OCCT failed on the component: Standard_Failure";
+  const alert = buildViewerMeshAlert(step, true, error, null, { partial: true, failedParts: ["accessory:case"] });
+  assert.equal(alert.severity, "warning");
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.title, "A part couldn’t be shown");
+  assert.match(alert.message, /“accessory:case” couldn’t be meshed, so it’s missing from the view\. Everything else is shown\./);
+  assert.match(alert.details, /Parts: accessory:case/);
+  assert.match(alert.details, /OCCT failed on the component/);
+  const many = buildViewerMeshAlert(step, true, error, null, { partial: true, failedParts: ["a", "b", "c", "d", "e"] });
+  assert.equal(many.title, "5 parts couldn’t be shown");
+  assert.match(many.message, /^“a”, “b”, “c” and 2 more couldn’t be meshed, so they’re missing/);
+  // With nothing drawn it is still the card of a model that did not load.
+  const nothing = buildViewerMeshAlert(step, false, error, null, { partial: true, failedParts: ["accessory:case"] });
+  assert.equal(nothing.severity, "error");
+  assert.notEqual(nothing.blocking, false);
+});
+
+test("parts drawn without faces cadgen could not mesh are a warning over the whole model, naming them", () => {
+  const alert = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["wing"] });
+  assert.equal(alert.severity, "warning");
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.title, "A part is missing faces");
+  assert.equal(alert.message, "“wing” has faces that couldn’t be meshed, so they’re missing from the view. Everything else is shown.");
+  assert.match(alert.details, /Parts: wing/);
+  const many = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["a", "b", "c", "d"] });
+  assert.equal(many.title, "4 parts are missing faces");
+  assert.match(many.message, /^“a”, “b”, “c” and 1 more have faces that couldn’t be meshed/);
+  // Said of the model once it is all there, never over one still arriving.
+  assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true, unmeshedParts: ["wing"] }), null);
 });
 
 test("progressive geometry is valid while loading but cannot mask a failed first load", () => {

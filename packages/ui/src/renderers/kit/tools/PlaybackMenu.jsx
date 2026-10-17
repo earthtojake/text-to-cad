@@ -24,8 +24,9 @@ const CORNER_TRIGGER_CLASS = cn(NAVBAR_CONTROL_CLASS, "aria-expanded:bg-accent a
 const PLAYBAR_TRIGGER_CLASS = cn(TOOLBAR_ICON_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
 
 // A value's submenu: its name, the value in hand at the right against the chevron, and the radio list.
-// `name` is the accessible name, for the two Speeds.
-function SpeedSubmenu({ label, name = label, value, values, onChange }) {
+// `name` is the accessible name, for the two Speeds. The Animation tool's settings have the
+// routine's Speed too (`playbar/AnimationPanel.jsx`).
+export function SpeedSubmenu({ label, name = label, value, values, onChange }) {
   const options = values.includes(value) ? values : [...values, value].sort((a, b) => a - b);
   return <DropdownMenuSub>
     <DropdownMenuSubTrigger aria-label={`${name}: ${value}×`} className="[&>svg:last-child]:ml-0 [&>svg:last-child]:size-3">
@@ -88,7 +89,9 @@ export function RoutineMenu({ animation, onOpenChange }) {
 /**
  * The playbar's Playback settings, at its right end: a cog whose dropdown opens up from it, with
  * the routine's **Speed**, **Loop**, and **Autoplay** (whether entering preview starts it). Ticking
- * a checkbox leaves the menu open.
+ * a checkbox leaves the menu open. Autoplay is the file's, as the Animation tool's panel shows it
+ * (`playbar/AnimationPanel.jsx`); Speed and Loop here are preview's own (`useRendererShell`'s
+ * `routinePlayback`), forgotten on leaving it.
  *
  * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void,
  *   onOpenChange?(open: boolean): void }} props  `animation` is the playbar runtime.

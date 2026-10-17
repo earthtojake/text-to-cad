@@ -9,9 +9,8 @@
 // `performance` is global.
 //
 // Names are a closed set so a reader can ask for them by name:
-//   cad:tessellate   one component surf → triangles, in a worker; the detail
-//                    carries `{ cid, cacheHit }` (hit = the shared cache
-//                    answered, and the worker skipped the tessellator)
+//   cad:tessellate   one component's stored mesh decoded in a worker, from
+//                    request to reply; the detail carries `{ cid }`
 //   cad:hover-pick   one hover raycast over the model, from whichever pointer
 //                    pick the renderer mounts (`renderers/step/scene/useStepPicking.js`)
 //   cad:frame        one render-on-demand frame (useViewerRuntime)

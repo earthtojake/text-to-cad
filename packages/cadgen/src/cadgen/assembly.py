@@ -312,16 +312,6 @@ def _normalize_label_token(value: object, *, field_name: str) -> str:
     return "_".join(token.replace(":", "_").split())
 
 
-def _json_safe(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, Mapping):
-        return {str(key): _json_safe(child) for key, child in value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_json_safe(child) for child in value]
-    return str(value)
-
-
 def _import_build123d() -> Any:
     try:
         import build123d

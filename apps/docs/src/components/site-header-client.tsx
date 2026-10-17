@@ -80,69 +80,43 @@ function VersionLink({ version }: { version: string }) {
   );
 }
 
-/** A phone's section links: a burger that drops them down under the header. A disclosure, not an
- * application menu, so each section stays a plain link in the tab order after the button. Escape,
- * a click outside, focus moving on past it, or choosing a section closes it. */
+/** A phone's section links: a burger that drops them down under the header. The browser's own
+ * popover (`popoverTarget`), so the browser opens and closes it -- the burger again, a tap outside
+ * or Escape -- from the first paint on, before this page has hydrated, and its links follow the
+ * burger in the tab order. Choosing a section closes it too. It shows in the top layer, held under
+ * the header at the burger by anchor positioning, or where the burger stands at the top of the page
+ * where that is missing (the header is sticky, so the page's top is the header's). The burger reads
+ * pressed while it is open (`aria-expanded`, from the popover's toggle). */
 function SectionMenu({ activeSection }: { activeSection: string }) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnPointerOutside = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", closeOnPointerOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
 
   return (
-    <nav
-      ref={menuRef}
-      aria-label="Primary"
-      className="relative flex items-center self-stretch sm:hidden"
-      onBlur={(event) => {
-        // Focus moved on to something past the menu. Focus lost to nothing -- a tap that focuses
-        // nothing, or leaving the window -- is not the reader moving on; a tap outside closes it.
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
-          setOpen(false);
-        }
-      }}
-    >
+    <nav aria-label="Primary" className="flex items-center self-stretch [anchor-name:--section-menu] sm:hidden">
       <Button
-        ref={buttonRef}
         type="button"
         variant="ghost"
         size="icon"
         className="text-muted-foreground hover:text-foreground"
         aria-label="Sections"
         aria-expanded={open}
-        aria-controls="section-menu"
-        onClick={() => setOpen((value) => !value)}
+        popoverTarget="section-menu"
       >
         <Menu className="size-4" />
       </Button>
       <div
+        ref={menuRef}
         id="section-menu"
-        hidden={!open}
-        className="absolute top-full left-0 z-50 mt-1 flex min-w-40 origin-top-left flex-col rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 motion-reduce:animate-none"
+        popover="auto"
+        onToggle={(event) => setOpen(event.newState === "open")}
+        className="inset-auto top-14 left-4 m-0 mt-1 min-w-40 origin-top-left flex-col rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md open:flex open:animate-in open:fade-in-0 open:zoom-in-95 open:slide-in-from-top-2 motion-reduce:animate-none supports-[anchor-name:--a]:top-[anchor(bottom)] supports-[anchor-name:--a]:left-[anchor(left)] supports-[anchor-name:--a]:[position-anchor:--section-menu]"
       >
         {NAV_SECTIONS.map(({ id, label }) => (
           <a
             key={id}
             href={`/#${id}`}
             aria-current={activeSection === id ? "location" : undefined}
-            onClick={() => setOpen(false)}
+            onClick={() => menuRef.current?.hidePopover()}
             className={`rounded-md px-2.5 py-2 text-ui transition hover:bg-secondary hover:text-foreground ${activeSection === id ? "text-foreground" : "text-muted-foreground"}`}
           >
             {label}
@@ -222,8 +196,8 @@ export function SiteHeaderClient({
         )} stars`;
 
   return (
-    // Clipped across, never down: a phone's section menu drops below the header.
-    <header className="sticky top-0 z-40 h-14 shrink-0 overflow-x-clip border-b border-border bg-background">
+    // A phone's section menu is a popover, in the top layer, so nothing here clips it.
+    <header className="sticky top-0 z-40 h-14 shrink-0 overflow-hidden border-b border-border bg-background">
       <div className="mx-auto flex h-full w-full max-w-[1200px] items-center gap-3 px-4 sm:px-6">
         <Link
           href="/"

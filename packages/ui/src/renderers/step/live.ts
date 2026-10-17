@@ -3,6 +3,8 @@ import type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewS
 
 export type CadCameraSnapshot = LiveCameraSnapshot;
 export interface CadLiveState extends LiveViewState {
+  /** The picture is a build's preview revision (STORE.md 9b), not the saved file `revision` names. */
+  preview: boolean;
   selection: readonly PromptReference[];
   selectedPartIds: readonly string[];
   selectedReferenceIds: readonly string[];

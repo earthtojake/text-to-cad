@@ -77,12 +77,8 @@ function occurrenceMatchesPartIds(occurrenceId, partIds) {
   if (!normalizedOccurrenceId || !partIds?.size) {
     return false;
   }
-  for (const partId of partIds) {
-    if (normalizedOccurrenceId === partId || normalizedOccurrenceId.startsWith(`${partId}.`)) {
-      return true;
-    }
-  }
-  return false;
+  // Leaf ids on both sides: a token carries no hierarchy to match a prefix of.
+  return partIds.has(normalizedOccurrenceId);
 }
 
 function edgeRowMatchesPartIds(row, partIds) {

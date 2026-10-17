@@ -7,14 +7,11 @@ verdict reads them (STORE.md).
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
-from cadgen.viewer import store_paths
 from cadgen.viewer.artifact_status import (
     artifact_status,
     owns_artifact_path,
@@ -59,13 +56,11 @@ class _Tree:
         path.write_bytes(body)
         return str(path)
 
-    def package(self, step_path, *, kind="assembly-package", components=("c0.surf",), write_payloads=True):
+    def package(self, step_path, *, kind="assembly-package", components=("c0",), write_payloads=True):
         """Seed the document's result: a tree (one component per name) and a
         record keyed by the document itself. Returns the tree hash."""
-        import hashlib
-
         descriptor = {"kind": kind, "components": {f"k{i}": {} for i, _name in enumerate(components)}}
-        tree = seed_result(step_path, descriptor, surf=b"SURF\x00")
+        tree = seed_result(step_path, descriptor)
         if not write_payloads:
             from cadgen.store.objects import object_path
 
@@ -140,7 +135,7 @@ class Verdicts(ArtifactStatusTestCase):
         # no result for them.
         self.assertEqual(
             artifact_status(step),
-            {"state": "not-compiled", "reason": "missing_glb"},
+            {"state": "not-compiled", "reason": "missing_tree"},
         )
 
     def test_restoring_the_bytes_makes_it_ready_again_with_nothing_rebuilt(self):
@@ -164,18 +159,18 @@ class Verdicts(ArtifactStatusTestCase):
 
     def test_the_gate_order_missing_then_components_then_ready(self):
         step = self.tree.step()
-        self.assertEqual(artifact_status(step)["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step)["reason"], "missing_tree")
 
         self.tree.package(step, components=())
-        self.assertEqual(artifact_status(step)["reason"], "missing_step_topology")
+        self.assertEqual(artifact_status(step)["reason"], "missing_geometry")
 
         self.tree.package(step)
         self.assertEqual(artifact_status(step), {"state": "compiled"})
 
-    def test_a_component_whose_native_payload_is_absent_is_missing_glb(self):
+    def test_a_component_whose_native_payload_is_absent_is_missing_geometry(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
-        self.assertEqual(artifact_status(step)["reason"], "missing_step_topology")
+        self.assertEqual(artifact_status(step)["reason"], "missing_geometry")
 
 
 class SnapshotShapes(ArtifactStatusTestCase):
@@ -214,7 +209,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             snapshot={"writing": False, "busy": True, "runId": None, "progress": None},
         )
         self.assertEqual(
-            status, {"state": "not-compiled", "reason": "missing_glb", "blocked": True}
+            status, {"state": "not-compiled", "reason": "missing_tree", "blocked": True}
         )
 
 
@@ -230,16 +225,6 @@ class InvalidUtf8(ArtifactStatusTestCase):
     Product names in a STEP file are arbitrary bytes and flow into the tree
     descriptor, so these are real files, not hypothetical ones.
     """
-
-    #: Latin-1 ``é``: a lone 0xE9 with no continuation byte, invalid as UTF-8.
-    BAD = b"\xe9"
-
-    def _corrupt(self, path, marker: bytes = b"NAME_HERE") -> None:
-        path = Path(path)
-        body = path.read_bytes()
-        self.assertIn(marker, body, "precondition: the fixture carries the marker")
-        path.write_bytes(body.replace(marker, self.BAD))
-
 
     def test_no_backend_reader_opens_a_text_file_strictly(self):
         """The sweep, as a rule rather than three cases.

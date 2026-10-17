@@ -17,7 +17,7 @@ const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//u;
 // The entry fields that carry a backend URL. A catalog entry is data from the
 // server, so the rebasing below is a rewrite of THESE keys and nothing else —
 // an unknown field is left alone rather than guessed at.
-const ENTRY_URL_KEYS = Object.freeze(["url", "poseUrl", "renderModuleUrl"]);
+const ENTRY_URL_KEYS = Object.freeze(["url", "poseUrl"]);
 
 /** @param {unknown} value @returns {string} */
 export function normalizeViewerOrigin(value) {

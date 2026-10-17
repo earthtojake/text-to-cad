@@ -9,8 +9,9 @@ daemon.
 The frames here are deliberately the same shape the daemon sends its client
 (``{"stream": ..., "data": ...}`` then ``{"exit": ...}``), so the supervisor is a pure
 relay and the client's wire protocol is untouched. A third frame, ``{"event": ...}``,
-carries build-tree events (STORE.md §Lazy children): a child a model's body submits
-from inside this worker reports through the same channel as the worker's own output.
+carries build-tree events (STORE.md §9a): the model's own transitions and those of
+every child it builds inside its body, through the same channel as the worker's own
+output.
 A fourth, ``{"heartbeat": {"phase": ..., "cpu": ...}}``, is the worker's liveness
 while a job runs (``_heartbeat``); the supervisor consumes it and never relays it.
 A fifth, ``{"artifactNext": true}``, is an artifact job asking before each derivation
@@ -42,41 +43,38 @@ import traceback
 
 # Same registry the supervisor validates against; imported rather than duplicated.
 from cadgen.daemon import telemetry
-from cadgen.daemon.client import FORWARDED_ENV_VARS
+from cadgen.daemon.client import INTERNAL_ENV_VARS
 from cadgen.daemon.server import _TOOL_IMPORTS, _evict_first_party_modules
 
 
 def _apply_request_env(request: dict) -> None:
-    """Apply the requesting CLIENT's environment for this job.
+    """Apply the requesting CLIENT's environment for this job: the one a cold run
+    of the same command sees.
 
     A worker inherits the environment of whichever build spawned the DAEMON, so
-    without this the first build's store became every later build's, across
-    projects. The store root is an explicit request field and wins; the
-    forwarded vars cover the rest of ``store.paths.store_root()``'s resolution
-    rule so the daemon adds no hidden second one. A var absent from the request
-    is DELETED — unset for the client means unset for the job — which also
-    clears a var a previous job's model code exported at import time.
-
-    ``root_id`` names the build tree this job belongs to; a child this job
-    submits inherits it through the environment so its events tag the same tree.
+    without this a model reading ``os.environ`` saw that build's variables, and
+    the first build's store became every later build's, across projects. Every
+    name the client has is set; every name it lacks is DELETED -- unset for the
+    client means unset for the job -- which also clears a var a previous job's
+    model code exported. The names the daemon's machinery sets for itself
+    (``client.INTERNAL_ENV_VARS``) are left as they are. A request that carries
+    no environment changes none of it. The store root is an explicit request
+    field and wins. ``job_id`` names the ledger's row for this job: its events
+    carry it.
     """
     env = request.get("env")
-    if not isinstance(env, dict):
-        env = {}
-    for name in FORWARDED_ENV_VARS:
-        value = env.get(name)
-        if isinstance(value, str):
-            os.environ[name] = value
-        else:
+    if isinstance(env, dict):
+        for name in [name for name in os.environ if name not in env and name not in INTERNAL_ENV_VARS]:
             os.environ.pop(name, None)
+        for name, value in env.items():
+            if not isinstance(name, str) or not isinstance(value, str) or name in INTERNAL_ENV_VARS:
+                continue
+            if os.environ.get(name) != value:
+                with contextlib.suppress(ValueError):  # a name or value no environment can hold
+                    os.environ[name] = value
     store_root = request.get("store_root")
     if isinstance(store_root, str) and store_root:
         os.environ["CADGEN_CACHE_DIR"] = store_root
-    root_id = request.get("root_id")
-    if isinstance(root_id, str) and root_id:
-        os.environ["CADGEN_ROOT_ID"] = root_id
-    else:
-        os.environ.pop("CADGEN_ROOT_ID", None)
     job_id = request.get("job_id")
     if isinstance(job_id, str) and job_id:
         os.environ["CADGEN_JOB_ID"] = job_id
@@ -90,19 +88,26 @@ _EMIT_LOCK = threading.Lock()
 # While a job runs, a daemon thread emits a heartbeat this often. The supervisor
 # calls a worker hung only well past it (server.WORKER_SILENCE_TIMEOUT_SECONDS).
 HEARTBEAT_INTERVAL_SECONDS = 10.0
-# The phase the running job last announced about itself; its heartbeat carries it.
+# The phase the running job last reported of itself; its heartbeat carries it.
 _PHASE: list[str | None] = [None]
+# The frame channel: a descriptor of its own on the pipe the pool reads, opened by
+# ``serve``. Not fd 1 itself, which a job may point elsewhere for a while -- a STEP read
+# sends the kernel's diagnostics to stderr by moving fd 1
+# (``step_scene_loader.kernel_messages_on_stderr``) -- and a frame written meanwhile, a
+# heartbeat, went to the daemon's log instead of the supervisor.
+_FRAMES: list = [None]
 
 
 def _emit(frame: dict) -> None:
-    """One JSON line on the real stdout. Never the redirected one."""
+    """One JSON line on the frame channel. Never the redirected stdout."""
     line = json.dumps(frame, separators=(",", ":")) + "\n"
     event = frame.get("event")
     if isinstance(event, dict) and event.get("phase") and event.get("job") == os.environ.get("CADGEN_JOB_ID"):
         _PHASE[0] = str(event["phase"])
     with _EMIT_LOCK:
-        sys.__stdout__.write(line)
-        sys.__stdout__.flush()
+        channel = _FRAMES[0] or sys.__stdout__
+        channel.write(line)
+        channel.flush()
 
 
 def _beat() -> None:
@@ -127,6 +132,12 @@ def _heartbeat():
     Joined before the job's exit frame is written, so no heartbeat ever follows
     ``exit`` or lands in the next job; a daemon thread, so it dies with the process.
     Not progress: nothing relays it to the client or folds it into the job ledger.
+
+    A beat nobody reads ends the worker. The frame channel's reader is the supervisor,
+    so it is gone (killed, or crashed), and with it everyone waiting on this job: its
+    client is already running the job again without the daemon, and a body that ran on
+    would only build the same model alongside that rerun. Between jobs, stdin's EOF does
+    the same. What the job leaves behind is swept by pid (``_internal.temp_leftovers``).
     """
     _PHASE[0] = None
     stop = threading.Event()
@@ -136,7 +147,7 @@ def _heartbeat():
             try:
                 _beat()
             except (OSError, ValueError):
-                return  # the frame channel is gone; stdin's EOF ends the worker
+                os._exit(1)  # the supervisor is gone: see above
 
     _beat()
     thread = threading.Thread(target=run, name="cadgen-worker-heartbeat", daemon=True)
@@ -226,23 +237,23 @@ def _warm_imports() -> None:
     for tool in _TOOL_IMPORTS:
         with contextlib.suppress(Exception):
             _tool_main(tool)
-    # Every saved STEP's writer input names the cadgen release and the kernel
-    # (store.build.writer_input_digest), and every box key names the kernel. Each
+    # Every construction key names the cadgen release (kernel_memo), and every part
+    # key and box key names the kernel. Each
     # is read from installed metadata once per process, by a lookup that lists
     # every folder on sys.path: tens of milliseconds a job would otherwise pay
     # with its model's folder on that path.
     with contextlib.suppress(Exception):
         import cadgen
-        from cadgen.store.surfaces import kernel_versions
+        from cadgen.store.parts import kernel_versions
 
         getattr(cadgen, "__version__")
         kernel_versions()
 
 
-def _run(request: dict, *, supervised: bool = False) -> int:
+def _run(request: dict) -> int:
     tool = request.get("tool")
     if tool == "artifact":
-        return _run_artifact(request, supervised=supervised)
+        return _run_artifact(request)
     argv = [str(a) for a in request.get("argv") or []]
     cwd = request.get("cwd")
     prog = str(request.get("prog") or "") or None
@@ -307,11 +318,14 @@ def _wanted() -> bool:
         return False
 
 
-def _run_artifact(request: dict, *, supervised: bool = False) -> int:
-    """A typed operation has no parser, script path, declared outputs or hygiene scan.
+# The refusals an artifact job answers with (``store.parts``): reported by their message alone.
+_REFUSALS = frozenset({("cadgen._internal.tessellate", "MeshProductionError"),
+                       ("cadgen.store.parts", "ProducerUnavailable")})
 
-    ``supervised``: a daemon worker's job (``serve``), which asks before each derivation
-    whether anyone still wants it. A one-shot transient worker has nobody to ask."""
+
+def _run_artifact(request: dict) -> int:
+    """A typed operation has no parser, script path, declared outputs or hygiene scan. It
+    asks its supervisor before each derivation whether anyone still wants it (``_wanted``)."""
     from cadgen.daemon import artifacts, broker
 
     out, err = _FrameWriter("stdout"), _FrameWriter("stderr")
@@ -324,14 +338,18 @@ def _run_artifact(request: dict, *, supervised: bool = False) -> int:
         root = artifacts.store_path(request.get("store_root"))
         if artifacts.store_path() != root:
             raise RuntimeError("artifact worker store does not match its request")
-        with broker.held(f"artifact:{operation['kind']}", required=True), artifacts.worker_context(root), \
+        # Something waits on this job (a build, a view): it goes ahead of jobs not yet started.
+        with broker.held(f"artifact:{operation['kind']}", required=True, first=True), \
              contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            result = artifacts.result_frame(
-                operation, artifacts.execute(operation, keep_going=_wanted if supervised else None))
+            result = artifacts.result_frame(operation, artifacts.execute(operation, keep_going=_wanted))
             _emit({"artifactResult": result})
         return 0
     except BaseException as error:  # the worker stays reusable, but no success is emitted
-        err.write(traceback.format_exc())
+        # A part the geometry refused, or a producer this worker cannot implement, is an
+        # answer, not a crash: its message is what the caller reports, without a traceback.
+        # Told by name: a job that failed before loading those modules must not load them now.
+        expected = (type(error).__module__, type(error).__name__) in _REFUSALS
+        err.write(f"{type(error).__name__}: {error}\n" if expected else traceback.format_exc())
         _report(error, bugs_only=True)  # a derivation the geometry refused is no bug; a mistake in cadgen's code is
         return 1
 
@@ -359,11 +377,19 @@ def serve() -> int:
         if reconfigure is not None:
             with contextlib.suppress(OSError, ValueError):
                 reconfigure(encoding="utf-8", errors="backslashreplace")
-    # Child-build events from this worker's jobs ride the frame channel; the
+    # Frames go out on a descriptor of their own (``_FRAMES``), which nothing a job does
+    # to fd 1 can move: the same pipe, each frame flushed whole, no newline translation.
+    sys.stdout.flush()
+    _FRAMES[0] = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8",
+                           errors="backslashreplace", newline="\n")
+    # The build-tree events of this worker's jobs ride the frame channel; the
     # supervisor relays them to the requesting client verbatim.
     from cadgen.daemon import executors
 
     executors.set_event_sink(lambda event: _emit({"event": event}))
+    # A command that answers before its files are written (--no-wait) releases its
+    # client with this frame; the exit frame follows once the files are written.
+    executors.set_release_sink(lambda code: _emit({"released": code}))
     # What killed workers left in the temp folder (views, trace logs) goes, on a
     # thread of its own: no job waits for it, and no live process's is touched.
     from cadgen._internal import temp_leftovers
@@ -394,7 +420,7 @@ def serve() -> int:
             _apply_request_env(request)
             telemetry.job_started()
             with _heartbeat():
-                code = _run(request, supervised=True)
+                code = _run(request)
             telemetry.job_ended(code)  # a failure nothing named: argparse's 2 is its arguments refused
             # What telemetry learned of the job rides its exit frame: the daemon counts it (server._handle_request).
             _emit({"exit": code, "pid": os.getpid(), **telemetry.job_finished()})

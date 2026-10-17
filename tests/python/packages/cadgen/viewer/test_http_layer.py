@@ -71,7 +71,7 @@ class ServerFixture:
             conn.close()
 
     def raw(self, request_bytes, *, reads=1):
-        """Send raw bytes on one connection and read back ``reads`` responses."""
+        """Send raw bytes on one connection and read ``reads`` responses."""
         sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
         try:
             sock.sendall(request_bytes)
@@ -131,7 +131,7 @@ class HostGate(HttpLayerTestCase):
         self.assertIn(b"'evil.example'", body)
 
     def test_the_gate_covers_every_route(self):
-        for path in ("/", "/assets/app.js", "/__cad/catalog", "/__tess_cache/a.tess", "/__cad/nope"):
+        for path in ("/", "/assets/app.js", "/__cad/catalog", "/__tess_cache/a.glb", "/__cad/nope"):
             with self.subTest(path=path):
                 status, _, _ = self.fixture.request("GET", path, headers={"Host": "attacker.example"})
                 self.assertEqual(status, 403)
@@ -215,7 +215,9 @@ class ServerInfo(HttpLayerTestCase):
         # Where a developer's relative links resolve, spelled with "/". A viewer has no root.
         self.assertEqual(info["start"], self.fixture.root.replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
-        self.assertEqual(list(info), ["app", "identityToken", "autoReload", "platform", "user", "start", "pick", "port", "pid"])
+        # No tolerance: the page reads each part's one display mesh by its key.
+        self.assertEqual(list(info), ["app", "identityToken", "autoReload", "platform", "user",
+                                      "start", "pick", "port", "pid"])
         self.assertEqual(headers["cache-control"], "no-store")
 
     def test_json_is_compact_and_not_ascii_escaped(self):
@@ -721,7 +723,7 @@ class RequestBodies(HttpLayerTestCase):
 
         for path, limit in (("/__tess_cache/probe", TESS_CACHE_METADATA_MAX_BYTES),
                             ("/__tess_cache/batch", TESS_CACHE_METADATA_MAX_BYTES),
-                            ("/__cad/surfaces", 128 * 1024), ("/__cad/surfaces/cancel", 128 * 1024)):
+                            ("/__cad/parts", 128 * 1024), ("/__cad/parts/cancel", 128 * 1024)):
             with self.subTest(path=path):
                 raw = self.fixture.raw(
                     f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
@@ -781,26 +783,36 @@ class EveryRouteAnswersForReal(HttpLayerTestCase):
             with self.subTest(object_hash=object_hash, limit=limit), mock.patch(
                 "cadgen.viewer.http_app.read_tess_cache_entry", side_effect=AssertionError("unadmitted cache read"),
             ):
-                status, _, _ = self.fixture.request("GET", f"/__tess_cache/a.tess?{query}")
+                status, _, _ = self.fixture.request("GET", f"/__tess_cache/a.glb?{query}")
             self.assertEqual(status, 400)
 
     def test_tess_get_uses_the_probed_object_and_byte_limit(self):
         import base64
         import json
-        from cadgen.store import meshes
-        from tests.python.support.tessellation import tessellation_fixture
+        from cadgen.store import parts
+        from tests.python.support.tessellation import part_fixture, store_part
 
-        fixture = tessellation_fixture()
-        payload = base64.b64decode(fixture["bytes"])
-        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(Path(self.fixture.root) / "store"), "CADGEN_MESH_CACHE": "1"}):
-            row = meshes.write(fixture["key"], payload)
+        fixture = part_fixture()
+        key = fixture["key"]
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(Path(self.fixture.root) / "store")}):
+            record = store_part(fixture)
             status, _, body = self.fixture.request("POST", "/__tess_cache/probe", headers={"x-cadgen-viewer": "1"},
-                                                 body=json.dumps({"tessellationInputs": [fixture["key"]]}).encode())
+                                                 body=json.dumps({"parts": [key, "2" * 64 + key[64:]]}).encode())
             self.assertEqual(status, 200)
-            self.assertEqual(json.loads(body)["entries"][fixture["key"]], row)
-            route = f"/__tess_cache/{fixture['key']}.tess?object={row['object']}&maxBytes={row['byteLength']}"
-            status, _, body = self.fixture.request("GET", route)
-            self.assertEqual((status, body), (200, payload))
+            self.assertEqual(json.loads(body), {"entries": {key: record}}, "a part the store lacks is absent")
+            # The part's display mesh and its selector table, each read by what its record says of it.
+            for role, suffix, content_type in (("glb", ".glb", "model/gltf-binary"),
+                                               ("selectors", ".selectors.json", "application/json")):
+                with self.subTest(role=role):
+                    route = f"/__tess_cache/{key}{suffix}?object={record[role]['object']}&maxBytes={record[role]['byteLength']}"
+                    status, headers, body = self.fixture.request("GET", route)
+                    self.assertEqual((status, body), (200, base64.b64decode(fixture[role])))
+                    self.assertEqual({name.lower(): value for name, value in headers.items()}.get("content-type"), content_type)
+            # cadgen writes every part: a client's write is refused, and changes nothing.
+            status, headers, _ = self.fixture.request("POST", f"/__tess_cache/{key}.glb",
+                                                      headers={"x-cadgen-viewer": "1"}, body=base64.b64decode(fixture["glb"]))
+            self.assertEqual(status, 405)
+            self.assertEqual(parts.probe(key), record)
 
     def test_no_route_reports_itself_as_unported(self):
         # This class used to list the routes still awaiting their step, each
@@ -814,7 +826,7 @@ class EveryRouteAnswersForReal(HttpLayerTestCase):
             ("POST", "/__cad/artifact?file=x.step", {"x-cadgen-viewer": "1"}),
             ("GET", "/__cad/asset?file=/x.step", {}),
             ("GET", "/__cad/store?file=x", {}),
-            ("GET", "/__tess_cache/a.tess", {}),
+            ("GET", "/__tess_cache/a.glb", {}),
         ]:
             with self.subTest(method=method, path=path):
                 _, _, body = self.fixture.request(method, path, headers=headers)

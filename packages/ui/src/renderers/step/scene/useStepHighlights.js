@@ -20,28 +20,11 @@ function referenceOccurrenceSelector(reference) {
   return String(reference?.occurrenceId || "").trim();
 }
 
-function referenceMatchesOccurrenceSubtree(reference, occurrenceSelector) {
+// An occurrence reference is one leaf's; its faces and edges carry that leaf's token.
+function referenceMatchesOccurrence(reference, occurrenceSelector) {
   const candidate = referenceOccurrenceSelector(reference);
   const selector = String(occurrenceSelector || "").trim();
-  return Boolean(candidate && selector && (candidate === selector || candidate.startsWith(`${selector}.`)));
-}
-
-function referenceShapeSelector(reference) {
-  const selectorType = referenceSelectorType(reference);
-  if (selectorType === "shape") {
-    return String(reference?.normalizedSelector || reference?.displaySelector || "").trim();
-  }
-  return String(reference?.shapeId || "").trim();
-}
-
-function referenceMatchesShape(reference, shapeSelector, occurrenceSelector = "") {
-  const candidate = referenceShapeSelector(reference);
-  const selector = String(shapeSelector || "").trim();
-  if (!candidate || !selector || candidate !== selector) {
-    return false;
-  }
-  const occurrence = String(occurrenceSelector || "").trim();
-  return !occurrence || referenceMatchesOccurrenceSubtree(reference, occurrence);
+  return Boolean(candidate && selector && candidate === selector);
 }
 
 function syntheticOccurrenceSelectorFromReferenceId(referenceId) {
@@ -57,8 +40,8 @@ function syntheticOccurrenceSelectorFromReferenceId(referenceId) {
 
 /**
  * Every face, edge and vertex a set of highlighted references lights, in the order they were
- * named: a face, edge or vertex lights itself; an occurrence or a shape (or a Features row's
- * synthetic occurrence) lights everything of it.
+ * named: a face, edge or vertex lights itself; an occurrence (or a Features row's synthetic
+ * occurrence) lights everything of it.
  */
 function expandHighlightReferenceIds(referenceIds, pickableReferenceMap, activeSelectorRuntime) {
   const expanded = new Set();
@@ -85,20 +68,14 @@ function expandHighlightReferenceIds(referenceIds, pickableReferenceMap, activeS
     if (!topologyReference) {
       const syntheticOccurrenceSelector = syntheticOccurrenceSelectorFromReferenceId(normalizedReferenceId);
       if (syntheticOccurrenceSelector) {
-        addChildren(childReference => referenceMatchesOccurrenceSubtree(childReference, syntheticOccurrenceSelector));
+        addChildren(childReference => referenceMatchesOccurrence(childReference, syntheticOccurrenceSelector));
       }
       continue;
     }
     const selectorType = referenceSelectorType(topologyReference);
     if (selectorType === "occurrence") {
       const occurrenceSelector = referenceOccurrenceSelector(topologyReference);
-      addChildren(childReference => referenceMatchesOccurrenceSubtree(childReference, occurrenceSelector));
-      continue;
-    }
-    if (selectorType === "shape") {
-      const shapeSelector = referenceShapeSelector(topologyReference);
-      const occurrenceSelector = referenceOccurrenceSelector(topologyReference);
-      addChildren(childReference => referenceMatchesShape(childReference, shapeSelector, occurrenceSelector));
+      addChildren(childReference => referenceMatchesOccurrence(childReference, occurrenceSelector));
       continue;
     }
     add(normalizedReferenceId);
@@ -249,7 +226,7 @@ function applyHoverOverSelection(selectedObjects, hoveredIds) {
 
 /**
  * The reference highlight: the boundary lines and the fill of every selected or hovered face,
- * edge and vertex, and of everything a selected occurrence or shape owns. It reads the selector
+ * edge and vertex, and of everything a selected occurrence owns. It reads the selector
  * runtime AS POSED, and re-reads each record's exploded matrix when the explosion comes to rest.
  *
  * Two layers, so a hover rebuilds only what it lights: the selection's layer re-runs when the

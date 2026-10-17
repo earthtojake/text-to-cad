@@ -10,8 +10,7 @@ existed, and how `cadgen step export` would have outlived its deletion.
 So: extract the command forms out of the skills' own fenced code blocks and put
 them through the real dispatcher's registry and the real parsers. Nothing is
 executed — a smoke test may not build CAD — but a form that names a command that
-is gone, or passes a flag that no longer exists, fails here
-(design/format-doors.md, "executed docs").
+is gone, or passes a flag that no longer exists, fails here.
 """
 
 from __future__ import annotations

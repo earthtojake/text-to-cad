@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { restoreMotionAnimation, restoreMotionParameters } from './motionRestore.js';
-const definition = { parameterMap: { x: { id: 'x', type: 'number', defaultValue: 2, min: -100, max: 100 } }, defaultParameterValues: { x: 2 } };
-const clips = { turn: { id: 'turn', duration: 5, update() {} } };
+import { restoreMotionAnimation, restoreMotionParameters, stepPoseLogic } from './motionRestore.js';
+const definition = { url: '/x.step.json', articulation: { schemaVersion: 2,
+  controls: [{ id: 'x', label: 'x', unit: 'deg', min: -100, max: 100, default: 2 }],
+  joints: [], carries: {}, handles: [], poses: { up: { x: 90 } }, opening: { x: 2 } } };
+const clips = { turn: { id: 'turn', duration: 5, tracks: [] } };
 test('a routine that owns the pose keeps Position\'s values off the model, and a load never resumes it', () => {
   const animation = restoreMotionAnimation({ enabled: true, activeClipId: 'turn', elapsedSec: 3, playing: true, speed: 2 }, clips);
   assert.deepEqual([animation.elapsedSec, animation.playing, animation.speed, animation.activeClipId], [0, false, 2, 'turn']);
@@ -15,7 +17,16 @@ test('a pose owned by Position comes through, whatever the clock says', () => {
   assert.deepEqual(restoreMotionParameters(definition, { x: 50 }, null), { x: 50 });
   assert.deepEqual(restoreMotionParameters(null, { x: 50 }, animation), {});
 });
+test('values are fitted to the articulation: rest values for none, the limits, and no stray names', () => {
+  assert.deepEqual(restoreMotionParameters(definition, null, null), { x: 2 });
+  assert.deepEqual(restoreMotionParameters(definition, { x: 150, stray: 4 }, null), { x: 100 });
+});
 test('a clip the model no longer has leaves the routine unselected, at rest', () => {
   const animation = restoreMotionAnimation({ enabled: true, activeClipId: 'gone', elapsedSec: 3 }, clips);
   assert.deepEqual([animation.enabled, animation.playing, animation.elapsedSec], [false, false, 0]);
+});
+test('the pose logic is the controls and named poses, never the version', () => {
+  assert.equal(stepPoseLogic(definition), stepPoseLogic({ ...definition, url: '/x.step.json?v=2' }));
+  assert.notEqual(stepPoseLogic(definition), stepPoseLogic({ ...definition, articulation: { ...definition.articulation, poses: {} } }));
+  assert.equal(stepPoseLogic(null), '');
 });

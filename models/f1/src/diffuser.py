@@ -1,7 +1,7 @@
 """F1 part model: diffuser.
 
 The geometry `lib/floor.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.11`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#diffuser`; rebuild `f1.py`
 to pick up a change here.
 """
 

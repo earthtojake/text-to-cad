@@ -9,6 +9,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
+from tests.python.support.tree_ids import tokenized
 
 add_repo_path("packages/cadgen/src")
 
@@ -44,7 +45,7 @@ class TreeLinkIntegrity(unittest.TestCase):
         from cadgen.store.trees import flatten, put_tree
 
         missing = "a" * 64
-        parent = put_tree({
+        parent = put_tree(tokenized({
             "label": "parent",
             "units": "mm", "entryKind": "assembly",
             "components": {},
@@ -61,7 +62,7 @@ class TreeLinkIntegrity(unittest.TestCase):
                     ],
                 }
             },
-        })
+        })[0])
 
         with self.assertRaisesRegex(FileNotFoundError, rf"linked tree object missing: {missing}"):
             flatten(parent)
@@ -103,7 +104,7 @@ class TreeLinkIntegrity(unittest.TestCase):
                 }
             },
         })
-        parent = put_tree({
+        parent = put_tree(tokenized({
             "label": "parent",
             "units": "mm", "entryKind": "assembly",
             "components": {},
@@ -120,7 +121,7 @@ class TreeLinkIntegrity(unittest.TestCase):
                     ],
                 }
             },
-        })
+        })[0])
 
         descriptor = flatten(parent)
         by_name = {occurrence["name"]: occurrence for occurrence in descriptor["occurrences"]}

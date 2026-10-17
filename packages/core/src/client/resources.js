@@ -91,7 +91,6 @@ export function createHttpCadResourceProvider({ origin = '', fetch: fetchImpl = 
     get signal() { return lifetimeSignal; },
     cacheKey: url => `http-resource:${id}:${resourceUrl(url)}`,
     async readJson(url, options) { const response = await request(url, options); const value = await response.json(); aborted(options?.signal); aborted(lifetimeSignal); return value; },
-    async readText(url, options) { const response = await request(url, options); const value = await response.text(); aborted(options?.signal); aborted(lifetimeSignal); return value; },
     async readBytes(url, options = {}) { const response = await request(url, options); const bytes = await responseBytes(response, options.maxBytes); aborted(options.signal); aborted(lifetimeSignal); return bytes; },
     async byteLength(url, options) {
       const response = await request(url, { ...options, method: 'HEAD' });
@@ -103,14 +102,12 @@ export function createHttpCadResourceProvider({ origin = '', fetch: fetchImpl = 
         const resolved = resolvePackageAssetUrl(source, reference);
         if (resolved) return resourceUrl(resolved);
       }
-      if (kind === 'robot' || kind === 'relative') {
+      if (kind === 'relative') {
         const resolved = resolveCadAssetMeshUrl(reference, resourceUrl(source));
         if (resolved) return resolved;
       }
       const base = new URL(resourceUrl(source), globalThis.window?.location?.href || 'http://cad.local/');
-      const resolved = kind === 'robot' && String(reference).startsWith('package://')
-        ? new URL(String(reference).slice('package://'.length).replace(/^\/+/, ''), new URL('/', base))
-        : new URL(kind === 'package' ? `${String(source).replace(/\/+$/, '')}/${reference}` : reference, base);
+      const resolved = new URL(kind === 'package' ? `${String(source).replace(/\/+$/, '')}/${reference}` : reference, base);
       return /^[a-z][a-z0-9+.-]*:/i.test(resourceUrl(source)) || /^(https?:)?\/\//i.test(reference) ? resolved.href : `${resolved.pathname}${resolved.search}`;
     },
     async workerTicket(url, options = {}) {
@@ -146,7 +143,7 @@ export function scopeCadResources(provider, signal) {
     resolveDependency(...args) { aborted(signal); return provider.resolveDependency(...args); },
     invalidate() { active.abort(); active = new AbortController(); generation += 1; currentSignal = generationSignal(); },
   };
-  for (const method of ['readJson', 'readText', 'readBytes', 'byteLength', 'workerTicket']) {
+  for (const method of ['readJson', 'readBytes', 'byteLength', 'workerTicket']) {
     scoped[method] = async (url, options = {}) => {
       aborted(signal); aborted(options.signal);
       const combined = AbortSignal.any([currentSignal, ...(options.signal ? [options.signal] : [])]);

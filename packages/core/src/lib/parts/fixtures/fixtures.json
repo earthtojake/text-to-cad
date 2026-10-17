@@ -1,0 +1,11 @@
+{
+  "cam_follower_roller": {
+    "part": "9fc4601477c829cf5fc58726516e611e0faf59768b8af023a35fa6738d38aff9-v10"
+  },
+  "slot": {
+    "part": "fc24a805a292984192dffa104177be6615e95f1174759494a36d117bd4f90fc3-v10"
+  },
+  "sun_gear": {
+    "part": "95b4d6080acc67ef83bcc96120a1c7e1e23d321d8f7585fa2d95533dc4d1f857-v10"
+  }
+}

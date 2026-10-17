@@ -30,8 +30,12 @@ function ClipIcon(props) {
 export function useModelTools({ modelKey, view, features, store, mesh, disabled, selectedTool, onSelect, measure = null }) {
   const applied = [
     ...(view.exploded.enabled && view.exploded.amount > 0 ? ["exploded"] : []),
-    ...(view.clip.enabled && Math.abs(view.clip.offsets[view.clip.axis] - (view.clip.invert ? 0 : 1)) > 1e-6 ? ["clip"] : []),
+    ...(view.clip.enabled ? ["clip"] : []),
   ];
+  // The box Clip's plane is placed in, so its slider maps with exactly that box: the model at
+  // rest, its declared box when a package has one (the scene's `restBounds`, which the viewport
+  // hands the plane as `zeroPoseBounds`).
+  const clipBounds = mesh?.declaredBounds || mesh?.bounds || null;
   const [panels, setPanels] = useState(() => ({ modelKey, ids: applied }));
   const panelIds = panels.modelKey === modelKey ? panels.ids : applied;
   const appliedKey = applied.join(",");
@@ -65,13 +69,13 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
     { id: "exploded", label: "Explode", Icon: ExplodeIcon, unavailable: Boolean(mesh) && explodablePartCount(mesh) <= 1,
       summary: `${Math.round((view.exploded.enabled ? view.exploded.amount : 0) * 100)}%`,
       controls: <ExplodeControls viewSettings={view} onViewSettingsPatch={store.patch} /> },
-    { id: "clip", label: "Clip", Icon: ClipIcon, summary: clipSummary(view),
-      controls: <CrossSectionControls viewSettings={view} onViewSettingsPatch={store.patch} bounds={mesh?.bounds || null} /> }
+    { id: "clip", label: "Clip", Icon: ClipIcon, summary: clipSummary(view, clipBounds),
+      controls: <CrossSectionControls viewSettings={view} onViewSettingsPatch={store.patch} bounds={clipBounds} /> }
   ].filter(tool => tool.id === "measure" || features.sections.includes(tool.id));
   const remove = id => {
     if (id === "measure") { measure.onRemove(); return; }
     else if (id === "exploded") store.patch({ exploded: { enabled: false, amount: 0 } });
-    else store.patch({ clip: { enabled: false, axis: "x", offsets: { x: 1, y: 1, z: 1 }, invert: false } });
+    else store.patch({ clip: { enabled: false, axis: "x", invert: false } });
     setPanels(current => ({ modelKey, ids: current.ids.filter(value => value !== id) }));
     if (selectedTool === id) onSelect("references");
   };
@@ -83,7 +87,7 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
         if (panelIds.includes(id)) { remove(id); return; }
         onSelect(id);
         // A panel starts neutral. Actual edits enable its effect.
-        if (id === "clip") store.patch({ clip: { enabled: false, axis: "x", offsets: { x: 1, y: 1, z: 1 }, invert: false } });
+        if (id === "clip") store.patch({ clip: { enabled: false, axis: "x", invert: false } });
         else if (id === "exploded") store.patch({ exploded: { enabled: false, amount: 0 } });
         setPanels(current => ({ modelKey, ids: [...new Set([...(current.modelKey === modelKey ? current.ids.filter(value => applied.includes(value)) : []), id])] }));
       }

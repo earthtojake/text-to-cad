@@ -14,8 +14,8 @@ A body travels base64 inside the host's JSON, and a JSON body of more than
 ``GZIP_JSON_MIN_BYTES`` travels gzipped as well, flagged ``encoding: "gzip"``: the
 page inflates it before the client sees it, and the headers describe the inflated
 body. A large model's descriptor is 1.43 MB of base64 as it is and 0.28 MB gzipped,
-for about 5 ms of level-1 compression. Binary bodies (tessellations, SURF objects)
-barely shrink, so they travel as they are.
+for about 5 ms of level-1 compression. Binary bodies (display meshes) barely
+shrink, so they travel as they are.
 
 A reply is one message on the host's channel, and a host reads that channel with
 a ceiling on one message: past it, the connection closes, and this process and
@@ -77,6 +77,9 @@ KEPT_BODIES_MAX_BYTES = 256 * 1024 * 1024
 # docstring): about one call a second while a large drawing renders, as a view's sync makes.
 DRAWING_HOLD_SECONDS = 0.25
 DRAWING_RETRY_MS = 750
+# A face's measure (``POST /__cad/measure``) holds a call no longer than a drawing does.
+MEASURE_HOLD_SECONDS = 0.25
+MEASURE_RETRY_MS = 250
 _CONTENT_RANGE = re.compile(r"bytes [0-9]+-([0-9]+)/([0-9]+)")
 
 
@@ -145,6 +148,7 @@ class ViewerTunnel:
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
                 app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
+                app.measures.hold_seconds, app.measures.retry_ms = MEASURE_HOLD_SECONDS, MEASURE_RETRY_MS
                 self._app = app
             return self._app
 

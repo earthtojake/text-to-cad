@@ -7,7 +7,7 @@ from a parameter (README law 6). Which input kinds the door accepts
 is declared once, beside the verb, in
 :data:`cadgen._internal.snapshot_door.DOOR_KINDS`.
 
-Its verb is the FULL surface — section mode, display, kinematics, animation, focus/hide —
+Its verb is the FULL surface — display, kinematics, animation, focus/hide —
 because STEP is the only input that has topology to act on.
 
 Mesh inputs are NOT this door's: ``.stl``, ``.3mf`` and ``.glb`` go through

@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import math
-from typing import Any
 
 from . import lookup
-from .lookup import table_rows as _table_rows
 
 
 AXIS_NAMES = ("x", "y", "z")
@@ -163,8 +159,8 @@ def positioning_facts_for_row(
     facts: dict[str, object] = {
         "selectorType": selector_type,
     }
-    if index is not None and row.get("id"):
-        facts["selector"] = lookup.display_selector(str(row["id"]), index)
+    if row.get("id"):
+        facts["selector"] = str(row["id"])
     if isinstance(bbox, dict):
         facts["bbox"] = bbox
         bbox_fact_payload = bbox_facts(bbox)
@@ -183,31 +179,23 @@ def positioning_facts_for_row(
             facts.update(frame)
         return facts
 
-    if selector_type == "shape":
-        facts["kind"] = str(row.get("kind") or "shape")
-        if index is not None and row.get("occurrenceId"):
-            facts["occurrenceId"] = lookup.display_selector(str(row["occurrenceId"]), index)
-        return facts
-
     if selector_type == "vertex":
         facts["kind"] = "point"
         if center is not None:
             facts["point"] = list(center)
-        if index is not None and row.get("occurrenceId"):
-            facts["occurrenceId"] = lookup.display_selector(str(row["occurrenceId"]), index)
+        if row.get("occurrenceId"):
+            facts["occurrenceId"] = str(row["occurrenceId"])
         return facts
 
     params = row.get("params") if isinstance(row.get("params"), dict) else {}
-    if index is not None and row.get("occurrenceId"):
-        facts["occurrenceId"] = lookup.display_selector(str(row["occurrenceId"]), index)
-    if index is not None and row.get("shapeId"):
-        facts["shapeId"] = lookup.display_selector(str(row["shapeId"]), index)
+    if row.get("occurrenceId"):
+        facts["occurrenceId"] = str(row["occurrenceId"])
+    if row.get("shapeId"):
+        facts["shapeId"] = str(row["shapeId"])
 
     if selector_type == "face":
         surface_type = str(row.get("surfaceType") or "").lower()
         facts["kind"] = surface_type or "face"
-        if row.get("area") not in {None, ""}:
-            facts["area"] = float(row["area"])
 
         normal = _normalize(
             _float_triplet(row.get("normal"))
@@ -278,394 +266,3 @@ def positioning_facts_for_row(
             if params.get(radius_key) not in {None, ""}:
                 facts[radius_key] = float(params[radius_key])
     return facts
-
-
-def positioning_point(facts: dict[str, object]) -> list[float] | None:
-    for key in ("point", "origin", "center", "translation"):
-        point = _float_triplet(facts.get(key))
-        if point is not None:
-            return list(point)
-    bbox = facts.get("bbox")
-    center = bbox_center(bbox)
-    return center if center is not None else None
-
-
-def positioning_coordinate(
-    facts: dict[str, object],
-    axis: str,
-) -> tuple[float, str] | None:
-    normalized_axis = str(axis or "").strip().lower()
-    if normalized_axis not in AXIS_INDEX:
-        return None
-    if str(facts.get("axis") or "") == normalized_axis and facts.get("coordinate") not in {None, ""}:
-        return float(facts["coordinate"]), "coordinate"
-    point = positioning_point(facts)
-    if point is not None:
-        return float(point[AXIS_INDEX[normalized_axis]]), "point"
-    return None
-
-
-def infer_positioning_axis(*fact_payloads: dict[str, object]) -> str | None:
-    axes: list[str] = []
-    for facts in fact_payloads:
-        alignment = facts.get("axisAlignment")
-        if not isinstance(alignment, dict) or not bool(alignment.get("aligned")):
-            continue
-        axis = str(alignment.get("axis") or "")
-        if axis in AXIS_INDEX:
-            axes.append(axis)
-    if axes and all(axis == axes[0] for axis in axes):
-        return axes[0]
-    for facts in fact_payloads:
-        axis = str(facts.get("axis") or "")
-        if axis in AXIS_INDEX:
-            return axis
-    return None
-
-
-def vector_relationship(
-    left: object,
-    right: object,
-    *,
-    aligned_threshold: float = AXIS_ALIGNMENT_THRESHOLD,
-) -> dict[str, object] | None:
-    left_vector = _normalize(_float_triplet(left))
-    right_vector = _normalize(_float_triplet(right))
-    if left_vector is None or right_vector is None:
-        return None
-    dot = _dot(left_vector, right_vector)
-    abs_dot = abs(dot)
-    if dot <= -aligned_threshold:
-        relation = "opposed"
-    elif dot >= aligned_threshold:
-        relation = "parallel"
-    elif abs_dot <= 1.0 - aligned_threshold:
-        relation = "perpendicular"
-    else:
-        relation = "angled"
-    return {
-        "relation": relation,
-        "dot": dot,
-        "aligned": abs_dot >= aligned_threshold,
-    }
-
-
-def geometry_facts_for_row(
-    selector_type: str,
-    row: dict[str, object],
-    index: lookup.SelectorIndex | None = None,
-) -> dict[str, object]:
-    facts = bbox_facts(row.get("bbox"))
-    if selector_type in {"occurrence", "shape"}:
-        return facts
-
-    params = row.get("params") if isinstance(row.get("params"), dict) else {}
-    center = _float_triplet(row.get("center"))
-    if center is not None:
-        facts.setdefault("center", list(center))
-
-    if selector_type == "vertex":
-        if row.get("edgeCount") not in {None, ""}:
-            facts["edgeCount"] = int(row["edgeCount"])
-        if index is not None and row.get("id"):
-            facts["selector"] = lookup.display_selector(str(row["id"]), index)
-        return facts
-
-    axis_vector = _float_triplet(params.get("axis"))
-    direction_vector = _float_triplet(params.get("direction"))
-    normal_vector = _float_triplet(row.get("normal")) or _float_triplet(params.get("normal")) or axis_vector
-
-    if selector_type == "face":
-        surface_type = str(row.get("surfaceType") or "")
-        if surface_type:
-            facts["surfaceType"] = surface_type
-        if row.get("area") not in {None, ""}:
-            facts["area"] = float(row["area"])
-        normal_axis = dominant_axis(normal_vector)
-        if normal_axis is not None:
-            facts["normalAxis"] = {
-                "axis": normal_axis["axis"],
-                "sign": normal_axis["sign"],
-                "aligned": normal_axis["aligned"],
-            }
-            if center is not None and bool(normal_axis["aligned"]):
-                facts["planeCoordinate"] = center[int(normal_axis["index"])]
-        radius = params.get("radius")
-        if radius not in {None, ""}:
-            facts["radius"] = float(radius)
-        if surface_type == "plane" and axis_vector is not None:
-            facts["axis"] = list(axis_vector)
-        if index is not None and row.get("id"):
-            facts["selector"] = lookup.display_selector(str(row["id"]), index)
-        return facts
-
-    curve_type = str(row.get("curveType") or "")
-    if curve_type:
-        facts["curveType"] = curve_type
-    if row.get("length") not in {None, ""}:
-        facts["length"] = float(row["length"])
-    direction_axis = dominant_axis(direction_vector or axis_vector or bbox_size(row.get("bbox")))
-    if direction_axis is not None:
-        facts["directionAxis"] = {
-            "axis": direction_axis["axis"],
-            "sign": direction_axis["sign"],
-            "aligned": direction_axis["aligned"],
-        }
-    radius = params.get("radius")
-    if radius not in {None, ""}:
-        facts["radius"] = float(radius)
-    if index is not None and row.get("id"):
-        facts["selector"] = lookup.display_selector(str(row["id"]), index)
-    return facts
-
-
-def _merge_bboxes(boxes: list[dict[str, object]]) -> dict[str, object]:
-    min_x = min(float(box["min"][0]) for box in boxes)
-    min_y = min(float(box["min"][1]) for box in boxes)
-    min_z = min(float(box["min"][2]) for box in boxes)
-    max_x = max(float(box["max"][0]) for box in boxes)
-    max_y = max(float(box["max"][1]) for box in boxes)
-    max_z = max(float(box["max"][2]) for box in boxes)
-    return {
-        "min": [min_x, min_y, min_z],
-        "max": [max_x, max_y, max_z],
-    }
-
-
-def major_planar_face_groups(
-    index: lookup.SelectorIndex,
-    *,
-    coordinate_tolerance: float = 1e-3,
-    min_area_ratio: float = 0.05,
-    limit: int = 12,
-) -> list[dict[str, object]]:
-    planar_rows = [
-        row for row in index.faces if str(row.get("surfaceType") or "").lower() == "plane"
-    ]
-    total_planar_area = sum(float(row.get("area") or 0.0) for row in planar_rows)
-    grouped: dict[tuple[str, int], dict[str, object]] = {}
-
-    for row in planar_rows:
-        facts = geometry_facts_for_row("face", row, index)
-        normal_axis = facts.get("normalAxis")
-        plane_coordinate = facts.get("planeCoordinate")
-        if not isinstance(normal_axis, dict) or plane_coordinate in {None, ""}:
-            continue
-        axis = str(normal_axis.get("axis") or "")
-        if axis not in AXIS_INDEX:
-            continue
-        coordinate = float(plane_coordinate)
-        bucket = int(round(coordinate / coordinate_tolerance)) if coordinate_tolerance > 0 else 0
-        key = (axis, bucket)
-        bbox = row.get("bbox")
-        if not isinstance(bbox, dict):
-            continue
-        group = grouped.get(key)
-        if group is None:
-            group = {
-                "axis": axis,
-                "coordinate": 0.0,
-                "normalSign": int(normal_axis.get("sign") or 1),
-                "faceCount": 0,
-                "totalArea": 0.0,
-                "bboxParts": [],
-                "selectors": [],
-            }
-            grouped[key] = group
-        area = float(row.get("area") or 0.0)
-        group["coordinate"] = float(group["coordinate"]) + (coordinate * max(area, 1e-9))
-        group["faceCount"] = int(group["faceCount"]) + 1
-        group["totalArea"] = float(group["totalArea"]) + area
-        group["bboxParts"].append(bbox)
-        selector = lookup.display_selector(str(row.get("id") or ""), index)
-        if selector:
-            group["selectors"].append(selector)
-
-    result: list[dict[str, object]] = []
-    for group in grouped.values():
-        total_area = float(group["totalArea"])
-        if total_planar_area > 0.0 and total_area / total_planar_area < min_area_ratio:
-            continue
-        weighted_coordinate = float(group["coordinate"]) / max(total_area, 1e-9)
-        merged_bbox = _merge_bboxes(list(group["bboxParts"]))
-        result.append(
-            {
-                "axis": group["axis"],
-                "coordinate": weighted_coordinate,
-                "normalSign": group["normalSign"],
-                "faceCount": group["faceCount"],
-                "totalArea": total_area,
-                "bbox": merged_bbox,
-                "selectors": sorted(set(str(selector) for selector in group["selectors"] if selector)),
-            }
-        )
-
-    result.sort(key=lambda item: (-float(item["totalArea"]), str(item["axis"]), float(item["coordinate"])))
-    return result[: max(int(limit), 0)]
-
-
-def _stable_hash(payload: object) -> str:
-    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True, ensure_ascii=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def selector_manifest_diff(
-    old_manifest: dict[str, Any] | None,
-    new_manifest: dict[str, Any],
-) -> dict[str, object]:
-    if old_manifest is None:
-        return {
-            "hasPrevious": False,
-            "topologyChanged": False,
-            "geometryChanged": False,
-            "bboxChanged": False,
-            "countDelta": {},
-        }
-
-    old_faces = _table_rows(old_manifest, "faces", "faceColumns")
-    new_faces = _table_rows(new_manifest, "faces", "faceColumns")
-    old_edges = _table_rows(old_manifest, "edges", "edgeColumns")
-    new_edges = _table_rows(new_manifest, "edges", "edgeColumns")
-    old_vertices = _table_rows(old_manifest, "vertices", "vertexColumns")
-    new_vertices = _table_rows(new_manifest, "vertices", "vertexColumns")
-
-    old_topology = {
-        "occurrences": [row.get("id") for row in _table_rows(old_manifest, "occurrences", "occurrenceColumns")],
-        "shapes": [row.get("id") for row in _table_rows(old_manifest, "shapes", "shapeColumns")],
-        "faces": [row.get("id") for row in old_faces],
-        "edges": [row.get("id") for row in old_edges],
-        "vertices": [row.get("id") for row in old_vertices],
-        "faceCount": old_manifest.get("stats", {}).get("faceCount"),
-        "edgeCount": old_manifest.get("stats", {}).get("edgeCount"),
-        "vertexCount": old_manifest.get("stats", {}).get("vertexCount"),
-    }
-    new_topology = {
-        "occurrences": [row.get("id") for row in _table_rows(new_manifest, "occurrences", "occurrenceColumns")],
-        "shapes": [row.get("id") for row in _table_rows(new_manifest, "shapes", "shapeColumns")],
-        "faces": [row.get("id") for row in new_faces],
-        "edges": [row.get("id") for row in new_edges],
-        "vertices": [row.get("id") for row in new_vertices],
-        "faceCount": new_manifest.get("stats", {}).get("faceCount"),
-        "edgeCount": new_manifest.get("stats", {}).get("edgeCount"),
-        "vertexCount": new_manifest.get("stats", {}).get("vertexCount"),
-    }
-    old_geometry = {
-        "bbox": old_manifest.get("bbox"),
-        "faces": [
-            {
-                "id": row.get("id"),
-                "surfaceType": row.get("surfaceType"),
-                "center": row.get("center"),
-                "normal": row.get("normal"),
-                "bbox": row.get("bbox"),
-                "area": row.get("area"),
-            }
-            for row in old_faces
-        ],
-        "edges": [
-            {
-                "id": row.get("id"),
-                "curveType": row.get("curveType"),
-                "center": row.get("center"),
-                "bbox": row.get("bbox"),
-                "length": row.get("length"),
-            }
-            for row in old_edges
-        ],
-        "vertices": [
-            {
-                "id": row.get("id"),
-                "center": row.get("center"),
-                "bbox": row.get("bbox"),
-            }
-            for row in old_vertices
-        ],
-    }
-    new_geometry = {
-        "bbox": new_manifest.get("bbox"),
-        "faces": [
-            {
-                "id": row.get("id"),
-                "surfaceType": row.get("surfaceType"),
-                "center": row.get("center"),
-                "normal": row.get("normal"),
-                "bbox": row.get("bbox"),
-                "area": row.get("area"),
-            }
-            for row in new_faces
-        ],
-        "edges": [
-            {
-                "id": row.get("id"),
-                "curveType": row.get("curveType"),
-                "center": row.get("center"),
-                "bbox": row.get("bbox"),
-                "length": row.get("length"),
-            }
-            for row in new_edges
-        ],
-        "vertices": [
-            {
-                "id": row.get("id"),
-                "center": row.get("center"),
-                "bbox": row.get("bbox"),
-            }
-            for row in new_vertices
-        ],
-    }
-
-    count_delta = {
-        "faceCount": int(new_manifest.get("stats", {}).get("faceCount") or 0)
-        - int(old_manifest.get("stats", {}).get("faceCount") or 0),
-        "edgeCount": int(new_manifest.get("stats", {}).get("edgeCount") or 0)
-        - int(old_manifest.get("stats", {}).get("edgeCount") or 0),
-        "vertexCount": int(new_manifest.get("stats", {}).get("vertexCount") or 0)
-        - int(old_manifest.get("stats", {}).get("vertexCount") or 0),
-        "shapeCount": int(new_manifest.get("stats", {}).get("shapeCount") or 0)
-        - int(old_manifest.get("stats", {}).get("shapeCount") or 0),
-    }
-
-    return {
-        "hasPrevious": True,
-        "topologyChanged": _stable_hash(old_topology) != _stable_hash(new_topology),
-        "geometryChanged": _stable_hash(old_geometry) != _stable_hash(new_geometry),
-        "bboxChanged": old_manifest.get("bbox") != new_manifest.get("bbox"),
-        "countDelta": count_delta,
-    }
-
-
-def view_name_for_axis(axis: str, sign: int) -> str:
-    normalized_sign = 1 if sign >= 0 else -1
-    if axis == "x":
-        return "right" if normalized_sign > 0 else "left"
-    if axis == "y":
-        return "top" if normalized_sign > 0 else "bottom"
-    return "front" if normalized_sign > 0 else "back"
-
-
-def aligned_view_name_for_facts(
-    selector_type: str,
-    facts: dict[str, object],
-) -> str | None:
-    if selector_type == "face":
-        normal_axis = facts.get("normalAxis")
-        if isinstance(normal_axis, dict):
-            axis = str(normal_axis.get("axis") or "")
-            sign = int(normal_axis.get("sign") or 1)
-            if axis in AXIS_INDEX:
-                return view_name_for_axis(axis, sign)
-        return None
-
-    if selector_type != "edge":
-        return None
-    direction_axis = facts.get("directionAxis")
-    if not isinstance(direction_axis, dict):
-        return None
-    axis = str(direction_axis.get("axis") or "")
-    if axis == "x":
-        return "front"
-    if axis == "y":
-        return "front"
-    if axis == "z":
-        return "top"
-    return None

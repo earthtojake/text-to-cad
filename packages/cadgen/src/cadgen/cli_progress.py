@@ -85,7 +85,7 @@ def cli_progress_line(
         return
     line = InlineProgressLine(stream=logger.stream)
     # The phase currently on the live line: its name, its human label, and the wall clock at
-    # which it started. Kept here rather than read back off the event because the event that
+    # which it started. Kept here rather than taken off the event because the event that
     # ENDS a phase is the one that opens the next, and its own start time is the boundary.
     state = {"phase": "", "label": "", "started": 0.0, "header": False}
 

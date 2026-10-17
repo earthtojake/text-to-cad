@@ -75,7 +75,7 @@ export const ViewerNavbar: ComponentType<{
   update?: ReactNode;
   /** The host's Full size button, where it shows the view small. */
   fullSize?: ReactNode;
-  /** The box, last in the row, the renderer draws its view controls into (a 3D view's Display and Preview). */
+  /** The box, last in the row, the renderer draws its view controls into (a 3D view's own, then Display and Preview). */
   controlsRef?: (element: HTMLDivElement | null) => void;
   className?: string;
 }>;

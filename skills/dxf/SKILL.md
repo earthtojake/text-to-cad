@@ -15,8 +15,8 @@ repository link is only for provenance and release review.
 Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
 one installation, and its warm build daemon, with the CAD app's server:
 
-- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.21 cadgen`
-- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.21 python`
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 python`
 
 The first run downloads that installation and the first snapshot its headless
 browser; later runs reuse both.
@@ -27,8 +27,8 @@ kernel load errors.
 
 Drawings are build123d geometry, so a drawing build loads the CAD kernel like a
 STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs).
-`cadgen dxf snapshot` needs no Node at all: it flattens the drawing with `ezdxf`
-(which arrives with cadgen) and paints it in the bundled headless browser.
+`cadgen dxf snapshot` flattens the drawing with `ezdxf` (which arrives with
+cadgen) and paints it in the bundled headless browser.
 
 ## Purpose
 
@@ -41,8 +41,9 @@ parameterless `@dxf` model function.
 build job a `@step` part has; its one output is the `.dxf` file; it has no
 geometry tree (nothing links to a drawing). Every run writes the sibling
 `<name>.dxf` (or the `out=` the decorator names); an unchanged source is a
-no-op; a drawing that calls a part model — `bracket()` inside its body — is
-stale whenever that part's GEOMETRY changes and current when it does not;
+no-op; a drawing that calls a part model — `bracket()` inside its body — depends
+on that part's result by its key, so it is stale whenever the part is rebuilt (its
+source edited, whatever its geometry) and current when it is not;
 `cadgen store why <drawing>.py` explains the verdict; `--force` rebuilds it
 anyway. The CAD Viewer and `dxf snapshot` read the `.dxf` file itself, so the
 file you hand a cutting service, the file the viewer draws and the file a
@@ -108,7 +109,7 @@ Copy the full template for the applicable workflow from
 
    ```python
    from cadgen import dxf, flatten
-   from bracket import bracket        # a child: tracked by its RESULT
+   from bracket import bracket        # a child: tracked by its KEY
 
    KERF = 0.15
 
@@ -122,10 +123,10 @@ Copy the full template for the applicable workflow from
        bracket_drawing()
    ```
 
-   The drawing's record pins the part's tree, so a part edit that changes its
-   geometry makes the drawing stale, and one that does not (a comment, a
-   refactor, a colour) leaves it current. Constants imported from the part
-   (`from bracket import THICKNESS`) are tracked by value the same way.
+   The drawing's record keeps the part's key, so a part edit makes the drawing
+   stale (a comment or formatting is no edit), and the drawing's rerun decodes
+   the part's stored result rather than building it again. Constants imported
+   from the part (`from bracket import THICKNESS`) are tracked by value.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
    read it with `cadgen.read_step` (warm from the store, the same geometry as
@@ -159,7 +160,7 @@ Copy the full template for the applicable workflow from
    source STEPs in an `imported/` directory beside the drawing, committed like any
    other input — input path and output path being different files is the whole
    rule. For a STEP this project DOES generate, use workflow 2 instead: import the
-   model script and call it, which is tracked by result and never touches an
+   model script and call it, which is tracked by key and never touches an
    artifact.
 
 One model per file is the recommendation, and a drawing gets its own script:
@@ -220,7 +221,7 @@ source whose `.dxf` still verifies and whose part children are unchanged is a
 no-op, and `--force` rebuilds anyway. The bytes are a function of the
 drawing's GEOMETRY, so a cold run and a warm daemon worker write the same
 file. Builds never wait on or cancel one another; a drawing that calls parts
-builds them in parallel like any parent.
+builds the stale ones in its own process, one at a time, like any parent.
 
 An imported `.dxf` needs nothing at all — hand it straight to snapshot or the
 Viewer.
@@ -253,8 +254,8 @@ cadgen dxf snapshot path/to/imported.dxf review.png
 cadgen dxf snapshot path/to/drawing.dxf review.png --appearance dark
 ```
 
-It takes the `.dxf` document only — a model script is refused by name (run
-`python <drawing>.py`, then snapshot the drawing it wrote). The whole drawing is
+It takes the `.dxf` document only: run `python <drawing>.py` first, then
+snapshot the drawing it wrote. The whole drawing is
 fitted to the image and painted head on, in the pens the file declares; an
 entity with no pen of its own (ACI 7) takes the appearance's foreground on its
 background. The command flattens the drawing with `ezdxf` and renders it through
@@ -306,8 +307,7 @@ validation don't replace this.
 
 - If your tools include `cad_show` (your host may prefix it), use it with the file's
   absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
+  what the user selected; `cad_screenshot` shows you what they see.
 - Otherwise run the CAD Viewer, from any folder:
 
   ```bash

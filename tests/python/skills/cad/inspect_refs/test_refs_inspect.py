@@ -1,4 +1,7 @@
-"""Exact native selection agrees with saved geometry and canonical viewer IDs."""
+"""Exact native selection agrees with saved geometry and canonical viewer IDs.
+
+A ref names geometry: an occurrence by its token, an element by the occurrence's token and
+the element's (``#o:…/f:…``), so the refs here are read off the scene, never written down."""
 from __future__ import annotations
 
 import hashlib
@@ -58,10 +61,16 @@ class StepSceneTests(unittest.TestCase):
             scene.resolve("#pin")
         self.assertNotEqual(scene.resolve("#pin_1").ref, scene.resolve("#pin_2").ref)
         self.assertEqual(scene.resolve("#pin_1").prototype_id, scene.resolve("#pin_2").prototype_id)
-        # `assembly#o1`: a bare stem names no file; a prefix is the file's path, extension included.
-        for ref in ("#no_such_part", "#f1", "#housing.f1", "wrong.step#o1", "assembly#o1", "#o9", "#pin_1.f0", "#pin_1.f9000", "#pin_1.f1,f2"):
+        face = next(scene.resolve("#pin_1").entities("face")).ref.split("/")[1]
+        # `assembly#…`: a bare stem names no file; a prefix is the file's path, extension
+        # included. A bare element token needs the one leaf an assembly has not; the retired
+        # positional grammar (`#o1.2`, `#pin_1.f1`) names nothing.
+        for ref in ("#no_such_part", f"#{face}", "#housing.f1", f"wrong.step#{group.ref[1:]}", f"assembly#{group.ref[1:]}",
+                    "#o:" + "9" * 12, "#pin_1.f1", f"#pin_1/{face},{face}", "#pin_1/f:not0a0token"):
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 scene.resolve(ref)
+        # A label stands in for the occurrence token in an element ref.
+        self.assertEqual(scene.resolve(f"#pin_1/{face}").ref, f"{scene.resolve('#pin_1').ref}/{face}")
 
     def test_geometry_is_world_placed_including_nested_rotation(self):
         scene = read_scene(self.path)
@@ -89,9 +98,10 @@ class StepSceneTests(unittest.TestCase):
                 self.assertAlmostEqual(edge.shape().length, scene.resolve(edge.ref).shape().length)
         base = scene.resolve("#base")
         self.assertEqual(len(list(base.entities("vertex"))), 8)
-        self.assertEqual(len(list(base.entities("shape"))), 1)
-        with self.assertRaises(ValueError):
-            list(base.entities("planes"))
+        # A body has no ref of its own: the occurrence names it.
+        for kind in ("shape", "planes"):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                list(base.entities(kind))
 
     def test_native_copies_cannot_mutate_scene_or_other_occurrences(self):
         from OCP.BRep import BRep_Builder
@@ -112,11 +122,12 @@ class StepSceneTests(unittest.TestCase):
         untouched_vertex = TopoDS.Vertex_s(TopExp_Explorer(a.shape().wrapped, TopAbs_VERTEX).Current())
         self.assertLess(BRep_Tool.Tolerance_s(untouched_vertex), 1e-3)
 
-    def test_read_and_occurrence_lookup_decode_no_geometry_or_surfaces(self):
+    def test_read_and_occurrence_lookup_decode_no_geometry_or_display_data(self):
         from cadgen._internal import component_package
         with mock.patch.object(component_package, "decode_geometry_component", wraps=component_package.decode_geometry_component) as decoded, \
-             mock.patch("cadgen.store.surfaces.derive", side_effect=AssertionError("inspection requested surfaces")), \
-             mock.patch("cadgen._internal.surface_extract.extract_surface_component", side_effect=AssertionError("inspection extracted surfaces")):
+             mock.patch("cadgen.store.parts.derive", side_effect=AssertionError("inspection requested display data")), \
+             mock.patch("cadgen.store.parts.request_display", side_effect=AssertionError("inspection requested display data")), \
+             mock.patch("cadgen._internal.topology_extract.extract_topology_facts", side_effect=AssertionError("inspection extracted topology facts")):
             scene = read_scene(self.path)
             scene.resolve("#housing")
             list(scene.leaves())
@@ -124,7 +135,7 @@ class StepSceneTests(unittest.TestCase):
             scene.resolve("#pin_1").shape()
             self.assertEqual(decoded.call_count, 1)
             scene.resolve("#pin_2").shape()
-            scene.resolve("#pin_1.f1").shape()
+            next(scene.resolve("#pin_1").entities("face")).shape()
             self.assertEqual(decoded.call_count, 1)
 
     def test_cached_inventory_does_not_import_build123d(self):
@@ -173,7 +184,12 @@ class StepSceneTests(unittest.TestCase):
         self.assertEqual(old.document_hash, expected)
         self.assertNotEqual(new.document_hash, expected)
         self.assertEqual(len(list(old.leaves())), 3)
-        self.assertAlmostEqual(new.resolve("#f1").shape().area, new.resolve("#o1.f1").shape().area)
+        # One leaf: a bare element token resolves, to the same face as the full ref.
+        (leaf,) = new.leaves()
+        face = next(leaf.entities("face"))
+        token = face.ref.split("/")[1]
+        self.assertEqual(new.resolve(f"#{token}").ref, face.ref)
+        self.assertAlmostEqual(new.resolve(f"#{token}").shape().area, face.shape().area)
         self.assertAlmostEqual(new.roots[0].shape().volume, 24)
         # Holding a scene retains selected bytes, even before any geometry was decoded.
         descriptor, captured = capture_tree(self.tree)
@@ -181,26 +197,30 @@ class StepSceneTests(unittest.TestCase):
         saved = captured[victim]
         object_path(victim).unlink()
         try:
-            self.assertGreater(old.resolve("#pin_1.f1").shape().area, 0)
+            self.assertGreater(next(old.resolve("#pin_1").entities("face")).shape().area, 0)
         finally:
             from cadgen.store.objects import put_object
             put_object(saved, repair=True)
 
-    def test_face_edge_and_shape_ordinals_match_display_extraction(self):
-        from cadgen._internal.surface_extract import extract_surface_component
-        from cadgen._internal.surface_extract import read_surf
-        # Compare using the scene's canonical BREP, before its world placement.
+    def test_face_and_edge_names_match_display_extraction(self):
+        from cadgen._internal.geometric_tokens import element_names
+        from cadgen._internal.topology_extract import component_metrics, extract_topology_facts
+        # Compare using the scene's canonical BREP, before its world placement: the
+        # entities come in the table's ordinal order, each under its name -- for a file no
+        # model run named, the token the body's geometry gives that ordinal.
         scene = read_scene(self.path)
         selection = scene.resolve("#pin_1")
         raw = scene._loaded.prototype_shapes[selection._node.prototype_key]
-        payload = extract_surface_component(raw)
-        index, _ = read_surf(bytes(payload))
-        for kind, prefix in (("face", "f"), ("edge", "e"), ("shape", "s")):
+        facts = extract_topology_facts(raw)
+        faces = component_metrics(raw)["faces"]
+        tokens = element_names(None, raw)
+        for kind, plural in (("face", "faces"), ("edge", "edges")):
             entities = list(selection.entities(kind))
-            rows = index[{"face": "faces", "edge": "edges", "shape": "shapes"}[kind]]
+            rows = facts[plural]
             self.assertEqual(len(entities), len(rows))
             for i, entity in enumerate(entities, 1):
-                self.assertEqual(entity.ref, f"{selection.ref}.{prefix}{i}")
+                self.assertEqual(entity.ref, f"{selection.ref}/{tokens[plural][i - 1]}")
                 self.assertEqual(entity.kind, kind)
-                metric = {"face": "area", "edge": "length", "shape": "volume"}[kind]
-                self.assertAlmostEqual(getattr(entity.shape(), metric), rows[i - 1][metric], places=6)
+                metric = {"face": "area", "edge": "length"}[kind]
+                exact = (faces if kind == "face" else rows)[i - 1][metric]
+                self.assertAlmostEqual(getattr(entity.shape(), metric), exact, places=6)

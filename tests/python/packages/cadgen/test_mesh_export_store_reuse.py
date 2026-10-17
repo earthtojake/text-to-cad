@@ -1,7 +1,7 @@
 """Mesh export resolves the STORE tree before touching anything else.
 
 The export fast path, exercised through the `cadgen stl|3mf|glb build` doors.
-Doors take DOCUMENTS (design/pose-animation-split.md, CLI/doors follow-on), so
+Doors take DOCUMENTS (packages/cadgen/README.md, law 7), so
 there are exactly two shapes to cover:
 
 * A generated document whose package is current exports straight from it — no
@@ -93,12 +93,6 @@ class MeshExportStoreReuseTest(unittest.TestCase):
             "CADGEN_CACHE_DIR": str(self.store),
             "PYTHONPATH": str(REPO / "packages/cadgen/src"),
         })
-
-    def _run(self, argv: list[str], cwd: Path) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [PYTHON, *argv], cwd=str(cwd), env=self.env,
-            capture_output=True, text=True, timeout=600,
-        )
 
     def _door(self, fmt: str, target: str, *flags: str) -> subprocess.CompletedProcess:
         module = {"stl": "stl_build", "3mf": "threemf_build", "glb": "glb_build"}[fmt]

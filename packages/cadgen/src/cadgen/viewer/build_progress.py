@@ -1,8 +1,8 @@
 """Where a document's build position comes from: the daemon's job ledger.
 
 ONE PRODUCER, ONE CHANNEL. Every job the daemon runs — ``python model.py`` in a
-terminal, a parent's child build, a door's compile, this viewer's own compile —
-is one entry in the daemon's ledger (``cadgen.daemon.jobs``), carrying the
+terminal, a door's compile, this viewer's own compile — and every child a job
+builds inside it is one row in the daemon's ledger (``cadgen.daemon.jobs``), carrying the
 job's DECLARED OUTPUT PATHS and its state as the build tree narrates it:
 submitted → queued → building [phase, done/total] → done | failed. The viewer
 asks the daemon (``cadgen.daemon.client.status``), matches jobs to the document

@@ -5,20 +5,26 @@ A tree holds the geometry a model made itself (``components``, placed by its
 child are two links to one tree. Nothing of a child is copied::
 
     {
-      "kind": "geometry-tree", "schemaVersion": 2,
+      "kind": "geometry-tree", "schemaVersion": 5,
       "label": "robot", "entryKind": "assembly",
-      "components": {"<cid>": {"kind": "native", "codec": "bintools-v4", "brep": "<object>", "faceColors": {}, "contentHash": "…"}},
-      "occurrences": [{"id": "o1.1", "name": "housing", "component": "<cid>", "transform": [16 floats]}],
-      "links":       [{"id": "o1.2", "name": "arm", "tree": "<object>", "transform": [16 floats]}],
-      "assembly": {"root": {"id": "o1", "name": "robot", "nodeType": "assembly", "children": [...]}},
+      "components": {"<cid>": {"kind": "native", "codec": "bintools-v4", "brep": "<object>", "faceColors": {}, "contentHash": "…", "construction": "…", "lineage": "<object>"}},
+      "occurrences": [{"id": "o:4b1f9e2a7c03", "name": "housing", "component": "<cid>", "transform": [16 floats]}],
+      "links":       [{"id": "o:e8a03d5b61f4", "name": "arm", "tree": "<object>", "transform": [16 floats]}],
+      "assembly": {"root": {"id": "o:0f3a6c8e2d17", "name": "robot", "nodeType": "assembly", "children": [...]}},
       "bbox": {...}, "stats": {...}
     }
 
+Every occurrence, link and node is named by its **token** (``o:`` and twelve
+hexadecimal characters, ``cadgen._internal.tree_tokens``): a hash of its
+parent's token, its name and -- a leaf's -- its placement rounded, so a token
+is a function of the tree it is in and of nothing positional (README law 20).
 Occurrence and link transforms are WORLD placements within this tree. In the
 structure under ``assembly.root`` a link appears as a node with
 ``nodeType: "link"`` and its ``id``; ``flatten`` expands it into the child's
-structure, re-rooting the child's ids under the link's id and composing the
-child's world transforms with the link's placement.
+structure, re-rooting the child's nodes under the link's token -- each minted
+again from the link's token, its name and its composed world placement, as the
+saved document's own hierarchy names it -- and composing the child's world
+transforms with the link's placement.
 
 ``flatten(tree_hash)`` returns the ASSEMBLY.JSON SHAPE (``kind:
 "assembly-package"``, a flat component map, flat world-placed occurrences, a
@@ -55,7 +61,16 @@ from cadgen.store.objects import (  # noqa: F401 - the stamp helpers stay import
 )
 
 TREE_KIND = "geometry-tree"
-TREE_SCHEMA = 2
+# A format change bumps it (STORE.md §2, §8): a tree of another version is never
+# read, and a sweeper that finds a newer one stands down. 3: an eager-only
+# component pins its topology facts as ``topology``, a field an older sweeper
+# does not mark. 4: every occurrence, link and node id is an ``o:`` token. 5: a
+# component carries the construction key and the lineage object its build named
+# it by (README law 20), an object an older sweeper does not mark. 6: a leaf's
+# token rounds its translation as the STEP file states it (``tree_tokens``), so a
+# leaf within a stated digit of a rounding boundary has another id than a schema-5
+# tree gave it, and minting a schema-5 tree's ids again would disagree with them.
+TREE_SCHEMA = 6
 FLAT_KIND = "assembly-package"
 
 # Metadata readers need an independently owned flattened descriptor but not the
@@ -91,13 +106,16 @@ _METADATA_CAPTURE_STAMP_BYTES = 512
 # Component entries validated against their object's bytes (``validate_geometry_component``,
 # a pure function of the two), by object, cid and the sha256 of the canonical
 # entry -- a digest, since the table is bounded by count and an entry's
-# faceColors grow with its faces; SURF containers validated, by object. With
-# the object still at its verified identity, the check holds without the bytes.
+# faceColors grow with its faces; pinned topology facts and lineages validated, by object.
+# With the object still at its verified identity, the check holds without the bytes.
 _VALIDATED_CAPACITY = 1 << 16
 _VALIDATED_COMPONENTS: OrderedDict[tuple[str, str, bytes], None] = OrderedDict()
-_VALIDATED_SURFACES: OrderedDict[str, None] = OrderedDict()
+_VALIDATED_OBJECTS: OrderedDict[str, None] = OrderedDict()
 
 IDENTITY_16 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+# The objects a component entry names: its encoded BREP, an eager-only one's topology
+# facts, and the lineage its build named it by.
+COMPONENT_OBJECTS = ("brep", "topology", "lineage")
 
 
 def put_tree(tree: dict[str, Any], *, repair: bool = False) -> str:
@@ -135,7 +153,7 @@ def tree_objects(tree_hash: str, *, _seen: set[str] | None = None) -> set[str]:
         for entry in tree["components"].values():
             if not isinstance(entry, dict):
                 continue
-            for field in ("brep", "eagerSurface"):
+            for field in COMPONENT_OBJECTS:
                 if entry.get(field):
                     try:
                         read_verified_object(entry[field])
@@ -147,7 +165,7 @@ def tree_objects(tree_hash: str, *, _seen: set[str] | None = None) -> set[str]:
 
 
 def tree_complete(tree_hash: str) -> bool:
-    """Full verified geometry closure; disposable surfaces are not required.
+    """Full verified geometry closure; parts' display data is not required.
 
     Verified once per process. The gate asks for the same closures many times
     in one build, so this is the metadata capture: a closure already verified
@@ -168,7 +186,7 @@ def claim_tree(tree_hash: str) -> bool:
     """:func:`tree_complete` for a publish: verify the closure, then claim all of it.
 
     A record about to name this tree must not lose any part of it -- its own
-    components, or a child's tree pinned long ago -- to a sweep that began
+    components, or a child's tree composed long ago -- to a sweep that began
     before the publish (STORE.md §8). Every object in the verified closure is
     claimed (:func:`cadgen.store.objects.claim_object`), through the metadata
     capture: an object this process verified and that keeps its identity is
@@ -235,15 +253,6 @@ def compose_transforms(parent: object, child: object) -> list[float]:
 # --- flatten ------------------------------------------------------------------
 
 
-def _rebase_id(link_id: str, child_id: str) -> str:
-    """``o1.2`` + child ``o1.3.1`` -> ``o1.2.3.1``: the child's root IS the link."""
-    child_id = str(child_id or "o1")
-    if child_id in ("o1", "o"):
-        return link_id
-    suffix = child_id[len("o1") :] if child_id.startswith("o1") else "." + child_id.lstrip("o")
-    return f"{link_id}{suffix}"
-
-
 def tree_kind(tree: dict[str, Any] | None) -> str:
     """``"assembly"`` or ``"part"``, read off the TREE and nowhere else.
 
@@ -285,18 +294,33 @@ def flatten_tree(
     *,
     tree_hash: str | None = None,
     memo: dict[str, dict[str, Any]] | None = None,
+    origins: dict[str, tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """:func:`flatten` of a tree held in memory — one not (yet) in the store.
 
-    The build flattens its own result before it is published, to assemble the
-    STEP it then re-reads (``cadgen.store.build``); the links inside it resolve
-    against the store as usual. ``tree_hash`` is recorded on the descriptor when
-    known and memoizes the result."""
+    The build flattens its own result before it is published, to resolve its
+    materials and measure its bounds (``cadgen.store.build``); the links inside it
+    resolve against the store as usual. ``tree_hash`` is recorded on the descriptor when known and
+    memoizes the result.
+
+    A child's nodes are re-rooted under the link's token: expanded with
+    provisional ids, then every id of the flattened tree is minted again from
+    its structure, names and composed placements (``tree_tokens.assign_tokens``),
+    which gives the parent's own nodes the tokens they already had and the
+    child's the tokens the saved document gives them. ``origins``, when given, is
+    filled with where each node a link placed came from: its token here mapped to the
+    linked tree and the node's token in that tree flattened."""
+    from cadgen._internal.tree_tokens import assign_tokens, retoken
+
     memo = memo if memo is not None else {}
 
     components: dict[str, Any] = {cid: dict(entry) for cid, entry in (tree.get("components") or {}).items()}
     occurrences: list[dict[str, Any]] = [dict(occ) for occ in tree.get("occurrences") or []]
     links = {str(link.get("id")): link for link in (tree.get("links") or []) if isinstance(link, dict)}
+
+    def provisional(link_id: str, child_id: str) -> str:
+        """A unique id for a child's node under a link, until the flattened tree is tokened."""
+        return f"{link_id}|{child_id}"
     # A published model tree carries its complete resolved intrinsic appearance.
     # An unpublished draft does not, so flattening it composes child libraries
     # and rebases their assignments before the parent declaration is resolved.
@@ -319,6 +343,9 @@ def flatten_tree(
             })
     appearance_materials = dict((own_appearance or {}).get("materials") or {})
     appearance_assignments = dict((own_appearance or {}).get("assignments") or {})
+    # A child's assignments, under provisional ids until the flattened tree is tokened; the
+    # tree's own are keyed by the flattened tokens already.
+    inherited_assignments: dict[str, str] = {}
 
     def inherit_appearance(child: dict[str, Any], link_id: str) -> None:
         if appearance_authoritative:
@@ -338,8 +365,17 @@ def flatten_tree(
                     suffix += 1
             appearance_materials.setdefault(inherited_id, dict(definition))
             remapped[material_id] = inherited_id
+        child_root = (child.get("assembly") or {}).get("root")
+        child_root_id = str(child_root.get("id") or "") if isinstance(child_root, dict) else ""
         for occurrence_id, material_id in child_appearance["assignments"].items():
-            appearance_assignments[_rebase_id(link_id, occurrence_id)] = remapped[material_id]
+            # The child's root IS the link (a part child's one occurrence takes the link's
+            # id, as ``expand`` places it); every other node gets a provisional id.
+            key = link_id if occurrence_id == child_root_id else provisional(link_id, occurrence_id)
+            inherited_assignments[key] = remapped[material_id]
+
+    # Each node a link placed, under its provisional id (or the link's own): the linked
+    # tree and the node's token in it (``origins``).
+    placed_from: dict[str, tuple[str, str]] = {}
 
     def expand(node: dict[str, Any]) -> dict[str, Any] | None:
         node_type = str(node.get("nodeType") or "")
@@ -360,10 +396,16 @@ def flatten_tree(
             link_name = str(link.get("name") or node.get("name") or node_id)
             link_color = link.get("color")
             child_is_part = str(child.get("entryKind") or "") == "part"
+            child_root = (child.get("assembly") or {}).get("root")
+            child_root_id = str(child_root.get("id") or "") if isinstance(child_root, dict) else ""
+            if child_root_id:
+                placed_from[node_id] = (child_hash, child_root_id)
             for occ in child.get("occurrences") or []:
                 placed = dict(occ)
-                occ_id = str(occ.get("id") or "o1")
-                placed["id"] = _rebase_id(node_id, occ_id)
+                occ_id = str(occ.get("id") or "")
+                # The child's root IS the link: a part child's one occurrence takes the
+                # link's id and name (the label the parent gave the placement).
+                placed["id"] = node_id if occ_id == child_root_id else provisional(node_id, occ_id)
                 placed["transform"] = compose_transforms(placement, occ.get("transform"))
                 component = (child.get("components") or {}).get(str(occ.get("component") or "")) or {}
                 # A root color on a materialized Compound is inherited only by
@@ -374,15 +416,14 @@ def flatten_tree(
                     child_is_part or (occ.get("color") is None and component.get("color") is None)
                 ):
                     placed["color"] = link_color
-                if occ_id == "o1":
-                    # A part child is ONE occurrence, its root: it takes the
-                    # link's name (the label the parent gave the placement).
+                if occ_id == child_root_id:
                     placed["name"] = link_name
                 occurrences.append(placed)
 
             def rebase(sub: dict[str, Any]) -> dict[str, Any]:
                 out = dict(sub)
-                out["id"] = _rebase_id(node_id, str(sub.get("id") or "o1"))
+                out["id"] = provisional(node_id, str(sub.get("id") or ""))
+                placed_from[out["id"]] = (child_hash, str(sub.get("id") or ""))
                 if sub.get("children"):
                     out["children"] = [rebase(c) for c in sub["children"]]
                     out["leafPartIds"] = [leaf for c in out["children"] for leaf in c.get("leafPartIds", [c["id"]])]
@@ -390,12 +431,13 @@ def flatten_tree(
                     out["leafPartIds"] = [out["id"]]
                 return out
 
-            child_root = (child.get("assembly") or {}).get("root")
             if isinstance(child_root, dict):
                 rebased = rebase(child_root)
                 rebased["name"] = str(link.get("name") or node.get("name") or rebased.get("name") or node_id)
                 rebased["nodeType"] = "subassembly" if rebased.get("children") else "part"
                 rebased["id"] = node_id
+                if not rebased.get("children"):
+                    rebased["leafPartIds"] = [node_id]
                 return rebased
             # A part child: one leaf occurrence, rebased to the link id.
             return {"id": node_id, "name": str(link.get("name") or node.get("name") or node_id), "nodeType": "part", "leafPartIds": [node_id], "children": []}
@@ -419,6 +461,20 @@ def flatten_tree(
     descriptor["components"] = components
     root = (tree.get("assembly") or {}).get("root")
     expanded_root = expand(root) if isinstance(root, dict) else None
+    if expanded_root is not None and links:
+        # Re-root: every id of the flattened tree, minted from the flattened structure.
+        mapping = assign_tokens(expanded_root, occurrences, [], label=tree.get("label"))
+        retokened = retoken(
+            {"occurrences": occurrences, "links": [], "assembly": {"root": expanded_root},
+             "appearance": {"materials": {}, "assignments": inherited_assignments}},
+            mapping,
+        )
+        occurrences, expanded_root = retokened["occurrences"], retokened["assembly"]["root"]
+        inherited_assignments = retokened["appearance"]["assignments"]
+        if origins is not None:
+            origins.update({mapping[node]: source for node, source in placed_from.items() if node in mapping})
+    for occurrence_id, material_id in inherited_assignments.items():
+        appearance_assignments.setdefault(occurrence_id, material_id)
     descriptor["occurrences"] = occurrences
     appearance = normalize_appearance({
         "materials": appearance_materials,
@@ -449,8 +505,8 @@ def _finite_number(value: Any) -> bool:
 def _validate_structure(tree: Any, *, native: bool = False) -> None:
     if type(tree) is not dict or tree.get("kind") != TREE_KIND or tree.get("schemaVersion") != TREE_SCHEMA:
         raise ValueError("unsupported geometry tree schema")
-    if "surfaceProducer" in tree:
-        raise ValueError("geometry tree contains a surface producer")
+    if "producer" in tree:
+        raise ValueError("geometry tree contains a producer")
     if "appearance" in tree:
         from cadgen._internal.source_sidecar import normalize_appearance
 
@@ -461,15 +517,19 @@ def _validate_structure(tree: Any, *, native: bool = False) -> None:
         raise ValueError("invalid geometry tree metadata")
     if type(tree.get("components")) is not dict or type(tree.get("occurrences")) is not list or type(tree.get("links")) is not list:
         raise ValueError("invalid geometry tree tables")
+    from cadgen._internal.tree_tokens import is_occurrence_token
     from cadgen.store.objects import is_object_hash
     for link in tree["links"]:
         if type(link) is not dict or not is_object_hash(link.get("tree")):
             raise ValueError("invalid linked tree identity")
+    for entry in tree["components"].values():
+        if type(entry) is not dict:
+            raise ValueError("invalid geometry component")
     ids = set()
     occurrence_ids = {row.get("id") for row in tree["occurrences"] if type(row) is dict and type(row.get("id")) is str}
     for row in [*tree["occurrences"], *tree["links"]]:
-        if type(row) is not dict or type(row.get("id")) is not str or not row["id"] or row["id"] in ids:
-            raise ValueError("invalid or duplicate occurrence/link ID")
+        if type(row) is not dict or not is_occurrence_token(row.get("id")) or row["id"] in ids:
+            raise ValueError("invalid or duplicate occurrence/link token")
         ids.add(row["id"])
         transform = row.get("transform")
         if type(transform) is not list or len(transform) != 16 or any(
@@ -489,7 +549,7 @@ def _validate_structure(tree: Any, *, native: bool = False) -> None:
     represented = set()
     while pending:
         node = pending.pop()
-        if type(node) is not dict or type(node.get("id")) is not str or not node["id"] or node["id"] in seen or node.get("nodeType") not in {"part", "assembly", "subassembly", "link"}:
+        if type(node) is not dict or not is_occurrence_token(node.get("id")) or node["id"] in seen or node.get("nodeType") not in {"part", "assembly", "subassembly", "link"}:
             raise ValueError("invalid assembly structure")
         seen.add(node.get("id"))
         children = node.get("children")
@@ -591,7 +651,7 @@ def _reset_metadata_capture_cache() -> None:
         _METADATA_CAPTURE_CACHE.clear()
         _METADATA_CAPTURE_CACHE_SIZE = 0
         _VALIDATED_COMPONENTS.clear()
-        _VALIDATED_SURFACES.clear()
+        _VALIDATED_OBJECTS.clear()
     _reset_verified()
 
 
@@ -639,8 +699,8 @@ def _capture(
     it did read. A native capture reads every object, since it owns the bytes,
     and remembers what it verified all the same.
     """
-    from cadgen._internal.component_package import canonical_json_bytes, validate_geometry_component
-    from cadgen.store.surfaces import validate_surface_bytes
+    from cadgen._internal.component_package import canonical_json_bytes, read_lineage, validate_geometry_component
+    from cadgen._internal.topology_facts import read_topology_facts
 
     cache_key = _metadata_capture_key(tree_hash)
     flight = None
@@ -730,19 +790,21 @@ def _capture(
         else:
             settled = True
         paths.add(key)
-        if entry["kind"] == "eager-only":
-            surf = entry["eagerSurface"]
-            known = surf in _VALIDATED_SURFACES
-            key = held(surf) if known and not retain_payloads else None
+        for field, read in (("topology", read_topology_facts), ("lineage", read_lineage)):
+            digest = entry.get(field)
+            if not digest:
+                continue
+            known = digest in _VALIDATED_OBJECTS
+            key = held(digest) if known and not retain_payloads else None
             if key is None:
-                payload, key, surf_settled = verified(surf)
+                payload, key, object_settled = verified(digest)
                 if not known:
-                    validate_surface_bytes(payload)
-                    _note_validated(_VALIDATED_SURFACES, surf)
+                    read(payload)
+                    _note_validated(_VALIDATED_OBJECTS, digest)
                 if retain:
-                    captured[surf] = payload
+                    captured[digest] = payload
                 del payload
-                settled = settled and surf_settled
+                settled = settled and object_settled
             paths.add(key)
         return settled
 

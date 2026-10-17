@@ -11,8 +11,8 @@ import { previewDisplaySettings } from "../view-settings/viewerDisplaySettings.j
 // responsive.
 //
 // PREVIEW is for looking at it: no picking, overlays or tool effects, the routines playing and
-// the camera orbiting. It is drawn one scene-quality tier up (finer tessellation, a higher idle
-// pixel ratio, and at the top tier larger shadow and environment maps), and keeps its full pixel
+// the camera orbiting. It is drawn one scene-quality tier up (a higher idle pixel ratio, and at
+// the top tier larger shadow and environment maps, at the same meshes), and keeps its full pixel
 // ratio while it moves: an orbit never rests, so the interaction drop would be all it ever showed.
 export const VIEWER_RENDER_PROFILE = Object.freeze({ TOOLS: "tools", PREVIEW: "preview" });
 

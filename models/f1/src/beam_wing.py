@@ -1,7 +1,7 @@
 """F1 part model: beam wing.
 
 The geometry `lib/rear_wing.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.18`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#beam_wing`; rebuild `f1.py`
 to pick up a change here.
 """
 

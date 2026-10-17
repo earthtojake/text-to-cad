@@ -507,9 +507,11 @@ function acuteAngleDegrees(alignment) {
  * What a single selected entity is worth on its own — length, area, radius —
  * taken from the exact values the topology computed rather than from the
  * tessellation. This is the half of a CAD measure tool that answers "how big is
- * this thing" before any second pick is made.
+ * this thing" before any second pick is made. A face's area is cadgen's exact measure of it, which
+ * the view asks for when the face is pointed at: `faceArea` is its state, and `{state: "ready",
+ * area}` reports it.
  */
-export function entityMeasurementFromPick(pick) {
+export function entityMeasurementFromPick(pick, { faceArea = null } = {}) {
   if (pick?.snapKind !== "edge" && pick?.snapKind !== "face") {
     return null;
   }
@@ -538,7 +540,7 @@ export function entityMeasurementFromPick(pick) {
     return compactEntity({
       selectorType: "face",
       typeLabel: surfaceType || "face",
-      area: finiteNumber(pickData.area),
+      area: faceArea?.state === "ready" ? finiteNumber(faceArea.area) : null,
       radius,
       diameter: radius === null ? null : radius * 2,
       center: isFinitePoint(params.center) ? params.center.slice(0, 3) : null

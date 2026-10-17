@@ -9,13 +9,16 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("skills/cad/scripts")
 
-from tests.python.support.tmp_root import CAD_TEST_TMP_ROOT, temporary_directory
-
-
-IGNORED_TEST_ROOT = CAD_TEST_TMP_ROOT
+from tests.python.support.tmp_root import RetryingTemporaryDirectory, temporary_directory
+from tests.python.support.warm_daemon import verified
 
 
 class IsolatedCadRoots:
+    """A test's own cwd, workspace and store, every one of them removed only once the
+    verify of every STEP a build saved into the store has answered (``warm_daemon.verified``):
+    a build through a daemon returns before its verify, which reads the file and writes
+    the store, so a workspace or store removed at once leaves it a vanished file."""
+
     def __init__(self, testcase: unittest.TestCase, *, prefix: str) -> None:
         self._tempdir = temporary_directory(prefix=prefix)
         testcase.addCleanup(self._tempdir.cleanup)
@@ -50,9 +53,25 @@ class IsolatedCadRoots:
                 os.environ["CADGEN_CACHE_DIR"] = previous_cache_dir
 
         testcase.addCleanup(restore_cache_dir)
+        # Registered last, so it runs first: before the cwd, the store's name and the root go.
+        testcase.addCleanup(verified, self.cache_dir)
 
     def temporary_cad_directory(self, *, prefix: str) -> tempfile.TemporaryDirectory[str]:
-        return tempfile.TemporaryDirectory(prefix=prefix, dir=self.cad_root)
+        """A workspace under the test's cwd, removed only once the store's verifies answered."""
+        return _Workspace(self.cache_dir, prefix=prefix, dir=self.cad_root)
+
+
+class _Workspace(RetryingTemporaryDirectory):
+    """A workspace a test builds into: its cleanup -- a ``tearDown``'s explicit call, a
+    ``with`` block's exit -- waits for the verify of every STEP saved to ``store`` first."""
+
+    def __init__(self, store: Path, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.store = store
+
+    def cleanup(self) -> None:
+        verified(self.store)
+        super().cleanup()
 
 
 class ClassCadRoots:

@@ -39,7 +39,7 @@ it('poses the model from the clock while playing, without rendering a component 
 
 it('a pass React re-runs mid-play draws the clock, never the time playback started from', () => {
   // The owner's state keeps the time playback started at (0 here: a routine that starts at rest)
-  // while the clock moves on. A detail swap or a progressive publish re-runs the pass mid-play, and
+  // while the clock moves on. A progressive publish re-runs the pass mid-play, and
   // the frame React draws must be the one the next tick draws, or the rest pose flashes.
   const clock = createAnimationClock();
   const frameRef = { current: vi.fn() as any };

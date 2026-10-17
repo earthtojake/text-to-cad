@@ -2,33 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ENTRY_ICON_KIND, entryIconKind } from './entryIconKind.js';
 
-test("how a model was produced changes nothing about its icon", () => {
-  const generatedAssembly = {
-    file: "mechanisms/table.step",
-    kind: "assembly",
-    sourceUrl: "/mechanisms/table.step.json"
-  };
-  const importedAssembly = { file: "mechanisms/table.step", kind: "assembly" };
-  const generatedPart = {
-    file: "parts/bracket.step",
-    kind: "part",
-    sourceUrl: "/parts/bracket.step.json"
-  };
-  const importedPart = { file: "parts/bracket.step", kind: "part" };
-
-  // Generated and imported read exactly alike: nothing distinguishes them.
-  assert.equal(
-    entryIconKind(generatedAssembly, { sourceFormat: "step" }),
-    entryIconKind(importedAssembly, { sourceFormat: "step" })
-  );
-  assert.equal(entryIconKind(generatedAssembly, { sourceFormat: "step" }), ENTRY_ICON_KIND.STEP);
-  assert.equal(
-    entryIconKind(generatedPart, { sourceFormat: "step" }),
-    entryIconKind(importedPart, { sourceFormat: "step" })
-  );
-  assert.equal(entryIconKind(generatedPart, { sourceFormat: "step" }), ENTRY_ICON_KIND.STEP);
-});
-
 test("a STEP part and a STEP assembly share one file icon", () => {
   const part = entryIconKind({ file: "a.step", kind: "part" }, { sourceFormat: "step" });
   const assembly = entryIconKind({ file: "b.step", kind: "assembly" }, { sourceFormat: "step" });

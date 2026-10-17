@@ -2,7 +2,7 @@
 
 A sub-assembly of the car: the group `lib/lighting.py` builds, as one model with
 its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.3`; rebuild `hypercar.py` to pick up a change here.
+`#lighting`; rebuild `hypercar.py` to pick up a change here.
 """
 
 from __future__ import annotations

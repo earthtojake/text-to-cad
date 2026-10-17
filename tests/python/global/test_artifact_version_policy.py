@@ -8,9 +8,9 @@ it references. Split across two numbers, a fix ships half applied: the descripto
 advances while content-addressed payloads are reused unchanged, and the package
 reports itself current while serving the old bytes.
 
-The second: ``STEP_TOPOLOGY_SCHEMA_VERSION`` is a Python->JS wire contract, and the
-JS client throws on a mismatch. It is declared once in each language, so nothing
-but this test stops the two from drifting -- which is the same
+The second: ``SELECTOR_TABLE_SCHEMA_VERSION`` is a Python->JS wire contract, and the
+page refuses a table of another schema. It is declared once in each language, so
+nothing but this test stops the two from drifting -- which is the same
 "a second hand-copied number is how the two drift" failure that put the package
 version in a stdlib-only module in the first place.
 """
@@ -25,21 +25,21 @@ from tests.python.support.paths import REPO_ROOT, add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
+from cadgen._internal.selector_table import SELECTOR_TABLE_SCHEMA_VERSION
 
 ROOT = REPO_ROOT
 
 
-class TopologySchemaVersionMirrorTest(unittest.TestCase):
-    def test_python_and_js_declare_the_same_topology_schema_version(self) -> None:
-        source = (ROOT / "packages/core/src/common/stepTopology.mjs").read_text(encoding="utf-8")
-        match = re.search(r"STEP_TOPOLOGY_SCHEMA_VERSION\s*=\s*(\d+)", source)
-        self.assertIsNotNone(match, "@text-to-cad/core must declare STEP_TOPOLOGY_SCHEMA_VERSION")
+class SelectorTableSchemaVersionMirrorTest(unittest.TestCase):
+    def test_python_and_js_declare_the_same_selector_table_schema_version(self) -> None:
+        source = (ROOT / "packages/core/src/lib/parts/selectorTable.js").read_text(encoding="utf-8")
+        match = re.search(r"^export const SELECTOR_TABLE_SCHEMA_VERSION = (\d+);$", source, re.MULTILINE)
+        self.assertIsNotNone(match, "@text-to-cad/core must declare SELECTOR_TABLE_SCHEMA_VERSION")
         self.assertEqual(
-            STEP_TOPOLOGY_SCHEMA_VERSION,
+            SELECTOR_TABLE_SCHEMA_VERSION,
             int(match.group(1)),
-            "cadgen and @text-to-cad/core disagree on STEP_topology schemaVersion; the JS client throws "
-            "on a mismatch, so a bump has to land in both languages together",
+            "cadgen and @text-to-cad/core disagree on the selector table's schemaVersion; the page refuses "
+            "a table of another schema, so a bump has to land in both languages together",
         )
 
 
@@ -110,18 +110,19 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
             (ROOT / "packages/cadgen/src/cadgen/viewer/http_app.py").read_text(encoding="utf-8"),
         )
 
-    def test_the_gltf_container_version_is_declared_once(self) -> None:
-        # GLB_VERSION is the glTF 2.0 spec's container version, not ours to bump, and
-        # two copies of an external constant is two places to get it wrong.
-        declarations = [
-            path
-            for path in (ROOT / "packages/cadgen/src/cadgen/_internal").glob("*.py")
-            if re.search(r"^GLB_VERSION\s*=", path.read_text(encoding="utf-8"), re.MULTILINE)
-        ]
-        self.assertEqual(
-            ["glb_topology.py"],
-            sorted(path.name for path in declarations),
+    def test_the_glb_container_is_declared_once(self) -> None:
+        # The container's magic, version and chunk types are the glTF 2.0 spec's, not ours
+        # to bump, and two copies of an external constant is two places to get it wrong:
+        # every GLB cadgen writes or reads is framed with cadgen.store.meshes' constants,
+        # so the magic appears in that one source.
+        package = ROOT / "packages/cadgen/src/cadgen"
+        magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)
+        declarations = sorted(
+            path.relative_to(package).as_posix()
+            for path in package.rglob("*.py")
+            if magic.search(path.read_text(encoding="utf-8"))
         )
+        self.assertEqual(["store/meshes.py"], declarations)
 
 
 if __name__ == "__main__":

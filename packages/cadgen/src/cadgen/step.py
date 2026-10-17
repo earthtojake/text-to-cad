@@ -17,8 +17,7 @@ Two verbs make documents, and the difference is what lands on disk:
   which is what tells the two verbs apart at the command line.
 
 Model scripts are RUN, never passed here: ``python model.py`` is the one source
-door (README law 7). Every verb takes a DOCUMENT and refuses a ``.py`` by
-naming the run.
+door (README law 7). Every verb takes a DOCUMENT.
 
 Import discipline: nothing here may pull in OCP/build123d at module scope. A
 model script pays this import before its freshness gate runs, and the whole
@@ -89,7 +88,6 @@ def build(
     *,
     kinematics: str | dict | None = None,
     materials: str | dict | None = None,
-    animation: str | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> BuildResult:
@@ -103,8 +101,9 @@ def build(
     in a model script. Vendor metadata (PMI, GD&T) does not survive; a model
     that keeps evolving belongs in a script instead.
 
-    Re-running is a no-op. Editing only declared materials, animation or
-    kinematics refreshes OUT's sidecar without re-emitting STEP geometry.
+    Re-running is a no-op. Editing only declared materials or kinematics
+    refreshes OUT's sidecar without re-emitting STEP geometry. Animation is
+    declared by a model script (``@step(animation=...)``), not here.
 
     target: the STEP/STP document to read.
     out: the STEP/STP document to write. Required, and never TARGET itself.
@@ -113,15 +112,12 @@ def build(
         decorator takes.
     materials: named material definitions and component assignments, as inline
         JSON or a .json path, using the same vocabulary as @step materials=.
-    animation: a JavaScript file path or self-contained ES module source exporting
-        clips; embedded into OUT's JSON sidecar.
     force: re-emit even when the freshness gate says OUT is current.
     verbose: show detailed progress and timing on stderr.
     """
     from cadgen._internal.step_reemit import (
         load_kinematics_space,
         load_materials_config,
-        load_animation_source,
         reemit_step_document,
         resolve_output,
     )
@@ -135,7 +131,6 @@ def build(
         destination,
         kinematics_def=kinematics_def,
         materials=load_materials_config(materials, where=where),
-        animation=load_animation_source(animation, where=where, document=destination),
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )
@@ -146,12 +141,6 @@ def build(
         skipped=bool(payload.get("skipped")),
         sidecar_only=bool(payload.get("sidecarOnly")),
     )
-
-
-def __getattr__(name: str):
-    if name in {"inspect", "INSPECTIONS"}:
-        raise ImportError("step.inspect has been removed; use cadgen.read_scene and cadgen.geometry in a Python script")
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 callable_namespace(__name__, "step")

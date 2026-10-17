@@ -1,6 +1,3 @@
-import { surfTessellationCacheKey } from "@text-to-cad/core/lib/renderAssetClient.js";
-import { lodTessellationForLevel, normalizeLodLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
-
 export function matchingDisplayedPackageContext(displayed, meshState, file) {
   const expectedFile = String(file || "");
   if (!displayed?.complete || !meshState?.assemblyInteractionReady) return null;
@@ -12,11 +9,12 @@ export function matchingDisplayedPackageContext(displayed, meshState, file) {
     : null;
 }
 
-// Keep decoded geometry that is still visible alive across an atomic revision
-// swap. D already binds the exact geometry and surface producer. The prior
-// runtime ticket supplies O when the new geometry descriptor intentionally
-// omits display artifacts; an explicit new O must still agree.
-export function retainedComponentMeshesForRevision({
+// Keep decoded geometry that is still visible alive across an atomic revision swap: a component
+// whose part is one already drawn (its key binds the exact geometry and producer) keeps that part's
+// mesh, and the row it was drawn from, whatever its id in the new tree -- a part is named by its
+// geometry (STORE.md 2), so a build's preview and the file it saves name one body by different ids
+// and one part, and nothing is read twice. Keyed by the new tree's component id.
+export function retainedComponentsForRevision({
   previous,
   descriptor,
   meshUrl,
@@ -24,22 +22,15 @@ export function retainedComponentMeshesForRevision({
   if (!previous?.descriptor || !previous?.meshUrl || !descriptor || !meshUrl) {
     return {};
   }
+  const byPart = new Map();
+  for (const [cid, row] of Object.entries(previous.componentIdentityByCid || {})) {
+    const meshData = previous.componentMeshDataByCid?.[cid];
+    if (row?.part && meshData && !byPart.has(row.part)) byPart.set(row.part, { meshData, row });
+  }
   const retained = {};
   for (const [cid, component] of Object.entries(descriptor.components || {})) {
-    const oldComponent = previous.descriptor.components?.[cid];
-    const oldIdentity = previous.componentIdentityByCid?.[cid] || oldComponent;
-    const meshData = previous.componentMeshDataByCid?.[cid];
-    if (!oldComponent?.surfaceInput || oldComponent.surfaceInput !== component?.surfaceInput
-        || !oldIdentity?.surfaceObject || !meshData) continue;
-    const level = normalizeLodLevel(
-      previous.componentLodLevelByCid?.[cid] ?? meshData.lodLevel,
-    );
-    if (meshData.lodLevel != null && normalizeLodLevel(meshData.lodLevel) !== level) continue;
-    const tessellation = lodTessellationForLevel(level);
-    const nextIdentity = { ...component, surfaceObject: component.surfaceObject || oldIdentity.surfaceObject };
-    const oldKey = surfTessellationCacheKey("", tessellation, oldIdentity);
-    const nextKey = surfTessellationCacheKey("", tessellation, nextIdentity);
-    if (oldKey === nextKey) retained[cid] = meshData;
+    const kept = component?.part ? byPart.get(component.part) : null;
+    if (kept) retained[cid] = kept;
   }
   return retained;
 }

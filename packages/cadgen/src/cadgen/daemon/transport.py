@@ -87,16 +87,99 @@ def state_dir() -> Path:
     return _state_dir()
 
 
+# A Unix socket path must fit sockaddr_un: 104 bytes with its NUL on macOS, 108 on Linux.
+# An address this long or longer is not bound; the margin keeps a stale ".sock" sibling
+# name or a platform's off-by-one from mattering.
+_SOCKET_PATH_LIMIT = 100
+
+
+class AddressUnusable(OSError):
+    """No daemon can listen at this address. The message names why, and the remedy."""
+
+
+def _fits(path: str | os.PathLike[str]) -> bool:
+    return len(os.fsencode(str(path))) < _SOCKET_PATH_LIMIT
+
+
+def short_folder() -> Path:
+    """Where a daemon's socket goes when its state directory is too deep for one.
+
+    A folder of this user's own in ``/tmp``, the same for every client: never
+    ``TMPDIR``, which differs between the processes that must all find one daemon.
+    It holds sockets only (:func:`beside`), and no one else may own or enter it
+    (:func:`claim_folder`).
+    """
+    return Path("/tmp") / f"cadgen-{os.getuid()}"
+
+
 def address_for(key: str) -> str:
     """The listening address for a given daemon identity.
 
     A pipe name is not a filesystem path -- it lives in the kernel's pipe namespace, which
     conveniently also sidesteps the ~104 character ceiling on Unix socket paths that the
     hashed name was working around in the first place.
+
+    On POSIX the socket lives in the state directory when its path fits a socket address.
+    When the state directory is too deep (``CADGEN_DAEMON_STATE_DIR``, or a deep ``TMPDIR``)
+    it goes in :func:`short_folder` under a name derived from the path it would have had,
+    so every client of that state directory and identity finds the same daemon. The key,
+    the locks and the log stay in the state directory either way.
     """
     if os.name == "nt":
         return rf"\\.\pipe\cadgen-daemon-v{PROTOCOL}-{key}"
-    return str(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.sock")
+    natural = state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.sock"
+    if _fits(natural):
+        return str(natural)
+    digest = hashlib.sha256(os.fsencode(str(natural))).hexdigest()[:16]
+    return str(short_folder() / f"cadgen-daemon-v{PROTOCOL}-{digest}.sock")
+
+
+def beside(address: str, name: str) -> Path:
+    """Where a file named ``name`` that belongs to a POSIX address lives: beside its socket,
+    or in the state directory when the socket is in :func:`short_folder`, which holds
+    sockets only -- a key there would be one more thing for a stranger to plant."""
+    folder = Path(address).parent
+    return (state_dir() if folder == short_folder() else folder) / name
+
+
+def claim_folder(address: str, *, create: bool) -> None:
+    """Make sure a socket in :func:`short_folder` is reachable by this user alone.
+
+    The folder sits in a ``/tmp`` every user shares under a name anyone can predict, so
+    another user could make it first. One that is not a folder of this user's is never
+    used: that raises :class:`AddressUnusable`, naming the remedy. A folder of ours that
+    others can enter is closed. ``create`` (the daemon, before it binds) makes it first;
+    a client only checks one that exists, since a missing folder just means no daemon yet.
+    Any other address is left alone.
+    """
+    if os.name == "nt":
+        return
+    folder = Path(address).parent
+    if folder != short_folder():
+        return
+    remedy = ("set CADGEN_DAEMON_STATE_DIR to a shorter folder, so the geometry service's "
+              "socket fits in it")
+    if create:
+        try:
+            os.mkdir(folder, 0o700)
+        except FileExistsError:
+            pass
+        except OSError as error:
+            raise AddressUnusable(f"The geometry service could not make {folder} for its socket "
+                                  f"({error.strerror or error}); {remedy}.") from error
+    try:
+        info = os.lstat(folder)
+    except FileNotFoundError:
+        if create:
+            raise AddressUnusable(f"{folder} vanished as the geometry service made it; {remedy}.") from None
+        return
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise AddressUnusable(
+            f"The geometry service's socket belongs in {folder}, which is not a folder of this "
+            f"user's; {remedy}."
+        )
+    if stat.S_IMODE(info.st_mode) & 0o077:
+        os.chmod(folder, 0o700)
 
 
 def private_address(key: str) -> str:
@@ -113,7 +196,7 @@ def private_address(key: str) -> str:
     # tempfile honors TMPDIR, which callers may deliberately point at a deep
     # private profile. Keep enough room for macOS' 104-byte sockaddr_un limit;
     # the random authenticated name remains private even in the shared /tmp.
-    if len(os.fsencode(address)) >= 100:
+    if not _fits(address):
         address = Path("/tmp") / name
     return str(address)
 
@@ -121,7 +204,7 @@ def private_address(key: str) -> str:
 def _authkey_path(address: str) -> Path:
     """The credential owned by exactly one daemon address."""
     if os.name != "nt":
-        return Path(str(address) + ".key")
+        return beside(address, Path(address).name + ".key")
     return state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.key"
 
 
@@ -402,7 +485,9 @@ class AuthenticationError(OSError):
 def connect(address: str, authkey: bytes) -> Channel:
     """Open a channel to a listening daemon. Raises OSError when there is none -- including one
     that closes the connection while it is being opened, as a daemon on its way out does (its
-    version changed, or it idled out): the caller then spawns or waits for its successor."""
+    version changed, or it idled out): the caller then spawns or waits for its successor.
+    :class:`AddressUnusable` when no daemon could ever listen there (``claim_folder``)."""
+    claim_folder(address, create=False)
     try:
         return Channel(mpc.Client(address, family=_family(), authkey=authkey))
     except EOFError as exc:
@@ -744,11 +829,14 @@ def keys_match(left: bytes | None, right: bytes | None) -> bool:
 
 __all__ = [
     "PROTOCOL",
+    "AddressUnusable",
     "Channel",
     "AuthenticationError",
     "Server",
     "address_for",
     "address_is_stale",
+    "beside",
+    "claim_folder",
     "clear_address",
     "connect",
     "ensure_authkey",
@@ -759,6 +847,7 @@ __all__ = [
     "daemon_lock",
     "spawn_lock",
     "read_authkey",
+    "short_folder",
     "state_dir",
     "supported",
 ]

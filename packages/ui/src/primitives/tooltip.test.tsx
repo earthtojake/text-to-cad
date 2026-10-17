@@ -23,6 +23,19 @@ it('uses one short styled hint, dismisses on press, and suppresses disabled or s
   hover(screen.getByRole('button'));
   expect(screen.queryByRole('tooltip')).toBeNull();
 });
+it('an expanded trigger hints nothing, its popup being up, but a disclosure keeps its hint while what it shows is shown', () => {
+  vi.useFakeTimers();
+  const { rerender } = render(<ToolbarButton label="Display" aria-expanded={true}>Icon</ToolbarButton>);
+  hover(screen.getByRole('button'));
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  rerender(<ToolbarButton label="Hide tools" disclosure aria-expanded={true}>Icon</ToolbarButton>);
+  fireEvent.pointerLeave(screen.getByRole('button'));
+  hover(screen.getByRole('button', { name: 'Hide tools' }));
+  expect(screen.getByRole('tooltip').textContent).toBe('Hide tools');
+  // Pressed, it still dismisses its hint, as every hint does.
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Hide tools' }));
+  expect(screen.queryByRole('tooltip')).toBeNull();
+});
 it('shows full text only when a label is actually clipped', () => {
   vi.useFakeTimers();
   render(<TooltipHint content="Full part name" overflowOnly><span data-testid="label">Full part name</span></TooltipHint>);

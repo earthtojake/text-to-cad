@@ -98,8 +98,8 @@ pointer cursor, and no tooltip.
 
 At the right, only what a host or a file adds: the host's update button, a renderer's
 actions, the host's Full size, where the host shows the view small, and last the box for
-the renderer's own view controls, which FileViewer hands it as `navbarSlot` (a 3D view's
-Display and Preview). Last, so that a renderer showing its file fullscreen, which puts the
+the renderer's own view controls, which FileViewer hands it as `navbarSlot` (a 3D view's:
+a STEP's Select modes while Select is the tool, Display and Preview). Last, so that a renderer showing its file fullscreen, which puts the
 navbar away, can draw its own controls where they sat.
 
 The explorer (`navigation/FolderExplorer.jsx`) is a popover under the file's name, a

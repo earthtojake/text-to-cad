@@ -1,7 +1,7 @@
 """The two sides of the store — a law (packages/cadgen/STORE.md §2).
 
-``objects/`` and ``index/document`` are the ARTIFACT side; ``index/model`` and
-``index/output`` are the CODE side. Three properties, one test each, over a
+``objects/`` and ``index/document`` are the ARTIFACT side; ``index/model``,
+``index/output`` and ``index/provenance`` are the CODE side. Three properties, one test each, over a
 real link trio (a pin, an arm placing the pin twice, a robot placing the arm
 twice and the pin once) built through the real pipeline:
 
@@ -9,11 +9,12 @@ twice and the pin once) built through the real pipeline:
 2. no reader consults a record — the doors, the viewer (catalog, render
    path AND status), and the mesh ledger find a tree through ``index/document``
    alone; the viewer has no exception;
-3. records are deletable — ``rm -rf index/model index/output`` loses no
-   artifact, and the rebuild re-creates the records without a new object;
+3. records are deletable — ``rm -rf index/model index/output index/provenance``
+   loses no artifact, only ``store where`` says it no longer knows, and the
+   rebuild re-creates the records and the entries without a new object;
 4. copied document bytes reuse the same canonical tree without a producer
    record, a text STEP parse, or a compile;
-5. the document renders identically with NO source and with BROKEN source —
+5. the document renders the same with NO source and with BROKEN source —
    README law 1, over the sidecar-driven surfaces (pose, clip frame, label
    focus, animated GLB) that properties 2 and 3 do not reach.
 """
@@ -31,8 +32,20 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import numpy as np
+
+from tests.python.support.mesh_geometry import (
+    glb_accessor,
+    glb_document,
+    glb_mesh_triangles,
+    glb_without_mesh_data,
+    mesh_deviation,
+    tolerance_of,
+)
 from tests.python.support.paths import add_repo_path
+from tests.python.support.png import largest_block_difference, read_png
 from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.warm_daemon import verified
 
 add_repo_path("packages/cadgen/src")
 
@@ -75,6 +88,7 @@ if __name__ == "__main__":
 '''
 
 ROBOT = '''
+import cadgen
 from cadgen import label_shape, step
 from cadgen import build123d as bd
 from arm import arm
@@ -85,13 +99,14 @@ KINEMATICS = {
                "axis": {"origin": [0, 0, 10], "dir": [0, 0, 1]}, "limits": [-90, 90]}],
     "poses": {"turned": {"spin": 30}},
 }
-ANIMATION = r"""export const clips = { lift: {
-    label: "Lift the post", duration: 4, loop: true,
-    update(t, m) { m.get("post").translate([0, 0, 6 * t]); }
-}};"""
 
 
-@step(out="robot.step", kinematics=KINEMATICS, animation=ANIMATION)
+def lift(t, m):
+    m.get("#post").translate((0, 0, 6 * t))
+
+
+@step(out="robot.step", kinematics=KINEMATICS,
+      animation={"lift": cadgen.clip(lift, duration=4, label="Lift the post")})
 def robot():
     base = label_shape(bd.Box(60, 60, 3), "base")
     front = bd.Pos(0, 20, 5) * arm()
@@ -112,14 +127,14 @@ SCRIPTS = {"pin.py": PIN, "arm.py": ARM, "robot.py": ROBOT}
 
 @contextlib.contextmanager
 def forbid_record_reads():
-    """Fail the moment anything reads ``index/model`` or ``index/output``."""
+    """Fail the moment anything reads ``index/model``, ``index/output`` or ``index/provenance``."""
     import cadgen.store.index as index
     import cadgen.store.records as records
 
     real = index.read_entry
 
     def guarded(kind: str, key: str):
-        if kind in ("model", "output"):
+        if kind in ("model", "output", "provenance"):
             raise AssertionError(f"a reader consulted index/{kind} (STORE.md §2, the law)")
         return real(kind, key)
 
@@ -160,6 +175,7 @@ class TwoSidesLaw(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        verified(cls.cache)
         os.chdir(cls._previous_cwd)
         if cls._previous_cache is None:
             os.environ.pop("CADGEN_CACHE_DIR", None)
@@ -261,14 +277,23 @@ class TwoSidesLaw(unittest.TestCase):
 
     def test_property_3_records_are_deletable(self) -> None:
         from cadgen._internal import doors
-        from cadgen.store.records import read_record
+        from cadgen.store.provenance import read_provenance, where
         from cadgen.viewer import scanner, store_paths
+        from cadgen.store.records import read_record
 
         expected = self._document_trees()
         trees = set(self._trees())
+        for name in SCRIPTS:
+            self.assertIsNotNone(read_provenance(self.root / name), f"{name} has no provenance entry")
+        base = where(self.robot_step, "#base")
+        self.assertTrue(base.known, base.reason)
+        self.assertEqual(base.made["file"], "robot.py")
         shutil.rmtree(self.cache / "index" / "model")
         shutil.rmtree(self.cache / "index" / "output", ignore_errors=True)
+        shutil.rmtree(self.cache / "index" / "provenance")
         try:
+            # Only the one code-side question has lost its answer.
+            self.assertFalse(where(self.robot_step, "#base").known)
             with mock.patch("cadgen.daemon.executors.submit_compile", side_effect=AssertionError("a compile was submitted for a document whose tree exists")):
                 for name, tree in expected.items():
                     document = self.root / f"{name}.step"
@@ -292,8 +317,10 @@ class TwoSidesLaw(unittest.TestCase):
             self._build_all()
         for name in SCRIPTS:
             self.assertIsNotNone(read_record(self.root / name), f"{name} has no record after the rebuild")
+            self.assertIsNotNone(read_provenance(self.root / name), f"{name} has no provenance entry after the rebuild")
         self.assertEqual(expected, self._document_trees(), "the rebuild changed a tree hash")
         self.assertEqual(objects, self._objects(), "the rebuild wrote new objects")
+        self.assertTrue(where(self.robot_step, "#base").known)
 
     def test_property_4_copied_document_reuses_the_byte_addressed_tree(self) -> None:
         import hashlib
@@ -366,7 +393,7 @@ class TwoSidesLaw(unittest.TestCase):
         self.assertEqual(0, snapshot.returncode, snapshot.stderr)
         glb = _cli(
             "glb", "build", document, str(out_dir / "clip.glb"),
-            "--animation", '{"clip": "lift", "fps": 10, "seconds": 1}',
+            "--animation", '{"clip": "lift", "seconds": 1}',
             cwd=cwd, cache=cache,
         )
         self.assertEqual(0, glb.returncode, glb.stderr)
@@ -378,6 +405,43 @@ class TwoSidesLaw(unittest.TestCase):
         self.assertEqual(3, len(stills), "the three sidecar-driven stills are the same image")
         return produced
 
+    def _assert_same_still(self, expected: bytes, actual: bytes, name: str) -> None:
+        """The two stills show one scene: averaged over 4 x 4 pixel blocks they agree to
+        within 2 of 255 on every block and channel. Beside its source the document draws
+        the parts its build derived from the bodies it held; alone, the parts derived from
+        those bodies as read from the file -- one part each (README law 20) whose
+        triangles are cut another way, which moves a pixel or two along an edge (measured:
+        four pixels of 43,200, a block mean by 0.1). A pose not taken, a frame not played or
+        a focus not framed moves whole blocks by eighty and more."""
+        difference = largest_block_difference(read_png(expected), read_png(actual))
+        self.assertLessEqual(difference, 2.0, f"{name} shows another scene without its source "
+                             f"(a block of pixels differs by {difference:.1f} of 255)")
+
+    def _assert_same_animated_scene(self, expected: bytes, actual: bytes) -> None:
+        """The two animated GLBs are one scene: the same nodes, placements, materials and
+        animation (the sidecar's keyframes, byte for byte), and each mesh the same geometry
+        within the display tolerance. The meshes' bytes may differ: beside its source the
+        document draws the parts its build derived from the bodies it held; alone, the parts
+        derived from those bodies as read from the file -- one part each (README law 20),
+        meshed from other bytes (law 5: compared by geometry, never by file hash)."""
+        from cadgen.tessellation_policy import DISPLAY_TESSELLATION
+
+        (expected_document, expected_binary), (document, binary) = glb_document(expected), glb_document(actual)
+        self.assertEqual(glb_without_mesh_data(expected_document), glb_without_mesh_data(document),
+                         "the animated GLB's scene differs without its source")
+        for index, animation in enumerate(expected_document.get("animations", [])):
+            for sampler, actual_sampler in zip(animation["samplers"], document["animations"][index]["samplers"]):
+                for role in ("input", "output"):
+                    self.assertTrue(np.array_equal(glb_accessor(expected_document, expected_binary, sampler[role]),
+                                                   glb_accessor(document, binary, actual_sampler[role])),
+                                    "the baked animation's keyframes differ without their source")
+        expected_meshes, meshes = glb_mesh_triangles(expected_document, expected_binary), glb_mesh_triangles(document, binary)
+        self.assertEqual(sorted(expected_meshes), sorted(meshes))
+        for name, triangles in expected_meshes.items():
+            self.assertLessEqual(mesh_deviation(triangles, meshes[name]),
+                                 tolerance_of(DISPLAY_TESSELLATION["chordTolerance"], triangles, meshes[name]),
+                                 f"mesh {name} describes other geometry without its source")
+
     @unittest.skipUnless(shutil.which("node"), "the render runtimes need node")
     def test_property_5_a_document_renders_with_no_source_and_with_broken_source(self) -> None:
         """Law 1: deleting every ``.py`` must not change what renders.
@@ -387,8 +451,11 @@ class TwoSidesLaw(unittest.TestCase):
         a file that does not parse and the only companion module is the retired
         ``.step.js`` a renderer must ignore. Every sidecar-driven surface — a
         declared pose, a clip frame, a label focus, and a baked animated GLB —
-        has to come back byte-for-byte what the same commands produced beside
-        the source.
+        has to come back what the same commands produced beside the source: the
+        stills the same picture, the GLB the same scene with each mesh the same
+        geometry (beside its source the document draws the parts its build
+        derived from the bodies it held, alone the parts derived from those bodies
+        as the file holds them: one part each, README law 20, other mesh bytes).
         """
         reference = self._render_and_export("robot.step", cwd=self.root, cache=None)
 
@@ -405,7 +472,10 @@ class TwoSidesLaw(unittest.TestCase):
         isolated = self._render_and_export("robot.step", cwd=elsewhere, cache=isolated_cache)
 
         for name, expected in reference.items():
-            self.assertEqual(expected, isolated[name], f"{name} differs without its source")
+            if name == "clip.glb":
+                self._assert_same_animated_scene(expected, isolated[name])
+            else:
+                self._assert_same_still(expected, isolated[name], name)
 
         # Nothing ran or recorded Python: a compile keys its record on the
         # DOCUMENT, so every record in the isolated store is step-sourced.

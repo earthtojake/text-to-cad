@@ -6,10 +6,12 @@ test('capture context freezes revision and selected topology before encoding', a
   const resource = { kind: 'workspace-file', path: '/models/parts/widget.step', revision: 'v1' };
   let resolve;
   const capture = new Promise(done => { resolve = done; });
-  const context = createCadPromptContext({ resource, references: [{ selector: 'o1.f2,o1.e3', label: 'Selected edges' }], text: 'Round these', capture });
+  const face = 'o:3f2a9c1d7e5b/f:bracket.extrude1.3';
+  const edge = 'o:3f2a9c1d7e5b/e:bracket.fillet1.2';
+  const context = createCadPromptContext({ resource, references: [{ selector: `${face},${edge}`, label: 'Selected edges' }], text: 'Round these', capture });
   resource.revision = 'v2';
   assert.equal(context.parts[0].reference.resource.revision, 'v1');
-  assert.deepEqual(context.parts[0].reference.target, { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3'] });
+  assert.deepEqual(context.parts[0].reference.target, { kind: 'cad-selector', selectors: [face, edge] });
   assert.deepEqual(context.parts[2].about, ['reference-0']);
   assert.equal(context.parts[2].name, 'widget-view.png');
   assert.throws(() => { context.parts[0].reference.resource.path = '/models/other.step'; }, TypeError);

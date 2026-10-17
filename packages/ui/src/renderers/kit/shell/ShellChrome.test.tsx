@@ -23,7 +23,7 @@ import { viewerLinks } from '../../../../dist/file-viewer/navigation/links.js';
 import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
-import { TOOL_PANEL_REFERENCE_HEIGHT, TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
+import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
 import { PerspectiveProjectionIcon } from '../../../../dist/renderers/kit/camera/ProjectionModeIcons.js';
 
@@ -68,10 +68,11 @@ function navbarSlot() {
   return slot;
 }
 afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
-function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onFullscreenChange = vi.fn(), appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
+function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onFullscreenChange = vi.fn(), appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined, environment = undefined as object | undefined } = {}) {
   const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, notice, features,
     navbarSlot: navbarSlot(), onFullscreenChange, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
-  const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
+  const host = testHost(environment ? { environment } as any : {});
+  const element = () => <ViewerHostContext.Provider value={host}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
   return { ...view, preferences, remount: () => { view.unmount(); return render(element()); } };
@@ -88,7 +89,7 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
   if (release) fireEvent.pointerUp(handle, { pointerId: 1, clientX: 100 + dx, clientY: 100 + dy });
 }
 
-it('the chrome is inset from the viewer, every panel opens one width, the tree at half the stack and the Reference shorter, and nothing is stored until a person sizes one', () => {
+it('the chrome is inset from the viewer, every panel opens one width, a resizable one capped at the whole stack, and nothing is stored until a person sizes one', () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px in from the viewer's top and left, stopping 8px above the
   // cube in the bottom-left corner (itself 8px off the bottom).
@@ -96,9 +97,8 @@ it('the chrome is inset from the viewer, every panel opens one width, the tree a
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
   expect(TOOL_PANEL_WIDTH).toBe(164);
   expect([width('Harness tree'), width('Harness reference')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
-  expect(panel('Harness tree')!.style.maxHeight).toBe(`${STACK_HEIGHT / 2}px`);
-  expect(TOOL_PANEL_REFERENCE_HEIGHT).toBe(144);
-  expect(panel('Harness reference')!.style.maxHeight).toBe(`${TOOL_PANEL_REFERENCE_HEIGHT}px`);
+  // Each as tall as its content needs, up to all the room under the strip.
+  expect([panel('Harness tree')!.style.maxHeight, panel('Harness reference')!.style.maxHeight]).toEqual([`${STACK_HEIGHT}px`, `${STACK_HEIGHT}px`]);
   expect(layout(preferences)).toEqual({ panels: {}, collapsed: {}, closed: {} });
   // Two kinds of panel: the tree and the Reference are each the person's to size, by one grip in
   // their bottom-right corner (Quick Edit's, drawn inside the panel); a kept effect is fixed, at the
@@ -124,32 +124,32 @@ it("each resizable panel is sized by its corner alone, apart from every other: w
   const treeCorner = screen.getByRole('separator', { name: 'Resize harness tree' });
   drag(treeCorner, [100, -100], { release: false });
   // Mid-drag: the tree follows the corner, and nothing else moves; nothing is written yet.
-  expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 100, `${STACK_HEIGHT / 2 - 100}px`]);
+  expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 100, `${STACK_HEIGHT - 100}px`]);
   expect(treeCorner.hasAttribute('data-dragging')).toBe(true);
   expect([width('Harness reference'), width('Kept controls')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
   expect(preferences.writes).toBe(0);
   fireEvent.pointerUp(treeCorner, { pointerId: 1, clientX: 200, clientY: 0 });
   expect(preferences.writes).toBe(1);
-  expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT / 2 - 100 } });
+  expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT - 100 } });
   // The Reference, by its own corner: its size, and the tree's as it was.
   drag(screen.getByRole('separator', { name: 'Resize harness reference' }), [40, -60]);
   expect(preferences.writes).toBe(2);
-  expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT / 2 - 100 },
-    reference: { width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 60 } });
+  expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT - 100 },
+    reference: { width: TOOL_PANEL_WIDTH + 40, height: STACK_HEIGHT - 60 } });
   expect([width('Harness tree'), width('Harness reference'), panel('Harness reference')!.style.maxHeight])
-    .toEqual([TOOL_PANEL_WIDTH + 100, TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 60}px`]);
+    .toEqual([TOOL_PANEL_WIDTH + 100, TOOL_PANEL_WIDTH + 40, `${STACK_HEIGHT - 60}px`]);
   // From the keyboard, one axis a key: Left/Right the width, Up/Down the cap; Home and End both, to their bounds.
   fireEvent.keyDown(treeCorner, { key: 'ArrowLeft' });
   fireEvent.keyDown(treeCorner, { key: 'ArrowDown' });
-  expect(layout(preferences).panels.tree).toEqual({ width: TOOL_PANEL_WIDTH + 84, height: STACK_HEIGHT / 2 - 84 });
+  expect(layout(preferences).panels.tree).toEqual({ width: TOOL_PANEL_WIDTH + 84, height: STACK_HEIGHT - 84 });
   fireEvent.keyDown(treeCorner, { key: 'Home' });
   expect(layout(preferences).panels.tree).toEqual({ width: TOOL_PANEL_WIDTH, height: 64 });
   fireEvent.keyDown(treeCorner, { key: 'End' });
   expect(layout(preferences).panels.tree).toEqual({ width: VIEWER.width / 2, height: STACK_HEIGHT });
-  expect(layout(preferences).panels.reference).toEqual({ width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 60 });
+  expect(layout(preferences).panels.reference).toEqual({ width: TOOL_PANEL_WIDTH + 40, height: STACK_HEIGHT - 60 });
   remount();
   expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([VIEWER.width / 2, `${STACK_HEIGHT}px`]);
-  expect([width('Harness reference'), panel('Harness reference')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 60}px`]);
+  expect([width('Harness reference'), panel('Harness reference')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 40, `${STACK_HEIGHT - 60}px`]);
 
   // Position, by its corner too: its width and height in one write, the others as they were.
   preferences.update({ toolStack: { panels: {}, collapsed: {}, closed: {} } });
@@ -158,12 +158,12 @@ it("each resizable panel is sized by its corner alone, apart from every other: w
   const writes = preferences.writes;
   drag(screen.getByRole('separator', { name: 'Resize harness position' }), [60, -50]);
   expect(preferences.writes).toBe(writes + 1);
-  expect(layout(preferences).panels).toEqual({ position: { width: TOOL_PANEL_WIDTH + 60, height: STACK_HEIGHT / 2 - 50 } });
-  expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH, `${STACK_HEIGHT / 2}px`]);
+  expect(layout(preferences).panels).toEqual({ position: { width: TOOL_PANEL_WIDTH + 60, height: STACK_HEIGHT - 50 } });
+  expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH, `${STACK_HEIGHT}px`]);
   // Reset puts every size back.
   act(() => preferences.update({ toolStack: { panels: {}, collapsed: {}, closed: {} } }));
   expect([width('Harness tree'), width('Harness reference'), width('Harness position'), panel('Harness tree')!.style.maxHeight])
-    .toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH, `${STACK_HEIGHT / 2}px`]);
+    .toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH, `${STACK_HEIGHT}px`]);
 });
 
 it("the tree's X closes it, kept mounted, and marks Select; Select pressed while it is the tool opens it again, and from another tool only takes Select up; closed is kept across a remount", () => {
@@ -230,9 +230,12 @@ it('a heading panel folds to its heading by its chevron, its content kept mounte
 
 it("on a phone the tree starts closed, with Select marked and nothing stored; opened, its cap is the whole column", () => {
   const { preferences } = frame({ mobile: true });
+  // The tools start hidden on a phone; shown, the tree is still as it starts there.
+  expect(layout(preferences)).toEqual({ panels: {}, collapsed: {}, closed: {} });
+  fireEvent.click(screen.getByRole('button', { name: 'Show tools' }));
   expect(shown()).toEqual(['Harness reference']);
   expect(tool('Select').querySelector('[data-tool-panel-closed]')).not.toBeNull();
-  expect(layout(preferences)).toEqual({ panels: {}, collapsed: {}, closed: {} });
+  expect(layout(preferences)).toEqual({ panels: {}, collapsed: {}, closed: {}, hidden: false });
   fireEvent.click(tool('Select'));
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
   expect(tool('Select').querySelector('[data-tool-panel-closed]')).toBeNull();
@@ -242,31 +245,117 @@ it("on a phone the tree starts closed, with Select marked and nothing stored; op
   expect([shown(), layout(preferences).closed]).toEqual([['Harness reference'], { tree: true }]);
 });
 
-it("a single part's tree starts closed, Select marked, and an assembly's open; once a person closes or opens it, their choice holds in every file", () => {
-  const preferences = tabSettings();
-  const mark = () => tool('Select').querySelector('[data-tool-panel-closed]');
-  // `panel-part.harness` is a single part's, `panel.harness` an assembly's.
-  const part = frame({ name: 'panel-part.harness', preferences });
-  expect([shown(), Boolean(mark())]).toEqual([['Harness reference'], true]);
-  part.unmount();
-  const assembly = frame({ name: 'panel.harness', preferences });
-  expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
+// The column's own toggle, and the three parts of the column it moves: the strip's row, the strip
+// on it, and the stack under it.
+const toggle = () => screen.getByRole('button', { name: /^(?:Hide|Show) tools$/ });
+const column = () => ({ row: document.querySelector<HTMLElement>('[data-cad-tool-row]')!,
+  strip: document.querySelector<HTMLElement>('[data-cad-toolbar]')!.parentElement!,
+  stack: document.querySelector<HTMLElement>('[data-cad-tool-stack]')!.parentElement! });
+const pressedTools = () => [...document.querySelectorAll('[data-cad-toolbar] button[aria-pressed="true"]')].map(button => button.getAttribute('aria-label'));
+
+it("the toggle at the strip's right end puts the strip and every panel away, mounted but out of reach and out of the accessibility tree, and brings them back: one write a press, and nothing else shows them", () => {
+  const { preferences, remount } = frame();
+  const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
+  fireEvent.click(tool('Keep'));
+  const panels = ['Harness tree', 'Harness reference', 'Kept controls'];
+  // On the strip's row, after the strip: a strip of one, named for what it does, the strip and the
+  // stack under its control.
+  expect([...column().row.children].map(child => child.hasAttribute('data-cad-tools-toggle') ? 'toggle' : child.querySelector('[role=group]') ? 'strip' : child.tagName))
+    .toEqual(['strip', 'toggle']);
+  expect([toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded')]).toEqual(['Hide tools', 'true']);
+  expect(toggle().getAttribute('aria-controls')!.split(' ').map(id => document.getElementById(id))).toEqual([column().strip, column().stack]);
+  expect(toggle().querySelector('svg')!.getAttribute('class')).toMatch(/\blucide-panel-left-close\b/);
+  for (const name of panels) expect(screen.getByRole('region', { name })).toBeTruthy();
+  expect([column().row.style.transform, column().stack.style.transform]).toEqual(['', '']);
   expect(preferences.writes).toBe(0);
-  // Closed in the assembly: closed in a part, and in the next assembly too.
-  fireEvent.click(within(panel('Harness tree')!).getByRole('button', { name: 'Close harness tree' }));
-  expect(layout(preferences).closed).toEqual({ tree: true });
-  assembly.unmount();
-  const closedPart = frame({ name: 'panel-part.harness', preferences });
-  expect([shown(), Boolean(mark())]).toEqual([['Harness reference'], true]);
-  // Opened in a part: open in the next part, and in an assembly.
-  fireEvent.click(tool('Select'));
-  expect(layout(preferences).closed).toEqual({ tree: false });
-  closedPart.unmount();
-  const openedPart = frame({ name: 'panel-part.harness', preferences });
-  expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
-  openedPart.unmount();
-  frame({ name: 'panel.harness', preferences });
-  expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
+
+  fireEvent.click(toggle());
+  expect([preferences.writes, layout(preferences).hidden]).toEqual([1, true]);
+  // The strip, its tools and every panel are out of reach and out of the accessibility tree...
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  for (const name of panels) expect(screen.queryByRole('region', { name })).toBeNull();
+  expect([column().strip.hasAttribute('inert'), column().stack.hasAttribute('inert')]).toEqual([true, true]);
+  // ...but mounted as they were: the tree with its rows, the kept effect's panel, the tool in hand.
+  expect(shown()).toEqual(panels);
+  expect(within(panel('Harness tree')!).getByText('Row 1')).toBeTruthy();
+  expect(pressedTools()).toEqual(['Select', 'Keep']);
+  // The row slides left by the strip's width, so the toggle comes to rest on the strip's line where
+  // the strip began; the stack slides out past its own width and the inset.
+  expect([column().row.style.transform, column().stack.style.transform]).toEqual(['translateX(calc(-100% + 34px))', 'translateX(calc(-100% - 8px))']);
+  expect([toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded')]).toEqual(['Show tools', 'false']);
+  expect(toggle().querySelector('svg')!.getAttribute('class')).toMatch(/\blucide-panel-left-open\b/);
+
+  // Nothing but the toggle shows them: not a reload of the model, not a trip to preview, not a remount.
+  stage('finding');
+  expect(document.querySelector('[data-cad-tools-toggle]')).toBeNull();
+  stage('idle');
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
+  expect(screen.queryByRole('button', { name: /^(?:Hide|Show) tools$/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Exit preview' }));
+  expect(toggle().getAttribute('aria-label')).toBe('Show tools');
+  remount();
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(preferences.writes).toBe(1);
+
+  fireEvent.click(toggle());
+  expect([preferences.writes, layout(preferences).hidden]).toEqual([2, false]);
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  for (const name of ['Harness tree', 'Harness reference']) expect(screen.getByRole('region', { name })).toBeTruthy();
+  expect([column().strip.hasAttribute('inert'), column().stack.hasAttribute('inert'), column().stack.style.transform]).toEqual([false, false, '']);
+  expect([toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded')]).toEqual(['Hide tools', 'true']);
+});
+
+it("on a phone the tools start hidden, nothing stored, until the person shows them; their choice then holds over how the column starts, on a phone or a desktop", () => {
+  const preferences = tabSettings();
+  const phone = frame({ mobile: true, preferences });
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Harness reference' })).toBeNull();
+  expect([toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded')]).toEqual(['Show tools', 'false']);
+  expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {}, closed: {} }]);
+  fireEvent.click(toggle());
+  expect([preferences.writes, layout(preferences).hidden]).toEqual([1, false]);
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  phone.unmount();
+  // Shown by the person, a phone opens with the tools up...
+  frame({ mobile: true, preferences });
+  expect(toggle().getAttribute('aria-label')).toBe('Hide tools');
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  cleanup();
+  // ...and hidden by the person, a desktop opens with them away.
+  frame({ preferences: tabSettings({ toolStack: { panels: {}, collapsed: {}, closed: {}, hidden: true } }) });
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(toggle().getAttribute('aria-label')).toBe('Show tools');
+});
+
+it("the column slides out and fades in 150ms, easing in, and back in 200ms, easing out, by transform and opacity alone; under reduced motion, the system's or the app's, it is simply gone, and back", () => {
+  const motion = (node: Element) => node.className.split(/\s+/).filter(name => /^(?:transition|duration-|ease-)/.test(name)).sort();
+  // The moving parts: the strip's row, the strip, the stack and the toggle's box.
+  const parts = () => { const { row, strip, stack } = column(); return [row, strip, stack, document.querySelector('[data-cad-tools-toggle] > span[aria-hidden]')!]; };
+  frame();
+  // Shown, nothing in the column transitions visibility: whatever hides the column (preview, a
+  // capture) hides it at once.
+  expect(parts().map(motion)).toEqual([['duration-200', 'ease-out', 'transition-transform'], ['duration-200', 'ease-out', 'transition-opacity'],
+    ['duration-200', 'ease-out', 'transition-[transform,opacity]'], ['duration-200', 'ease-out', 'transition-opacity']]);
+  fireEvent.click(toggle());
+  // Going, visibility steps at the end of the slide.
+  expect(parts().map(motion)).toEqual([['duration-150', 'ease-in', 'transition-transform'], ['duration-150', 'ease-in', 'transition-[opacity,visibility]'],
+    ['duration-150', 'ease-in', 'transition-[transform,opacity,visibility]'], ['duration-150', 'ease-in', 'transition-opacity']]);
+  // Gone is transparent and, once the slide ends, invisible.
+  expect([column().strip.style.opacity, column().strip.style.visibility, column().stack.style.opacity, column().stack.style.visibility]).toEqual(['0', 'hidden', '0', 'hidden']);
+  cleanup();
+  for (const still of ['system', 'app']) {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: still === 'system' && query === '(prefers-reduced-motion: reduce)', media: query,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
+    frame(still === 'app' ? { environment: { colorScheme: 'light', reducedMotion: true } } : {});
+    expect(parts().map(motion), still).toEqual([[], [], [], []]);
+    fireEvent.click(toggle());
+    expect(parts().map(motion), still).toEqual([[], [], [], []]);
+    expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+    fireEvent.click(toggle());
+    expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+    cleanup();
+  }
 });
 
 const displayPopover = () => document.querySelector<HTMLElement>('[data-display-popover]');
@@ -417,6 +506,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   frame({ appearance: { colorScheme: 'light', compact: true } });
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
+  expect(document.querySelector('[data-cad-tools-toggle]')).toBeNull();
   expect(barButtons()).toEqual([]);
   expect(document.querySelector('[data-quick-edit]')).toBeNull();
   expect(viewportProps.current.viewCube).toBe(false);

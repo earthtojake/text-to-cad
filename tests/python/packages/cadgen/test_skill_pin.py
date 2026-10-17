@@ -36,7 +36,7 @@ class SkillPin(unittest.TestCase):
         # A development install points the command at a checkout: `.venv/bin/python -m cadgen.cli`.
         self.assertIsNone(read_skill_pin(self._skill("Run `/src/.venv/bin/python -m cadgen.cli`.\nplaywright==1.0.0\n")))
 
-    def test_the_launch_commands_pin_is_read_back(self) -> None:
+    def test_the_launch_commands_pin_is_read(self) -> None:
         body = f"- `cadgen` means `uvx --no-config --managed-python --python 3.13 --from cadgen=={INSTALLED} cadgen`\n"
         self.assertEqual(INSTALLED, read_skill_pin(self._skill(body)))
 

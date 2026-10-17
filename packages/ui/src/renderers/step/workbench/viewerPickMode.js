@@ -11,10 +11,7 @@ export function viewerSelectorRuntimeForRenderPane({
 
 // One shared empty list for every part-state prop this module hands the scene.
 // A fresh [] per call is a new prop identity on every render, which re-runs the
-// viewer's scene-effects effect — and the viewport LOD resample it ends with —
-// on renders that changed nothing. That resample publishes LOD status, whose
-// React state re-renders the workspace: the viewport never stops sampling
-// itself and never reports settled quality.
+// viewer's scene effects on renders that changed nothing.
 const EMPTY_PART_IDS = Object.freeze([]);
 
 // Part selection and visibility are independent of lighting/display style.

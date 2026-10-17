@@ -106,15 +106,14 @@ every format flows through. Lower the budgets in the same commit that removes ch
 
 What is left is deliberate. `useCadAssets` is allowlisted: choosing and running a loader
 per format is its whole job, and the `assetKind` field names *which* loader without
-pretending the implementations are the same. `stepArtifactStatus.js` keeps its checks
-because STEP package error codes, the `stale` flag and the renderable-GLB fallback are
-STEP vocabulary. STEP is now the only artifact-managed format: a DXF is rendered from
-the file that is on disk — the backend flattens those bytes to 2D primitives per request
-and never owns a package for one (`owns_dxf_path` always answers False).
+pretending the implementations are the same. STEP is now the only artifact-managed
+format: a DXF is rendered from the file that is on disk — the backend flattens those
+bytes to 2D primitives per request and never owns a package for one (`owns_dxf_path`
+always answers False).
 
 ## Standing gate
 
-The `web` CI job's `scripts/test/test-viewer-browser.sh` opens one fixture per load path
+The `packaging` CI job's `scripts/test/test-viewer-browser.sh` opens one fixture per load path
 (STEP, STL, DXF, URDF) through the real backend and the bundled viewer and asserts each
 draws something with no page errors: a blank-but-error-free viewport is the signature
 failure here (a shader that fails to compile, a gate that hides the geometry). It runs on

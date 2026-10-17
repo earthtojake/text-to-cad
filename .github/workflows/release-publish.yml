@@ -235,11 +235,15 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web apps/mcp
 
-      # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
-      # builders, the snapshot browser bundle, the CAD Viewer client, the CAD app and the
-      # file tracers are all gitignored, so the release commit carries none of them. Nothing
-      # here writes to git -- the wheel is the release asset.
+      # The bundle feeds the WHEEL, and it is the only thing that does: the snapshot
+      # browser bundle, the CAD Viewer client, the CAD app and the file tracers are all
+      # gitignored, so the release commit carries none of them. Nothing
+      # here writes to git -- the wheel is the release asset. TEXT_TO_CAD_RELEASE names the
+      # version this build releases, so the Viewer and the CAD app it bundles show it as it is;
+      # any other build shows where it came from (`-dev.<commit>`, @text-to-cad/ui/build-id).
       - name: Bundle production outputs
+        env:
+          TEXT_TO_CAD_RELEASE: ${{ needs.gate.outputs.version }}
         run: scripts/bundle/bundle.sh --clean
 
       - name: Validate production bundle layout
@@ -299,7 +303,7 @@ jobs:
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
       # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
       # built minutes earlier by a step that could fail soft, and a wheel without it
-      # installs cleanly and then cannot render a snapshot or export a mesh.
+      # installs cleanly and then cannot render a snapshot or serve a Viewer.
       - name: Assert the shipping wheel carries its built runtime
         run: |
           wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
@@ -309,7 +313,6 @@ jobs:
           for required in \
             cadgen/_runtime/browser/snapshot-render.js \
             cadgen/_runtime/browser/render.html \
-            cadgen/_runtime/node/mesh-export.mjs \
             cadgen/_runtime/viewer/index.html \
             cadgen/_runtime/mcp/index.html \
             cadgen/_runtime/native/filetrace-macos-aarch64.dylib \

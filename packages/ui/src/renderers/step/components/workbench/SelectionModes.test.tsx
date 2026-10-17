@@ -19,8 +19,8 @@ it('Select\'s mode is one button showing the mode in hand; its menu lists the mo
   const view = render(<SelectModeMenu mode="faces" assembly={false} onModeChange={modeChange}
     connected={{ edgeChain: true, tangentFaces: true }} onConnectedChange={connectedChange} />);
   const button = screen.getByRole('button', { name: 'Select mode: Faces' });
-  // The button is the panel header's sliders icon; the strip shows the mode.
-  expect([glyphs(button), !!button.querySelector('svg.lucide-sliders-horizontal')]).toEqual([[], true]);
+  // The button is one of the navbar's view controls, their size, the sliders icon; the strip shows the mode.
+  expect([glyphs(button), !!button.querySelector('svg.lucide-sliders-horizontal'), button.classList.contains('size-6')]).toEqual([[], true, true]);
   await user.click(button);
   expect(menu().getAttribute('aria-label')).toBe('Select mode');
   expect(screen.getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
@@ -54,6 +54,8 @@ it('Measure\'s snapping is one button showing the mode in hand; its menu is four
   const user = userEvent.setup();
   const changed = vi.fn();
   render(<MeasureModeMenu mode="edges" onModeChange={changed} />);
+  // A panel heading's small button, in the Measure heading.
+  expect(screen.getByRole('button', { name: 'Measure snapping: Edges' }).classList.contains('size-5')).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Measure snapping: Edges' }));
   expect(screen.getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['All', 'Points', 'Edges', 'Faces']);
   expect(glyphs(menu())).toEqual(['measure', 'points', 'edges', 'faces']);

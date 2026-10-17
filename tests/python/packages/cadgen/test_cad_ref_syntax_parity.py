@@ -1,9 +1,11 @@
 """The Python and JS selector grammars are two implementations of one language.
 
-`cadgen.cad_ref_syntax` and `@text-to-cad/core/lib/cadRefs.js` parse the same refs, and before this fixture
-existed nothing checked that they agreed -- the grammar was copy-pasted into four places. Both
-suites read `packages/core/src/lib/cadRefs.parity.json`, so a form added to one language and
-forgotten in the other fails here rather than in a user's pasted ref.
+`cadgen.cad_ref_syntax` and `@text-to-cad/core/lib/cadRefs.js` parse the same selectors, and before
+this fixture existed nothing checked that they agreed -- the grammar was copy-pasted into four
+places. Both suites read the `selectorCases` of `packages/core/src/lib/cadRefs.parity.json`, so a
+form added to one language and forgotten in the other fails here rather than in a user's pasted
+ref. Its `inheritanceCases` and `tokenCases` are the JS parser's alone: Python takes one ref at a
+time, its file prefix split off (`split_cad_ref`) and its selector parsed (`parse_selector`).
 """
 
 from __future__ import annotations
@@ -19,16 +21,20 @@ from unittest import mock
 
 from tests.python.support.paths import repo_path
 
-from cadgen.label_refs import build_label_aliases
 from cadgen.cad_ref_syntax import (
-    build_cad_token,
-    ensure_ref_file_matches,
-    normalize_selector_list,
-    parse_cad_tokens,
     parse_selector,
     path_has_suffix,
     split_cad_ref,
 )
+from cadgen.refs import Space, locate
+
+OCCURRENCE = "o:" + "1" * 12
+
+
+def ensure_ref_file_matches(prefix: str, document: str) -> None:
+    """Resolve a ref carrying ``prefix`` against ``document``: the one resolver's file
+    guard (``cadgen.refs.locate``), which raises ``ValueError`` for a foreign file."""
+    locate(f"{prefix}#{OCCURRENCE}", Space({OCCURRENCE: [OCCURRENCE]}, {}, document=document))
 
 
 FIXTURE_PATH = repo_path("packages", "core", "src", "lib", "cadRefs.parity.json")
@@ -39,10 +45,8 @@ def _fixture() -> dict:
 
 
 class ParityFixtureIsUsableTest(unittest.TestCase):
-    def test_the_fixture_exists_and_has_all_three_case_kinds(self) -> None:
-        data = _fixture()
-        for key in ("selectorCases", "inheritanceCases", "aliasCases"):
-            self.assertTrue(data.get(key), f"{key} must be present and non-empty")
+    def test_the_fixture_exists_and_has_selector_cases(self) -> None:
+        self.assertTrue(_fixture().get("selectorCases"), "selectorCases must be present and non-empty")
 
 
 class SelectorParityTest(unittest.TestCase):
@@ -53,68 +57,55 @@ class SelectorParityTest(unittest.TestCase):
                 self.assertIsNotNone(parsed)
                 self.assertEqual(case["selectorType"], parsed.selector_type)
                 self.assertEqual(case["occurrenceId"], parsed.occurrence_id)
-                self.assertEqual(case["ordinal"], parsed.ordinal)
+                self.assertEqual(case["element"], parsed.element)
                 self.assertEqual(case["canonical"], parsed.canonical)
                 self.assertEqual(case.get("label", ""), parsed.label)
 
 
-class AliasParityTest(unittest.TestCase):
-    """The fixture carries aliasCases for both languages, but only the JS suite ran them.
-
-    Nothing here read them, so `buildLabelAliasMap` and `build_label_aliases` could drift
-    with the fixture still green -- which is how the `occurrenceId` row spelling ended up
-    accepted by one side and dropped by the other.
-    """
-
-    def test_every_alias_case_builds_as_the_fixture_says(self) -> None:
-        for case in _fixture()["aliasCases"]:
-            with self.subTest(why=case.get("why", "")):
-                built = build_label_aliases(case["rows"])
-                self.assertEqual(case["aliases"], built["aliases"])
-                self.assertEqual(case.get("ambiguous", {}), built["ambiguous"])
+O1, O2 = "o:4b1f9e2a7c03", "o:0a9e8d7c6b5f"
+F, E, V = "f:9d2e8c1b5a70", "e:12ab34cd56ef", "v:fedcba987654"
+# Names by lineage: the feature that made the element, its number there, and a split piece's.
+NAMED = ("f:dial.extrude1.3", "e:dial.extrude1.3.2", "v:lid.2")
 
 
-class InheritanceParityTest(unittest.TestCase):
-    def test_comma_lists_inherit_as_the_fixture_says(self) -> None:
-        for case in _fixture()["inheritanceCases"]:
-            with self.subTest(input=case["input"], why=case.get("why", "")):
-                self.assertEqual(case["expected"], normalize_selector_list(case["input"]))
+class TokenPrecedenceTest(unittest.TestCase):
+    """Token and name forms are tried before the label form, so neither is read as a label,
+    and the retired positional grammar (``o1.2.f7``, ``f7``) is no ref at all."""
 
+    TOKEN_FORMS = (O1, f"{O1}/{F}", f"{O1}/{E}", f"{O1}/{V}", F, E, V, f"#{O2}/{F}", *NAMED,
+                   *(f"{O2}/{name}" for name in NAMED), "m1", "m17")
 
-class BackwardsCompatibilityTest(unittest.TestCase):
-    """Adding label forms must not move a single existing ref.
-
-    This is the guarantee that matters most: every numeric selector anyone has already pasted
-    into an issue, a sidecar, or a script keeps parsing to exactly what it parsed to before.
-    """
-
-    NUMERIC_FORMS = (
-        "o1",
-        "o1.2",
-        "o1.2.3.4.5.6",
-        "o12.f19",
-        "o1.2.s3",
-        "o1.2.e3",
-        "o1.2.v3",
-        "f45",
-        "s2",
-        "e9",
-        "v4",
-        "#o2.f1",
-        "m1",
-        "m17",
-    )
-
-    def test_numeric_selectors_never_take_the_label_branch(self) -> None:
-        for selector in self.NUMERIC_FORMS:
+    def test_token_selectors_never_take_the_label_branch(self) -> None:
+        for selector in self.TOKEN_FORMS:
             with self.subTest(selector=selector):
                 parsed = parse_selector(selector)
                 self.assertIsNotNone(parsed)
-                self.assertEqual(
-                    "",
-                    parsed.label,
-                    f"{selector} must not be read as a label",
-                )
+                self.assertEqual("", parsed.label, f"{selector} must not be read as a label")
+
+    def test_the_retired_grammar_is_no_ref(self) -> None:
+        from cadgen.cad_ref_syntax import element_kind, element_ref, is_native_selector
+
+        for selector in ("o1", "o1.2", "o1.2.f7", "o12.f19", "s2", f"{O1}/s:9d2e8c1b5a70", f"{O1}.{F}"):
+            with self.subTest(selector=selector):
+                self.assertNotEqual("occurrence", parse_selector(selector).selector_type)
+                self.assertNotIn(parse_selector(selector).selector_type, {"face", "edge", "vertex"})
+                self.assertFalse(is_native_selector(selector))
+        self.assertEqual("label", parse_selector("f45").selector_type, "a bare ordinal is a label spelling")
+        self.assertEqual(f"{O1}/{F}", element_ref(O1, F))
+        self.assertEqual(("face", "edge", "vertex"), (element_kind(F), element_kind(E), element_kind(V)))
+        self.assertEqual(("face", "edge", "vertex"), tuple(element_kind(name) for name in NAMED))
+
+    def test_an_element_name_names_its_feature(self) -> None:
+        from cadgen.cad_ref_syntax import element_feature, is_element_name, is_feature_name
+
+        self.assertEqual(["dial.extrude1", "dial.extrude1", "lid"], [element_feature(name) for name in NAMED])
+        self.assertIsNone(element_feature(F), "a geometric token names no feature")
+        self.assertTrue(all(is_element_name(name) for name in (F, E, V, *NAMED)))
+        self.assertTrue(is_element_name(NAMED[0], "face") and not is_element_name(NAMED[0], "edge"))
+        for value in (O1, "f7", "f:dial.extrude1", "f:9d2e8c1b5a70.3", "x:dial.extrude1.3", None):
+            self.assertFalse(is_element_name(value), value)
+        self.assertTrue(is_feature_name("dial.extrude1") and is_feature_name("lid"))
+        self.assertFalse(is_feature_name("dial.extrude1.3") or is_feature_name("3d") or is_feature_name(""))
 
     def test_mates_stay_opaque(self) -> None:
         # "m1" matches the label pattern; it must still be opaque so mate handling in the
@@ -123,52 +114,19 @@ class BackwardsCompatibilityTest(unittest.TestCase):
             with self.subTest(selector=selector):
                 self.assertEqual("opaque", parse_selector(selector).selector_type)
 
-    def test_entity_and_occurrence_forms_win_over_the_label_form(self) -> None:
-        self.assertEqual("face", parse_selector("f45").selector_type)
-        self.assertEqual("occurrence", parse_selector("o1.2").selector_type)
-        self.assertEqual("shape", parse_selector("s7").selector_type)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-class TokenParityTest(unittest.TestCase):
-    """The token layer: `<file>#<selectors>`.
-
-    The prefix half of the token was always in the grammar's shape -- ParsedToken has carried a
-    `cad_path` field filled with "" since it was written -- and this is where it gets populated.
-    It sits LEFT of the '#', which is why it cannot collide with the selector grammar: labels,
-    their ':' qualifiers, and entity dots all live on the right.
-    """
-
-    def test_every_token_case_parses_as_the_fixture_says(self) -> None:
-        for case in _fixture()["tokenCases"]:
-            with self.subTest(text=case["text"], why=case.get("why", "")):
-                tokens = parse_cad_tokens(case["text"])
-                if case["selectors"] is None:
-                    self.assertEqual([], tokens, "text without '#' is not a token")
-                    continue
-                self.assertEqual(1, len(tokens), f"expected one token from {case['text']!r}")
-                self.assertEqual(case["cadPath"], tokens[0].cad_path)
-                self.assertEqual(case["selectors"], list(tokens[0].selectors))
-
-    def test_a_token_round_trips_through_build_cad_token(self) -> None:
-        # build_cad_token took a cad_path and discarded it (`_ = cad_path`). It no longer does,
-        # so what the viewer copies is what the grammar parses.
-        self.assertEqual("plate.stl#o1.2", build_cad_token("plate.stl", "o1.2"))
-        self.assertEqual("#o1.2", build_cad_token("", "o1.2"))
-        self.assertEqual("plate.stl#", build_cad_token("plate.stl", ""))
-        self.assertEqual("#", build_cad_token("", ""))
+    def test_element_and_occurrence_forms_win_over_the_label_form(self) -> None:
+        self.assertEqual("face", parse_selector(F).selector_type)
+        self.assertEqual("occurrence", parse_selector(O1).selector_type)
+        self.assertEqual("vertex", parse_selector(f"{O2}/{V}").selector_type)
+        self.assertEqual("edge", parse_selector(f"bracket/{E}").selector_type)
+        self.assertEqual("bracket", parse_selector(f"bracket/{E}").label)
 
 
 class TokenBackwardsCompatibilityTest(unittest.TestCase):
-    def test_bare_tokens_are_untouched(self) -> None:
-        for text in ("#o1", "#o1.2.f3", "#f45", "#m1", "#", "#o1.2,f3"):
+    def test_bare_tokens_carry_no_file_prefix(self) -> None:
+        for text in (f"#{O1}", f"#{O1}/{F}", f"#{F}", "#m1", "#", f"#{O1},{F}"):
             with self.subTest(text=text):
-                tokens = parse_cad_tokens(text)
-                self.assertEqual(1, len(tokens))
-                self.assertEqual("", tokens[0].cad_path, f"{text} must carry no file prefix")
+                self.assertEqual(("", text[1:]), split_cad_ref(text), f"{text} must carry no file prefix")
 
 
 class RefFileGuardTest(unittest.TestCase):
@@ -240,11 +198,19 @@ class RefFileGuardTest(unittest.TestCase):
             ensure_ref_file_matches("STEP/part.step", str(document))
 
     def test_a_quoted_prefix_is_decoded_rather_than_cut_at_a_hash(self) -> None:
-        for path in ("/work/CAD models/part #2.step", "C:\\work\\part.step", "STEP/part.step"):
+        # The viewer JSON-quotes a prefix holding a space, a quote, a '#' or a backslash.
+        for path in (
+            "/work/CAD models/part #2.step",
+            "C:\\work\\part.step",
+            "models/Hex Drive Screw (2).STEP",
+            'models/café #1 "screw".STEP',
+        ):
             with self.subTest(path=path):
-                self.assertEqual((path, "o1.f2"), split_cad_ref(build_cad_token(path, "o1.f2")))
-        self.assertEqual(("", "o1.f2"), split_cad_ref("#o1.f2"))
-        self.assertEqual(("", "o1.f2"), split_cad_ref("o1.f2"))
+                token = json.dumps(path, ensure_ascii=False) + f"#{O1}/{F},{E}"
+                self.assertEqual((path, f"{O1}/{F},{E}"), split_cad_ref(token))
+        self.assertEqual(("STEP/part.step", f"{O1}/{F}"), split_cad_ref(f"STEP/part.step#{O1}/{F}"))
+        self.assertEqual(("", f"{O1}/{F}"), split_cad_ref(f"#{O1}/{F}"))
+        self.assertEqual(("", f"{O1}/{F}"), split_cad_ref(f"{O1}/{F}"))
 
     def test_path_has_suffix_is_segment_aligned(self) -> None:
         self.assertTrue(path_has_suffix("a/b/plate.stl", "plate.stl"))
@@ -253,11 +219,6 @@ class RefFileGuardTest(unittest.TestCase):
         self.assertFalse(path_has_suffix("plate.stl", "a/plate.stl"))
         self.assertFalse(path_has_suffix("a/b/plate.stl", ""))
 
-class ImportedFilenameTokenTests(unittest.TestCase):
-    def test_quoted_paths_round_trip(self) -> None:
-        for path in ['models/Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']:
-            token = build_cad_token(path, 'o1.f2,o1.f3')
-            parsed = parse_cad_tokens(token)
-            self.assertEqual(1, len(parsed))
-            self.assertEqual(path, parsed[0].cad_path)
-            self.assertEqual(('o1.f2', 'o1.f3'), parsed[0].selectors)
+
+if __name__ == "__main__":
+    unittest.main()

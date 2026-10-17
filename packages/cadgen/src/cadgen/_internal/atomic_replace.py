@@ -55,12 +55,12 @@ The DESTINATION has its own failure, and it answers with a different code. NTFS 
 rename over a file that any process holds open -- ``MoveFileEx`` without POSIX semantics, which is
 what ``os.replace`` is -- and says ``WinError 5`` (ERROR_ACCESS_DENIED), not 32. The store is
 built to have that happen: there are no locks (STORE.md §7), two builds of one model publish the
-same entries, records, trees and document, and each reads back what it just wrote -- the record,
-the tree, the ``.step`` it hashes to verify the save. So the loser of that race finds the winner
+same entries, records, trees and document, and each reads what it just wrote -- the record, the
+tree, the ``.step`` its verify parses. So the loser of that race finds the winner
 reading the very file it is replacing, or renaming onto it at the same instant, and a ``5`` that
 was never a denial failed a byte-identical publish the contract calls idempotent. POSIX renames
 over an open file without complaint, which is why only Windows saw it. The hold is a
-read-back that ends in milliseconds, so the same ladder waits it out; the retry is keyed on a
+read that ends in milliseconds, so the same ladder waits it out; the retry is keyed on a
 FILE at the target, because that is the only case where a ``5`` can be somebody else's
 handle. A read-only file there is a real denial that now surfaces after the bounded wait instead
 of at once -- the price, and a small one. The copy below does nothing for a held destination; it
@@ -148,7 +148,8 @@ def temp_suffix() -> str:
 
 
 STAGE_PREFIX = ".cadgen-stage-"
-"""The name a build's STEP staging folder starts with. The folder sits beside the output."""
+"""The name a build's STEP staging folder starts with. The folder sits beside the output; its
+owner follows (``temp_leftovers.stage_prefix``), so a build can remove a killed one's."""
 
 _TEMP_NAME = re.compile(r"\.\d+\.[0-9a-f]{8}\.tmp$")
 

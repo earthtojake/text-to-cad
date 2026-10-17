@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { componentMemoryAccounting, renderMemoryAccounting } from "./renderMemoryAccounting.js";
+import { componentMemoryAccounting, renderMemoryAccounting, syncSelectorCacheAccounting } from "./renderMemoryAccounting.js";
+import { createViewerMemoryPolicy } from "./viewerMemoryPolicy.js";
 
 test("render memory accounting counts shared component buffers once and splits edges from surfaces", () => {
   const surface = new THREE.BufferGeometry();
@@ -31,7 +32,7 @@ test("render memory accounting counts shared component buffers once and splits e
   assert.equal(totals.displayCpuBytes, totals.surfaceBytes + totals.edgeBytes);
   assert.equal(totals.gpuEstimatedBytes, totals.surfaceBytes + totals.edgeBytes);
   assert.equal(totals.memoryPolicy.hardRssCap, false);
-  assert.equal(typeof totals.assetCaches.surfPayload.entries, "number");
+  assert.equal(typeof totals.assetCaches.partPayload.entries, "number");
   assert.deepEqual(renderMemoryAccounting(null).occurrences, 0);
 });
 
@@ -86,8 +87,8 @@ test("surface instances and packed deformation backing buffers are admitted", ()
   instance.setColorAt(0, new THREE.Color("white"));
   instance.setColorAt(1, new THREE.Color("white"));
   const packed = new ArrayBuffer(128);
-  records[0].tubeDeformationState = {
-    mapping: [new Uint8Array(packed, 16, 8)]
+  records[0].tubeSkinState = {
+    joints: [new Uint8Array(packed, 16, 8)]
   };
 
   const directTotals = renderMemoryAccounting({
@@ -185,4 +186,15 @@ test("uncached whole-scene edge inputs and private color baselines remain CPU ow
   assert.equal(totals.gpuEstimatedBytes, totals.surfaceBytes);
   const next = renderMemoryAccounting({ displayRecords: [] });
   assert.equal(next.displayCpuBytes, 0, "dropped owners release their CPU charge");
+});
+
+test("cache-only updates preserve measured picking arrays and cannot mix independent policies", () => {
+  const one = createViewerMemoryPolicy(), two = createViewerMemoryPolicy();
+  syncSelectorCacheAccounting(one, 200, 700); syncSelectorCacheAccounting(two, 50, 100);
+  syncSelectorCacheAccounting(one, 0); syncSelectorCacheAccounting(two, 80);
+  assert.equal(one.snapshot().retainedByCategory.selectors, 700);
+  assert.equal(two.snapshot().retainedByCategory.selectors, 180);
+  syncSelectorCacheAccounting(one, 400); assert.equal(one.snapshot().retainedByCategory.selectors, 1100);
+  syncSelectorCacheAccounting(one, 300, 30); assert.equal(one.snapshot().retainedByCategory.selectors, 330);
+  one.reset(); syncSelectorCacheAccounting(one, 10); assert.equal(one.snapshot().retainedByCategory.selectors, 10);
 });

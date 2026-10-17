@@ -7,8 +7,7 @@ from lib.phalanx import make_phalanx
 from lib.pulley import make_pulley
 
 
-@step(out='../STEP/middle_routing_review.step',
-      mesh_tolerance=.008,mesh_angular_tolerance=.045)
+@step(out='../STEP/middle_routing_review.step')
 def middle_routing_review():
     children=[];f=MIDDLE;base=(f.x,f.base_y,0.)
     y=f.base_y

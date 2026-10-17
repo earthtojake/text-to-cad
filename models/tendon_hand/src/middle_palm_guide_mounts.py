@@ -3,7 +3,7 @@ from pathlib import Path
 from cadgen import build123d as bd,read_step,step
 from lib.palm_guide_mounts import make_palm_ray_mounts
 
-@step(out='../STEP/middle_palm_guide_mounts.step',mesh_tolerance=.001,mesh_angular_tolerance=.18)
+@step(out='../STEP/middle_palm_guide_mounts.step')
 def middle_palm_guide_mounts():
     from lib.palm_frame import make_palm_frame_bodies
     host=next(p for p in make_palm_frame_bodies() if p.label=='palm_metacarpal_truss')

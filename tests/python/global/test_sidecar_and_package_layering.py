@@ -6,9 +6,9 @@ Two stores of state sit beside a generated STEP and neither may leak into the ot
   is not derivable from artifact bytes, so a tree carrying it would make
   identical-bytes documents collide and would be swept by `cadgen store gc`.
 * The SIDECAR is what the author declared, and it TRAVELS WITH THE FILE. It holds
-  kinematics and intrinsic appearance (law 17): no mesh declarations, no choreography (the
-  render module beside the document is read by the viewer, never by a build), and
-  no path into anybody's source tree.
+  kinematics, intrinsic appearance (law 17) and the keyframes a model's clips bake to:
+  no mesh declarations, no code (a clip runs once, when its model builds), and no path
+  into anybody's source tree.
 
 The fixture is a hinge with one revolute mate, written and built here in a fresh
 store, so the assertions hold on a real build and read nothing under models/.

@@ -313,6 +313,16 @@ class SdfFindingsTests(unittest.TestCase):
         error_codes, _ = self._codes(sdf_text)
         self.assertFalse(error_codes)
 
+    def test_a_joint_may_name_a_frame_as_its_parent_or_child(self) -> None:
+        # SDFormat >= 1.7: a joint's endpoints are frames, which a link or an explicit <frame> is.
+        sdf_text = _model(
+            f"{TWO_LINKS}"
+            '<frame name="mount" attached_to="base"><pose>0 0 0.1 0 0 0</pose></frame>'
+            '<joint name="j1" type="fixed"><parent>mount</parent><child>arm</child></joint>'
+        )
+        error_codes, _ = self._codes(sdf_text)
+        self.assertFalse(error_codes)
+
     def test_unlimited_effort_sentinel_allowed(self) -> None:
         sdf_text = _model(
             _joint("<axis><xyz>0 0 1</xyz><limit><lower>-1</lower><upper>1</upper><effort>-1</effort></limit></axis>")

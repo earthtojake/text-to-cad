@@ -3,85 +3,85 @@ import test from "node:test";
 
 import {
   matchingDisplayedPackageContext,
-  retainedComponentMeshesForRevision,
+  retainedComponentsForRevision,
 } from "./packageComponentReuse.js";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
-const SURF_A = "1".repeat(64);
-const INPUT_A = "d".repeat(64);
+const PART_A = `${"d".repeat(64)}-v1`;
+const PART_B = `${"e".repeat(64)}-v1`;
 const CID = "0123456789abcdef";
+// The same body under another id: what the tree parsed back from a saved STEP, or a build's
+// preview of it, names it by.
+const OTHER_CID = "fedcba9876543210";
 
-function descriptor(surfaceObject = SURF_A, surfaceInput = INPUT_A) {
-  return { components: { [CID]: { surfaceInput, ...(surfaceObject ? { surfaceObject } : {}) } } };
+function descriptor(part = PART_A, cid = CID) {
+  return { components: { [cid]: { part } } };
+}
+
+// The row a component's mesh was drawn from: its part's record.
+function row(part = PART_A) {
+  return { part, glb: { object: "1".repeat(64) }, selectors: { object: "2".repeat(64) } };
 }
 
 function meshUrl(tree) {
   return `/__cad/store?file=/${tree}&v=${tree}`;
 }
 
-test("an unchanged concrete surface stays retained across a tree revision", () => {
-  const meshData = { lodLevel: 0, vertices: new Float32Array(3) };
+test("a component whose part is unchanged keeps its mesh, and its row, across a tree revision, whatever its id", () => {
+  const meshData = { vertices: new Float32Array(3) };
+  const drawnFrom = row();
   const previous = {
     descriptor: descriptor(),
-    componentIdentityByCid: { [CID]: descriptor().components[CID] },
+    componentIdentityByCid: { [CID]: drawnFrom },
     meshUrl: meshUrl(HASH_A),
     componentMeshDataByCid: { [CID]: meshData },
-    componentLodLevelByCid: { [CID]: 0 },
   };
-  const retained = retainedComponentMeshesForRevision({
+  const retained = retainedComponentsForRevision({
     previous,
     descriptor: descriptor(),
     meshUrl: meshUrl(HASH_B),
   });
-  assert.equal(retained[CID], meshData);
+  assert.deepEqual(retained, { [CID]: { meshData, row: drawnFrom } });
+  // A preview's save names the same body by another id and the same part: the part is the name.
+  const renamed = retainedComponentsForRevision({
+    previous,
+    descriptor: descriptor(PART_A, OTHER_CID),
+    meshUrl: meshUrl(HASH_B),
+  });
+  assert.deepEqual(renamed, { [OTHER_CID]: { meshData, row: drawnFrom } });
 });
 
-test("reuse rejects changed surface outputs, inputs and exact levels", () => {
-  const meshData = { lodLevel: 0 };
+test("reuse rejects a changed part, and a mesh no part's row was drawn from", () => {
+  const meshData = {};
   const previous = {
     descriptor: descriptor(),
+    componentIdentityByCid: { [CID]: row() },
     meshUrl: meshUrl(HASH_A),
     componentMeshDataByCid: { [CID]: meshData },
-    componentLodLevelByCid: { [CID]: 0 },
   };
-  assert.deepEqual(retainedComponentMeshesForRevision({
+  assert.deepEqual(retainedComponentsForRevision({
     previous,
-    descriptor: descriptor("2".repeat(64)),
+    descriptor: descriptor(PART_B),
     meshUrl: meshUrl(HASH_B),
-  }), {}, "an explicit conflicting surface output is never reused");
-
-  assert.equal(retainedComponentMeshesForRevision({
-    previous,
-    descriptor: descriptor(null),
-    meshUrl: meshUrl(HASH_B),
-  })[CID], meshData, "a geometry-only descriptor inherits O from the exact prior D");
-
-  const changedLevel = { ...previous, componentLodLevelByCid: { [CID]: 1 } };
-  assert.deepEqual(retainedComponentMeshesForRevision({
-    previous: changedLevel,
+  }), {}, "another part cannot reuse the mesh");
+  assert.deepEqual(retainedComponentsForRevision({
+    previous: { ...previous, componentIdentityByCid: {} },
     descriptor: descriptor(),
     meshUrl: meshUrl(HASH_B),
-  }), {}, "the retained mesh's stamped L0 and requested L1 cannot alias");
-
-  assert.deepEqual(retainedComponentMeshesForRevision({
-    previous,
-    descriptor: descriptor(SURF_A, "e".repeat(64)),
-    meshUrl: meshUrl(HASH_B),
-  }), {}, "a different producer-bound surface input cannot reuse the mesh");
+  }), {}, "a mesh with no row behind it is never reused");
 });
 
 test("A remains the bounded reuse source after B staging fails or is superseded by C", () => {
-  const meshData = { lodLevel: 0 };
+  const meshData = {};
   const displayedA = {
     file: "assembly.step",
     meshHash: "tree-a",
     complete: true,
     descriptor: descriptor(),
-    componentIdentityByCid: { [CID]: descriptor().components[CID] },
+    componentIdentityByCid: { [CID]: row() },
     meshUrl: meshUrl(HASH_A),
     componentMeshDataByCid: { [CID]: meshData },
-    componentLodLevelByCid: { [CID]: 0 },
   };
   const visibleA = {
     file: "assembly.step",
@@ -102,12 +102,12 @@ test("A remains the bounded reuse source after B staging fails or is superseded 
   );
 
   const sourceForC = matchingDisplayedPackageContext(displayedA, visibleA, "assembly.step");
-  const retainedForC = retainedComponentMeshesForRevision({
+  const retainedForC = retainedComponentsForRevision({
     previous: sourceForC,
     descriptor: descriptor(),
     meshUrl: meshUrl(HASH_B),
   });
-  assert.equal(retainedForC[CID], meshData);
+  assert.equal(retainedForC[CID].meshData, meshData);
   assert.equal(
     matchingDisplayedPackageContext(displayedA, { ...visibleA, meshHash: "other" }, "assembly.step"),
     null,

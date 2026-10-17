@@ -94,7 +94,7 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
         from cadgen._internal import generation_runner
 
         return mock.patch.object(
-            generation_runner, "_run_script_generator_inner",
+            generation_runner, "_run_script_generator_body",
             side_effect=AssertionError("a door must not run the model's script"),
         )
 

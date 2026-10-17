@@ -92,9 +92,7 @@ export function useStepPartVisualState(layers) {
   const { pickMode, pickableParts, hiddenPartIds, selectedPartIds, hoveredPartId } = props;
   const { viewerTheme, normalizedDisplayMode, visualEdgeSettings, focusedPartIds, partVisualStateEnabled } = policy;
   const { recordEdgesVisible } = layers.edges;
-  const { partVisualStateRef, lodCameraChangeRef } = refs;
-  // A selected part is detail the camera sample must keep, whatever else it drops.
-  const lodSelectionKey = normalizePartIdList(selectedPartIds).join("\u0000");
+  const { partVisualStateRef } = refs;
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -107,11 +105,6 @@ export function useStepPartVisualState(layers) {
     runtime.cadScene?.syncSurfaceInstances();
     requestSceneFrame(runtime, shadowCastersChanged(casters, runtime.displayRecords));
   }, [viewerReadyTick, partVisualStateEnabled, recordEdgesVisible, focusedPartIds, hiddenPartIds, hoveredPartId, pickMode, pickableParts, selectedPartIds, viewerTheme, visualEdgeSettings, normalizedDisplayMode]);
-
-  useEffect(() => {
-    lodCameraChangeRef.current?.();
-  }, [lodSelectionKey]);
-
 }
 
 /**

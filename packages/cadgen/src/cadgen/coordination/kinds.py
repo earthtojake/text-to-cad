@@ -18,6 +18,7 @@ from cadgen.coordination.phases import (
     PHASE_COMPONENTS,
     PHASE_FINALIZE,
     PHASE_GENERATE,
+    PHASE_MESH,
     PHASE_PACKAGE,
 )
 
@@ -37,22 +38,33 @@ class ArtifactKind:
     """
 
     name: str
-    phases: tuple[str, ...] = (PHASE_GENERATE, PHASE_PACKAGE, PHASE_COMPONENTS, PHASE_FINALIZE)
+    phases: tuple[str, ...] = (PHASE_GENERATE, PHASE_PACKAGE, PHASE_COMPONENTS, PHASE_FINALIZE, PHASE_MESH)
     labels: Mapping[str, str] = field(default_factory=dict)
 
 
 # A tree: assembly.json + content-addressed components/<cid>.glb.
 STEP_PACKAGE = ArtifactKind(name="step-package")
 
-# Phases the JS builders introduce. None of the STEP phase names fit their work, so they
-# declare their own here rather than growing the shared PHASE_LABELS dict.
-PHASE_PARSE = "parse"
-PHASE_MESH = "mesh"
+# The same tree, compiled from a STEP file's bytes rather than built by a model script:
+# what a CAD user knows as importing. Its phases say so, in the terminal and in the CAD
+# Viewer's loading screen, which reads "import" in a phase's label as importing.
+STEP_IMPORT = ArtifactKind(
+    name=STEP_PACKAGE.name,
+    labels={
+        PHASE_GENERATE: "Importing STEP",
+        PHASE_PACKAGE: "Importing STEP: collecting parts",
+        PHASE_COMPONENTS: "Importing STEP: storing parts",
+        PHASE_MESH: "Importing STEP: meshing parts",
+    },
+)
+
+# The phase a drawing introduces. None of the STEP phase names fit its work, so it is
+# declared here rather than growing the shared PHASE_LABELS dict.
 PHASE_WRITE = "write"
 
 # A generated drawing: the product is the `.dxf` file itself (the viewer parses
-# it directly; no package, no Node child). The phases are just the Python
-# generator run and the file write.
+# it directly; no package). The phases are just the Python generator run and the
+# file write.
 DRAWING_PACKAGE = ArtifactKind(
     name="drawing-package",
     phases=(PHASE_GENERATE, PHASE_WRITE, PHASE_FINALIZE),
@@ -82,17 +94,3 @@ SNAPSHOT = ArtifactKind(
 # An export (STEP/STL/3MF/GLB/DXF) writes no package -- it occupies the model's GENERATOR
 # and writes a file elsewhere -- so it is reported with generator_busy() against the
 # model's own kind rather than being a kind of its own.
-
-# `inspect validate`. Not a reported artifact either -- it writes no package -- but a
-# check over a 2,500-occurrence assembly runs for many minutes,
-# and it reports through the same phase model so the terminal line reads like a
-# build's. Resolving the input is deliberately not a phase here for the same reason
-# as SNAPSHOT: a stale document's rebuild paints its own line first.
-PHASE_COLLECT = "collect"
-PHASE_CHECK = "check"
-
-VALIDATION = ArtifactKind(
-    name="validation",
-    phases=(PHASE_COLLECT, PHASE_CHECK),
-    labels={PHASE_COLLECT: "Collecting parts", PHASE_CHECK: "Checking parts"},
-)

@@ -34,7 +34,6 @@ class RetainedRevisionPublication(unittest.TestCase):
 
         from build123d import Box, Cylinder
         from cadgen.store.build import build_tree_from_compound
-        from cadgen.store.records import write_record
 
         self.child_model = self.root / "child.py"
         self.child_model.write_text("# synthetic child identity\n", encoding="utf-8")
@@ -44,10 +43,18 @@ class RetainedRevisionPublication(unittest.TestCase):
         self.new_tree, _tree, _stats = build_tree_from_compound(
             Cylinder(1, 9), root_name="child"
         )
-        write_record(
-            self.child_model,
-            {"tree": self.old_tree, "closure": {"hash": "", "files": []}, "children": [], "outputs": {}},
-        )
+        self.child_key = self._write_child(self.old_tree, closure_hash="")
+
+    def _write_child(self, tree: str, *, closure_hash: str) -> str:
+        """Publish the child's record with ``tree`` as the result of the closure at
+        ``closure_hash``; returns the key it is keyed by."""
+        from cadgen.store.records import read_record, write_record
+        from cadgen.store.results import producer_versions
+
+        record = {**(read_record(self.child_model) or {}), "tree": tree,
+                  "closure": {"hash": closure_hash, "files": []}, "children": [], "outputs": {},
+                  "producer": producer_versions()}
+        return write_record(self.child_model, record)
 
     def _publication(self):
         import build123d as bd
@@ -61,6 +68,7 @@ class RetainedRevisionPublication(unittest.TestCase):
         target = self.root / "parent.step"
         export_build123d_step_file(bd.Sphere(1), target)
         original_pair = (target.read_bytes(), None)
+        self.original = hashlib.sha256(original_pair[0]).hexdigest()
         script = self.root / "parent.py"
         script.write_text("# synthetic parent identity\n", encoding="utf-8")
         metadata = GeneratorMetadata(
@@ -68,8 +76,6 @@ class RetainedRevisionPublication(unittest.TestCase):
             display_name="parent",
             generator_names=("parent",),
             format="step",
-            mesh_tolerance=None,
-            mesh_angular_tolerance=None,
             entry_function="parent",
             is_decorated=True,
         )
@@ -95,41 +101,38 @@ class RetainedRevisionPublication(unittest.TestCase):
             reemit_annotation_hash=hashlib.sha256(b"no annotation").hexdigest(),
         )
         scene.source_compound = parent
-        scene.store_children = [{"model": str(self.child_model), "tree": self.old_tree}]
+        scene.store_children = [{"model": str(self.child_model), "key": self.child_key}]
         return spec, scene, target, original_pair, float(parent.volume)
 
-    def _run_with_preview_fault(self, fault):
+    def _run_with_export_fault(self, fault):
+        """Publish the parent with ``fault`` run as its export starts: after its result
+        and record are published and before anything is written from them."""
         import build123d as bd
 
         from cadgen._internal import generation
         from cadgen.daemon import executors
-        from cadgen.store import build as store_build
+        from cadgen.store import exports
 
         spec, scene, target, original_pair, pinned_volume = self._publication()
         expected_pair = (hashlib.sha256(original_pair[0]).hexdigest(), None)
-        real_build = store_build.build_tree_through_step
+        real_export = exports.export_step
         observed = {}
 
-        def injecting_build(*args, **kwargs):
-            publish = kwargs.get("on_preview")
-
-            def inject(preview_hash, preview_tree):
-                if publish is not None:
-                    publish(preview_hash, preview_tree)
-                fault()
-
-            kwargs["on_preview"] = inject
-            result = real_build(*args, **kwargs)
-            observed["stagedVolume"] = float(bd.import_step(Path(args[1])).volume)
-            observed["tree"] = result[0]
+        def injecting_export(tree, out, **kwargs):
+            fault()
+            result = real_export(tree, out, **kwargs)
+            observed["stagedVolume"] = float(bd.import_step(Path(out)).volume)
+            observed["tree"] = tree
             return result
+
+        from cadgen.authoring import build_run
 
         executors.set_event_sink(lambda _event: None)
         self.addCleanup(executors.set_event_sink, None)
-        with mock.patch.object(store_build, "build_tree_through_step", side_effect=injecting_build):
+        # The run that owns the command finishes the export it queued as it ends.
+        with mock.patch.object(exports, "export_step", side_effect=injecting_export), build_run():
             result = generation._generate_part_outputs(
                 spec,
-                entries_by_step_path={target: spec},
                 preloaded_scene=scene,
                 require_step_file=False,
                 force=True,
@@ -140,76 +143,40 @@ class RetainedRevisionPublication(unittest.TestCase):
     def test_newer_child_record_and_normal_gc_do_not_change_the_pinned_save(self) -> None:
         from cadgen.store.gc import collect
         from cadgen.store.index import model_ref
-        from cadgen.store.records import read_record, write_record
+        from cadgen.store.records import read_record
         from cadgen.store.trees import get_tree, tree_complete
 
         gc_reports = []
 
         def publish_new_child_and_collect():
-            record = read_record(self.child_model)
-            self.assertIsNotNone(record)
-            write_record(self.child_model, {**record, "tree": self.new_tree})
+            # The child's source moved and it was rebuilt: a new tree under a new key.
+            self._write_child(self.new_tree, closure_hash="moved")
             gc_reports.append(collect())
 
-        _result, target, original_pair, pinned_volume, observed, spec = self._run_with_preview_fault(
+        _result, target, original_pair, pinned_volume, observed, spec = self._run_with_export_fault(
             publish_new_child_and_collect
         )
 
         parent_record = read_record(model_ref(spec.script_path, "parent"))
         self.assertEqual(read_record(self.child_model)["tree"], self.new_tree)
-        self.assertEqual(parent_record["children"], [{"model": str(self.child_model), "tree": self.old_tree}])
+        self.assertEqual(parent_record["children"], [{"model": str(self.child_model), "key": self.child_key}])
         self.assertEqual(get_tree(parent_record["tree"])["links"][0]["tree"], self.old_tree)
+        self.assertEqual(observed["tree"], parent_record["tree"], "the file is written from the pinned result")
         self.assertTrue(tree_complete(parent_record["tree"]))
         self.assertEqual(gc_reports[0].removed, 0)
         self.assertAlmostEqual(observed["stagedVolume"], pinned_volume, places=5)
         self.assertNotEqual(target.read_bytes(), original_pair[0])
 
     def _assert_deletion_fails_before_named_replacement(self, delete):
-        from cadgen._internal import generation
-        from cadgen.store.records import read_record, write_record
-
         def replace_child_then_delete():
-            record = read_record(self.child_model)
-            write_record(self.child_model, {**record, "tree": self.new_tree})
+            self._write_child(self.new_tree, closure_hash="moved")
             delete()
 
-        spec, scene, target, original_pair, pinned_volume = self._publication()
-        expected_pair = (hashlib.sha256(original_pair[0]).hexdigest(), None)
-        from cadgen.daemon import executors
-        from cadgen.store import build as store_build
-        import build123d as bd
-
-        real_build = store_build.build_tree_through_step
-        observed = {}
-
-        def injecting_build(*args, **kwargs):
-            publish = kwargs.get("on_preview")
-
-            def inject(preview_hash, preview_tree):
-                if publish is not None:
-                    publish(preview_hash, preview_tree)
-                replace_child_then_delete()
-
-            kwargs["on_preview"] = inject
-            result = real_build(*args, **kwargs)
-            observed["stagedVolume"] = float(bd.import_step(Path(args[1])).volume)
-            return result
-
-        executors.set_event_sink(lambda _event: None)
-        self.addCleanup(executors.set_event_sink, None)
-        with mock.patch.object(store_build, "build_tree_through_step", side_effect=injecting_build):
-            with self.assertRaisesRegex(RuntimeError, "pinned geometry disappeared"):
-                generation._generate_part_outputs(
-                    spec,
-                    entries_by_step_path={target: spec},
-                    preloaded_scene=scene,
-                    require_step_file=False,
-                    force=True,
-                    expected_document_pair=expected_pair,
-                )
-
-        self.assertAlmostEqual(observed["stagedVolume"], pinned_volume, places=5)
-        self.assertEqual(target.read_bytes(), original_pair[0])
+        target = self.root / "parent.step"
+        with self.assertRaises(FileNotFoundError):
+            self._run_with_export_fault(replace_child_then_delete)
+        # The pinned geometry is gone: nothing was written from it, and the saved file stays.
+        self.assertEqual(hashlib.sha256(target.read_bytes()).hexdigest(), self.original)
 
     def test_missing_pinned_child_fails_before_replacing_the_saved_document(self) -> None:
         from cadgen.store.objects import object_path

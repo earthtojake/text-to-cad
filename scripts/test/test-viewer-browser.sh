@@ -61,7 +61,7 @@ export CADGEN_DAEMON_STATE_DIR="$project/daemon-state"
 # The model library every Viewer writes: the test's own, never the user's.
 export CADGEN_STATE_DIR="$project/state"
 export CADGEN_VIEWER_DIST="$RUNTIME"
-unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_DAEMON_CHILD CADGEN_ROOT_ID
+unset CADGEN_DAEMON_CHILD
 server_pid=""
 
 cleanup() {
@@ -115,7 +115,7 @@ import sys
 from pathlib import Path
 
 from cadgen import build123d as bd
-from cadgen.step_export import export_build123d_step_scene
+from cadgen.step_export import export_build123d_step_file
 from cadgen.step_export_target import export_cad_target
 
 root = Path(sys.argv[1])
@@ -135,7 +135,7 @@ left.label = "left_cylinder"
 right = left.moved(bd.Pos(10, 0, 0))
 right.label = "right_cylinder"
 assembly = bd.Compound(children=[left, right], label="smoke_assembly")
-export_build123d_step_scene(assembly, root / "assembly.step")
+export_build123d_step_file(assembly, root / "assembly.step")
 PY
 
 # A STEP model the camera gate saves a rebuilt revision over. Built from
@@ -183,9 +183,9 @@ if ! (cd "$project" && "$PYTHON" hinge.py && "$PYTHON" hinge_grown.py \
   exit 1
 fi
 
-# Mesh export necessarily materializes source surfaces and tessellations. The
-# browser gate starts with a new store so its first STEP page remains a true
-# cold import/derive path; only this test's private cache is removed.
+# The builds and the mesh export above stored display data. The browser gate
+# starts with a new store so its first STEP page is a true cold import, whose
+# compile derives it; only this test's private cache is removed.
 rm -rf "$CADGEN_CACHE_DIR"
 mkdir -p "$CADGEN_CACHE_DIR"
 

@@ -8,9 +8,8 @@ defaults. Within the tab, a model's state lasts only while it is the model on
 screen: leaving it drops it. The one thing outside the rule is a network cache,
 listed at the end.
 
-This doc covers browser state only. Catalogs, CAD assets, and hidden STEP
-GLB/topology artifacts are backend concerns; use [backend.md](./backend.md) for
-that interface.
+This doc covers browser state only. Catalogs and CAD assets are backend concerns;
+use [backend.md](./backend.md) for that interface.
 
 ## URL Query Params
 
@@ -41,7 +40,7 @@ The record is `{ version, settings, files }`:
 
 | Kept | Where | What |
 | --- | --- | --- |
-| Tab settings | `settings` | `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list). |
+| Tab settings | `settings` | `toolStack` (the resizable panels' sizes, the folded panels, the closed tree and whether the tools are hidden, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list). |
 | File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's settings, Orbit's and the playbar's: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for the home — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
 
 | Not kept | Every open starts it afresh |

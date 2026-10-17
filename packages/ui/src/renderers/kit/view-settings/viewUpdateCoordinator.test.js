@@ -79,7 +79,7 @@ test('unmount aborts preparation and rejects pending captures', async () => {
 test('only resource boundaries prepare; clip motion, exposure, rotation and color stay live', () => {
   const render = scene({ mode: 'render', clip: { enabled: true } });
   for (const patch of [
-    { lighting: { exposure: 1, rotation: 35 } }, { clip: { enabled: true, offset: 0.7 } },
+    { lighting: { exposure: 1, rotation: 35 } }, { clip: { enabled: true, at: 0.7 } },
     { floor: { color: '#abcabc', opacity: 0.7 } }, { surfaces: { color: '#abcdef' } },
     { camera: { projection: 'orthographic' } },
   ]) assert.equal(viewPreparationKey(scene({ mode: 'render', clip: { enabled: true }, ...patch })), viewPreparationKey(render));

@@ -11,9 +11,8 @@ configured: it starts at the seed and is recalibrated on every accounting pass
 from the RSS of workers that are idle and have run nothing, which is what a
 worker costs before geometry (``memory.worker_baseline``). The dependency
 headroom follows from the same number. Exhaustion waits for the
-builds in flight to finish (a parent fanning out its children submits them all
-at once, and only a core's worth can run) and fails explicitly only when nothing
-is running that could release memory. These are soft RSS and
+builds in flight to finish and fails explicitly only when nothing is running
+that could release memory. These are soft RSS and
 reservation bounds, not a hard limit on a native operation's allocations.
 Publication ordering remains the publish rule's concern.
 
@@ -131,6 +130,16 @@ def stopped(status: int | None) -> bool:
     import signal
 
     return -status in {getattr(signal, name) for name in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, name)}
+
+
+def _sweep_scratch() -> None:
+    """Remove what workers that are gone left in the temp folder; never fails the pool."""
+    try:
+        from cadgen._internal import temp_leftovers
+
+        temp_leftovers.sweep()
+    except Exception:  # noqa: BLE001 - scratch cleanup never fails the daemon
+        pass
 
 
 def describe_exit(status: int | None) -> str:
@@ -289,11 +298,11 @@ class Worker:
         # The broker a worker's jobs take slots from is the daemon itself; name the
         # address explicitly so a worker never guesses it from its identity.
         env["CADGEN_DAEMON_SOCKET"] = daemon_address()
-        # A daemon's worker submits its children to the daemon, whatever the process
-        # that started the daemon had in its environment.
+        # A daemon's worker submits its compiles and pool jobs to the daemon, whatever
+        # the process that started the daemon had in its environment.
         env.pop("CADGEN_DAEMON", None)
         # Guards against a worker's own top-level call routing back into the daemon
-        # as a fresh request; nested SUBMITS ignore this on purpose (client.run_nested).
+        # as a fresh request; a nested compile ignores this on purpose (client.run_nested).
         env["CADGEN_DAEMON_CHILD"] = "1"
         python, launched = interpreter()
         env.update(launched)
@@ -529,7 +538,7 @@ class Pool:
                 return
             # Subject-less borrowers return after one job. Replacing them while busy
             # discards each returning warm kernel in favour of a cold import,
-            # turning a stream of surface requests into one import per job.
+            # turning a stream of part requests into one import per job.
             borrowed = sum(worker.busy and not worker.model for worker in self._workers)
             want = spare_count() - len(self._spares_locked()) - borrowed - self._spares_pending
             if self._policy.limit_bytes:
@@ -794,7 +803,10 @@ class Pool:
                 if now - worker.last_used >= BORROWED_SURPLUS_IDLE_SECONDS:
                     self._drop_locked(worker)
 
-    def release(self, worker: Worker, *, healthy: bool = True) -> None:
+    def release(self, worker: Worker, *, healthy: bool = True, cancelled: bool = False) -> None:
+        """Take a worker back after a job. An unhealthy one is dropped, and counted a crash
+        unless its job was ``cancelled``: stopped because its caller left (or someone stopped
+        the worker), which ends a job by killing its worker as a matter of course."""
         with self._cv:
             borrowed = worker.extra and not worker.model
             worker.busy = False
@@ -802,9 +814,9 @@ class Pool:
             worker.jobs_served += 1
             self._stats["jobsServed"] += 1
             if not healthy or not worker.alive():
-                if not healthy:
+                if not healthy and not cancelled:
                     self._stats["crashes"] += 1
-                self._drop_locked(worker)
+                self._drop_locked(worker, sweep=True)
             elif worker.jobs_served >= recycle_after():
                 self._stats["recycles"] += 1
                 self._drop_locked(worker)
@@ -831,7 +843,11 @@ class Pool:
             self._cv.notify_all()
         self.ensure_spares()
 
-    def _drop_locked(self, worker: Worker) -> None:
+    def _drop_locked(self, worker: Worker, *, sweep: bool = False) -> None:
+        """Retire a worker on a thread of its own. One that died or was killed (``sweep``)
+        could not remove its scratch -- an import copy is a whole document -- and the sweep
+        a worker runs as it starts never sees a worker that dies after it, so once this one
+        is reaped its scratch is swept here (``temp_leftovers``)."""
         if worker in self._workers:
             self._workers.remove(worker)
         if worker not in self._retiring:
@@ -843,13 +859,15 @@ class Pool:
             finally:
                 with self._cv:
                     self._cv.notify_all()
+            if sweep:
+                _sweep_scratch()
 
-        threading.Thread(target=retire, daemon=True).start()
+        threading.Thread(target=retire, name="cadgen-worker-retire", daemon=True).start()
 
     def _reap_dead_locked(self) -> None:
         for worker in list(self._workers):
             if not worker.alive() and not worker.busy:
-                self._drop_locked(worker)
+                self._drop_locked(worker, sweep=True)
 
     def reap_dead(self) -> None:
         with self._cv:

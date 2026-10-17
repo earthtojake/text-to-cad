@@ -140,11 +140,11 @@ class ResultShape(unittest.TestCase):
         listing = {
             "ok": True,
             "mode": "list",
-            "parts": [{"ref": "#o1.1", "name": "plate", "triangleCount": 12}],
+            "parts": [{"ref": "#o:3f2a9c1d7e5b", "name": "plate", "triangleCount": 12}],
         }
         result = snapshot_result(listing)
         self.assertEqual(result.files, ())
-        self.assertEqual(result.parts[0]["ref"], "#o1.1")
+        self.assertEqual(result.parts[0]["ref"], "#o:3f2a9c1d7e5b")
 
     def test_debug_without_json_prints_one_line_per_input_after_the_saved_paths(self) -> None:
         # `--debug` alone used to compute the diagnostics and print nothing.
@@ -155,9 +155,9 @@ class ResultShape(unittest.TestCase):
         self.assertEqual(result.human_lines(), [
             # The platform's own spelling of the path: backslashes on Windows.
             f"saved snapshot: {Path('/tmp/a.png')}",
-            "warning: low light",
             'debug: {"input":"part.step","stageTimings":{"renderMs":12}}',
         ])
+        self.assertEqual(result.warning_lines(), ["warning: low light"])
 
     def test_an_empty_inventory_still_prints_itself(self) -> None:
         # List mode with zero parts answers `[]`, not silence.
@@ -217,34 +217,38 @@ class JsonShape(unittest.TestCase):
         self.assertNotIn(", ", printed)  # compact separators
         self.assertEqual(json.loads(printed)["files"][0]["path"], native("/tmp/review.png"))
 
-    def test_the_human_form_names_the_paths_and_the_warnings(self) -> None:
-        stdout = io.StringIO()
-        emit(
+    def test_the_human_form_names_the_paths_and_says_the_warnings_on_stderr(self) -> None:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        code = emit(
             lambda: snapshot_result(VIEW_RESULT),
             prog="cadgen step snapshot",
             as_json=False,
             stdout=stdout,
+            stderr=stderr,
         )
-        self.assertEqual(
-            stdout.getvalue().splitlines(),
-            [
-                f"saved snapshot: {native('/tmp/review.png')}",
-                "warning: one part had no material",
-            ],
-        )
+        self.assertEqual(code, 0, "a warning is not a failure")
+        self.assertEqual(stdout.getvalue().splitlines(), [f"saved snapshot: {native('/tmp/review.png')}"])
+        self.assertEqual(stderr.getvalue().splitlines(), ["warning: one part had no material"])
 
     def test_list_mode_prints_the_inventory_and_nothing_else(self) -> None:
-        listing = {"ok": True, "mode": "list", "parts": [{"ref": "#o1.1", "name": "plate"}]}
-        stdout = io.StringIO()
-        emit(
+        # A list's warnings were once dropped from its human form: its stdout is the
+        # inventory alone, so they are said on stderr.
+        listing = {"ok": True, "mode": "list", "parts": [{"ref": "#o:3f2a9c1d7e5b", "name": "plate"}],
+                   "warnings": ["#o:0a9e8d7c6b5f pin could not be meshed (boom), so the list leaves it out"]}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        code = emit(
             lambda: snapshot_result(listing),
             prog="cadgen step snapshot",
             as_json=False,
             stdout=stdout,
+            stderr=stderr,
         )
+        self.assertEqual(code, 0)
         self.assertEqual(
-            json.loads(stdout.getvalue()), [{"ref": "#o1.1", "name": "plate"}]
+            json.loads(stdout.getvalue()), [{"ref": "#o:3f2a9c1d7e5b", "name": "plate"}]
         )
+        self.assertEqual(stderr.getvalue().splitlines(),
+                         ["warning: #o:0a9e8d7c6b5f pin could not be meshed (boom), so the list leaves it out"])
 
     def test_a_failure_is_the_schema_error_line(self) -> None:
         stdout = io.StringIO()
@@ -376,7 +380,7 @@ class PublicVerbs(unittest.TestCase):
         drawing = parameters("cadgen.dxf")
         self.assertIn("appearance", drawing)
         for absent in ("camera", "display", "mode", "view_labels",
-                       "kinematics", "focus", "hide", "joint_values", "section"):
+                       "kinematics", "focus", "hide", "joint_values"):
             self.assertNotIn(absent, drawing, f"{absent} describes a scene a drawing does not have")
 
         for door in ("urdf", "sdf"):

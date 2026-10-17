@@ -1,14 +1,8 @@
-"""The assembled .step is the document: it must carry the model's colors, and
-it must carry NOTHING else — no cadgen metadata, no link back to source code.
+"""A generated model's tree carries its colors and nothing source-derived.
 
-Regression suite for the planetary-pilot color loss (2026-08-30):
-``assemble_step_from_package`` read colors only from the COMPONENT entry,
-while generators author per-occurrence colors — every such model's .step was
-written colorless, so any import of it was colorless too. Colors are baked
-into the STEP; everything source-derived (pose, mates, provenance) lives in
-the tree's source sidecar and is deliberately NOT in the file, so importing
-a bare generated .step yields a plain imported package (renders, no pose) and
-running the model script restores the rest.
+Generators author per-occurrence colors, and the tree records each one on its
+occurrence. Everything source-derived (pose, mates, provenance) lives in the
+sidecar and the model record, never in the tree.
 """
 
 from __future__ import annotations
@@ -22,8 +16,6 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen import step_artifact_cli  # noqa: E402
-from cadgen._internal.step_assemble import assemble_step_from_package  # noqa: E402
 from cadgen.catalog import result_view_dir  # noqa: E402
 from tests.python.support.cad_test_roots import ClassCadRoots, IsolatedCadRoots  # noqa: E402
 
@@ -56,8 +48,8 @@ if __name__ == "__main__":
 
 
 class GeneratedStepFidelityTests(unittest.TestCase):
-    # The generated package is built ONCE for the class: every test reads it (or
-    # assembles and imports a COPY into its own store), none rebuilds it.
+    # The generated package is built ONCE for the class: every test reads a COPY
+    # of it in its own store, none rebuilds it.
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -130,85 +122,6 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         # model wrote; the copied store carries it under the seed's path.
         provenance = read_source_provenance(self._seed_dir / "colored.step") or {}
         self.assertEqual(provenance.get("sourceKind"), "python")
-
-    def test_assembled_step_carries_occurrence_colors_and_no_cadgen_metadata(self) -> None:
-        # One assembled file, read as text: the occurrence colours are in it, and
-        # nothing of cadgen's is -- no cadgen: properties, no source path, no hash.
-        _, logical_step = self._build_generated_package()
-        out = self.temp_root / "out" / "colored.step"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        assemble_step_from_package(result_view_dir(logical_step), out)
-        text = out.read_text(encoding="utf-8", errors="ignore")
-        self.assertIn(
-            "COLOUR",
-            text,
-            "assembled STEP must carry the occurrence colors the descriptor records",
-        )
-        self.assertNotIn("cadgen:", text)
-        self.assertNotIn("colored.py", text)
-
-    def test_generate_and_import_produce_one_descriptor_schema(self) -> None:
-        """The Phase-2 invariant: assembly.json is a pure function of the STEP
-        bytes plus schema versions, whichever producer wrote it. Generating a
-        model and importing its own exported STEP must yield descriptors with
-        the SAME key set, the same identity fields, and equivalent geometry.
-
-        Deliberately NOT byte-identity: the STEP text round-trip is not
-        BREP-byte-preserving (component cids and adaptive-mesh stats may
-        differ), so byte-unification is a Phase-3 decision, not this gate.
-        """
-        _, logical_step = self._build_generated_package()
-        generated = self._descriptor(logical_step)
-
-        exported_dir = self.temp_root / "roundtrip"
-        exported_dir.mkdir()
-        exported = exported_dir / "colored.step"
-        assemble_step_from_package(result_view_dir(logical_step), exported)
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=exported,
-        )
-        self.assertTrue(payload.get("ok"), payload)
-        imported = self._descriptor(exported)
-
-        # A bare generated STEP is simply importable (nothing in the file says
-        # otherwise): the import leaves no source sidecar behind, and the derived
-        # package keeps every occurrence's colour.
-        from cadgen._internal.source_sidecar import model_is_generated
-
-        self.assertFalse(model_is_generated(exported), "an import must not leave a source sidecar behind")
-        self.assertEqual(
-            len([o for o in imported.get("occurrences") or [] if isinstance(o.get("color"), list)]),
-            len(imported.get("occurrences") or []),
-            "every imported occurrence keeps its colour",
-        )
-
-        # Schema purity: one key set, no source-derived keys on either side.
-        self.assertEqual(sorted(generated.keys()), sorted(imported.keys()))
-        for banned in (
-            "sourceKind", "sourcePath", "sourceHash", "sourceClosureHash",
-            "sourceClosureFiles", "pose", "generatedAt",
-        ):
-            self.assertNotIn(banned, generated)
-            self.assertNotIn(banned, imported)
-
-        # Identity fields agree.
-        for key in ("kind", "entryKind", "units", "rootName"):
-            self.assertEqual(generated.get(key), imported.get(key), key)
-
-        # Geometric equivalence: same occurrence structure and bounds (cids
-        # and mesh stats are allowed to differ across the round trip).
-        self.assertEqual(
-            len(generated.get("occurrences") or []),
-            len(imported.get("occurrences") or []),
-        )
-        self.assertEqual(
-            sorted(o.get("name") for o in generated["occurrences"]),
-            sorted(o.get("name") for o in imported["occurrences"]),
-        )
-        for axis in ("min", "max"):
-            for got, expected in zip(imported["bbox"][axis], generated["bbox"][axis]):
-                self.assertAlmostEqual(got, expected, places=3)
 
 
 if __name__ == "__main__":

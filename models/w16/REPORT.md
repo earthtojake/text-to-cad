@@ -84,7 +84,7 @@ Three clips ship in the sidecar and are scrubbable in the viewer.
   goes away is what stands in front of them: the outer systems move clear, the
   heads lift along each bank's axis, and the crankcase casting plus its seven
   cast face skins fade to 8 % opacity. The block's cross bolts and ID pads stay
-  solid, so its bolt pattern still reads: some of `o1.1`, not all of it. Off over
+  solid, so its bolt pattern still reads: some of the block, not all of it. Off over
   8 s, held 8 s, back on. The length is exactly 4 crank cycles and the ramp
   returns to zero, so t=0 and t=24 are identical — verified, maximum matrix
   difference 0.000e+00.

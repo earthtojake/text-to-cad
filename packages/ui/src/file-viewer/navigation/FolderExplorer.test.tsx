@@ -45,7 +45,7 @@ it('starts in the open file\'s folder: a press opens a subfolder inline, a doubl
   await screen.findByText('b.step');
   expect(rows()).toEqual(['directory:/home/me/models/parts/brackets', 'file:/home/me/models/parts/brackets/b.step', `file:${FILE}*`]);
   expect([brackets.getAttribute('aria-expanded'), brackets.style.paddingLeft, row('/home/me/models/parts/brackets/b.step').style.paddingLeft])
-    .toEqual(['true', '8px', '18px']);
+    .toEqual(['true', '5px', '15px']);
   // Its rows hang from a faint line under its chevron, as every tree's do.
   expect([brackets.querySelectorAll('[data-tree-guide]').length,
     row('/home/me/models/parts/brackets/b.step').querySelectorAll('[data-tree-guide]').length]).toEqual([0, 1]);

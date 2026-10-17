@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
 import { buildComposedPackageMeshData } from "@text-to-cad/core/lib/assembly/meshData.js";
-import { resetStepModuleRecordEffects } from "@text-to-cad/core/common/stepModuleEffects.js";
+import { resetRecordEffects } from "@text-to-cad/core/common/recordEffects.js";
 import { applyPartVisualState } from "@text-to-cad/core/lib/viewer/partVisualState.js";
 import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
 import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
@@ -80,8 +80,8 @@ test("eligibility excludes merged, non-STEP, active and residual dynamic states"
     { renderFormat: "urdf" }, { renderFormat: "dxf" }, { renderFormat: "glb" },
     { parameters: {} }, { animation: {} }, { exploded: true }, { loading: true },
     ...[{ effectMatrix: {} }, { explodedViewMatrix: {} }, { effectStyle: {} }, { effectVisible: false },
-      { effectHighlighted: true }, { effectDeformation: {} }, { tubeDeformationState: { active: true } },
-      { tubeGpuState: { active: true } }].map(record => ({ records: [record] })),
+      { effectHighlighted: true }, { effectDeformation: {} }, { tubeSkinState: { active: true } }
+    ].map(record => ({ records: [record] })),
   ]) assert.equal(staticSceneResetEligible({ ...base, ...patch }), false, JSON.stringify(patch));
 });
 
@@ -99,7 +99,7 @@ test("removing a prior module, animation or exploded pose never skips the transi
 function component(level) {
   const geometry = new THREE.BoxGeometry(1 + level / 10, 1, 1);
   const result = { vertices: geometry.attributes.position.array, normals: geometry.attributes.normal.array,
-    indices: geometry.index.array, colors: new Float32Array(0), lodLevel: level,
+    indices: geometry.index.array, colors: new Float32Array(0),
     bounds: { min: [-(1 + level / 10) / 2, -.5, -.5], max: [(1 + level / 10) / 2, .5, .5] },
     parts: [{ id: "solid", vertexCount: geometry.attributes.position.count, triangleCount: geometry.index.count / 3 }] };
   geometry.dispose(); return result;
@@ -115,7 +115,7 @@ const visualState = () => ({ hiddenPartIds: [], selectedPartIds: [], hoveredPart
 const topology = { edges: [{ occurrenceId: "a1", segmentStart: 0, segmentCount: 1 }],
   proxy: { edgePositions: new Float32Array([0, 0, 0, 1, 0, 0]), edgeIndices: new Uint32Array([0, 1]), edgeIds: new Uint32Array([0]) } };
 function sceneFixture(source) {
-  const scene = buildModel(THREE, source, { renderPartsIndividually: true, parameterSetup: false });
+  const scene = buildModel(THREE, source, { renderPartsIndividually: true });
   const runtime = { THREE, cadScene: scene, displayRecords: scene.displayRecords, activeModelKey: "test.step",
     modelGroup: scene.modelGroup, edgesGroup: scene.edgesGroup, modelBounds: scene.bounds, requestRender() {} };
   return { scene, runtime, tracker: createStaticSceneReset(), dispose() {
@@ -128,7 +128,7 @@ function syncEdges(runtime, visual, clip) {
     syncClip: active => syncRuntimeStepClipPlane(active, clip) });
 }
 function ordinaryReset(runtime, visual, clip) {
-  resetStepModuleRecordEffects(runtime.displayRecords, THREE);
+  resetRecordEffects(runtime.displayRecords, THREE);
   runtime.displayRecords.forEach(record => applyDisplayRecordTransform(THREE, record));
   applyPartVisualState(THREE, runtime.displayRecords, visual);
   runtime.cadScene.syncSurfaceInstances(); syncEdges(runtime, visual, clip);
@@ -163,7 +163,7 @@ test("actual repeated component publications preserve transforms, materials, cli
   const desc = descriptor(), base = component(0), b = component(0);
   let source = buildComposedPackageMeshData(desc, { a: base, b });
   const control = sceneFixture(source), optimized = sceneFixture(source), visual = visualState();
-  const clip = { enabled: true, axis: "x", offsets: { x: .4 }, invert: false };
+  const clip = { enabled: true, axis: "x", at: 0.4, invert: false };
   try {
     assert.equal(publish(optimized, source, visual, clip, true), false, "first load resets normally");
     publish(control, source, visual, clip, false);
@@ -191,7 +191,7 @@ test("actual prop-only visual and section-clip changes still apply after a compl
     publish(optimized, source, visual, clip, true); publish(optimized, source, visual, clip, true);
     publish(control, source, visual, clip, false);
     for (const [nextVisual, nextClip] of [[{ ...visual, hiddenPartIds: ["a1"], selectedPartIds: ["a2"] }, clip],
-      [visual, { enabled: true, axis: "y", offsets: { y: .2 }, invert: true }]]) {
+      [visual, { enabled: true, axis: "y", at: .2, invert: true }]]) {
       const token = {}; optimized.tracker.beginRender(token, true);
       assert.equal(optimized.tracker.consume(token, { source, runtime: optimized.runtime,
         visualState: nextVisual, clipState: nextClip }), false);
@@ -211,18 +211,20 @@ test("actual module and animation removal restores rest records even beside a ne
     const desc = descriptor(), components = { a: component(0), b: component(0) };
     const source = buildComposedPackageMeshData(desc, components);
     const control = sceneFixture(source), optimized = sceneFixture(source), visual = visualState(), clip = { enabled: false };
-    const parameters = kind === "parameters" ? { definition: { manifest: {}, module: { update(ctx) {
-      ctx.effects.transform("a1", { translate: [3, 2, 1] });
-      ctx.effects.style("a1", { color: "#ff0000", opacity: .4 });
-    } } } } : null;
-    const animation = kind === "animation" ? { elapsedSec: 0, clip: { duration: 1, update(t, model) {
-      model.get("a1").translate([3, 2, 1]).opacity(.4);
-    } } } : null;
+    // The pose: a slider carrying a1 along (3, 2, 1), at the travel that lands it there.
+    const parameters = kind === "parameters" ? { articulation: { schemaVersion: 2,
+      controls: [{ id: "lift", label: "lift", unit: "mm", min: 0, max: 10, default: 0 }],
+      joints: [{ id: "lift", parent: null, kind: "slider", origin: [0, 0, 0], axis: [3, 2, 1], travel: { bias: 0, terms: [["lift", 1]] } }],
+      carries: { lift: ["a1"] }, handles: [], poses: {}, opening: { lift: 0 } }, values: { lift: Math.hypot(3, 2, 1) } } : null;
+    const animation = kind === "animation" ? { elapsedSec: 0, clip: { id: "lift", label: "Lift", duration: 1, loop: true, tracks: [
+      { targets: ["a1"], times: [0], pivot: [0, 0, 0], transform: [[3, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]] },
+      { targets: ["a1"], times: [0], opacity: [.4] }
+    ] } } : null;
     try {
       for (const f of [control, optimized]) {
         publish(f, source, visual, clip, false);
         f.tracker.beginRender({}, staticSceneResetEligible({ source, renderFormat: "step", parameters, animation }));
-        applySceneState(THREE, { runtime: f.runtime, meshData: source, stepParameterRuntime: parameters, animation });
+        applySceneState(THREE, { runtime: f.runtime, meshData: source, pose: parameters, animation });
         f.runtime.displayRecords.forEach(record => applyDisplayRecordTransform(THREE, record));
         applyPartVisualState(THREE, f.runtime.displayRecords, visual); f.scene.syncSurfaceInstances();
         assert.ok(f.runtime.displayRecords[0].effectMatrix, "the prior dynamic frame really changed geometry placement");

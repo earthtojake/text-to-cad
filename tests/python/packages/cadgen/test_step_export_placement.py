@@ -90,7 +90,7 @@ class NamesOcctWouldMisreadTests(unittest.TestCase):
             self.assertIn(b"'post (6\\X\\27)'", data)
             self.assertIn(b"'it''s'", data)
 
-    def test_a_file_whose_names_read_back_keeps_occt_spelling(self):
+    def test_a_file_whose_names_are_read_as_written_keeps_occt_spelling(self):
         with tempfile.TemporaryDirectory(prefix="step-names-") as tmp:
             part = bd.Solid.make_box(2, 3, 4)
             part.label = "it's (big)"
@@ -108,7 +108,7 @@ class NonAsciiNamesTests(unittest.TestCase):
     character as a Part 21 directive instead (\\X2\\ in the basic plane, \\X4\\ beyond it), and
     every ASCII literal as OCCT does."""
 
-    # Lowercase accents failed every build; the rest read back already and must still.
+    # Lowercase accents failed every build; the rest were read as written already and must still.
     FAILED = ["Bügel_ä", "é", "ö", "ñandú", "ç", "à", "å", "ø"]
     PASSED = ["É_Ü", "ß", "ő", "ł", "Кирилл", "日本", "bolt_🔩", "Grüße's (6')"]
 
@@ -133,16 +133,6 @@ class NonAsciiNamesTests(unittest.TestCase):
             # ASCII literals keep OCCT's spelling.
             self.assertIn(b"'plain'", data)
             self.assertIn(b"'it''s'", data)
-
-    def test_the_splice_spells_names_as_the_writer_does(self):
-        from cadgen.step_export import spell_name
-
-        self.assertEqual(spell_name("plain"), b"plain")
-        self.assertEqual(spell_name("Bügel_ä"), b"B\\X2\\00FC\\X0\\gel_\\X2\\00E4\\X0\\")
-        self.assertEqual(spell_name("日本🔩x"), b"\\X2\\65E5672C\\X0\\\\X4\\0001F529\\X0\\x")
-        self.assertEqual(spell_name("post (6')"), b"post (6\\X\\27)")
-        with self.assertRaises(ValueError):
-            spell_name("back\\slash")
 
     def test_an_ascii_file_is_written_as_occt_writes_it(self):
         from unittest import mock

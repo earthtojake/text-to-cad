@@ -1,6 +1,6 @@
 {
   "name": "@text-to-cad/ui",
-  "version": "0.7.21",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "files": [
@@ -9,6 +9,8 @@
     "licenses",
     "scripts/drawing-assets.mjs",
     "scripts/drawing-assets.d.mts",
+    "scripts/build-id.mjs",
+    "scripts/build-id.d.mts",
     "README.md"
   ],
   "sideEffects": [
@@ -90,7 +92,8 @@
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"
     },
-    "./drawing-assets": "./scripts/drawing-assets.mjs"
+    "./drawing-assets": "./scripts/drawing-assets.mjs",
+    "./build-id": "./scripts/build-id.mjs"
   },
   "scripts": {
     "build": "node scripts/build.mjs",

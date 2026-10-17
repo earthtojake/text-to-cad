@@ -2,7 +2,7 @@
 
 A sub-assembly of the engine: the parts `lib/heads.py` builds, as one model
 with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.4`; rebuild `w16.py` to pick up a change here.
+`#heads`; rebuild `w16.py` to pick up a change here.
 """
 
 from __future__ import annotations
@@ -15,8 +15,7 @@ from lib import spec as S
 from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/heads.step", materials=materials_for_system("heads"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@step(out="../STEP/heads.step", materials=materials_for_system("heads"))
 def heads():
     parts = heads_lib.build(S.SECTIONED)
     if not parts:

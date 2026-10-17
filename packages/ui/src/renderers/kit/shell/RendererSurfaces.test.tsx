@@ -2,13 +2,12 @@ import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// The shell's surfaces a RENDERER fills — the viewport menu, Quick Edit, the camera-settled
-// report — driven end to end through the real RendererShell and useRendererShell under the shell
-// harness (a renderer that uses all three), with only the WebGL viewport replaced. The stand-in
+// The shell's surfaces a RENDERER fills — the viewport menu and Quick Edit — driven end to end
+// through the real RendererShell and useRendererShell under the shell
+// harness (a renderer that uses both), with only the WebGL viewport replaced. The stand-in
 // hands the overlay the same viewport context the real one does (a host the pointer events arrive
 // on, a runtime whose renderer's canvas is the scene's), and records the props the shell wired, so
-// the camera reports reach the renderer through exactly the callbacks the real viewport calls.
-// The viewport's own half of those reports (a resize, a preview camera) is ShellViewport.test.tsx.
+// the camera reports reach the shell through exactly the callbacks the real viewport calls.
 const viewport = vi.hoisted(() => ({ props: null as any }));
 vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
@@ -26,6 +25,7 @@ vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
 import HarnessRenderer from '../../../../dist/renderers/shell-harness/HarnessRenderer.js';
 import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
+import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -164,7 +164,7 @@ it('a clipboard destination has no snapshot in the navbar, and Draw copies its i
   const writeImage = vi.fn(async () => {}), deliver = vi.fn();
   const { navigation } = mount(testHost({
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
+    clipboard: { writeText: async () => {}, writeImage },
   }));
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
   fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
@@ -185,23 +185,6 @@ it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a pro
   pick(canvas);
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
     .toEqual(['Close Quick Edit', 'Copy Prompt']);
-});
-
-it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', () => {
-  const { overlay } = mount();
-  expect(overlay('camera-settles')).toBe('0');
-  // A camera that moved and was recorded (`onPerspectiveChange`) is a settle.
-  act(() => { viewport.props.onPerspectiveChange({ position: [1, 2, 3], target: [0, 0, 0], up: [0, 0, 1], zoom: 1, projection: 'orthographic' }); });
-  expect(overlay('camera-settles')).toBe('1');
-  // So is the viewport's own settle (a preview camera, a resize), which records nothing.
-  act(() => { viewport.props.onCameraSettled(); });
-  expect(overlay('camera-settles')).toBe('2');
-  // Preview: the camera that moves records no perspective, and the renderer still hears of it.
-  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
-  expect(viewport.props.previewMode).toBe(true);
-  act(() => { viewport.props.onPerspectiveChange({ position: [4, 5, 6], target: [0, 0, 0], up: [0, 0, 1], zoom: 2, projection: 'orthographic' }); });
-  act(() => { viewport.props.onCameraSettled(); });
-  expect(overlay('camera-settles')).toBe('4');
 });
 
 it('a view that has gone writes nothing more: its last write is the one it makes as it unmounts, and a camera report after it writes no view again', () => {
@@ -226,3 +209,47 @@ it('a view that has gone writes nothing more: its last write is the one it makes
 
 // The full reset crosses the renderer callback and the shell's tool/preview
 // lifecycle; it must reach the camera only after those changes commit.
+
+// A stand-in routine runtime: what preview puts down on the way in and hands back on the way out.
+function routineRuntime(name: string, calls: string[]) {
+  return { clips: [{ id: name }], clock: createAnimationClock(), savePlayback: () => { calls.push(`save ${name}`); return `${name}@3s`; },
+    resetPlayback: () => calls.push(`reset ${name}`), onRelease: () => calls.push(`release ${name}`),
+    restorePlayback: (saved: string) => calls.push(`restore ${name} ${saved}`), onPlayToggle: () => calls.push(`play ${name}`) };
+}
+
+function mountRoutine(data: Record<string, unknown>) {
+  const settings = { toolStack: { panels: {}, collapsed: {} } };
+  const preferences = { getSnapshot: () => settings, subscribe: () => () => {}, update() {} };
+  const slot = navbarSlot();
+  const props = (extra: Record<string, unknown>) => ({ source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' },
+    document: null, navbarSlot: slot, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state: undefined,
+    onStateChange() {}, onNavigationActionsChange() {}, reload() {}, data: { services: { preferences }, ...extra } });
+  const view = render(<ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(data) as any)} /></ViewerHostContext.Provider>);
+  return (extra: Record<string, unknown>) => view.rerender(
+    <ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(extra) as any)} /></ViewerHostContext.Provider>);
+}
+
+it('the tools view\'s routine goes back only to the file it came from', () => {
+  const calls: string[] = [];
+  const first = routineRuntime('a', calls);
+  const rerender = mountRoutine({ animation: first, modelKey: 'a.glb' });
+  act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Preview' })[0]); });
+  // Another file opened in this view while preview was up: its runtime starts at rest.
+  const second = routineRuntime('b', calls);
+  rerender({ animation: second, modelKey: 'b.glb' });
+  // Opening another file leaves preview; the routine saved from a is never posed on b, which
+  // starts at rest (put down, however many times).
+  expect(screen.queryAllByRole('button', { name: 'Exit preview' })).toEqual([]);
+  expect(calls.filter(call => !call.startsWith('release'))).toEqual(['save a', 'reset a']);
+  expect(calls).toContain('release b');
+});
+
+it('a view that stops offering Preview while it is up leaves it as every exit does', () => {
+  const calls: string[] = [];
+  const runtime = routineRuntime('a', calls);
+  const rerender = mountRoutine({ animation: runtime });
+  act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Preview' })[0]); });
+  rerender({ animation: runtime, previewable: false });
+  expect(calls.filter(call => !call.startsWith('release'))).toEqual(['save a', 'reset a', 'restore a a@3s']);
+  expect(calls).toContain('release a');
+});

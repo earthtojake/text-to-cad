@@ -78,6 +78,8 @@ class StoreForget(unittest.TestCase):
         result = self._store("forget", "src/pin.py")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("forgot record", result.stdout)
+        self.assertIn("1 stored result", result.stdout)
+        self.assertFalse(list((self.cache / "index" / "result").glob("*")), "the results went with the record")
         why = self._store("why", "src/pin.py")
         self.assertEqual(1, why.returncode)
         self.assertIn("verdict STALE  (no record)", why.stdout)

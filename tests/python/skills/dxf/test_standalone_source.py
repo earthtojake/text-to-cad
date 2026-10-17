@@ -61,20 +61,8 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             self.assertIsNone(source.step_path)
             self.assertEqual(script_path.with_suffix(".dxf"), source.dxf_path)
 
-    def test_directory_catalog_lists_any_decorated_dxf_source(self) -> None:
-        # Library-first: any plain .py declaring a @dxf model is a first-class
-        # drawing entry — the retired .dxf.py naming carried no meaning worth
-        # keeping once the decorator is the declaration.
-        with temporary_directory(prefix="dxf-skill") as root:
-            script_path = _write_standalone_source(Path(root))
-            sources = cad_catalog.iter_cad_sources(Path(root))
-
-            self.assertEqual(1, len(sources))
-            self.assertIsNotNone(sources[0].dxf_path)
-            self.assertEqual(script_path, sources[0].script_path)
-
     def test_generate_dxf_targets_always_writes_the_sibling(self) -> None:
-        # The .dxf IS the product (design/standalone-viewer.md Phase A): every run
+        # The .dxf IS the product: every run
         # writes it, no package exists, and only the output record remains — in
         # the store's records/ tier — to make an unchanged source a no-op.
         with temporary_directory(prefix="dxf-skill") as root:
@@ -184,10 +172,10 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             self.assertFalse(stale(script_path).stale)
             self.assertNotEqual(rendered, sibling.read_bytes())
 
-    def test_a_drawing_pins_the_model_it_composes(self) -> None:
-        # A drawing is a model in the graph: calling `bracket()` in its body pins
-        # bracket's tree in the drawing's record (gate clause 3), so the flat
-        # pattern goes stale when bracket's GEOMETRY changes — no `--force`.
+    def test_a_drawing_follows_the_model_it_composes_by_key(self) -> None:
+        # A drawing is a model in the graph: calling `bracket()` in its body records
+        # bracket's key in the drawing's record (gate clause 3), so the flat
+        # pattern goes stale when bracket is rebuilt — no `--force`.
         import os
         from unittest import mock
 
@@ -238,7 +226,7 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             record = read_record(pattern_path) or {}
             children = record.get("children") or []
             self.assertEqual([Path(c["model"]).name for c in children], ["bracket.py::bracket"])
-            self.assertEqual(children[0]["tree"], (read_record(bracket_path) or {}).get("tree"))
+            self.assertEqual(children[0]["key"], (read_record(bracket_path) or {}).get("key"))
             self.assertFalse(stale(pattern_path).stale)
             first = pattern_path.with_suffix(".dxf").read_bytes()
 

@@ -4,8 +4,8 @@ Stdlib-only. Each digit segment is approximated by a conservative capsule
 (segment + radius) in its link frame; a pose is collision-free when every
 thumb capsule clears every finger capsule. The named grip poses are tuned
 to small POSITIVE clearances (pads kiss at ~+0.7..0.8 mm, never overlap),
-and the animation key orders in `ANIMATION_JS` in `src/lyra.py` are chosen so every
-adjacent smoothstep blend stays clear:
+and the key orders of the `ANIMATION` clips in `src/lyra.py` are chosen so
+every adjacent smoothstep blend stays clear:
 
 - pose tour: relaxed -> precision_pinch -> ok_sign -> point ->
   tripod_pinch -> fist (the fist only neighbors tripod/relaxed; blending
@@ -118,7 +118,7 @@ def _smoothstep(u: float) -> float:
 
 
 def path_worst(pose_a, pose_b, steps: int = 120) -> tuple[float, str, str, float]:
-    """Worst clearance along the smoothstep blend a -> b (the sidecar path)."""
+    """Worst clearance along the smoothstep blend a -> b (a clip's path)."""
     names = [joint["name"] for joint in chain.all_joints()]
     worst = (math.inf, "", "", 0.0)
     for i in range(steps + 1):
@@ -138,8 +138,8 @@ RIPPLE_WINDOW = 0.45
 
 
 def ripple_pose(phase: float, grip: float = 1.0) -> dict[str, float]:
-    """Mirror of the sidecar ripplePose: overlapping per-digit curl pulses
-    on top of the baked relaxed pose (the tour's opening wave)."""
+    """Mirror of `_ripple_pose` in src/lyra.py: overlapping per-digit curl
+    pulses on top of the baked relaxed pose (the tour's opening wave)."""
     p = phase % 1.0
     step = (1.0 - RIPPLE_WINDOW) / (len(RIPPLE_ORDER) - 1)
     pose = dict(chain.named_poses_deg()[chain.BAKED_POSE_NAME])

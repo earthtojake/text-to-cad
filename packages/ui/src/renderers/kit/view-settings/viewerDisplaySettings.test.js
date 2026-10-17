@@ -16,7 +16,7 @@ test('the viewer offers the canonical presets in their intended order', () => {
 
 test('live display patches merge groups without pinning defaults or losing tools', () => {
   const current = { mode: 'render', camera: { focalLength: 80 }, lighting: { exposure: 1, size: 2 },
-    clip: { enabled: true, axis: 'y', offset: 0.35 } };
+    clip: { enabled: true, axis: 'y', at: 0.35 } };
   const next = mergeViewerDisplaySettings(current, { lighting: { exposure: 2 } });
   assert.deepEqual(next, { ...current, lighting: { exposure: 2, size: 2 } });
   assert.throws(() => mergeViewerDisplaySettings(current, { render: { exposure: 1 } }), /Unsupported/);
@@ -25,7 +25,7 @@ test('live display patches merge groups without pinning defaults or losing tools
 
 test('preset selection retains tools while Reset clears all View overrides', () => {
   const current = { mode: 'render', camera: { focalLength: 80 }, lighting: { exposure: 1 },
-    clip: { enabled: true, axis: 'y', offset: 0.35 }, exploded: { enabled: true, amount: 0.4 } };
+    clip: { enabled: true, axis: 'y', at: 0.35 }, exploded: { enabled: true, amount: 0.4 } };
   assert.deepEqual(resetViewSettings(current), { mode: 'render' });
   const next = viewerDisplaySettingsForMode(current, 'wireframe');
   assert.deepEqual(next, { mode: 'wireframe', clip: current.clip, exploded: current.exploded });
@@ -58,7 +58,7 @@ test('the viewer Preview baseline is inherited without an override or Custom sta
 });
 
 test('camera commands activate explicit projection and lens while pose-only updates leave View unchanged', () => {
-  const current = { mode: 'render', camera: { enabled: false }, clip: { enabled: true, axis: 'z', offset: 0.2 } };
+  const current = { mode: 'render', camera: { enabled: false }, clip: { enabled: true, axis: 'z', at: 0.2 } };
   const pose = { position: [30, 40, 50], target: [3, 4, 5], up: [0, 0, 1], zoom: 1.4 };
   assert.deepEqual(viewerDisplaySettingsForCamera(current, pose), current);
   const next = viewerDisplaySettingsForCamera(current, { ...pose, projection: 'perspective', focalLength: 85 });
@@ -69,23 +69,20 @@ test('camera commands activate explicit projection and lens while pose-only upda
   assert.throws(() => viewerDisplaySettingsForCamera(current, { ...pose, focalLength: 500 }), /focalLength/);
 });
 
-test('live clip scalar patches replace the active offset and retain the other axes', () => {
-  const initial = { mode: 'solid', clip: { enabled: true, axis: 'x', offsets: { x: 0.2, y: 0.1 } } };
-  const changed = mergeViewerDisplaySettings(initial, { clip: { offset: 0.4 } });
-  assert.equal(changed.clip.offset, 0.4);
-  assert.deepEqual(changed.clip.offsets, { x: 0.4, y: 0.1, z: 0 });
-  const zero = mergeViewerDisplaySettings(changed, { clip: { axis: 'y', offset: 0 } });
-  assert.equal(zero.clip.axis, 'y');
-  assert.equal(zero.clip.offset, 0);
-  assert.equal(zero.clip.enabled, false);
-  assert.deepEqual(zero.clip.offsets, { x: 0.4, y: 0, z: 0 });
-  const explicit = mergeViewerDisplaySettings(changed, { clip: { axis: 'y', offset: 0.3, offsets: { y: 0.7 } } });
-  assert.equal(explicit.clip.offset, 0.7);
-  assert.deepEqual(explicit.clip.offsets, { x: 0.4, y: 0.7, z: 0 });
+test('live clip patches place the plane in millimetres; a new axis without a place cuts through the middle', () => {
+  const initial = { mode: 'solid', clip: { axis: 'x', at: 2 } };
+  const moved = mergeViewerDisplaySettings(initial, { clip: { at: 4.5 } });
+  assert.deepEqual(moved.clip, { enabled: true, axis: 'x', invert: false, at: 4.5 });
+  assert.deepEqual(mergeViewerDisplaySettings(moved, { clip: { invert: true } }).clip,
+    { enabled: true, axis: 'x', invert: true, at: 4.5 }, 'flipping never moves the plane');
+  assert.deepEqual(mergeViewerDisplaySettings(moved, { clip: { axis: 'y' } }).clip, { enabled: true, axis: 'y', invert: false });
+  assert.deepEqual(mergeViewerDisplaySettings(moved, { clip: { axis: 'y', at: -3 } }).clip,
+    { enabled: true, axis: 'y', invert: false, at: -3 });
+  assert.throws(() => mergeViewerDisplaySettings(moved, { clip: { offset: 0.5 } }), /Unsupported display\.clip fields: offset/);
 });
 
 test('presentation suspends model effects without mutating the saved settings', () => {
-  const display = { mode: 'render', clip: { enabled: true, axis: 'y', offsets: { y: .4 } }, exploded: { enabled: true, amount: .7 } };
+  const display = { mode: 'render', clip: { enabled: true, axis: 'y', at: 4 }, exploded: { enabled: true, amount: .7 } };
   const before = structuredClone(display);
   const preview = previewDisplaySettings(display);
   assert.equal(preview.clip.enabled, false);

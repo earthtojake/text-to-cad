@@ -4,7 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
-import { TREE_GLYPH_CLASS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
+import { TREE_GLYPH_CLASS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
 import { cn } from "@text-to-cad/ui/utils";
 import { FileIcon, FolderIcon } from "./icons.jsx";
 
@@ -21,7 +21,7 @@ const CURRENT_CRUMB = `${CRUMB_CLASS} min-w-0 truncate text-foreground`;
 // light glyph -- a folder its disclosure chevron, a file its type's icon -- in one column, so the
 // names carry the list; a folder opened inline holds its rows a level further in, hung from the
 // trees' faint lines (`TreeRowGuides`).
-const ROW_INSET_PX = 8;
+const ROW_INSET_PX = TREE_ROW_INSET_PX;
 const rowInset = depth => ROW_INSET_PX + depth * TREE_INDENT_PX;
 
 /** The folders from the top of `path`'s filesystem down to it, as `{ name, path }` with `/` separators. */
@@ -77,7 +77,7 @@ function Note({ children, busy = false }) {
 
 /** What a folder opened inline says while it has no rows to show: a row's height, in its glyph's column. */
 function InlineNote({ depth, busy = false, children }) {
-  return <p className="relative flex h-6 items-center gap-1.5 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
+  return <p className="relative flex h-6 items-center gap-1 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
     role={busy ? "status" : undefined}>
     <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
     <span className="flex size-3 shrink-0 items-center">{busy ? <LoaderCircle className="size-3 animate-spin" aria-hidden="true" /> : null}</span>

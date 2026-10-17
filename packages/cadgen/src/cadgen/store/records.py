@@ -1,28 +1,36 @@
 """Records: the mutable per-model entry in ``index/model/``.
 
+``index/model/<sha256(model ref)>-v<RECORD_SCHEMA_VERSION>`` (``record_key``).
 A record says what a model's build depended on and what it produced::
 
     {
       "model": "/abs/src/robot.py",
-      "kind": "step",
       "entryKind": "assembly",
       "tree": "<tree object hash>",
+      "key": "<result key>",
+      "producer": {"cadgen": "0.8.0", "build123d": "…", "cadqueryOcp": "…"},
       "closure": {"hash": "…", "files": ["robot.py", "lib/frame.py"]},
-      "children": [{"model": "/abs/src/arm.py", "tree": "…"}],
-      "outputs": {"/abs/STEP/robot.step": {"sha256": "…"}, …}
+      "children": [{"model": "/abs/src/arm.py::arm", "key": "…"}],
+      "outputs": {"/abs/STEP/robot.step": {"sha256": "…", "writer": "cadgen-step-writer-4"}, …}
     }
 
-``children`` is recorded from the CALLS the body made, never derived from the
-tree's links — that is what makes the link/component decision in
-``cadgen.store.trees`` safe. ``closure.files`` are relative to the script's
-folder and hashed by ``cadgen.store.closure``.
+``key`` is the result's identity: a hash of the model, the closure, the
+constants, the children's keys and the producer, computed by ``write_record``
+from what the record holds (``cadgen.store.results``), under which the record
+is also stored as written (``index/result``). ``children`` is recorded from the
+CALLS the body made, each by its key, never derived from the tree's links —
+that is what makes the link/component decision in ``cadgen.store.trees`` safe.
+``closure.files`` are relative to the script's folder and hashed by
+``cadgen.store.closure``.
 
 Identity is the SCRIPT. A generated document carries no tie back to its
 source (a generated file is independent of its script).
 
 Two sides, two index kinds (STORE.md §2, the law):
 
-- ``index/document/<sha256(document BYTES)>`` → ``{"tree": …, "kind": …}``.
+- ``index/document/<sha256(document BYTES)>-v<DOCUMENT_SCHEMA_VERSION>``
+  (``document_key``) → ``{"tree": …, "kind": …}`` (and, from an export, ``verified``,
+  ``plain`` and ``differ``: :func:`note_document_tree`).
   ARTIFACT → ARTIFACT. The only thing a reader (a door, the viewer, snapshot)
   consults to find the tree for a file: hash the bytes, look it up, read
   objects. Written whenever a tree is published for a document — by the
@@ -32,6 +40,12 @@ Two sides, two index kinds (STORE.md §2, the law):
 - ``index/output/<sha256(output PATH)>`` → ``{"model": …}``. CODE-SIDE
   dependency memory: which model wrote the file at this path. Read by
   ``store why`` and provenance — never by the viewer or a render path.
+
+Both schema versions are in the KEY: a cadgen reads and writes only its own
+version's record and document entry, and one of another version sharing the
+store keeps its own beside them, so neither recompiles what the other wrote nor
+rewrites the other's entry. Nothing reads another version's entry; the sweeper
+retires it once it is a week old (``gc``, STORE.md §8).
 """
 
 from __future__ import annotations
@@ -41,28 +55,74 @@ from typing import Any
 
 from cadgen.store.index import (
     iter_entries,
+    key_version,
     model_key,
     path_key,
     read_entry,
     remove_entry,
     resolve_model_ref,
     split_model_ref,
+    versioned_key,
     write_entry,
 )
 
 RECORD_KIND = "record"
-# Payload cutovers, not directory/name salts. Legacy mappings are misses.
+# A format change bumps it and lands on new keys (record_key); another version's
+# records are never read.
 # Schema 6 requires execution-time input hashes, including DXF.
 # Older records may claim current input bytes for geometry built before an edit,
 # or lack the import-time, absent-file and search-root entries a closure now
 # carries. Their next source run rebuilds; saved-document mappings and objects
 # stay valid.
-RECORD_SCHEMA_VERSION = 8
-DOCUMENT_SCHEMA_VERSION = 4
+# Schema 9: the tree a record names is geometry schema 4 (store.trees.TREE_SCHEMA), whose ids
+# are tokens, and its appearance assignments are keyed by them (README law 20).
+# Schema 10: the tree a record names is geometry schema 5, whose components carry the
+# construction key and lineage their build named them by.
+# Schema 11: the tree a record names is geometry schema 6, whose leaves' tokens round a
+# translation as the STEP file states it.
+# Schema 12: a model's STEP is an export of the tree it names: the record is written at
+# the source result, its STEP output pending (an empty sha256) until the export lands,
+# then its sha256 and writer (``plain`` for a file written without names). No separate
+# document tree, correspondence maps or writer input.
+# Schema 13: the record carries its result's key and the producer that built it, and
+# names each child by the child's key (store/results.py), never by its tree.
+RECORD_SCHEMA_VERSION = 13
+# A format change bumps it and lands on new keys (document_key).
+# Schema 6: an XCAF label entry (`=>[0:1:1:2]`) reads as no name, and an
+# occurrence without one of its own never shows a shared product's name that is
+# another occurrence's label, so the same bytes compile to a tree that names
+# those occurrences differently. An older version's entry is never read and the
+# document compiles again; its components are unchanged.
+# Schema 7: the producer hint names the kernel alone (build123d, OCP and
+# its distribution); the part version (store.parts.PART_VERSION) versions the
+# extraction, the selector table and the mesh derived under it.
+# Schema 8: the tree an entry names is geometry schema 3 (store.trees.TREE_SCHEMA),
+# and the hint is ``producer``. A schema-7 entry names a schema-2 tree this cadgen
+# cannot read: on its own key it would be taken for a hit that no view can open.
+# Schema 9: the tree an entry names is geometry schema 4, its ids tokens.
+# Schema 10: the tree an entry names is geometry schema 5: a saved document's leaves
+# carry the construction key and lineage of the components they were written from.
+# Schema 11: the tree an entry names is geometry schema 6, whose leaves' tokens round a
+# translation as the STEP file states it.
+# Schema 12: an exported file's bytes map to the result tree it was written from,
+# pending (``verified`` false) until its verify answers, or to its own content and what
+# differs (``differ``) when it does not hold that tree.
+DOCUMENT_SCHEMA_VERSION = 12
+
+
+def record_key(model: Path | str) -> str:
+    """A model's record key: its identity's hash (``model_key``) under this
+    cadgen's record schema."""
+    return versioned_key(model_key(model), RECORD_SCHEMA_VERSION)
+
+
+def document_key(document_hash: str) -> str:
+    """The document entry key for these bytes under this cadgen's document schema."""
+    return versioned_key(document_hash, DOCUMENT_SCHEMA_VERSION)
 
 
 def read_record(model: Path | str) -> dict[str, Any] | None:
-    data = read_entry("model", model_key(model))
+    data = read_entry("model", record_key(model))
     if data is None:
         # A bare script path whose file is gone (or no longer parses) cannot name
         # its function: find the record by the script it recorded, when exactly one.
@@ -82,7 +142,9 @@ def records_for_script(script: Path | str) -> list[tuple[str, dict[str, Any]]]:
 
     resolved = _resolved(script)
     found: list[tuple[str, dict[str, Any]]] = []
-    for _key, entry_file in iter_entries("model"):
+    for key, entry_file in iter_entries("model"):
+        if key_version(key) != RECORD_SCHEMA_VERSION:
+            continue
         try:
             data = json.loads(entry_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -92,7 +154,12 @@ def records_for_script(script: Path | str) -> list[tuple[str, dict[str, Any]]]:
     return found
 
 
-def write_record(model: Path | str, payload: dict[str, Any]) -> None:
+def write_record(model: Path | str, payload: dict[str, Any]) -> str:
+    """Write ``payload`` as ``model``'s record and return its key. Every record is
+    keyed by what it holds (``results.key_for``), and the result at that key is the
+    record as last written under it (``results.write_result``)."""
+    from cadgen.store.results import key_for, write_result
+
     body = dict(payload)
     body["kind"] = RECORD_KIND
     body["schemaVersion"] = RECORD_SCHEMA_VERSION
@@ -101,21 +168,14 @@ def write_record(model: Path | str, payload: dict[str, Any]) -> None:
     body["model"] = ref
     body["script"] = str(script)
     body["function"] = function
-    write_entry("model", model_key(ref), body)
+    body["key"] = key_for(body, ref)
+    write_entry("model", record_key(ref), body)
+    write_result(body["key"], ref, body)
+    return body["key"]
 
 
 def remove_record(model: Path | str) -> None:
-    remove_entry("model", model_key(model))
-
-
-def update_record(model: Path | str, **fields: Any) -> dict[str, Any] | None:
-    """Merge ``fields`` into an existing record (atomic rewrite). None if absent."""
-    record = read_record(model)
-    if record is None:
-        return None
-    record.update(fields)
-    write_record(model, record)
-    return record
+    remove_entry("model", record_key(model))
 
 
 def _resolved(path: Path | str) -> str:
@@ -129,32 +189,46 @@ def _resolved(path: Path | str) -> str:
 
 def note_document_tree(
     document_hash: str, tree: str, *, kind: str = "step",
-    surface_producer: dict[str, Any] | None = None,
+    producer: dict[str, Any] | None = None, verified: bool = True, plain: bool = False,
+    differ: list[str] | None = None,
 ) -> None:
-    """``index/document/<sha256(bytes)>`` → the tree describing those bytes.
-    Artifact → artifact; idempotent; atomic. Keeps the entry's mesh ledger when
-    the tree is unchanged (those meshes were cut from this same tree)."""
+    """``index/document/<sha256(bytes)>-v<schema>`` → the tree describing those
+    bytes. Artifact → artifact; idempotent; atomic. Keeps the entry's mesh ledger
+    when the tree is unchanged (those meshes were cut from this same tree).
+
+    An export's publication maps the bytes it wrote to the tree it wrote them from
+    before any parse of them (``store/exports.py``): pending, ``verified`` False --
+    and ``plain`` for a file written without names -- until its verify answers.
+    Confirmed, the entry is written again without them; a file that does not hold
+    its tree maps to its own content, listing what differs (``differ``), and stays
+    ``plain`` when it was written so."""
     digest = str(document_hash or "").strip()
     tree_hash = str(tree or "").strip()
     if not digest or not tree_hash:
         return
-    existing = read_entry("document", digest) or {}
+    existing = read_entry("document", document_key(digest)) or {}
     payload: dict[str, Any] = {"schemaVersion": DOCUMENT_SCHEMA_VERSION, "tree": tree_hash, "kind": str(kind or "step")}
+    if not verified:
+        payload["verified"] = False
+    if plain:
+        payload["plain"] = True
+    if differ:
+        payload["differ"] = [str(line) for line in differ]
     meshes = existing.get("meshes")
     if existing.get("schemaVersion") == DOCUMENT_SCHEMA_VERSION and isinstance(meshes, dict) and str(existing.get("tree") or "") == tree_hash:
         payload["meshes"] = meshes
-    from cadgen.store.surfaces import producer_fields
-    if surface_producer is not None:
+    from cadgen.store.parts import producer_fields
+    if producer is not None:
         # Attestation belongs to the worker or validated artifact response;
         # lightweight readers must not import the kernel to persist its hint.
-        selected = producer_fields(surface_producer)
-        payload["surfaceProducer"] = selected
+        selected = producer_fields(producer)
+        payload["producer"] = selected
     elif existing.get("schemaVersion") == DOCUMENT_SCHEMA_VERSION and existing.get("tree") == tree_hash:
         try:
-            payload["surfaceProducer"] = producer_fields(existing.get("surfaceProducer"))
+            payload["producer"] = producer_fields(existing.get("producer"))
         except (ValueError, TypeError):
             pass
-    write_entry("document", digest, payload)
+    write_entry("document", document_key(digest), payload)
 
 
 def document_entry_for_hash(document_hash: str) -> dict[str, Any] | None:
@@ -163,7 +237,7 @@ def document_entry_for_hash(document_hash: str) -> dict[str, Any] | None:
 
     if not is_object_hash(document_hash):
         return None
-    entry = read_entry("document", document_hash)
+    entry = read_entry("document", document_key(document_hash))
     if not entry or entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION or not is_object_hash(entry.get("tree")):
         return None
     return entry
@@ -182,20 +256,20 @@ def note_document_mesh(document_hash: str, variant_key: str, sha256: str) -> Non
     digest = str(document_hash or "").strip()
     if not digest or not variant_key or not sha256:
         return
-    entry = read_entry("document", digest)
+    entry = read_entry("document", document_key(digest))
     if not entry or not entry.get("tree") or entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION:
         return
     meshes = dict(entry.get("meshes") or {})
     meshes[str(variant_key)] = str(sha256)
     entry["meshes"] = meshes
-    write_entry("document", digest, entry)
+    write_entry("document", document_key(digest), entry)
 
 
 def document_mesh_sha(document_hash: str, variant_key: str) -> str | None:
     digest = str(document_hash or "").strip()
     if not digest:
         return None
-    entry = read_entry("document", digest) or {}
+    entry = read_entry("document", document_key(digest)) or {}
     if entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION:
         return None
     meshes = entry.get("meshes") or {}
@@ -241,11 +315,3 @@ def record_for_document(document: Path | str) -> dict[str, Any] | None:
     """MODEL-SIDE: the record behind a ``.step`` on disk (generated or imported),
     or None. A reader that needs a TREE uses ``tree_for_document_hash``."""
     return read_record(source_for_document(document))
-
-
-def current_tree(model: Path | str) -> str | None:
-    record = read_record(model)
-    if record is None:
-        return None
-    tree = str(record.get("tree") or "").strip()
-    return tree or None

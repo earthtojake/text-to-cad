@@ -487,23 +487,20 @@ test("multiple components keep their own buffers without an aggregate allocation
   assert.equal(single.indices, a.indices);
 });
 
-test("an XCAF label entry where a STEP names an occurrence or assembly is no name: each goes by its id", () => {
+test("parts and groups are drawn by the names the tree gives them, and one without goes by its id", () => {
   const a = unitTriangleComponentMeshData();
-  // cadgen's single-part STEP: its one occurrence (and the root over it) named `=>[0:1:1:2]`.
-  const single = buildComposedPackageMeshData({ entryKind: "part", label: "=>[0:1:1:2]",
-    occurrences: [{ id: "o1.1", name: "=>[0:1:1:2]", component: "a", transform: IDENTITY_4X4 }] }, { a });
-  assert.deepEqual([single.parts[0].name, single.parts[0].label], ["o1.1", "o1.1"]);
   const descriptor = { components: { a: {} }, occurrences: [
     { id: "o1.1", name: "Panel:1", component: "a", transform: IDENTITY_4X4 },
-    { id: "o1.2", name: "0:1:1:5", component: "a", transform: IDENTITY_4X4 }
+    { id: "o1.2", component: "a", transform: IDENTITY_4X4 }
   ] };
-  descriptor.assembly = { root: { id: "o1", name: "=>[0:1:1:2]", nodeType: "assembly", children: [
+  descriptor.assembly = { root: { id: "o1", name: "frame", nodeType: "assembly", children: [
     { id: "o1.1", name: "Panel:1", nodeType: "part", children: [] },
-    { id: "o1.2", name: "=>[0:1:1:5]", label: "0:1:1:5", nodeType: "part", children: [] }
+    { id: "o1.2", nodeType: "part", children: [] }
   ] } };
   const composed = buildComposedPackageMeshData(descriptor, { a });
-  assert.deepEqual(composed.parts.map(part => part.name), ["Panel:1", "o1.2"], "a name somebody gave is kept");
-  assert.deepEqual([composed.assemblyRoot.name, ...composed.assemblyRoot.children.map(child => child.name)], ["o1", "Panel:1", "o1.2"]);
+  assert.deepEqual(composed.parts.map(part => [part.name, part.label]), [["Panel:1", "Panel:1"], ["o1.2", "o1.2"]]);
+  assert.deepEqual([composed.assemblyRoot.name, ...composed.assemblyRoot.children.map(child => child.name)],
+    ["frame", "Panel:1", "o1.2"]);
 });
 
 function reuseFixture() {
@@ -514,20 +511,20 @@ function reuseFixture() {
   ] };
   descriptor.assembly = { root: { id: "root", nodeType: "assembly",
     children: descriptor.occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } };
-  return { descriptor, a: { ...unitTriangleComponentMeshData(), lodLevel: 0 }, b: unitTriangleComponentMeshData() };
+  return { descriptor, a: unitTriangleComponentMeshData(), b: unitTriangleComponentMeshData() };
 }
 
-test("LOD composition keeps unchanged occurrences and tree identity while updating repeated triangle ranges", () => {
+test("a component's new mesh keeps unchanged occurrences and tree identity while updating repeated triangle ranges", () => {
   const { descriptor, a, b } = reuseFixture();
   const before = buildComposedPackageMeshData(descriptor, { a, b });
-  const refined = { ...a, lodLevel: 1, indices: new Uint32Array([0, 1, 2, 0, 2, 1]),
+  const refined = { ...a, indices: new Uint32Array([0, 1, 2, 0, 2, 1]),
     parts: a.parts.map(part => ({ ...part, triangleCount: 2 })) };
   const after = buildComposedPackageMeshData(descriptor, { a: refined, b }, { previous: before });
   assert.equal(after.parts[1], before.parts[1], "unaffected occurrence metadata is shared");
   for (const index of [0, 2]) {
     assert.notEqual(after.parts[index], before.parts[index]);
     assert.equal(after.parts[index].sourceMesh, refined);
-    assert.equal(after.parts[index].sourceMeshKey, "a:flat:l1");
+    assert.equal(after.parts[index].sourceMeshKey, "a:flat");
     assert.equal(after.parts[index].sourcePartRanges[0].triangleCount, 2);
   }
   assert.equal(after.assemblyRoot, before.assemblyRoot, "identical bounds/appearance preserve the tree");
@@ -676,28 +673,25 @@ test("composed package drives a per-occurrence override colour through the mater
   assert.equal(composed.colors.length, 0);
 });
 
-test("composed package carries named material identity and multiplies source alpha", () => {
+test("composed package carries named material identity and the opacity cadgen folded", () => {
   const component = unitTriangleComponentMeshData();
   component.parts[0].color = "#123456";
   component.colors = new Float32Array(component.vertices.length).fill(0.5);
   component.parts[0].opacity = 0.5;
-  const appearance = {
-    materials: { paint: { name: "Red paint", baseColor: "#CC1122", opacity: 0.4 } },
-    assignments: { "o1.1": "paint" }
-  };
+  // The occurrence as cadgen serves it for display: its material, base colour and the opacity
+  // it resolved (its STEP alpha times the material's). The page multiplies nothing again.
   const descriptor = {
-    appearance,
     occurrences: [{
       id: "o1.1", name: "painted", component: "cA", transform: IDENTITY_4X4,
       baseColor: "#CC1122", materialId: "paint", materialName: "Red paint",
-      material: { roughness: 0.42, metalness: 0.03, clearcoat: 0, clearcoatRoughness: 0.26, opacity: 0.4 }
+      material: { roughness: 0.42, metalness: 0.03, clearcoat: 0, clearcoatRoughness: 0.26, opacity: 0.4 },
+      opacity: 0.2
     }],
     assembly: { root: { id: "o1", name: "demo", nodeType: "assembly", children: [
       { id: "o1.1", name: "painted", nodeType: "part", children: [] }
     ] } }
   };
   const composed = buildComposedPackageMeshData(descriptor, { cA: component });
-  assert.equal(composed.appearance, appearance);
   assert.equal(composed.parts[0].color, "#CC1122");
   assert.equal(composed.parts[0].sourceColor, "#123456");
   assert.equal(composed.parts[0].sourceOpacity, 0.5);
@@ -711,12 +705,12 @@ test("composed package carries named material identity and multiplies source alp
   assert.equal(composed.assemblyRoot.children[0].sourceOpacity, 0.5);
 });
 
-test("composed package preserves an exact zero source alpha before material scaling", () => {
+test("composed package preserves an exact zero source alpha, and an occurrence's own alpha without a material", () => {
   const component = unitTriangleComponentMeshData();
   const descriptor = {
     occurrences: [{
       id: "o1.1", component: "cA", transform: IDENTITY_4X4,
-      color: [0.1, 0.2, 0.3, 0], material: { opacity: 0.4 }
+      color: [0.1, 0.2, 0.3, 0]
     }],
     assembly: { root: { id: "o1", nodeType: "assembly", children: [
       { id: "o1.1", nodeType: "part", children: [] }

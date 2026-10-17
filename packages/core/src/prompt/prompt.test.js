@@ -2,13 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, promptReferenceIds } from './index.js';
 
-const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
+// A ref is `<occurrence token>/<element name>`, as cadgen and the viewer compose it.
+const FACE = 'o:3f2a9c1d7e5b/f:bracket.extrude1.3';
+const EDGE = 'o:3f2a9c1d7e5b/e:bracket.fillet1.2';
+const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: [FACE] } };
 test('one context retains image/reference relationships and formats canonical references', () => {
   const capture = Promise.resolve(new Blob(['png'], { type: 'image/png' }));
   const context = createPromptContext([referencePart(reference, 'face'), { id: 'image', kind: 'attachment', name: 'view.png', mimeType: 'image/png', content: capture, about: ['face'] }, textPart('Increase the clearance.')]);
   assert.equal(validatePromptContext(context), context);
   assert.equal(context.parts[1].content, capture);
-  assert.equal(formatPromptContextText(context), '"/work/STEP/my part.step"#o1.2.f45\nIncrease the clearance.');
+  assert.equal(formatPromptContextText(context), `"/work/STEP/my part.step"#${FACE}\nIncrease the clearance.`);
   assert.notEqual(createPromptContext([textPart('next')]).operationId, context.operationId);
 });
 test('a message says what the person wrote, then the file, its references and a picture saved as a file', () => {
@@ -16,7 +19,7 @@ test('a message says what the person wrote, then the file, its references and a 
   const sketch = { id: 'sketch', kind: 'attachment', name: 'part-sketch.png', mimeType: 'image/png', content: new Blob(), about: ['file'], label: 'Sketch' };
   const context = createPromptContext([textPart('Round this edge.\n'), referencePart(file, 'file'), referencePart(reference, 'face'), sketch]);
   assert.equal(formatPromptMessage(context, { attachmentPath: part => `/tmp/${part.name}` }),
-    'Round this edge.\n\nFile: "/work/STEP/my part.step"\nReferences:\n"/work/STEP/my part.step"#o1.2.f45\nSketch: /tmp/part-sketch.png');
+    `Round this edge.\n\nFile: "/work/STEP/my part.step"\nReferences:\n"/work/STEP/my part.step"#${FACE}\nSketch: /tmp/part-sketch.png`);
   // A picture sent beside the text is not named in it.
   assert.equal(formatPromptMessage(createPromptContext([textPart('Why?'), referencePart(file, 'file'), sketch])), 'Why?\n\nFile: "/work/STEP/my part.step"');
 });
@@ -25,7 +28,7 @@ test('code targets preserve explicit ranges rather than borrowing the CAD fragme
   assert.equal(formatPromptReference(code), '/work/src/bracket.py:5:3-7:1');
 });
 test('a reference names its ids as a person reads them: each selector, a range from 1, or its label', () => {
-  assert.deepEqual(promptReferenceIds({ ...reference, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3'] } }), ['o1.f2', 'o1.e3']);
+  assert.deepEqual(promptReferenceIds({ ...reference, target: { kind: 'cad-selector', selectors: [FACE, EDGE] } }), [FACE, EDGE]);
   const range = { resource: { kind: 'workspace-file', path: '/work/a.py' }, target: { kind: 'text-range', start: { line: 0, character: 4 }, end: { line: 2, character: 0 } } };
   assert.deepEqual(promptReferenceIds(range), ['1:5–3:1']);
   assert.deepEqual(promptReferenceIds({ ...range, label: 'def plate' }), ['def plate']);

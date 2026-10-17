@@ -36,10 +36,11 @@ from .cadgen_ops import CadgenOps
 from .content_types import content_type_for_path, content_type_for_static_asset, extension_of
 from .encoding import UriError, strict_decode_uri_component
 from .scanner import CAD_CATALOG_SCHEMA_VERSION, SOURCE_EXTENSIONS, catalog_entry, to_posix_path
-from .store_paths import virtual_store_asset
+from .store_paths import preview_annotations, virtual_store_asset
 from .tess_cache import (
-    TESS_CACHE_METADATA_MAX_BYTES, parse_tess_cache_admission,
-    read_tess_cache_batch, read_tess_cache_entry, read_tess_cache_probe, write_tess_cache_entry,
+    TESS_CACHE_BATCH_PATH, TESS_CACHE_METADATA_MAX_BYTES, TESS_CACHE_PROBE_PATH, TESS_CACHE_ROUTE_PREFIX,
+    parse_tess_cache_admission, read_tess_cache_batch, read_tess_cache_entry, read_tess_cache_probe,
+    tess_cache_name_from_route_path,
 )
 
 __all__ = [
@@ -62,10 +63,6 @@ _THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
 _CAD_EXTENSIONS = ", ".join(sorted(SOURCE_EXTENSIONS))
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
-TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
-TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
-TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
-
 # Routes that do NOT hold the development auto-reload back (``reload.py``).
 # `/__cad/server` is what the browser's own reload watcher polls — counting it
 # would let that watcher defer the very restart it is waiting for — and the
@@ -73,7 +70,7 @@ TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 # than doing work. Interrupting a parked poll costs the client one re-poll
 # after it reloads; interrupting a compile would cost a build, which is why
 # every other route, `POST /__cad/artifact` above all, is counted.
-_UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel",
+_UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/parts", "/__cad/parts/cancel", "/__cad/measure",
                                "/__cad/analytics", "/__cad/analytics/activity", "/__cad/version"})
 
 
@@ -264,10 +261,11 @@ class CadApp:
         from cadgen._internal.picker import available
 
         from .drawings import DrawingRenders
-        from .surfaces import SurfaceSubscribers
+        from .parts import FaceMeasures, PartSubscribers
         from .warm import CatalogWarmer
 
-        self.surface_subscribers = SurfaceSubscribers()
+        self.part_subscribers = PartSubscribers()
+        self.measures = FaceMeasures()
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # What a watched build saves, its catalog row computed before a read asks (``warm.py``).
@@ -285,8 +283,9 @@ class CadApp:
         # the identity this instance announces is the identity of the code it is actually running.
         self.identity_token = identity if identity is not None else identity_token(self.dist_dir)
         # The single development predicate (reload.py). In an installed wheel
-        # this is False and the whole mechanism is absent: nothing is watched,
-        # no request is counted, and the browser never polls for a restart.
+        # this is False and the whole mechanism is absent: nothing is watched
+        # and no request is counted. The page still asks who its server is, at
+        # an installed cadence, to reload under another install on its port.
         self.auto_reload = dev_reload.running_from_source_checkout()
         self._request_lock = threading.Lock()
         self._busy_requests = 0
@@ -323,12 +322,12 @@ class CadApp:
             "app": "cad-viewer",
             # The start-time token, NOT identity_token() re-evaluated: a
             # resident answering a reuse probe must report the code it runs,
-            # not the code now on disk. It is also what the browser's
-            # development reload watcher compares against to notice that this
-            # server has become a NEW process on the same port.
+            # not the code now on disk. It is also what the browser's reload
+            # watcher compares against to notice that this server has become
+            # other code on the same port (a restarted checkout, an upgrade).
             "identityToken": self.identity_token,
             # Whether this server watches its own code and restarts itself.
-            # False in every installed wheel; the client polls only when true.
+            # False in every installed wheel; the client polls faster when true.
             "autoReload": self.auto_reload,
             # Which file manager Reveal opens: darwin, win32 or linux.
             "platform": sys.platform if sys.platform in ("darwin", "win32") else "linux",
@@ -482,7 +481,7 @@ class CadApp:
             if self._rejected_by_host_check(request, response):
                 return
             if pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
-                # Shared component-tessellation cache. Checked BEFORE the dist
+                # The store's parts: display meshes and selector tables. Checked BEFORE the dist
                 # fallthrough: this is an API family, not a page asset.
                 self._handle_tess_get(request, response)
                 return
@@ -511,6 +510,10 @@ class CadApp:
                     response.send_json(200, self.build_status(query.get("file") or "", after=query.get("after")))
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
+                elif pathname == "/__cad/tube-skins":
+                    self._handle_tube_skins(request, response, query)
+                elif pathname == "/__cad/robot":
+                    self._handle_robot(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -525,9 +528,8 @@ class CadApp:
                     response.send_json(200, self._version())
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
-                    # page. Falling through to the SPA answered typo'd and
-                    # retired routes with index.html at 200, so a client doing
-                    # res.json() got an HTML parse error instead of a status.
+                    # page: a 404 a client doing res.json() can read, never the
+                    # SPA's index.html at 200.
                     response.send_json(404, {"error": "Not found"})
             except Exception as error:  # noqa: BLE001
                 self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
@@ -605,19 +607,25 @@ class CadApp:
                         response.send_empty(413, [("connection", "close")])
                         return
                     response.send_json(200, {"ok": True, "path": save_sketch(request.body(), str(query.get("name") or ""))})
-                elif pathname == "/__cad/surfaces":
+                elif pathname == "/__cad/parts":
                     if int(request.headers.get("content-length") or 0) > 128 * 1024:
                         response.send_empty(413, [("connection", "close")])
                         return
-                    response.send_json(200, self.surface_subscribers.resolve(request.body()))
-                elif pathname == "/__cad/surfaces/cancel":
+                    response.send_json(200, self.part_subscribers.resolve(request.body()))
+                elif pathname == "/__cad/measure":
+                    if int(request.headers.get("content-length") or 0) > 4 * 1024:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    status, payload = self.measures.response(request.body())
+                    response.send_json(status, payload)
+                elif pathname == "/__cad/parts/cancel":
                     if int(request.headers.get("content-length") or 0) > 128 * 1024:
                         response.send_empty(413, [("connection", "close")])
                         return
                     payload = json.loads(request.body())
                     if type(payload) is not dict or set(payload) != {"job"} or type(payload["job"]) is not str:
-                        raise ValueError("surface cancellation requires a subscriber token")
-                    self.surface_subscribers.cancel(payload["job"])
+                        raise ValueError("part cancellation requires a subscriber token")
+                    self.part_subscribers.cancel(payload["job"])
                     response.send_empty(204)
                 elif pathname == TESS_CACHE_PROBE_PATH:
                     self._handle_tess_probe(request, response)
@@ -626,7 +634,8 @@ class CadApp:
                     # matches both.
                     self._handle_tess_batch(request, response)
                 elif pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
-                    self._handle_tess_post(request, response)
+                    # cadgen writes every part: a client reads them.
+                    response.send_empty(405, [("allow", "GET")])
                 else:
                     response.send_empty(405, [("allow", "POST")])
             except Exception as error:  # noqa: BLE001
@@ -738,7 +747,7 @@ class CadApp:
     # --- usage stats (telemetry) --------------------------------------------
 
     def _consent(self, share=None) -> dict:
-        """The app menu's Share usage stats toggle: whether sharing is on and why, and, from the person's
+        """The app menu's Share anonymous usage data toggle: whether sharing is on and why, and, from the person's
         click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
         ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL
@@ -788,26 +797,29 @@ class CadApp:
 
     def _handle_store_asset(self, request, response, query):
         """A tree served as if it were a directory: ``<tree>/assembly.json`` is
-        the flattened tree, ``<tree>/components/<object>.surf`` streams the
-        object. Nothing here touches a path the client names: the ``file``
-        param is parsed into (tree hash, object hash) and each is looked up by
-        HASH in the store, so ``file=/etc/hosts`` is simply not a tree.
+        the flattened tree and ``<tree>/components/<cid>.brep`` streams a component's
+        BREP (``store.view.virtual_path``); ``annotations=<object>`` is a preview
+        revision's annotations object, the one a build feed names (``preview.py``).
+        Nothing here touches a path the client names: the ``file`` param is parsed into
+        (tree hash, component) and each is looked up by HASH in the store, so
+        ``file=/etc/hosts`` is simply not a tree.
 
         Everything that fails is 404, never 403. Leading slashes are STRIPPED
         because the client's resolvePackageAssetUrl emits
-        ``file=/<tree>/components/<object>.surf``.
+        ``file=/<tree>/assembly.json``.
         """
+        if query.get("annotations"):
+            payload = preview_annotations(str(query["annotations"]))
+            if payload is None:
+                response.send_json(404, {"error": "Not found"})
+            else:
+                response.send_bytes(200, payload, "application/json", RAW_FILE_HEADERS)
+            return
         rel = str(query.get("file") or "").replace("\\", "/").lstrip("/")
-        if query.get("surfaceInput") is not None or query.get("object") is not None:
-            from .surfaces import pinned_surface_object
-
-            payload = pinned_surface_object(query.get("tree"), query.get("surfaceInput"), query.get("object"))
-            content_type = "application/octet-stream"
-        else:
-            producer = json.loads(query.get("surfaceProducer")) if query.get("surfaceProducer") else None
-            payload, content_type = virtual_store_asset(
-                rel, producer=producer, document_hash=query.get("documentHash"),
-            )
+        producer = json.loads(query.get("producer")) if query.get("producer") else None
+        payload, content_type = virtual_store_asset(
+            rel, producer=producer, document_hash=query.get("documentHash"),
+        )
         if payload is None:
             response.send_json(404, {"error": "Not found"})
             return
@@ -836,6 +848,30 @@ class CadApp:
         status, body = self.drawings.response(query.get("file") or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
+            return
+        response.send_json(status, body)
+
+    def _handle_tube_skins(self, request, response, query):
+        """A document's bending tubes, bound as a view plays them (``tube_skins.py`` owns the
+        rules). Real work on a miss -- binding every tube a clip bends -- so it is counted, as
+        the drawing route is."""
+        from .tube_skins import tube_skins_response
+
+        status, body = tube_skins_response(query.get("file") or "", query.get("documentHash"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "model/gltf-binary")
+            return
+        response.send_json(status, body)
+
+    def _handle_robot(self, request, response, query):
+        """A robot description resolved for the page, or one of the primitive meshes cadgen made for
+        it (``robots.py`` owns both rules). Real work on a miss -- the validators, the frame graph,
+        meshing a shape -- so it is counted, as the drawing route is."""
+        from .robots import robot_response
+
+        status, body, content_type = robot_response(query.get("file") or "", query.get("mesh"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
             return
         response.send_json(status, body)
 
@@ -869,10 +905,9 @@ class CadApp:
         if status != 200:
             response.send_empty(status)
             return
-        response.send_bytes(200, body, "application/octet-stream")
-
-    def _handle_tess_post(self, request, response):
-        response.send_empty(write_tess_cache_entry(request.path, request.body()))
+        # The decoded name's suffix, as the read's: an encoded `%2Eglb` names a mesh too.
+        glb = tess_cache_name_from_route_path(request.path).endswith(".glb")
+        response.send_bytes(200, body, "model/gltf-binary" if glb else "application/json")
 
     def _handle_tess_probe(self, request, response):
         if int(request.headers.get("content-length") or 0) > TESS_CACHE_METADATA_MAX_BYTES:

@@ -648,7 +648,7 @@ function closeupSubjectNear(camera, placedObjects, modelGroup) {
       || bounds.min.length !== 3 || bounds.max.length !== 3
       || !bounds.min.every(Number.isFinite) || !bounds.max.every(Number.isFinite)
       || bounds.max.some((value, axis) => value < bounds.min[axis])
-      || record.effectDeformation || record.tubeDeformationState?.active || record.tubeGpuState?.active) return null;
+      || record.effectDeformation || record.tubeSkinState?.active) return null;
     world.identity();
     if (record.effectMatrix) world.premultiply(record.effectMatrix);
     if (record.explodedViewMatrix) world.premultiply(record.explodedViewMatrix);

@@ -14,12 +14,13 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
+from tests.python.support.tree_ids import tokenized
 
 add_repo_path("packages/cadgen/src")
-from cadgen.store import surfaces, trees
+from cadgen.store import parts, trees
 from cadgen.store.build import build_tree_from_compound
 from cadgen.store.objects import iter_objects, object_path
-from cadgen.viewer.surfaces import SurfaceSubscribers, pinned_surface_object
+from cadgen.viewer.parts import PartSubscribers
 
 WINDOWS_TICK_NS = 15_625_000
 # Twice the coarsest tick trees.py knows (FAT's 2 s write time), and a whole
@@ -27,9 +28,14 @@ WINDOWS_TICK_NS = 15_625_000
 SETTLE_OFFSET_NS = 4_000_000_000
 
 
-class PendingSurface(Future):
+class PendingPart(Future):
     def detach(self):
         pass
+
+
+def runtime_view(tree: str, producer: dict) -> dict:
+    """``tree``'s runtime view under ``producer``: each component names its part."""
+    return parts.view_from_geometry(tree, trees.capture_tree(tree, retain_payloads=False)[0], producer=producer)
 
 
 class MetadataCapture(unittest.TestCase):
@@ -47,22 +53,22 @@ class MetadataCapture(unittest.TestCase):
                     for x in (1, 2)]
         links = [{"id": f"o{i}", "tree": tree, "name": f"part {i}",
                   "transform": list(trees.IDENTITY_16)} for i, tree in enumerate(children, 1)]
-        self.tree = trees.put_tree({
+        self.tree = trees.put_tree(tokenized({
             "units": "mm", "entryKind": "assembly", "components": {}, "occurrences": [],
             "links": links, "assembly": {"root": {
                 "id": "root", "nodeType": "assembly", "children": [
                     {"id": link["id"], "nodeType": "link", "children": []} for link in links],
             }},
-        })
+        })[0])
         self.geometry, self.payloads = trees.capture_tree(self.tree)
-        self.producer = surfaces.producer_identity()
-        self.view = surfaces.request_view(self.tree, producer=self.producer)
+        self.producer = parts.producer_identity()
+        self.view = runtime_view(self.tree, self.producer)
         self.cid = next(iter(self.view["components"]))
         self.request = {
             "tree": self.tree, "viewId": self.view["viewId"], "producer": self.producer,
-            "components": [{"cid": self.cid, "surfaceInput": self.view["components"][self.cid]["surfaceInput"]}],
+            "components": [{"cid": self.cid, "part": self.view["components"][self.cid]["part"]}],
         }
-        self.manager = SurfaceSubscribers()
+        self.manager = PartSubscribers()
         self.addCleanup(lambda: [self.manager.cancel(token) for token in list(self.manager._jobs)])
         trees._reset_metadata_capture_cache()
         self.addCleanup(trees._reset_metadata_capture_cache)
@@ -130,7 +136,7 @@ class MetadataCapture(unittest.TestCase):
         self.assertEqual(captured, self.payloads)
 
     def test_resolve_and_polls_recheck_one_verified_complete_closure(self):
-        pending = PendingSurface()
+        pending = PendingPart()
         read = trees.read_verified_object
         with mock.patch.object(trees, "read_verified_object", wraps=read) as reads, \
              mock.patch("cadgen.daemon.artifacts.submit_artifact", return_value=pending) as submit:
@@ -141,7 +147,7 @@ class MetadataCapture(unittest.TestCase):
             self.assertEqual(polled["job"], first["job"])
             self.assertFalse(reads.call_args_list)
             submit.assert_called_once()
-        records = surfaces.derive(self.tree, [self.cid], producer=self.producer)
+        records = parts.derive(self.tree, [self.cid], producer=self.producer)
         pending.set_result(records)
         with mock.patch.object(trees, "read_verified_object", wraps=read) as reads:
             ready = self.manager.resolve(json.dumps({**self.request, "job": first["job"]}).encode())
@@ -263,15 +269,13 @@ class MetadataCapture(unittest.TestCase):
             self.assertEqual(view["viewId"], self.view["viewId"])
             self.assertEqual(Counter(call.args[0] for call in reads.call_args_list), Counter(self.payloads.keys()))
             reads.reset_mock()
-            self.assertEqual(surfaces.request_view(self.tree, producer=self.producer), self.view)
+            self.assertEqual(runtime_view(self.tree, self.producer), self.view)
             self.assertFalse(reads.call_args_list)
 
     def test_missing_or_corrupt_unrequested_geometry_is_rejected_every_time(self):
-        records = surfaces.derive(self.tree, [self.cid], producer=self.producer)
         other = next(entry for cid, entry in self.geometry["components"].items() if cid != self.cid)
         target = object_path(other["brep"])
         original = target.read_bytes()
-        record = records[self.cid]
         same_size_corruption = bytes([original[0] ^ 1]) + original[1:]
         for malformed in (None, b"corrupt geometry", same_size_corruption):
             with self.subTest(missing=malformed is None):
@@ -284,10 +288,9 @@ class MetadataCapture(unittest.TestCase):
                     with mock.patch("cadgen.daemon.artifacts.submit_artifact", side_effect=AssertionError("damaged closure admitted")):
                         for call in (
                             lambda: trees.capture_tree(self.tree, retain_payloads=False),
-                            lambda: surfaces.request_view(self.tree, producer=self.producer),
-                            lambda: surfaces.derive(self.tree, [self.cid], producer=self.producer),
+                            lambda: runtime_view(self.tree, self.producer),
+                            lambda: parts.derive(self.tree, [self.cid], producer=self.producer),
                             lambda: self.manager.resolve(json.dumps(self.request).encode()),
-                            lambda: pinned_surface_object(self.tree, record["surfaceInput"], record["object"]),
                         ):
                             with self.assertRaises((OSError, ValueError)):
                                 call()
@@ -296,16 +299,14 @@ class MetadataCapture(unittest.TestCase):
         self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
 
     def test_the_viewer_verifies_a_tree_once_and_stats_what_each_request_names(self):
-        from cadgen.viewer import surfaces as viewer_surfaces
+        from cadgen.viewer import parts as viewer_parts
 
-        record = surfaces.derive(self.tree, [self.cid], producer=self.producer)[self.cid]
-        surf = object_path(record["object"])
+        parts.derive(self.tree, [self.cid], producer=self.producer)
         resolve = lambda: self.manager.resolve(json.dumps(self.request).encode())["components"][self.cid]["state"]
-        serve = lambda: pinned_surface_object(self.tree, record["surfaceInput"], record["object"])
-        self.assertEqual((resolve(), serve()), ("ready", surf))
-        with mock.patch.object(viewer_surfaces, "capture_tree", side_effect=AssertionError("verified again")):
+        self.assertEqual(resolve(), "ready")
+        with mock.patch.object(viewer_parts, "capture_tree", side_effect=AssertionError("verified again")):
             for _ in range(3):
-                self.assertEqual((resolve(), serve()), ("ready", surf))
+                self.assertEqual(resolve(), "ready")
 
         # GC or eviction deleting what a request names sends the tree back through the
         # complete verification, which fails as it did before the tree was pinned.
@@ -315,18 +316,11 @@ class MetadataCapture(unittest.TestCase):
             target.unlink()
             try:
                 with mock.patch("cadgen.daemon.artifacts.submit_artifact", side_effect=AssertionError("missing object admitted")):
-                    for call in (resolve, serve):
-                        with self.assertRaises(FileNotFoundError):
-                            call()
+                    with self.assertRaises(FileNotFoundError):
+                        resolve()
             finally:
                 target.write_bytes(original)
-            self.assertEqual((resolve(), serve()), ("ready", surf))
-        surf_bytes = surf.read_bytes()
-        surf.unlink()
-        try:
-            self.assertIsNone(serve())
-        finally:
-            surf.write_bytes(surf_bytes)
+            self.assertEqual(resolve(), "ready")
 
         # A component no request names is not looked at; a derivation still verifies
         # the whole closure before it writes anything.
@@ -335,9 +329,9 @@ class MetadataCapture(unittest.TestCase):
         original = target.read_bytes()
         target.unlink()
         try:
-            self.assertEqual(serve(), surf)
+            self.assertEqual(resolve(), "ready")
             with self.assertRaises(FileNotFoundError):
-                surfaces.derive(self.tree, [self.cid], producer=self.producer)
+                parts.derive(self.tree, [self.cid], producer=self.producer)
         finally:
             target.write_bytes(original)
 
@@ -379,21 +373,21 @@ class MetadataCapture(unittest.TestCase):
         self.settle_store_objects()
         self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
 
-    def test_selected_surface_derivation_reads_only_its_exact_native_payload(self):
-        records = surfaces.derive(self.tree, [self.cid], producer=self.producer)
+    def test_selected_part_derivation_reads_only_its_exact_native_payload(self):
+        from cadgen.store.index import remove_entry
+
+        records = parts.derive(self.tree, [self.cid], producer=self.producer)
         selected = self.geometry["components"][self.cid]
         other = next(entry for cid, entry in self.geometry["components"].items() if cid != self.cid)
+        remove_entry("part", self.view["components"][self.cid]["part"])
         trees._reset_metadata_capture_cache()
         trees.capture_tree(self.tree, retain_payloads=False)
 
         graph_read = trees.read_verified_object
-        selected_read = surfaces.read_verified_object
+        selected_read = parts.read_verified_object
         with mock.patch.object(trees, "read_verified_object", wraps=graph_read) as graph_reads, \
-             mock.patch.object(surfaces, "read_verified_object", wraps=selected_read) as selected_reads:
-            self.assertEqual(
-                surfaces.derive(self.tree, [self.cid], force=True, producer=self.producer),
-                records,
-            )
+             mock.patch.object(parts, "read_verified_object", wraps=selected_read) as selected_reads:
+            self.assertEqual(parts.derive(self.tree, [self.cid], producer=self.producer), records)
         self.assertFalse(graph_reads.call_args_list)
         read_digests = [call.args[0] for call in selected_reads.call_args_list]
         self.assertIn(selected["brep"], read_digests)
@@ -418,13 +412,13 @@ class VerifiedIdentityAcrossClaims(unittest.TestCase):
                          for x in (1, 2)]
         links = [{"id": f"o{i}", "tree": tree, "name": f"part {i}",
                   "transform": list(trees.IDENTITY_16)} for i, tree in enumerate(self.children, 1)]
-        self.tree = trees.put_tree({
+        self.tree = trees.put_tree(tokenized({
             "units": "mm", "entryKind": "assembly", "components": {}, "occurrences": [],
             "links": links, "assembly": {"root": {
                 "id": "root", "nodeType": "assembly", "children": [
                     {"id": link["id"], "nodeType": "link", "children": []} for link in links],
             }},
-        })
+        })[0])
         self.closure = {self.tree: self.tree}
         for child in self.children:
             self.closure.update({child: child, **{entry["brep"]: child for entry in trees.get_tree(child)["components"].values()}})

@@ -2,7 +2,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { Popover, PopoverTrigger, PopoverContent } from "@text-to-cad/ui/primitives/popover";
 import { useEffect, useState } from 'react';
-import { LoaderCircle, RotateCcw } from 'lucide-react';
+import { Eye, LoaderCircle, RotateCcw } from 'lucide-react';
 import { cn } from '@text-to-cad/ui/utils';
 import { Button } from '@text-to-cad/ui/primitives/button';
 
@@ -12,6 +12,28 @@ const SHOW_AFTER_MS = 150;
 
 /** A newer revision of the file loading behind the one on screen: the view stays usable meanwhile. */
 export const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
+
+/** What loads behind the view, from the loading frame (`loadingProgress`): cadgen meshing parts its
+ * store lacked (a cold open, drawn as the parts arrive) says so, counted; anything else is the
+ * model updating. */
+export function modelUpdateStatus(progress) {
+  if (progress?.label !== "Meshing parts") return MODEL_UPDATE_STATUS;
+  return { pending: true, label: `Meshing parts${progress.counts ? ` ${progress.counts}` : ""}…` };
+}
+
+/**
+ * The model on screen is a build's own preview revision, not the saved file (loading.md section 5):
+ * said where the update status is said, for as long as it is drawn -- through the rest of the build,
+ * and under the alert of one that failed -- and gone once the saved file replaces it in place.
+ */
+export function ViewPreviewLabel({ className }) {
+  return <div className={cn('pointer-events-auto flex min-w-0 items-center gap-1.5 bg-transparent text-xs font-medium text-foreground', className)}
+    role="status" aria-live="polite" data-view-preview-label>
+    <TooltipHint content="A preview of the build in progress. The saved file replaces it when the build finishes.">
+      <span className="flex items-center gap-1.5"><Eye className="size-3.5 shrink-0" aria-hidden="true" />Preview</span>
+    </TooltipHint>
+  </div>;
+}
 
 export function ViewUpdateStatus({ status, onRetry, className }) {
   const mobile = useViewerMobile();

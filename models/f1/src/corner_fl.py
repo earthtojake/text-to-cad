@@ -1,7 +1,7 @@
 """F1 part model: front-left corner: wheel, brake, upright.
 
 The geometry `lib/wheels.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.21`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#corner_fl`; rebuild `f1.py`
 to pick up a change here.
 """
 

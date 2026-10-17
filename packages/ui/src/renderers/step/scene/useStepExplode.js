@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { createHeightSchedule } from "@text-to-cad/core/common/studioContactShadow.js";
 import {
-  applyExplodedViewProgress, clearExplodedViewRecords, computeExplodedViewLayout, easeExplodedViewProgress
+  applyExplodedViewProgress, clearExplodedViewRecords, computeExplodedViewLayout, easeExplodedViewProgress,
+  occurrencePathsFromAssemblyRoot
 } from "@text-to-cad/core/lib/viewer/explodedView.js";
 import { applyDisplayRecordTransform, toNumber } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
 import { syncRecordTopologyDisplayEdgeTransforms } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
@@ -181,7 +182,9 @@ export function useStepExplode(layers) {
     // Compute the radial layout from the current records. On disable the
     // layout is still resolvable, so collapse can animate from the current
     // progress down to 0.
-    const layout = computeExplodedViewLayout(runtime.displayRecords, baseBounds);
+    // The assembly tree is the only hierarchy a part has: its token names no ancestors.
+    const hierarchy = occurrencePathsFromAssemblyRoot(meshData?.assemblyRoot);
+    const layout = computeExplodedViewLayout(runtime.displayRecords, baseBounds, { hierarchy });
     animation.layout = layout;
 
     if (!layout.entries.length) {

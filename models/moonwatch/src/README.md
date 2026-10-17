@@ -2,7 +2,7 @@
 
 | Script                  | Artifact                       | Description                                                        |
 |-------------------------|--------------------------------|--------------------------------------------------------------------|
-| moonwatch.py            | STEP/moonwatch.step            | Full watch: case + dial/hands + movement + bracelet; carries kinematics and embedded choreography |
+| moonwatch.py            | STEP/moonwatch.step            | Full watch: case + dial/hands + movement + bracelet; carries kinematics and animation clips |
 | case.py                 | STEP/case.step                 | Case cluster: middle, bezel stack, crystal, caseback, crown, pushers, lugs |
 | dial.py                 | STEP/dial.step                 | Three-register step dial, applied indices, printed tracks, full hand stack |
 | movement.py             | STEP/movement.step             | Complete movement = movement_base + keyless_works + chrono_works    |
@@ -49,8 +49,8 @@ directory, with no `sys.path` manipulation.
 ## Articulation
 
 `moonwatch.py` declares `KINEMATICS` (typed mates, pure data), which lands in
-`STEP/moonwatch.step.json`. Choreography is the `ANIMATION_JS` literal in
-`moonwatch.py`, embedded in model metadata at build time.
+`STEP/moonwatch.step.json`. Choreography is the `ANIMATION` clips in
+`moonwatch.py`, baked to keyframes in that same sidecar when the watch builds.
 
 - **Mates** — the watch's real DOFs: `hour`, `minute`, `chrono_seconds`,
   `sub_seconds`, `chrono_minutes`, `chrono_hours`, the going train (`center`,
@@ -66,7 +66,7 @@ directory, with no `sys.path` manipulation.
   chronograph running, 0..1800).
 - **Poses** — `rest`, `one_minute`, `half_hour`, `chrono_at_10min`,
   `start_pressed`, `reset_pressed`, `winding`, `setting`.
-- **`ANIMATION_JS` in `moonwatch.py`** — choreography only: the `running`, `reveal`,
+- **`ANIMATION` in `moonwatch.py`** — choreography only: the `running`, `reveal`,
   `showcase` and `grand_tour` clips (staged explodes, the movement's
   lift-and-flip out of the case, the sinusoidal balance swing and the escape
   wheel's per-beat snap — neither of the last two is a linear gearing, so

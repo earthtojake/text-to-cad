@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { foldRepeatedParts, presentModelingAssembly } from './modelingPresentation.js';
+import { foldRepeatedParts, implicitModelingRoots, presentModelingAssembly } from './modelingPresentation.js';
 
 const part=(id,label,component)=>({id:`model:${id}`,kind:'part',label,selectionId:id,leafPartIds:[id],component});
 const labels=nodes=>nodes.map(node=>node.label);
@@ -72,14 +72,36 @@ test('parts named only by number stay unfolded, because the number is the whole 
  assert.deepEqual(labels(foldRepeatedParts(nodes,'model:root')),['01','02']);
 });
 
-test('an assembly read from the STEP tree folds its repeated children',()=>{
- const descriptor={occurrences:[
-  {id:'o1',name:'plant',component:'c1'},{id:'o2',name:'plant',component:'c1'},{id:'o3',name:'lid',component:'c2'},
- ]};
+test('an assembly read from the STEP tree folds its repeated children, by the component each part names',()=>{
  const stepRoot={id:'root',name:'deck',children:[
-  {id:'o1',name:'plant_1_01',children:[]},{id:'o2',name:'plant_1_02',children:[]},{id:'o3',name:'lid',children:[]},
+  {id:'o1',name:'plant_1_01',componentId:'c1',children:[]},{id:'o2',name:'plant_1_02',componentId:'c1',children:[]},
+  {id:'o3',name:'lid',componentId:'c2',children:[]},
  ]};
- const rows=presentModelingAssembly(descriptor,{},stepRoot);
+ const rows=presentModelingAssembly(stepRoot);
  assert.deepEqual(labels(rows),['plant_1 (2)','lid']);
  assert.deepEqual(rows[0].memberSelectionIds,['o1','o2']);
+});
+
+test('the STEP document wrapper is flattened, nested assemblies and identities kept, and a part is a leaf',()=>{
+ const leaf=(id,name)=>({id,nodeType:'part',name,leafPartIds:[id],children:[
+  {id:`step-topology:${id}.f1`,nodeType:'topology-face',name:'Face 1',children:[]}]});
+ const root={id:'o1',nodeType:'assembly',name:'tom',children:[{id:'o1.1',nodeType:'assembly',name:'Arm',children:[leaf('o1.1.1','Wrist')]},leaf('o1.2','Base')]};
+ const presented=presentModelingAssembly(root);
+ assert.deepEqual(presented.map(node=>[node.label,node.selectionId,node.kind]),[['Arm','o1.1','assembly'],['Base','o1.2','part']]);
+ assert.deepEqual(presented[0].children.map(node=>[node.selectionId,node.kind,node.children.length]),[['o1.1.1','part',0]],
+  'its faces and edges are never rows');
+ assert.equal(root.children[0].id,'o1.1');
+ const part=presentModelingAssembly({id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]});
+ assert.deepEqual(part.map(node=>[node.selectionId,node.kind]),[['__step_model__','part']],'a part file is its one row');
+});
+
+test('implicit roots are the single assemblies a tree opens through, never a folded group or a part',()=>{
+ const part={id:'p',kind:'part',children:[]};
+ const group={id:'g',kind:'group',children:[part,{...part,id:'p2'}]};
+ const inner={id:'b',kind:'assembly',children:[group]};
+ const outer={id:'a',kind:'assembly',children:[inner]};
+ assert.deepEqual(implicitModelingRoots([outer]),[outer,inner]);
+ assert.deepEqual(implicitModelingRoots([outer,{...outer,id:'a2'}]),[]);
+ assert.deepEqual(implicitModelingRoots([part]),[]);
+ assert.deepEqual(implicitModelingRoots([group]),[]);
 });

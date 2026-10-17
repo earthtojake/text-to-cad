@@ -2,8 +2,8 @@
 //
 // The pipeline's colour convention: everything upstream of a hex string is
 // LINEAR. build123d `Color` and OCCT `Quantity_Color` are linear, so the
-// descriptor's `occurrences[].color`, `components[].color`, a surf's
-// `partColor`, and per-face colours are all linear floats. Everything that is
+// descriptor's `occurrences[].color`, `components[].color` and per-face
+// colours are all linear floats. Everything that is
 // a `#rrggbb` string is sRGB-ENCODED: that is what a colour picker shows, what
 // a model's `baseColor` param holds, what three.js decodes with
 // `new THREE.Color(hex)`, and what 3MF's `displaycolor` is specified to be.

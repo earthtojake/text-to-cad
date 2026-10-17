@@ -1,17 +1,29 @@
 """The build tree: how a top-level build shows the model graph as its bodies reveal it.
 
-Every model transition — submitted, building (with the phase), current, done, failed —
-is an EVENT (``cadgen.daemon.executors.emit_event``). Child builds run in other
-processes, so their events travel back to the top-level call through the pool: as
-``{"event": ...}`` frames from a daemon worker, as ``CADGEN_EVENT`` stderr lines from a
-transient worker. Both arrive here identically, tagged with the root request's id.
+Every model transition — building (with the phase), current, done, failed — is an
+EVENT (``cadgen.daemon.executors.emit_event``), the root's and those of each child
+built inside its body alike. A daemon worker's travel back to the top-level call as
+``{"event": ...}`` frames; a build with no daemon emits them in the process that
+renders them.
 
-Two renderings, chosen once per process:
+Three renderings, chosen once per process:
 
 * a **TTY**: one block on stderr, refreshed in place, one line per model doing WORK.
   Current children are summarized on their parent's line; a finished subtree folds to
   one line, so a 200-model assembly never scrolls. Stdout stays the result channel.
-* **non-TTY / ``--json``**: one JSON line per transition on stderr, no drawing.
+* ``--json``: one JSON line per transition on stderr, no drawing.
+* any other **non-TTY** (an agent's shell, a CI log): no transitions at all. A line per
+  phase and per part of every model was most of what an agent read from a build.
+
+Every model that was BUILT also gets a durable human line on stderr saying where its
+time went -- ``[cadgen] built robot.step in 9m42s: model code 8m20s, cadgen 1m22s`` --
+read off its ``done`` event's ``timings`` (cadgen._internal.build_timing), followed by
+a warning when its model code got much slower than its last build, a warning when it
+started a program (its ``started``: what that program reads is no input), and the
+``--profile`` report when the build carried one. Off a TTY they print as the model
+finishes; on a TTY, below the frozen block when the build ends. A plain non-TTY also
+gets the one notice the transitions carried that a reader acts on: a model already
+stale when it finished.
 
 Nothing here knows what a build is; it renders events.
 """
@@ -20,7 +32,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import os
 import sys
 import threading
 import time
@@ -50,7 +61,8 @@ def _fmt_seconds(seconds: float) -> str:
 class _Model:
     __slots__ = (
         "model", "name", "state", "phase", "done", "total", "started", "finished",
-        "elapsed", "exit", "parent", "children", "stale", "seen",
+        "elapsed", "exit", "parent", "children", "stale", "seen", "timings", "profile",
+        "programs", "warnings", "timed", "stale_told",
     )
 
     def __init__(self, model: str, parent: str | None) -> None:
@@ -71,6 +83,12 @@ class _Model:
         self.children: list[str] = []
         self.stale: str | None = None
         self.seen = False  # ever reported by its own process (not just submitted)
+        self.timings: dict | None = None  # where a built model's time went
+        self.profile: str | None = None  # its --profile report
+        self.programs: list[str] | None = None  # the programs its code started
+        self.warnings: list[str] | None = None  # what its build warned of
+        self.timed = False  # its time lines were printed (or held for the block)
+        self.stale_told = False  # its already-stale notice was printed (plain non-TTY)
 
     @property
     def terminal(self) -> bool:
@@ -84,18 +102,18 @@ class _Model:
 
 
 class BuildTree:
-    """Renders model events for one root request. Thread-safe: events arrive from job
+    """Renders model events for one root request: every event this process's sink
+    hears is its own, the root's and its children's, which build in the root's process
+    or in the one worker that builds the root. Thread-safe: events arrive from job
     threads while the body runs on the main thread."""
 
     def __init__(
         self,
         *,
-        root_id: str | None,
         stream: TextIO | None = None,
         json_lines: bool = False,
     ) -> None:
         self._stream = stream if stream is not None else sys.stderr
-        self._root_id = root_id
         self._json = bool(json_lines)
         self._tty = (not self._json) and bool(getattr(self._stream, "isatty", lambda: False)())
         self._guard = threading.RLock()
@@ -104,6 +122,8 @@ class BuildTree:
         self._drawn_lines = 0
         self._last_draw = 0.0
         self._closed = False
+        # The time lines a TTY block holds back until it freezes.
+        self._held: list[str] = []
         self._ticker: threading.Thread | None = None
         self._stop = threading.Event()
         if self._tty:
@@ -115,9 +135,6 @@ class BuildTree:
     def handle(self, event: dict) -> None:
         if not isinstance(event, dict):
             return
-        root = event.get("root")
-        if self._root_id and root and root != self._root_id:
-            return  # someone else's tree
         model = event.get("model")
         state = event.get("state")
         if not isinstance(model, str) or not isinstance(state, str):
@@ -136,10 +153,15 @@ class BuildTree:
                 self._attach(node, parent)
             changed = self._apply(node, event, state) or fresh
             if changed:
-                if self._json or not self._tty:
+                if self._json:
                     self._write_line(node)
-                else:
+                elif self._tty:
                     self._draw(force=True)
+            if (node.timings is not None or node.programs or node.warnings) and not node.timed:
+                self._time_lines(node)
+            if node.stale and node.terminal and not node.stale_told and not (self._json or self._tty):
+                node.stale_told = True
+                self._write_text([f"[cadgen] {node.name} is already stale: {node.stale}; rerun"])
 
     def _attach(self, node: _Model, parent: str) -> None:
         """Hang ``node`` under ``parent``, inventing the parent's line if its own
@@ -194,12 +216,61 @@ class BuildTree:
             code = event.get("exit")
             if isinstance(code, int):
                 node.exit = code
+            timings = event.get("timings")
+            if state == STATE_DONE and isinstance(timings, dict) and node.timings is None:
+                node.timings = timings
+                profile = event.get("profile")
+                node.profile = profile if isinstance(profile, str) and profile else None
+            programs = event.get("started")
+            if state == STATE_DONE and isinstance(programs, list) and node.programs is None:
+                node.programs = [str(program) for program in programs if isinstance(program, str) and program]
+            warnings = event.get("warnings")
+            if state == STATE_DONE and isinstance(warnings, list) and node.warnings is None:
+                node.warnings = [str(warning) for warning in warnings if isinstance(warning, str) and warning]
             if state == STATE_FAILED:
                 node.state = STATE_FAILED
         stale = event.get("stale")
         if isinstance(stale, str) and stale:
             node.stale = stale
         return before != (node.state, node.phase, node.done, node.total, node.stale)
+
+    # --- time lines --------------------------------------------------------------------
+
+    def _time_lines(self, node: _Model) -> None:
+        """The durable lines for a model that was built: where its time went, the
+        slowdown warning, the warning that it started a program, its build's own
+        warnings, the ``--profile`` report. Once per model."""
+        node.timed = True
+        from cadgen._internal.build_timing import slowdown_warning, started_warning, time_line
+        from cadgen._internal.doors import display_path
+
+        lines = []
+        if node.timings is not None:
+            timings = node.timings
+            document = timings.get("document")
+            lines.append(f"[cadgen] {time_line(display_path(document) if document else node.name, timings)}")
+            last = timings.get("lastModelSeconds")
+            warning = slowdown_warning(
+                node.name, float(timings.get("modelSeconds") or 0.0),
+                float(last) if isinstance(last, (int, float)) else None,
+            )
+            if warning:
+                lines.append(f"[cadgen] {warning}")
+        started = started_warning(node.name, node.programs or [])
+        if started:
+            lines.append(f"[cadgen] {started}")
+        lines += [f"[cadgen] warning: {node.name}: {warning}" for warning in node.warnings or ()]
+        if node.profile:
+            lines += [f"[cadgen] {line}" for line in node.profile.splitlines()]
+        if self._tty:
+            self._held.extend(lines)
+        else:
+            self._write_text(lines)
+
+    def _write_text(self, lines: list[str]) -> None:
+        with contextlib.suppress(OSError, ValueError):
+            self._stream.write("".join(f"{line}\n" for line in lines))
+            self._stream.flush()
 
     # --- JSONL -----------------------------------------------------------------------
 
@@ -216,6 +287,12 @@ class BuildTree:
             payload["stale"] = node.stale
         if node.exit is not None and node.state == STATE_FAILED:
             payload["exit"] = node.exit
+        if node.state == STATE_DONE and node.timings is not None:
+            payload["timings"] = {k: v for k, v in node.timings.items() if k != "document"}
+        if node.state == STATE_DONE and node.programs:
+            payload["started"] = list(node.programs)
+        if node.state == STATE_DONE and node.warnings:
+            payload["warnings"] = list(node.warnings)
         with contextlib.suppress(OSError, ValueError):
             self._stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
             self._stream.flush()
@@ -326,6 +403,8 @@ class BuildTree:
             if self._tty:
                 self._last_draw = 0.0
                 self._draw(force=True)
+                self._write_text(self._held)
+                self._held = []
         if self._ticker is not None:
             self._ticker.join(timeout=1.0)
 
@@ -338,27 +417,18 @@ def build_tree(*, json_lines: bool = False, stream: TextIO | None = None) -> Ite
     """Own this process's event sink for the length of a top-level build.
 
     Installs nothing when a sink is already present (a daemon worker relays events as
-    frames; a transient worker writes them as ``CADGEN_EVENT`` lines — see
-    ``cadgen.daemon.executors``): the tree belongs to the ROOT request only. Mints the
-    root id when this process is the root, so every child job inherits it.
+    frames — see ``cadgen.daemon.executors``): the tree belongs to the ROOT request
+    only.
     """
     from cadgen.daemon import executors
 
-    if executors.sink_installed() or os.environ.get("CADGEN_EVENTS") == "1":
+    if executors.sink_installed():
         yield None
         return
-    minted = False
-    if not os.environ.get("CADGEN_ROOT_ID"):
-        import uuid
-
-        os.environ["CADGEN_ROOT_ID"] = uuid.uuid4().hex
-        minted = True
-    tree = BuildTree(root_id=os.environ["CADGEN_ROOT_ID"], stream=stream, json_lines=json_lines)
+    tree = BuildTree(stream=stream, json_lines=json_lines)
     executors.set_event_sink(tree.handle)
     try:
         yield tree
     finally:
         executors.set_event_sink(None)
         tree.close()
-        if minted:
-            os.environ.pop("CADGEN_ROOT_ID", None)

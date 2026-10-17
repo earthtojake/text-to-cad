@@ -26,7 +26,7 @@ test("an empty STEP scene already satisfies the kit contract, so the viewport ca
   assert.equal(scene.plan(identity).reuse, false);
 });
 
-test("progressive publishes and detail swaps land in ONE scene identity: the roots and the records' owner never change", () => {
+test("progressive publishes land in ONE scene identity: the roots and the records' owner never change", () => {
   const scene = createStepScene(THREE);
   const roots = [scene.object3D, scene.edgesObject3D];
   const first = source([mesh(1)], { missingComponentIds: ["cid1"] });
@@ -46,7 +46,7 @@ test("progressive publishes and detail swaps land in ONE scene identity: the roo
   assert.equal(scene.displayRecords[0], firstRecord, "an occurrence on screen keeps its record");
   assert.deepEqual([scene.object3D, scene.edgesObject3D], roots);
   assert.equal(scene.placedObjects(), scene.displayRecords, "the depth fit is told about the records themselves");
-  assert.equal(scene.source, whole);
+  assert.equal(scene.cadScene.source, whole, "the live build holds the publish");
   assert.deepEqual(sceneFramingBounds(scene), bounds);
   scene.dispose();
 });
@@ -89,7 +89,7 @@ test("a build setting that changes how records are made rebuilds under the same 
 });
 
 // What STEP draws over the model -- the reference highlight's face fill -- used to hang in
-// the viewport's own `modelGroup`, which `render/lodSceneCleanup.js` deliberately never
+// the viewport's own `modelGroup`, which `render/sceneCleanup.js` deliberately never
 // clears. A rebuild then took the outline (the edge layer IS cleared) and left the fill lit
 // over a model it was no longer measured against.
 test("an overlay drawn with the surfaces hangs in this scene's root, and leaves with it", () => {

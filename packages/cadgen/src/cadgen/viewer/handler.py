@@ -76,7 +76,7 @@ class CadHTTPServer(ThreadingHTTPServer):
 def make_handler_class(app):
     class CadRequestHandler(BaseHTTPRequestHandler):
         # Python defaults to HTTP/1.0, which means no keep-alive. The client
-        # fetches many .surf components in parallel; without keep-alive every
+        # fetches many parts' meshes and tables in parallel; without keep-alive every
         # component pays a fresh connection. Safe because every response here
         # carries an explicit content-length.
         protocol_version = "HTTP/1.1"

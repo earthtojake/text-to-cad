@@ -1,11 +1,12 @@
-"""The viewer's tessellation-cache transport and shared TESB framing.
+"""The viewer's read-only routes to the store's parts: a route path's name, URI-decoded
+and checked; the status a read answers; and the batch requests and container.
 
-Ports ``tessCache.test.mjs``. The container test does not read the format by
-eye — it hands the Python encoder's bytes to the AUTHORITATIVE decoder in
-``packages/core``, which is where the format lives. A hand-written
-assertion about offsets would pass just as happily against a subtly wrong
-encoder, and the client would then silently fall back to one round trip per
-component for the life of the page.
+What the routes read is the store's, and its suites hold it (test_store_tess_cache,
+test_store_parts). The container test does not read the format by eye — it hands the
+Python encoder's bytes to the AUTHORITATIVE decoder in ``packages/core``, which is where
+the format lives. A hand-written assertion about offsets would pass just as happily
+against a subtly wrong encoder, and the client would then silently fall back to one
+round trip per component for the life of the page.
 """
 
 from __future__ import annotations
@@ -17,32 +18,33 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 
 from cadgen.viewer.tess_cache import (
     TESS_CACHE_ROUTE_PREFIX,
     read_tess_cache_batch,
     read_tess_cache_entry,
-    tess_cache_key_from_route_path,
-    write_tess_cache_entry,
+    tess_cache_name_from_route_path,
 )
-from cadgen.store.tess_cache import tessellation_cache_dir
 
-from tests.python.support.tessellation import tessellation_fixture
+from tests.python.support.tessellation import part_fixture, store_part
 
-FIXTURE = tessellation_fixture()
+FIXTURE = part_fixture()
 GOOD_KEY = FIXTURE["key"]
-PAYLOAD = base64.b64decode(FIXTURE["bytes"])
+PAYLOAD = base64.b64decode(FIXTURE["glb"])
+TABLE = base64.b64decode(FIXTURE["selectors"])
+RECORD = FIXTURE["record"]
+# Another part's key: well formed, and stored nowhere.
+ABSENT_KEY = "2" * 64 + GOOD_KEY[64:]
+
 
 def admitted(key=GOOD_KEY, size=None):
-    return {"tessellationInput": key, "object": FIXTURE["facts"]["object"],
-            "maxBytes": len(PAYLOAD) if size is None else size}
+    return {"part": key, "object": RECORD["glb"]["object"], "maxBytes": len(PAYLOAD) if size is None else size}
 
 # The authoritative codec: @text-to-cad/core in this repository. The suite is root-owned
 # and runs from a checkout, so the source path is always present -- no skip.
 REPO_ROOT = Path(__file__).resolve().parents[5]
-CADGEN_JS_CODEC = REPO_ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCache.js"
+CADGEN_JS_CODEC = REPO_ROOT / "packages" / "core" / "src" / "lib" / "parts" / "tessellationCache.js"
 
 
 class TessCacheTestCase(unittest.TestCase):
@@ -60,7 +62,6 @@ class TessCacheTestCase(unittest.TestCase):
                 "LOCALAPPDATA",
                 "HOME",
                 "USERPROFILE",
-                "CADGEN_MESH_CACHE",
             )
         }
         self.addCleanup(self._restore)
@@ -80,74 +81,49 @@ class TessCacheTestCase(unittest.TestCase):
     def route(self, name: str) -> str:
         return f"{TESS_CACHE_ROUTE_PREFIX}{name}"
 
+    def read(self, name: str, role: str = "glb", **admission):
+        """``read_tess_cache_entry`` for ``name``, admitted by the record's facts of ``role``
+        unless ``admission`` says otherwise."""
+        facts = RECORD[role]
+        admission = {"expected_object": facts["object"], "max_bytes": facts["byteLength"], **admission}
+        return read_tess_cache_entry(self.route(name), **admission)
+
 
 class NameValidation(TessCacheTestCase):
-    def test_the_canonical_key_is_accepted(self):
-        self.assertEqual(tess_cache_key_from_route_path(self.route(f"{GOOD_KEY}.tess")), GOOD_KEY)
+    def test_a_parts_two_objects_are_named_by_its_key(self):
+        for suffix in (".glb", ".selectors.json"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(tess_cache_name_from_route_path(self.route(GOOD_KEY + suffix)), GOOD_KEY + suffix)
 
-    def test_traversal_separators_hidden_names_and_spaces_are_refused(self):
-        # The cache lives outside every folder a file is served from, so containment
-        # cannot help here: this pattern is the whole defence.
-        for name in (
-            "../escape.tess",
-            "sub/dir.tess",
-            "%2e%2e%2fescape.tess",
-            "..%2Fescape.tess",
-            ".hidden.tess",
-            "noext",
-            "",
-            "a b.tess",
-            "a..b.tess",
-            "batch",
-        ):
+    def test_an_encoded_traversal_is_decoded_and_refused(self):
+        # The store lives outside every folder a file is served from, so containment
+        # cannot help here: the part key's pattern is the whole defence, and it judges
+        # the decoded name (the store's suite holds the pattern).
+        for name in ("%2e%2e%2fescape.glb", "..%2Fescape.glb"):
             with self.subTest(name=name):
-                self.assertIsNone(tess_cache_key_from_route_path(self.route(name)))
+                self.assertIsNone(tess_cache_name_from_route_path(self.route(name)))
 
     def test_a_malformed_percent_escape_is_a_refusal_not_a_crash(self):
-        for name in ("%zz.tess", "%.tess", "%2.tess", "%C0%AF.tess", "%ED%A0%80.tess"):
+        for name in ("%zz.glb", "%.glb", "%2.glb", "%C0%AF.glb", "%ED%A0%80.glb"):
             with self.subTest(name=name):
-                self.assertIsNone(tess_cache_key_from_route_path(self.route(name)))
+                self.assertIsNone(tess_cache_name_from_route_path(self.route(name)))
 
     def test_a_trailing_newline_does_not_sneak_past_the_anchor(self):
         # Python's `$` also matches before a trailing newline; JavaScript's does
         # not. fullmatch is what keeps the two the same.
-        self.assertIsNone(tess_cache_key_from_route_path(self.route("a.tess%0A")))
+        self.assertIsNone(tess_cache_name_from_route_path(self.route(f"{GOOD_KEY}.glb%0A")))
 
 
-class StoreRoundTrip(TessCacheTestCase):
-    def test_write_then_read_returns_the_exact_bytes(self):
-        payload = PAYLOAD
-        self.assertEqual(write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), payload), 204)
-        status, body = read_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"))
-        self.assertEqual(status, 200)
-        self.assertEqual(body, payload)
-
-    def test_a_miss_is_404_and_a_refused_name_is_403(self):
-        self.assertEqual(read_tess_cache_entry(self.route("absent-t1.tess"))[0], 404)
-        self.assertEqual(read_tess_cache_entry(self.route("../escape.tess"))[0], 403)
-        self.assertEqual(write_tess_cache_entry(self.route("../escape.tess"), b"x"), 403)
-
-    def test_an_empty_body_is_accepted_and_dropped(self):
-        self.assertEqual(write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), b""), 204)
-        self.assertEqual(read_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"))[0], 404)
-
-    def test_the_write_leaves_no_temp_file_behind(self):
-        write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), PAYLOAD)
-        names = os.listdir(tessellation_cache_dir())
-        self.assertEqual(names, [GOOD_KEY], "an index entry is keyed by the cache key itself")
-
-    def test_disabling_the_cache_turns_off_both_directions_and_creates_no_directory(self):
-        os.environ["CADGEN_MESH_CACHE"] = "0"
-        self.assertEqual(write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), b"x"), 204)
-        self.assertEqual(read_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"))[0], 404)
-        self.assertFalse(os.path.exists(tessellation_cache_dir()))
-
-    def test_the_enable_flag_is_read_per_call(self):
-        write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), PAYLOAD)
-        os.environ["CADGEN_MESH_CACHE"] = "0"
-        self.assertEqual(read_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"))[0], 404)
-        os.environ.pop("CADGEN_MESH_CACHE")
-        self.assertEqual(read_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"))[0], 200)
+class ReadStatus(TessCacheTestCase):
+    def test_a_hit_is_200_a_miss_404_and_a_refused_name_403(self):
+        self.assertEqual(self.read(f"{ABSENT_KEY}.glb")[0], 404)
+        self.assertEqual(self.read("../escape.glb")[0], 403)
+        self.assertEqual(store_part(), RECORD)
+        self.assertEqual(self.read(f"{GOOD_KEY}.glb"), (200, PAYLOAD))
+        self.assertEqual(self.read(f"{GOOD_KEY}.selectors.json", "selectors"), (200, TABLE))
+        self.assertEqual(self.read(f"{GOOD_KEY}.glb", expected_object="f" * 64)[0], 404,
+                         "a read the record does not admit is a miss")
+        self.assertEqual(self.read(f"{GOOD_KEY}.tess")[0], 403, "a mesh is a GLB body")
 
 
 class BatchRequests(TessCacheTestCase):
@@ -160,10 +136,6 @@ class BatchRequests(TessCacheTestCase):
             with self.subTest(body=body):
                 self.assertIsNone(read_tess_cache_batch(body))
 
-    def test_more_than_the_cap_is_refused(self):
-        self.assertIsNone(read_tess_cache_batch(json.dumps({"entries": [admitted()] * 257}).encode()))
-        self.assertIsNotNone(read_tess_cache_batch(json.dumps({"entries": []}).encode()))
-
     def test_one_undecodable_byte_is_a_per_entry_miss_not_a_400(self):
         """``Buffer.from(body).toString("utf8")`` substitutes; it does not throw.
 
@@ -175,7 +147,7 @@ class BatchRequests(TessCacheTestCase):
         """
         import struct
 
-        write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), PAYLOAD)
+        store_part()
         body = json.dumps({"entries": [admitted(), admitted("NAME_HERE")]}).encode()
         container = read_tess_cache_batch(body.replace(b"NAME_HERE", b"\xe9"))
         self.assertIsNotNone(container, "a bad byte must not fail the whole batch")
@@ -231,29 +203,18 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
         return json.loads(result.stdout)
 
     def test_hit_miss_and_refusal_decode_in_order(self):
-        write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), PAYLOAD)
+        store_part()
         container = read_tess_cache_batch(
             json.dumps(
-                {"entries": [admitted(), admitted("absent-t1"), admitted("../escape")]}
+                {"entries": [admitted(), admitted(ABSENT_KEY), admitted("../escape")]}
             ).encode()
         )
         # A refused name and a miss are per-entry MISSES, never errors: one bad
         # key must not cost an assembly its whole round trip.
         self.assertEqual(self.decode_with_node(container), [list(PAYLOAD), None, None])
 
-    def test_unaligned_payloads_round_trip(self):
-        # 1, 2 and 3 mod 4 all exercise the padding; a decoder that advances by
-        # the raw length instead of the aligned one desynchronises after the
-        # first such entry.
-        # Framing also accepts odd-length body readers; real TESS v4 bodies
-        # themselves are aligned. Keep this isolated from payload validation.
-        entries = [bytes(range(size)) for size in (1, 2, 3, 4, 5)]
-        with mock.patch("cadgen.store.tess_cache.read_tessellation_cache", side_effect=entries):
-            container = read_tess_cache_batch(json.dumps({"entries": [admitted()] * 5}).encode())
-        self.assertEqual(self.decode_with_node(container), [list(entry) for entry in entries])
-
     def test_a_non_string_name_is_a_miss_and_keeps_the_container_valid(self):
-        write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), PAYLOAD)
+        store_part()
         container = read_tess_cache_batch(
             json.dumps({"entries": [17, admitted(), None]}).encode()
         )

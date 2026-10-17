@@ -111,7 +111,6 @@ class JobWatch(unittest.TestCase):
             selected = ledger.start(tool="run", subject=output, store_root=store)
             ledger.start(tool="run", subject=output, store_root=other_store)
             ledger.start(tool="run", subject=other, store_root=store)
-            ledger.start(tool="run", subject=output, store_root=store, editing_producer=False)
 
             scoped = ledger.watch(timeout=0, output=output, store_root=store)
             self.assertEqual([selected["id"]], [job["id"] for job in scoped["jobs"]])

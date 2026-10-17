@@ -30,27 +30,38 @@ const STEP_ENTRY = {
   bytes: 42
 };
 
+// Occurrence tokens of three parts (in the order a sorted copy line lists them) and element
+// names: a ref is `<occurrence token>/<element name>`.
+const ROOT = "o:1a2b3c4d5e6f";
+const BRACKET = "o:2b3c4d5e6f70";
+const PRISM = "o:3c4d5e6f7081";
+const F1 = "f:base.extrude1.3";
+const F4 = "f:base.hole1.1";
+const E1 = "e:base.extrude1.5";
+
+// A part's selector table (cadgen selector_table.py, schema 3) as `joinSelectorTable` extends
+// it: element rows lead with their name and name no occurrence; the page places them.
 function selectorBundle() {
   return {
     manifest: {
       cadRef: "models/assy",
       tables: {
-        occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"]
+        occurrenceColumns: ["transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount", "vertexStart", "vertexCount"],
+        shapeColumns: ["ordinal", "kind", "bbox", "center", "area", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        faceColumns: ["name", "ordinal", "shape", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "tangentGroup", "triangleStart", "triangleCount"],
+        edgeColumns: ["name", "ordinal", "shape", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "vertexStart", "vertexCount", "relevance", "flags", "params", "adjacentFaceCount", "continuity", "dihedralDeg", "visibilityClass", "chain", "segmentStart", "segmentCount"]
       },
       occurrences: [
-        ["o1", "1", "Root", null, null, null, null, 0, 1, 0, 1, 0, 1]
+        [null, null, 0, 1, 0, 1, 0, 1, 0, 0]
       ],
       shapes: [
-        ["o1.s1", "o1", 1, "solid", null, [0, 0, 0], 1, 1, 0, 1, 0, 1]
+        [1, "solid", null, [0, 0, 0], 1, 0, 1, 0, 1]
       ],
       faces: [
-        ["o1.f1", "o1", "o1.s1", 1, "plane", 4, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0]
+        [F1, 1, 1, "plane", 4, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 1, 0, 0]
       ],
       edges: [
-        ["o1.e1", "o1", "o1.s1", 1, "line", 2, [1, 0, 0], null, 0, 1, 0, 0, {}, 0, 0]
+        [E1, 1, 1, "line", 2, [1, 0, 0], null, 0, 1, 0, 0, 0, 0, {}, 1, "c0", 90, "feature", 1, 0, 0]
       ]
     },
     buffers: {}
@@ -86,19 +97,17 @@ test("reference state normalization trims reference metadata and preserves cache
     }
   ]);
 
-  const referenceState = buildNormalizedReferenceState(STEP_ENTRY, selectorBundle());
+  const referenceState = buildNormalizedReferenceState(STEP_ENTRY, selectorBundle(), { occurrenceId: ROOT });
   assert.equal(buildReferenceCacheKey(STEP_ENTRY), "models/assy.step:selector-hash");
   assert.equal(referenceState.fileRef, "models/assy.step");
   assert.equal(referenceState.referenceHash, "models/assy.step:selector-hash");
-  assert.equal(referenceState.stepHash, "selector-hash");
-  assert.deepEqual(referenceState.counts, { faces: 1, edges: 1 });
+  // The occurrence, its face and its edge; a solid is a row, never a reference.
   assert.deepEqual(
     referenceState.references.map((reference) => reference.copyText),
     [
-      "#o1",
-      "#s1",
-      "#f1",
-      "#e1"
+      `#${ROOT}`,
+      `#${ROOT}/${F1}`,
+      `#${ROOT}/${E1}`
     ]
   );
 });
@@ -113,41 +122,46 @@ test("copy helpers merge selector refs and keep plain fallback lines", () => {
   assert.equal(copyResult.text, "#f1,f2\nplain reference");
 
   const payload = buildSelectionCopyPayload({
-    references: [{ id: "e1", copyText: "#e1" }],
+    references: [{ id: "e1", copyText: `#${ROOT}/${E1}` }],
     parts: [
-      { id: "part-b", occurrenceId: "o1.2", name: "Bracket" },
-      { occurrenceId: "o1.6", name: "triangular_prism" },
+      { id: "part-b", occurrenceId: BRACKET, name: "Bracket" },
+      { occurrenceId: PRISM, name: "triangular_prism" },
       { id: "", name: "Missing selector" }
     ],
     entry: STEP_ENTRY
   });
   assert.deepEqual(payload.lines, [
-    "#e1,o1.2,o1.6"
+    `#${ROOT}/${E1},${BRACKET},${PRISM}`
   ]);
   assert.equal(payload.copiedCount, 3);
   assert.deepEqual(payload.missingPartNames, ["Missing selector"]);
 
   assert.equal(
-    buildAssemblyPartCopyText({ id: "part-b", occurrenceId: "o1.2", name: "Bracket" }, STEP_ENTRY),
-    "#o1.2"
+    buildAssemblyPartCopyText({ id: "part-b", occurrenceId: BRACKET, name: "Bracket" }, STEP_ENTRY),
+    `#${BRACKET}`
   );
   assert.equal(
-    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "triangular_prism" }, STEP_ENTRY),
-    "#o1.6"
+    buildAssemblyPartCopyText({ occurrenceId: PRISM, name: "triangular_prism" }, STEP_ENTRY),
+    `#${PRISM}`
   );
   assert.equal(
-    buildAssemblyPartCopyText({ id: "internal-node", displaySelector: "o1.7.1.s1", name: "cube_top_pad" }, STEP_ENTRY),
-    "#o1.7.1.s1"
+    buildAssemblyPartCopyText({ id: "internal-node", displaySelector: PRISM, name: "cube_top_pad" }, STEP_ENTRY),
+    `#${PRISM}`
   );
+  // A name is never a selector, and neither is an id of the old positional grammar.
   assert.equal(
     buildAssemblyPartCopyText({ id: "cube_top_pad", name: "cube_top_pad" }, STEP_ENTRY),
+    ""
+  );
+  assert.equal(
+    buildAssemblyPartCopyText({ id: "o1.7.1", occurrenceId: "o1.7.1", name: "cube_top_pad" }, STEP_ENTRY),
     ""
   );
   assert.deepEqual(buildWholeStepEntryCopyReference(STEP_ENTRY), {
     id: "step-entry:whole",
     copyText: "#"
   });
-  assert.equal(canonicalCadRefCopyText("#o1.7.1.f4 plane area=35"), "#o1.7.1.f4");
+  assert.equal(canonicalCadRefCopyText(`#${ROOT}/${F4} plane area=35`), `#${ROOT}/${F4}`);
 });
 
 test("selection utility helpers preserve list and topology path behavior", () => {
@@ -223,8 +237,8 @@ test("a composition serves a request that holds every part it loaded", () => {
 test("copy text carries the entry's file prefix", () => {
   const entry = { ...STEP_ENTRY, fileRefPrefix: "models/assy.step" };
   assert.equal(
-    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, entry),
-    "models/assy.step#o1.6"
+    buildAssemblyPartCopyText({ occurrenceId: PRISM, name: "prism" }, entry),
+    `models/assy.step#${PRISM}`
   );
   assert.equal(buildWholeStepEntryCopyReference(entry).copyText, "models/assy.step#");
   assert.equal(fileRefPrefixForEntry(entry), "models/assy.step");
@@ -235,28 +249,28 @@ test("an entry with no prefix emits the bare refs it always did", () => {
   // The prefix is opt-in per call site: every existing caller that builds a minimal entry keeps
   // producing exactly the copy text it produced before.
   assert.equal(
-    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, STEP_ENTRY),
-    "#o1.6"
+    buildAssemblyPartCopyText({ occurrenceId: PRISM, name: "prism" }, STEP_ENTRY),
+    `#${PRISM}`
   );
   assert.equal(buildWholeStepEntryCopyReference(STEP_ENTRY).copyText, "#");
   assert.equal(fileRefPrefixForEntry(STEP_ENTRY), "");
 });
 
 test("canonical copy text keeps a file prefix instead of dropping the line", () => {
-  assert.equal(canonicalCadRefCopyText("assy.step#o1.7.1.f4 plane area=35"), "assy.step#o1.7.1.f4");
-  assert.equal(canonicalCadRefCopyText("#o1.7.1.f4 plane area=35"), "#o1.7.1.f4");
+  assert.equal(canonicalCadRefCopyText(`assy.step#${ROOT}/${F4} plane area=35`), `assy.step#${ROOT}/${F4}`);
+  assert.equal(canonicalCadRefCopyText(`#${ROOT}/${F4} plane area=35`), `#${ROOT}/${F4}`);
 });
 
 test("withFileRefPrefix is idempotent, which is what lets it run at one funnel", () => {
   // Copy text arrives at the funnel from several builders: some already carry a prefix (parts
   // built from the entry), some do not (tree-node selections). Applying this once at
   // the end is only safe because a second application is a no-op.
-  assert.equal(withFileRefPrefix("#o1.2", "plate.stl"), "plate.stl#o1.2");
-  assert.equal(withFileRefPrefix("plate.stl#o1.2", "plate.stl"), "plate.stl#o1.2");
-  assert.equal(withFileRefPrefix("other.stl#o1.2", "plate.stl"), "other.stl#o1.2");
+  assert.equal(withFileRefPrefix(`#${BRACKET}`, "plate.stl"), `plate.stl#${BRACKET}`);
+  assert.equal(withFileRefPrefix(`plate.stl#${BRACKET}`, "plate.stl"), `plate.stl#${BRACKET}`);
+  assert.equal(withFileRefPrefix(`other.stl#${BRACKET}`, "plate.stl"), `other.stl#${BRACKET}`);
   assert.equal(withFileRefPrefix("#", "plate.stl"), "plate.stl#");
   // No prefix available, or nothing ref-like: leave it exactly as it was.
-  assert.equal(withFileRefPrefix("#o1.2", ""), "#o1.2");
+  assert.equal(withFileRefPrefix(`#${BRACKET}`, ""), `#${BRACKET}`);
   assert.equal(withFileRefPrefix("plain text", "plate.stl"), "plain text");
   assert.equal(withFileRefPrefix("", "plate.stl"), "");
 });
@@ -264,12 +278,12 @@ test("withFileRefPrefix is idempotent, which is what lets it run at one funnel",
 test("every copy path shapes its text the one way: canonical refs, each carrying the file prefix", () => {
   // The Copy Reference button, a menu's Copy Reference and a double-click all copy through here,
   // so a tree row's ref is prefixed exactly as the button's is.
-  assert.deepEqual(copyTextLines(["#o1.3.f24 plane area=35", "", "#o1.7"], "planetary.step"),
-    ["planetary.step#o1.3.f24", "planetary.step#o1.7"]);
-  assert.deepEqual(copyTextLines("#o1.3.f24\n#o1.7", "planetary.step"), ["planetary.step#o1.3.f24", "planetary.step#o1.7"],
+  assert.deepEqual(copyTextLines([`#${ROOT}/${F4} plane area=35`, "", `#${BRACKET}`], "planetary.step"),
+    [`planetary.step#${ROOT}/${F4}`, `planetary.step#${BRACKET}`]);
+  assert.deepEqual(copyTextLines(`#${ROOT}/${F4}\n#${BRACKET}`, "planetary.step"), [`planetary.step#${ROOT}/${F4}`, `planetary.step#${BRACKET}`],
     "a menu's newline-joined copy text reads the same as a list of lines");
-  assert.deepEqual(copyTextLines(["planetary.step#o1.3"], "planetary.step"), ["planetary.step#o1.3"], "an already-prefixed line passes through");
-  assert.deepEqual(copyTextLines(["#o1.3"], ""), ["#o1.3"], "no prefix, the bare ref");
+  assert.deepEqual(copyTextLines([`planetary.step#${ROOT}`], "planetary.step"), [`planetary.step#${ROOT}`], "an already-prefixed line passes through");
+  assert.deepEqual(copyTextLines([`#${ROOT}`], ""), [`#${ROOT}`], "no prefix, the bare ref");
   assert.deepEqual(copyTextLines(["plain text"], "planetary.step"), [], "text that is not a ref is not copied");
   assert.deepEqual(copyTextLines(undefined, "planetary.step"), []);
 });

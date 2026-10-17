@@ -27,12 +27,6 @@ DEFAULT_COMPONENT_BYTES = 384 * MIB
 # worker's subprocess fan-out from claiming the entire budget.
 EXTRACTION_CEILING_BYTES = 2048 * MIB
 
-# Removed knobs. Their teaching error names the calibration that replaced them.
-_REMOVED_SETTINGS = {
-    "CADGEN_WORKER_MEMORY_MB": "the per-worker reservation",
-    "CADGEN_DEPENDENCY_MEMORY_MB": "the dependency headroom",
-}
-
 
 def _megabytes(name: str, default: int) -> int:
     raw = os.environ.get(name, "").strip()
@@ -104,18 +98,6 @@ class MemoryPolicy:
 
     @classmethod
     def from_environment(cls) -> "MemoryPolicy":
-        for name, described in _REMOVED_SETTINGS.items():
-            if os.environ.get(name, "").strip():
-                # A stale setting cannot make admission wrong, only do nothing:
-                # say so once at policy construction and carry on.
-                print(
-                    f"warning: {name} is ignored: {described} is not configurable. A worker is "
-                    f"charged a {WORKER_SEED_BYTES // MIB} MiB seed until the pool has measured an "
-                    "idle worker of its own, then the observed baseline, and the dependency "
-                    "headroom follows from that same number. Size the whole budget with "
-                    "CADGEN_MEMORY_MB instead (0 disables admission).",
-                    file=sys.stderr,
-                )
         # Leave 30% to the daemon, browser and other applications. An explicit
         # zero disables admission; unknown host capacity also leaves it off.
         limit = _megabytes("CADGEN_MEMORY_MB", physical_memory_bytes() * 7 // 10)

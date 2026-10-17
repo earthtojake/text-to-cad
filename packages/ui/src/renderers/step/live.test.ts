@@ -63,7 +63,7 @@ describe('live CAD viewer binding', () => {
     expect((await view.controller.setDisplaySettings({ mode: 'render' })).display.mode).toBe('render');
     expect(frames).toBe(3);
   });
-  it('rejects retired public display schema before dispatch', async () => {
+  it('rejects a display mode or field outside the public schema before dispatch', async () => {
     const view = harness();
     await expect(view.controller.setDisplaySettings({ mode: 'shaded_edges' })).rejects.toThrow('display.mode');
     await expect(view.controller.setDisplaySettings({ render: { exposure: 1 } })).rejects.toThrow('Unsupported');
@@ -79,14 +79,14 @@ describe('live CAD viewer binding', () => {
     expect(view.commands.setDisplaySettings).toHaveBeenCalledExactlyOnceWith({ lighting: { exposure: 1 } });
     expect(frames).toBe(3);
   });
-  it('waits for normalized clip precedence rather than an overridden scalar offset', async () => {
+  it('waits for the normalized clip, where a new axis drops the old coordinate', async () => {
     const view = harness();
-    view.update({ ...state(), display: { mode: 'solid', clip: { axis: 'x', offsets: { x: 0.2 } } } });
+    view.update({ ...state(), display: { mode: 'solid', clip: { axis: 'x', at: 2 } } });
     view.commands.setDisplaySettings.mockImplementation(() => view.update({ ...state(), display: {
-      mode: 'solid', clip: { enabled: true, axis: 'y', offset: 0.7, offsets: { x: 0.2, y: 0.7, z: 0 }, invert: false }
+      mode: 'solid', clip: { enabled: true, axis: 'y', invert: false }
     } }));
-    const result = await view.controller.setDisplaySettings({ clip: { axis: 'y', offset: 0.3, offsets: { y: 0.7 } } });
-    expect(result.display.clip).toMatchObject({ axis: 'y', offset: 0.7 });
+    const result = await view.controller.setDisplaySettings({ clip: { axis: 'y' } });
+    expect(result.display.clip).toEqual({ enabled: true, axis: 'y', invert: false });
   });
   it('bounds a render-mode command that never commits', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(10_001);

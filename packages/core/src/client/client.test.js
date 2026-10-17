@@ -226,25 +226,48 @@ test('polling keeps its two-second cadence, obeys host visibility and stops with
   client.dispose();
 });
 
-test('surface and preview requests are origin-bound, guarded and cancelled with their owner', async () => {
+test('part and preview requests are origin-bound, guarded and cancelled with their owner', async () => {
   const calls = [];
   const client = createCadClient({ origin: 'http://workspace.test', fetch: async (url, options) => {
     calls.push({ url, options });
     return json({ job: 'subscriber', feedCursor: 'next' });
   } });
-  const body = { tree: 'tree', components: [{ cid: 'one', surfaceInput: 'input' }] };
-  assert.equal((await client.requestSurfaces(body)).job, 'subscriber');
-  await client.cancelSurfaceRequest({ job: 'subscriber' });
+  const body = { tree: 'tree', components: [{ cid: 'one', part: `${'1'.repeat(64)}-v1` }] };
+  assert.equal((await client.requestParts(body)).job, 'subscriber');
+  await client.cancelPartRequest({ job: 'subscriber' });
   await client.editingPreview('part.step', { after: 'cursor' });
   assert.equal(new URL(calls[0].url).origin, 'http://workspace.test');
   assert.deepEqual(JSON.parse(calls[0].options.body), body);
   assert.equal(calls[0].options.headers['x-cadgen-viewer'], '1');
-  assert.equal(new URL(calls[1].url).pathname, '/__cad/surfaces/cancel');
+  assert.equal(new URL(calls[1].url).pathname, '/__cad/parts/cancel');
   assert.equal(new URL(calls[2].url).pathname, '/__cad/preview');
   assert.equal(new URL(calls[2].url).searchParams.get('file'), 'part.step');
   assert.equal(new URL(calls[2].url).searchParams.get('after'), 'cursor');
   client.dispose();
   await assert.rejects(client.editingPreview('part.step'), { name: 'AbortError' });
+});
+
+test('a preview revision is read as a saved file is: its tree’s view under the origin, its annotations by object', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://workspace.test', fetch: async (url, options) => {
+    calls.push({ url, options });
+    return new URL(url).searchParams.get('annotations') === 'gone'
+      ? { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'Not found' }) }
+      : json({ kind: 'preview-annotations', schemaVersion: 1, tree: 'tree', articulation: null, appearance: null, display: null, animation: null });
+  } });
+  const keyed = new URL(client.storeTreeUrl('tree', { producer: { producerKey: 'kernel' } }));
+  assert.equal(keyed.origin, 'http://workspace.test');
+  assert.equal(keyed.pathname, '/__cad/store');
+  assert.equal(keyed.searchParams.get('file'), 'tree');
+  assert.deepEqual(JSON.parse(keyed.searchParams.get('producer')), { producerKey: 'kernel' });
+  assert.equal(new URL(client.storeTreeUrl('tree')).searchParams.has('producer'), false, 'no producer: the view keys the parts as for a saved file');
+  const annotations = await client.previewAnnotations('object');
+  assert.equal(annotations.kind, 'preview-annotations');
+  assert.equal(new URL(calls[0].url).pathname, '/__cad/store');
+  assert.equal(new URL(calls[0].url).searchParams.get('annotations'), 'object');
+  assert.equal(calls[0].options.method, 'GET');
+  assert.equal(await client.previewAnnotations('gone'), null, 'an object the store no longer holds is none, not a failure');
+  client.dispose();
 });
 
 test('a drawing is one plain GET, and a refusal arrives with the server’s own sentence', async () => {
@@ -282,6 +305,23 @@ test('a drawing still rendering is asked for again after the server\'s retryMs, 
   await assert.rejects(waiting.drawing('/m/sheet.dxf', { signal: controller.signal }), { name: 'AbortError' });
   client.dispose();
   waiting.dispose();
+});
+
+test('a face is measured by one POST naming its view, component, part and face, asked again while cadgen measures it', async () => {
+  const replies = [{ state: 'measuring', retryMs: 0 }, { face: 3, area: 12.5, center: [1, 2, 3] }];
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    calls.push({ url, options });
+    return Response.json(replies.shift(), { status: calls.length < 2 ? 202 : 200 });
+  } });
+  const body = { tree: 'a'.repeat(64), viewId: 'b'.repeat(64), producer: {}, cid: 'c'.repeat(16), part: `${'d'.repeat(64)}-v9`, face: 3 };
+  assert.deepEqual(await client.measureFace(body), { face: 3, area: 12.5, center: [1, 2, 3] });
+  assert.equal(calls.length, 2);
+  assert.equal(new URL(calls[0].url).pathname, '/__cad/measure');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.headers['x-cadgen-viewer'], '1');
+  assert.deepEqual(JSON.parse(calls[0].options.body), body);
+  client.dispose();
 });
 
 test('a drawing refused by the server raises the classified failure an alert is built from', async () => {

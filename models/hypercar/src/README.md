@@ -3,19 +3,19 @@
 | Script          | Artifact           | Description                                    |
 |-----------------|--------------------|------------------------------------------------|
 | hypercar.py     | STEP/hypercar.step | Mid-engine hypercar, full assembly: the 13 system models below, linked in occurrence order |
-| body.py | STEP/body.step | `o1.1` painted panels, pillars, aero skins |
-| glazing.py | STEP/glazing.step | `o1.2` DLO glass + lamp lenses |
-| lighting.py | STEP/lighting.step | `o1.3` lamp internals + light signature |
-| chassis.py | STEP/chassis.step | `o1.4` monocoque tub, subframes, crash structures |
-| suspension_front.py | STEP/suspension_front.step | `o1.5` wishbones, uprights, pushrods, rockers, coilovers |
-| suspension_rear.py | STEP/suspension_rear.step | `o1.6` the same, rear |
-| wheels.py | STEP/wheels.step | `o1.7` rims, tyres |
-| brakes.py | STEP/brakes.step | `o1.8` discs, calipers, hubs |
-| powertrain.py | STEP/powertrain.step | `o1.9` engine, intake, exhaust, transaxle, driveshafts |
-| interior.py | STEP/interior.step | `o1.10` seats, wheel, dash, console, pedals, door cards |
-| aero.py | STEP/aero.step | `o1.11` splitter, diffuser, wing |
-| hinge.py | STEP/hinge.step | `o1.12` dihedral synchro-helix door mechanism |
-| details.py | STEP/details.step | `o1.13` mirrors, badges, filler, vents, fasteners |
+| body.py | STEP/body.step | painted panels, pillars, aero skins |
+| glazing.py | STEP/glazing.step | DLO glass + lamp lenses |
+| lighting.py | STEP/lighting.step | lamp internals + light signature |
+| chassis.py | STEP/chassis.step | monocoque tub, subframes, crash structures |
+| suspension_front.py | STEP/suspension_front.step | wishbones, uprights, pushrods, rockers, coilovers |
+| suspension_rear.py | STEP/suspension_rear.step | the same, rear |
+| wheels.py | STEP/wheels.step | rims, tyres |
+| brakes.py | STEP/brakes.step | discs, calipers, hubs |
+| powertrain.py | STEP/powertrain.step | engine, intake, exhaust, transaxle, driveshafts |
+| interior.py | STEP/interior.step | seats, wheel, dash, console, pedals, door cards |
+| aero.py | STEP/aero.step | splitter, diffuser, wing |
+| hinge.py | STEP/hinge.step | dihedral synchro-helix door mechanism |
+| details.py | STEP/details.step | mirrors, badges, filler, vents, fasteners |
 
 Build: `python src/hypercar.py` builds the car and every stale system beneath
 it (in parallel, one worker each) and links their results; `python
@@ -29,8 +29,8 @@ src/<system>.py` builds one system alone — the car does not pick it up until
   wraps it), plus `surfaces.py` (the one master body surface every panel is
   cut from), `palette.py` (colours, authored as sRGB hex) and `context.py`
   (the shared `group`/`style` helpers). Plain modules: no `@step` lives here.
-- `ANIMATION_JS` in `hypercar.py` — choreography for the showcase tour, door
-  loop, and explode loop, embedded in model metadata at build time.
+- `ANIMATION` in `hypercar.py` — clips for the showcase tour, door loop, and
+  explode loop, baked to keyframes in the car's sidecar at build time.
 - `../render/` — authored presentation config for beauty renders, kept at the
   project root because it is neither code nor an artifact:
 
@@ -42,12 +42,12 @@ src/<system>.py` builds one system alone — the car does not pick it up until
 
 ## Assembly order
 
-The order of `SYSTEMS` in `hypercar.py` IS the occurrence order, and
-the embedded animation targets those ids — do not reorder without updating it.
+The order of `SYSTEMS` in `hypercar.py` is the occurrence order; the animation
+clips address systems and parts by name, so the order carries nothing else.
 
-    o1.1 body   o1.2 glazing   o1.3 lighting   o1.4 chassis
-    o1.5 suspension_front   o1.6 suspension_rear   o1.7 wheels   o1.8 brakes
-    o1.9 powertrain   o1.10 interior   o1.11 aero   o1.12 hinge   o1.13 details
+    body   glazing   lighting   chassis
+    suspension_front   suspension_rear   wheels   brakes
+    powertrain   interior   aero   hinge   details
 
 ## Kinematics
 

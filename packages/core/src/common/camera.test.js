@@ -5,7 +5,6 @@ import {
   cameraSpecUsesPerspectiveProjection,
   normalizeCameraSpec,
   RENDER_CAMERA_PRESETS,
-  RETIRED_CAMERA_PRESETS,
   resolveCameraSnapshot
 } from "./camera.js";
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "../lib/perspective.js";
@@ -167,12 +166,8 @@ test("photographic lenses survive camera resolution and session snapshots", () =
   assert.equal(normalizeCameraSpec({ focalLength: 200 }).focalLength, 200);
 });
 
-test("each view has one preset name, and a retired name says which replaced it", () => {
+test("each view has one preset name", () => {
   assert.deepEqual(Object.keys(RENDER_CAMERA_PRESETS).sort(), ["back", "bottom", "front", "iso", "left", "right", "top"]);
-  for (const [retired, replacement] of Object.entries(RETIRED_CAMERA_PRESETS)) {
-    assert.ok(RENDER_CAMERA_PRESETS[replacement], replacement);
-    assert.throws(() => normalizeCameraSpec(retired, { strict: true }), new RegExp(`'${retired}' was removed; use '${replacement}'`));
-  }
 });
 
 test("an angle pair is exactly azimuth:elevation", () => {

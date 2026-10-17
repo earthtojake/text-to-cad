@@ -63,10 +63,10 @@ class AttackFixture:
         )
         from cadgen.store.trees import get_tree
         from cadgen.store.objects import read_verified_object
-        from tests.python.support.store_fixtures import FIXTURE_SURFACE_PRODUCER
+        from tests.python.support.store_fixtures import FIXTURE_PRODUCER
         self.component_name, component = next(iter(get_tree(self.package_name)["components"].items()))
         self.component_payload = read_verified_object(component["brep"])
-        self.store_binding = "&surfaceProducer=" + quote(json.dumps(FIXTURE_SURFACE_PRODUCER))
+        self.store_binding = "&producer=" + quote(json.dumps(FIXTURE_PRODUCER))
 
         self.dist = os.path.join(self.base, "dist")
         os.makedirs(os.path.join(self.dist, "assets"))
@@ -377,7 +377,7 @@ class StoreRouteConfinement(SecurityTestCase):
                 self.assertEqual(body, b'{"error":"Not found"}')
 
     def test_leading_slashes_are_stripped_so_the_client_form_works(self):
-        # resolvePackageAssetUrl emits file=/<key>/components/c0.surf.
+        # resolvePackageAssetUrl emits file=/<key>/assembly.json.
         status, _, body = self.fixture.request(
             "GET", f"/__cad/store?file=/{self.fixture.package_name}/components/{self.fixture.component_name}.brep"
         )

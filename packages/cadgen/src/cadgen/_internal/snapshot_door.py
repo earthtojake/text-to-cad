@@ -1,18 +1,15 @@
 """The public ``snapshot`` verbs — MIRRORS, one signature per format shape.
 
-Snapshot used to be the schema's one adapter: a hand-written parser whose
-option surface a policy test pinned by declaration. That exception is retired
-(user directive, 2026-08-30): every rich option is typed ``str | dict | None``
-— CLI-side one string (a saved name, inline JSON, or a path) interpreted by
-the loaders the verb already uses; library-side a real dict through the same
-parameter — so the signature IS the surface and ``cli_from_function`` derives
-the CLI exactly as it does for ``build`` and ``validate``.
+Every rich option is typed ``str | dict | None`` — CLI-side one string (a
+saved name, inline JSON, or a path) interpreted by the loaders the verb
+already uses; library-side a real dict through the same parameter — so the
+signature IS the surface and ``cli_from_function`` derives the CLI exactly as
+it does for ``build`` and ``validate``.
 
-Four signature shapes cover the seven doors honestly (the old shared
-signature advertised STEP-only options to every door and refused them at
-runtime):
+Four signature shapes cover the seven doors, each advertising only the
+options its formats take:
 
-- STEP: the full surface — section mode and its plane, display, kinematics, animation, focus/hide.
+- STEP: the full surface — display, kinematics, animation, focus/hide.
 - mesh (stl/3mf/glb): view/list renders of untyped geometry.
 - robot (urdf/sdf): the mesh shape plus ``joint_values``.
 - dxf: a DRAWING, not a scene. Where, how big, and light or dark — nothing
@@ -89,7 +86,6 @@ def _run(
     animation: object = None,
     time: float | None = None,
     video: object = None,
-    section: object = None,
     joint_values: object = None,
     focus: tuple[str, ...] = (),
     hide: tuple[str, ...] = (),
@@ -145,8 +141,6 @@ def _run(
         options.animation, options.animation_time, options.animation_specified = animation, time, True
     if video is not None:
         options.video, options.video_specified = video, True
-    if section is not None:
-        options.section, options.section_specified = section, True
     if joint_values is not None:
         options.joint_values, options.joint_values_specified = joint_values, True
     options.focus = _refs(focus, "focus")
@@ -160,7 +154,7 @@ def _run(
 def _refs(value: object, name: str) -> list[str] | None:
     """``focus``/``hide`` as a list of refs: a sequence of strings, never one string.
 
-    ``focus="#o1.2"`` is the natural slip from the CLI's repeatable flag, and a
+    ``focus="#housing"`` is the natural slip from the CLI's repeatable flag, and a
     string IS a sequence — of characters, each of which used to be looked up as
     a ref of its own.
     """
@@ -184,7 +178,6 @@ def step_snapshot_verb(door: str):
         *,
         job: Path | None = None,
         mode: str = "view",
-        section: str | dict | None = None,
         camera: str | dict | None = None,
         display: str | dict | None = None,
         kinematics: str | dict | None = None,
@@ -208,19 +201,14 @@ def step_snapshot_verb(door: str):
         about the model changes, though a STEP input whose tree is missing
         builds one.
 
-        target: the model to render — a .step/.stp document (a model script
-            is refused by naming the run that writes the document).
-        out: destination path, written EXACTLY there — .png (section mode
-            also writes .svg, --video writes .mp4/.gif) — or a directory for
-            a generated timestamped name.
+        target: the model to render — a .step/.stp document. Run a model
+            script first, then snapshot the document it writes.
+        out: destination path, written EXACTLY there — .png (--video writes
+            .mp4/.gif) — or a directory for a generated timestamped name.
         job: a render-job JSON file — one job, an array of them, or
             {"jobs": [...]}. When given it wins: target/out are ignored, and
             the other flags override every job in it.
-        mode: view (default), section, or list.
-        section: where --mode section cuts, as PLANE[:OFFSET] — the plane is
-            XY, XZ or YZ (default XY) and the offset moves it along its normal
-            in model units (default 0): XZ:12.5 cuts at Y=12.5. In a job,
-            {"plane": "XZ", "offset": 12.5}.
+        mode: view (default) or list.
         camera: a preset (front, back, left, right, top, bottom, iso), an
             "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
@@ -259,7 +247,7 @@ def step_snapshot_verb(door: str):
             kinds,
             target=target, out=out, job=job, mode=mode,
             camera=camera, display=display, kinematics=kinematics,
-            animation=animation, time=time, video=video, section=section,
+            animation=animation, time=time, video=video,
             focus=focus, hide=hide, width=width, height=height,
             size_profile=size_profile, view_labels=view_labels, debug=debug,
         )
@@ -268,14 +256,11 @@ def step_snapshot_verb(door: str):
 
 
 # --- what a drawing is not ---------------------------------------------------
-# The sentences BOTH refusal paths say. A `.dxf` reaches a refusal two ways: a
-# flag this door used to take (`--camera`, refused while parsing, below) and a
-# key in a job packet (`"camera"`, refused by
-# `cadgen.snapshot_cli.check_drawing_render_job`, which `cadgen snapshot` routes
-# a `.dxf` through too). They are one cutover and must read as one, so the
-# wording lives here -- beside the signature whose absences it explains -- and
-# both paths compose it. Stdlib-only strings: this module stays off the CAD
-# stack, and `--help` with it.
+# The sentences a job's 3D-scene keys are refused with for a `.dxf`
+# (`cadgen.snapshot_cli.check_drawing_render_job`, the path a `--job` packet and
+# `cadgen snapshot` both take). They live here, beside the drawing signature
+# whose absences they explain. Stdlib-only strings: this module stays off the
+# CAD stack, and `--help` with it.
 
 # What a drawing IS, said once: every refusal opens with it.
 DRAWING_IS = "a DXF is drawn as a flat 2D drawing, fitted to the image and painted head on"
@@ -303,8 +288,8 @@ def drawing_camera_refusal(subject: str) -> str:
 def drawing_mode_refusal(subject: str) -> str:
     """Why ``view`` is the only render mode a drawing has."""
     return (
-        f"{DRAWING_IS}: it has no parts to list and no solid to section, so view is the "
-        f"only mode {subject} renders in."
+        f"{DRAWING_IS}: it has no parts to list, so view is the only mode {subject} "
+        "renders in."
     )
 
 
@@ -316,27 +301,6 @@ def drawing_scene_refusal(named: str, subject: str, *, plural: bool) -> str:
     )
 
 
-# The flags this door took while a DXF was rendered as a 3D flat pattern. They
-# are gone from the signature above, so each one is declared here with what it
-# meant, why a drawing has no such thing, and what to do instead; the command
-# name and the flag are supplied by the parser
-# (`cadgen._internal.cli_from_function.retired_options`).
-DRAWING_RETIRED_OPTIONS: dict[str, str] = {
-    "--camera": (
-        f"{drawing_camera_refusal('a drawing')} Drop the flag; there is no view to ask for."
-    ),
-    "--display": drawing_scene_refusal("display", "a drawing", plural=False),
-    "--mode": (
-        f"mode chose between view, section and list; {drawing_mode_refusal('a drawing')} "
-        "Drop the flag."
-    ),
-    "--view-labels": (
-        f"view labels burnt the camera's view name into the image; {DRAWING_IS} — "
-        f"{DRAWING_NO_VIEW_NAME}. Drop the flag."
-    ),
-}
-
-
 def drawing_snapshot_verb(door: str):
     """The DRAWING-shaped verb: a flat 2D render of a ``.dxf``.
 
@@ -346,13 +310,13 @@ def drawing_snapshot_verb(door: str):
     every option that describes a 3D scene is absent from this signature
     rather than accepted and ignored: no ``camera`` (nothing to pose), no
     ``display`` (no surfaces, lighting or render mode), no ``mode`` (a drawing
-    has no parts to list and no solid to section), no ``view_labels`` (no view
-    to label). ``appearance`` is what survives of display, because a default
-    pen has no colour until a background is chosen.
+    has no parts to list), no ``view_labels`` (no view to label).
+    ``appearance`` is what survives of display, because a default pen has no
+    colour until a background is chosen.
 
-    Absent is not silent: each of those four is declared in
-    :data:`DRAWING_RETIRED_OPTIONS` and refused by name, in the same words the
-    job-packet check uses for the same request.
+    Absent is not silent: the parser refuses each of those flags as an
+    unrecognized argument, and a job packet's key of the same name is refused
+    by the drawing check in :mod:`cadgen.snapshot_cli`.
     """
     kinds = DOOR_KINDS[door]
     suffixes = ", ".join(f".{kind}" for kind in kinds)
@@ -421,16 +385,12 @@ def drawing_snapshot_verb(door: str):
         )
 
     snapshot.__doc__ = snapshot.__doc__.replace("{suffixes}", suffixes)
-    # The four flags the 3D flat pattern took. Absent from the signature, and
-    # therefore from `--help`, but still REFUSED BY NAME rather than reported
-    # as noise: the parser keeps them as hidden entries that only ever raise.
-    snapshot.__cadgen_retired_options__ = dict(DRAWING_RETIRED_OPTIONS)
     return snapshot
 
 
 def mesh_snapshot_verb(door: str):
     """The mesh-shaped verb: view/list renders of untyped geometry —
-    no kinematics, section mode, or selection (nothing to act on)."""
+    no kinematics or selection (nothing to act on)."""
     kinds = DOOR_KINDS[door]
     suffixes = ", ".join(f".{kind}" for kind in kinds)
 
@@ -576,7 +536,6 @@ def polymorphic_snapshot_verb():
         *,
         job: Path | None = None,
         mode: str = "view",
-        section: str | dict | None = None,
         camera: str | dict | None = None,
         display: str | dict | None = None,
         kinematics: str | dict | None = None,
@@ -597,17 +556,15 @@ def polymorphic_snapshot_verb():
         target: the document to render — STEP/STP, STL/3MF/GLB, DXF, or a
             robot description (URDF/SRDF/SDF). Run model scripts first, then
             snapshot the document they write.
-        out: destination path, written EXACTLY there — .png (a STEP section
-            also writes .svg, a STEP --video writes .mp4/.gif) — or a directory
-            for a generated timestamped name. A refused request leaves an
-            existing OUT untouched; an accepted one clears it first.
+        out: destination path, written EXACTLY there — .png (a STEP --video
+            writes .mp4/.gif) — or a directory for a generated timestamped
+            name. A refused request leaves an existing OUT untouched; an
+            accepted one clears it first.
         job: a render-job JSON file — one job, an array of them, or
             {"jobs": [...]}; jobs may mix formats. When given it wins, and the
             other flags override every job in it.
-        mode: view (default), section (STEP only), or list (not DXF: a
-            drawing has no parts to list).
-        section: where a STEP --mode section cuts, as PLANE[:OFFSET] — XY, XZ
-            or YZ, offset along the plane's normal in model units: XZ:12.5.
+        mode: view (default) or list (not DXF: a drawing has no parts to
+            list).
         camera: a preset (front, back, left, right, top, bottom, iso), an
             "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
@@ -648,7 +605,7 @@ def polymorphic_snapshot_verb():
             ALL_KINDS,
             target=target, out=out, job=job, mode=mode,
             camera=camera, display=display, kinematics=kinematics,
-            animation=animation, time=time, video=video, section=section,
+            animation=animation, time=time, video=video,
             joint_values=joint_values, focus=focus, hide=hide,
             width=width, height=height, size_profile=size_profile,
             view_labels=view_labels, debug=debug,

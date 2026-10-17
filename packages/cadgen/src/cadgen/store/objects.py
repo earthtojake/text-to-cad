@@ -65,13 +65,22 @@ def has_object(digest: str) -> bool:
         return False
 
 
-def _mkdir(folder: Path) -> None:
+@contextlib.contextmanager
+def _writing(target: Path) -> Iterator[None]:
+    """A write the store's folder refuses is :class:`StoreUnwritableError`, wherever it is
+    refused: a read-only store whose shard folder already exists refuses the temp file,
+    not the folder."""
     try:
-        folder.mkdir(parents=True, exist_ok=True)
+        yield
     except PermissionError as exc:
         from cadgen.store.paths import unwritable
 
-        raise unwritable(exc, folder) from None
+        raise unwritable(exc, target) from None
+
+
+def _mkdir(folder: Path) -> None:
+    with _writing(folder):
+        folder.mkdir(parents=True, exist_ok=True)
 
 
 def _object_matches(path: Path, digest: str) -> bool:
@@ -344,8 +353,9 @@ def put_object(data: bytes, *, repair: bool = False) -> str:
         return digest
     _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")
-    with open(tmp, "wb") as handle:
-        handle.write(data)
+    with _writing(target):
+        with open(tmp, "wb") as handle:
+            handle.write(data)
     _replace_object(tmp, target, digest, repair=repair)
     return digest
 
@@ -363,7 +373,8 @@ def put_object_from_file(path: Path, *, repair: bool = False) -> str:
         return hexdigest
     _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")
-    shutil.copyfile(path, tmp)
+    with _writing(target):  # the source was just read whole: a refusal here is the store's
+        shutil.copyfile(path, tmp)
     if repair and not _object_matches(tmp, hexdigest):
         tmp.unlink(missing_ok=True)
         raise ValueError(f"object source changed while repairing {hexdigest}")

@@ -4,7 +4,7 @@ This is a narrow source optimization, not an alternate execution engine. Literal
 metadata (including constants used exclusively by annotations) is removed from
 the geometry fingerprint. Computed annotations remain in that fingerprint and
 reuse their recorded value only while their source and dependencies are unchanged.
-Reflection, changed child pins, and unavailable geometry use the ordinary build.
+Reflection, a child under another key, and unavailable geometry use the ordinary build.
 """
 from __future__ import annotations
 
@@ -184,8 +184,7 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     from cadgen.store.trees import get_tree, put_tree, flatten, tree_complete
     from cadgen.catalog import artifact_file_hash
     from cadgen._internal.source_sidecar import (
-        normalize_materials, normalize_animation, resolve_materials, remap_appearance,
-        write_source_sidecar, source_sidecar_path,
+        normalize_materials, resolve_materials, write_source_sidecar, source_sidecar_path,
     )
 
     entry_name = getattr(spec.generator_metadata, 'entry_function', None)
@@ -225,29 +224,25 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     if closure_hash(geometry_shas.items()) != record['geometryClosure']['hash']:
         return None
     baseline_hash = record['unannotatedTree']
-    if not tree_complete(baseline_hash) or not tree_complete(record.get('documentTree') or ''):
+    if not tree_complete(baseline_hash):
         return None
     baseline = get_tree(baseline_hash)
     descriptor = flatten(baseline_hash)
-    document_descriptor = flatten(record['documentTree'])
-    if baseline is None or descriptor is None or document_descriptor is None:
+    if baseline is None or descriptor is None:
         return None
     raw_materials = parts[1]['materials']
     material_declaration = (copy.deepcopy(record.get('materials')) if raw_materials is _COMPUTED
                             else normalize_materials(raw_materials, where='materials='))
     raw_animation = parts[1]['animation']
-    animation = (copy.deepcopy(record.get('animation')) if raw_animation is _COMPUTED
-                 else normalize_animation(raw_animation, where='animation='))
-    if animation is not None:
-        # The decorator checked the module it imported; this is the text read now.
-        from cadgen._internal.animation_source import check_animation_exports
-        from cadgen.render import relative_to_cwd
-
-        check_animation_exports(animation['source'], name=f'{relative_to_cwd(script)}::{entry_name} animation')
+    if raw_animation is not None and raw_animation is not _COMPUTED:
+        return None  # a literal is never clips: the ordinary build says why
+    # Clips are functions, so their declaration and everything it calls stay in
+    # the geometry fingerprint, which matched above: the recorded keyframes are
+    # the ones this source bakes.
+    animation = copy.deepcopy(record.get('animation')) if raw_animation is _COMPUTED else None
     raw_kinematics = parts[1]['kinematics']
-    kinematics_is_document = raw_kinematics is _COMPUTED
     try:
-        kinematics = (copy.deepcopy(record.get('kinematics')) if kinematics_is_document
+        kinematics = (copy.deepcopy(record.get('kinematics')) if raw_kinematics is _COMPUTED
                       else _literal_kinematics(raw_kinematics, descriptor))
     except LookupError:
         return None
@@ -256,29 +251,28 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     if appearance is not None:
         baseline['appearance'] = appearance
     tree = put_tree(baseline)
+    # The saved file is an export of the result, so the sidecar binds the result's tokens.
     sidecar = {}
     if appearance is not None:
-        sidecar['appearance'] = remap_appearance(appearance, record.get('documentOccurrenceMap') or {})
+        sidecar['appearance'] = appearance
     if animation is not None:
         sidecar['animation'] = animation
     if kinematics is not None:
-        if not kinematics_is_document:
-            from cadgen._internal.kinematics_resolve import remap_document_kinematics
-            kinematics = remap_document_kinematics(kinematics, record.get('documentOccurrenceMap') or {},
-                                                 record.get('documentNodeMap') or {}, record['documentTree'])
         sidecar['kinematics'] = kinematics
     # Preserve the selected source, record, STEP and sidecar revision until
     # publication. A racing change retries via the ordinary build's safeguards.
     from cadgen._internal.generation import _document_pair_state
     pair = _document_pair_state(spec.step_path)
-    if pair[0] != record.get('stepHash'):
+    # The STEP as the record names it: written (its sha256 empty until its export lands).
+    recorded = str(((record.get('outputs') or {}).get(str(spec.step_path.expanduser().resolve())) or {}).get('sha256') or '')
+    if not recorded or pair[0] != recorded:
         return None
     if (current_closure_hash(script, closure['files'], sliced, shas=recorded_shas, wholes=wholes, own=own) != full_hash
             or read_record(model) != record):
         return None
     if _document_pair_state(spec.step_path) != pair:
         return None
-    write_source_sidecar(spec.step_path, sidecar, document_hash=record['stepHash'])
+    write_source_sidecar(spec.step_path, sidecar, document_hash=recorded)
     output = source_sidecar_path(spec.step_path).resolve()
     outputs = copy.deepcopy(record.get('outputs') or {})
     digest = artifact_file_hash(output)
@@ -288,10 +282,14 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     else:
         outputs.pop(str(output), None)
         forget_output(output)
+    from cadgen.store.results import producer_versions
+
     updated = {**record, 'tree': tree, 'closure': {**closure, 'hash': full_hash, 'shas': shas},
                'outputs': outputs, 'materials': material_declaration, 'animation': animation,
-               'appearance': sidecar.get('appearance'), 'kinematics': kinematics}
+               'appearance': sidecar.get('appearance'), 'kinematics': kinematics,
+               'producer': producer_versions()}
     # If source changed in this tiny publication interval the captured hashes
-    # intentionally leave this record stale; no newer bytes are claimed.
+    # intentionally leave this record stale; no newer bytes are claimed. The
+    # closure moved, so the record is keyed anew and its result stored under that key.
     write_record(model, updated)
     return tree

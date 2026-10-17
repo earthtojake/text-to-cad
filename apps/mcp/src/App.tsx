@@ -23,6 +23,11 @@ import { Banner } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
+declare const __TEXT_TO_CAD_BUILD__: string | undefined;
+// Which build this page is, where it is not the release's own: vite.config.mjs names it
+// (`@text-to-cad/ui/build-id`), and the version then reads `0.7.15-dev.<build>`.
+const BUILD = typeof __TEXT_TO_CAD_BUILD__ === 'string' ? __TEXT_TO_CAD_BUILD__ : '';
+
 // The host's sandbox need not be a secure context, where randomUUID is missing.
 const newViewId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
@@ -201,7 +206,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
-  const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
+  const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
   const { launch } = showing;
   if (superseded) {

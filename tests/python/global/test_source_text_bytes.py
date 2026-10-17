@@ -5,9 +5,9 @@ This shipped. A group-key sentinel in the GLB writer was written as the raw byte
 ``packages/core/src/lib/glb/writeGlb.js`` from UTF-8 text into a binary
 file. The consequences are all silence:
 
-* ``rg`` skips binary files, so every later search of the module that writes
-  every GLB the product ships returned nothing — for a developer and for an
-  agent alike, the code simply did not exist;
+* ``rg`` skips binary files, so every later search of that module returned
+  nothing — for a developer and for an agent alike, the code simply did not
+  exist;
 * ``grep`` prints ``Binary file ... matches`` and no line numbers;
 * ``git diff`` renders the byte as a blank space, so the line reads as a
   harmless leading-space sentinel in review;

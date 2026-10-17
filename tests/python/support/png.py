@@ -108,3 +108,38 @@ def read_png(data: bytes) -> PngImage:
         )
     channels = _CHANNELS[color_type]
     return PngImage(width, height, channels, _unfilter(zlib.decompress(bytes(compressed)), width, height, channels))
+
+
+def block_means(image: PngImage, size: int = 4) -> list[list[tuple[float, float, float]]]:
+    """The image averaged over ``size`` x ``size`` blocks (a partial block at the right or
+    bottom edge averages what it holds): what two renders of one scene are compared on when
+    their meshes may differ in the last bits (README law 5: by geometry within a tolerance,
+    never by file hash). A triangle cut another way moves a pixel or two along an edge, which
+    a block's mean barely feels; a moved part or another framing moves whole blocks."""
+    rows = []
+    for top in range(0, image.height, size):
+        row = []
+        for left in range(0, image.width, size):
+            total = [0.0, 0.0, 0.0]
+            count = 0
+            for y in range(top, min(top + size, image.height)):
+                for x in range(left, min(left + size, image.width)):
+                    pixel = image.pixel(x, y)
+                    for channel in range(3):
+                        total[channel] += pixel[channel]
+                    count += 1
+            row.append(tuple(value / count for value in total))
+        rows.append(row)
+    return rows
+
+
+def largest_block_difference(first: PngImage, second: PngImage, size: int = 4) -> float:
+    """The largest difference, over every block and channel, between the two images' block
+    means (``block_means``); the images must have one size."""
+    if (first.width, first.height) != (second.width, second.height):
+        raise ValueError("the images differ in size")
+    largest = 0.0
+    for row, other_row in zip(block_means(first, size), block_means(second, size)):
+        for mean, other in zip(row, other_row):
+            largest = max(largest, *(abs(a - b) for a, b in zip(mean, other)))
+    return largest

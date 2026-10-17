@@ -32,8 +32,8 @@ _STATIC_CONTENT_TYPES = {
 #
 # Exactly the extensions those two routes can actually emit: the asset route
 # serves the cataloged formats (scanner.SOURCE_EXTENSIONS) plus the
-# `.step.json`/`.stp.json` sidecars, and the store tier holds `.surf`/`.brep`
-# component files (octet-stream by fallthrough) beside `assembly.json`.
+# `.step.json`/`.stp.json` sidecars, and the store route serves a view's
+# `.brep` component files (octet-stream by fallthrough) beside `assembly.json`.
 _ASSET_CONTENT_TYPES = {
     ".json": "application/json; charset=utf-8",
     ".glb": "model/gltf-binary",

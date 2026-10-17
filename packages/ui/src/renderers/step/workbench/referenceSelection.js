@@ -56,8 +56,7 @@ export function buildNormalizedReferenceState(entry, referencePayload = null, {
   copyCadPath,
   partId = "",
   transform = null,
-  remapOccurrenceId = "",
-  remapOccurrencePrefix = null,
+  occurrenceId = "",
   selectorRuntime: prebuiltSelectorRuntime = null,
   loadedTopologyKey = "",
   loadedTopologyIds = null
@@ -66,32 +65,22 @@ export function buildNormalizedReferenceState(entry, referencePayload = null, {
   // per-component runtimes and passes the result here instead of a single bundle to parse.
   const selectorRuntime = prebuiltSelectorRuntime || buildSelectorRuntime(referencePayload, {
     // fileRefPrefix is the file's absolute path (the view's), extension
-    // included -- which is why cadPathForEntry (which strips it) is NOT used here. An entry
-    // without the field emits bare "#...", so the prefix is opt-in per call site.
+    // included. An entry without the field emits bare "#...", so the prefix is
+    // opt-in per call site.
     copyCadPath: copyCadPath || fileRefPrefixForEntry(entry),
     partId,
     transform,
-    remapOccurrenceId,
-    remapOccurrencePrefix
+    occurrenceId
   });
   const references = normalizeReferenceList(selectorRuntime.references);
   return {
     fileRef: fileKey(entry),
-    kind: entry.kind,
     referenceHash: buildReferenceCacheKey(entry),
-    stepRelPath: fileKey(entry),
-    stepHash: String(selectorRuntime.stepHash || entry?.hash || ""),
-    counts: {
-      faces: Number(selectorRuntime.faces?.length || 0),
-      edges: Number(selectorRuntime.edges?.length || 0)
-    },
-    parts: [],
     selectorRuntime,
     references,
     loadedTopologyKey,
     // The part ids an assembly composition holds (its key's members); null for a whole document.
-    loadedTopologyIds: Array.isArray(loadedTopologyIds) ? loadedTopologyIds : null,
-    disabledReason: ""
+    loadedTopologyIds: Array.isArray(loadedTopologyIds) ? loadedTopologyIds : null
   };
 }
 

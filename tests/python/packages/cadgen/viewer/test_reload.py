@@ -134,7 +134,7 @@ class WhenItFires(unittest.TestCase):
         Windows, and a test about a digest of file contents should not have an
         opinion smuggled into it by the open mode.
 
-        The stamp is COUNTED, never read back from the filesystem. It used to be
+        The stamp is COUNTED, never read from the filesystem. It used to be
         ``os.stat(...).st_mtime + 1``, taken right after the write -- which asks
         the platform what time it just recorded, and Windows answers from the
         ~15.6ms interrupt clock. Two edits inside one tick came back with the

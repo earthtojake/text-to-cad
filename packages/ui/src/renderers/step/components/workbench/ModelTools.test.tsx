@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { useModelTools } from '../../../../../dist/renderers/step/components/workbench/ModelTools.js';
 
 afterEach(cleanup);
-const neutral = () => ({ exploded: { enabled: false, amount: 0 }, clip: { enabled: false, axis: 'x', offsets: { x: 1, y: 1, z: 1 }, invert: false } });
+const neutral = () => ({ exploded: { enabled: false, amount: 0 }, clip: { enabled: false, axis: 'x', invert: false } });
 
 it('retains only applied effects after leaving and follows external resets and file changes', () => {
   const props = { modelKey: 'one', view: neutral(), features: { sections: ['exploded', 'clip'] }, store: { patch: vi.fn() },
@@ -25,7 +25,7 @@ it('retains only applied effects after leaving and follows external resets and f
 });
 
 it('returning a clip to zero removes its panel when another tool is chosen', () => {
-  const props = { modelKey: 'one', view: { ...neutral(), clip: { ...neutral().clip, enabled: true, offsets: { x: .5, y: 1, z: 1 } } },
+  const props = { modelKey: 'one', view: { ...neutral(), clip: { ...neutral().clip, enabled: true, at: 5 } },
     features: { sections: ['clip'] }, store: { patch: vi.fn() }, mesh: null, disabled: false, selectedTool: 'clip', onSelect: vi.fn() };
   const { result, rerender } = renderHook(options => useModelTools(options), { initialProps: props });
   expect(result.current.tools[0].active).toBe(true);

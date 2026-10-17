@@ -36,7 +36,7 @@ function cadClient() {
   };
 }
 const ports = (client: ReturnType<typeof cadClient>, extra: object = {}) => ({ files: createCadFileSource(client as never),
-  clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+  clipboard: { writeText: async () => {}, writeImage: async () => {} },
   promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, ...extra });
 const library = { list: async () => [], change: async () => [], thumbnail: async () => null, open: async () => {} };
 const props = () => viewer.props!;
@@ -134,7 +134,7 @@ test('the home pictures a card out of sight, in a viewer of its own, from what i
 
 test("the person's settings go to the app menu over every file; the home shows the host's links", async () => {
   const client = cadClient();
-  const appSettings = [{ id: 'analytics', label: 'Share usage stats', checked: false, onCheckedChange: () => {} }];
+  const appSettings = [{ id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: () => {} }];
   render(<CadViewer client={client as never} host={ports(client, { links: viewerLinks({ version: '0.7.4' }) })} tabStore={createTabStore(memoryTabRecord())}
     live={createLiveRegistry()} file="/models/parts/a.step" library={library} appSettings={appSettings} onShow={() => {}} />);
   // FileViewer's navbar logo opens them (its own suite).

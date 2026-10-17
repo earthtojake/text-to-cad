@@ -57,7 +57,7 @@ class PhaseShapeTest(unittest.TestCase):
     def test_a_phase_reports_its_position_in_the_run(self):
         reporter, events = _recording_reporter()
         reporter.phase(PHASE_COMPONENTS)
-        self.assertEqual((3, 4), (events[-1].index, events[-1].count))
+        self.assertEqual((3, 5), (events[-1].index, events[-1].count))
 
     def test_an_undeclared_phase_reports_no_position_rather_than_a_wrong_one(self):
         reporter, events = _recording_reporter()

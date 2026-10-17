@@ -6,7 +6,7 @@ statically by what the importer TAKES from a model file:
 
 - only model functions (``from arm import arm``; ``import arm`` + ``arm.arm()``)
   → a **result edge**: ``arm.py`` is excluded from this closure and the child
-  is tracked by its pinned tree hash (``record.children``);
+  is tracked by its result's key (``record.children``, ``store/results.py``);
 - a plainly hashable constant (``from plate import WIDTH`` — a number, str,
   bool, None, or tuples/lists/dicts of those, however the module computed it)
   → a **value edge**: the file stays out of the closure and the record carries
@@ -15,7 +15,7 @@ statically by what the importer TAKES from a model file:
 - anything else (a helper function, a build123d object, an expression) → a
   **source edge**: the file is in the closure like any other.
 
-Constants by value, functions by reach, models by result.
+Constants by value, functions by reach, models by key.
 
 **Non-model files are sliced by reach.** A helper module (``lib/frame.py``) is
 in the closure of every model whose reach enters it, but what the record hashes
@@ -54,10 +54,19 @@ Hashes are the semantic (AST) digest for ``.py`` (``ast1:``), the slice digest
 for a sliced file (``slice4:``), and the byte digest otherwise, via
 ``cadgen._internal.source_hash`` and ``cadgen.store.reach`` — a comment-only
 edit is not a change.
+
+**What is not a file is an entry too.** A file the imports relied on NOT
+existing (``!<path>``) -- one beside or before what an import found, and every
+file that would have satisfied an import that found nothing (an optional part
+a model skips while it is missing) -- hashed ``absent``; the search roots an
+import was found past (``<import roots N>``); a folder the model's code listed
+(``<folder>/``); and an environment variable the model's own code read
+(``<environment NAME>``), hashed by the value it read, or ``unset``.
 """
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import hashlib
 import os
@@ -66,7 +75,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Iterator, Mapping
 
 from cadgen._internal.atomic_replace import is_transient_name
 from cadgen._internal.source_hash import (
@@ -253,10 +262,10 @@ def _model_formats_of(payload: bytes, filename: str) -> dict[str, str]:
     return formats
 
 
-def _pinned(formats: Mapping[str, str]) -> frozenset[str]:
-    """The models a call PINS. A drawing is not one: called inside another
-    build, a ``@dxf`` function runs its body inline, so taking it is taking
-    source."""
+def _composed(formats: Mapping[str, str]) -> frozenset[str]:
+    """The models a call COMPOSES, by key. A drawing is not one: called inside
+    another build, a ``@dxf`` function runs its body inline, so taking it is
+    taking source."""
     return frozenset(name for name, fmt in formats.items() if fmt != "dxf")
 
 
@@ -291,7 +300,10 @@ class _Resolved:
     root: int = 0
 
 
-def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None:
+def _resolve_dotted(parts: list[str], roots: Iterable[Path], *, misses: list[Path] | None = None) -> _Resolved | None:
+    """The first root ``parts`` resolves in, or None -- and then, into ``misses``,
+    every file that would have satisfied it in each root, at the level its walk
+    stopped there."""
     absent: list[Path] = []
     for position, root in enumerate(roots):
         executed: list[Path] = []
@@ -320,6 +332,8 @@ def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None
         if ok:
             module = executed[-1] if executed else None
             return _Resolved(tuple(executed), module, current, tuple(absent), position)
+    if misses is not None:
+        misses.extend(absent)
     return None
 
 
@@ -482,26 +496,61 @@ class _Walk:
             formats = self._formats[path] = _model_formats_of(payload, str(path)) if payload else {}
         return formats
 
-    def _pinned_models(self, path: Path) -> frozenset[str]:
-        return _pinned(self._formats_of(path))
+    def _composed_models(self, path: Path) -> frozenset[str]:
+        return _composed(self._formats_of(path))
 
     def _declared_models(self, path: Path) -> frozenset[str]:
         return frozenset(self._formats_of(path))
 
     # -- resolution --------------------------------------------------------------
 
-    def _dotted(self, parts: list[str], roots: list[Path]) -> _Resolved | None:
-        resolved = _resolve_dotted(parts, roots)
+    def _dotted(self, parts: list[str], roots: list[Path], *, missing: bool = False) -> _Resolved | None:
+        """``parts`` resolved in ``roots``. ``missing``: the lookup is an import the
+        model's code makes, and when it finds nothing there, every file that would
+        have satisfied it is recorded absent -- a module that appears later (an
+        optional part a model skips while it is missing) is a change like any
+        edit. So is an installed package's name: a project file of that name would
+        shadow it. The standard library's names are not recorded: cadgen and the
+        kernel import most of it before any model code runs, and recording each
+        would cost every model a dozen entries that differ with how the
+        interpreter was built (``math`` is builtin in one build, a file in another)."""
+        misses: list[Path] | None = [] if missing else None
+        resolved = _resolve_dotted(parts, roots, misses=misses)
         if resolved is not None and _first_party_target(resolved):
             self.absent.update(resolved.absent)
             if roots is self.roots:
                 self.root_used = max(self.root_used, resolved.root)
+        elif resolved is None and misses and not (roots is self.roots and parts[0] in sys.stdlib_module_names):
+            self.absent.update(misses)
         return resolved
 
-    def _sub(self, resolved: _Resolved, name: str) -> _Resolved | None:
+    def _sub(self, resolved: _Resolved, name: str, *, missing: bool = False) -> _Resolved | None:
         if resolved.package_dir is None:
             return None
-        return self._dotted([name], [resolved.package_dir])
+        return self._dotted([name], [resolved.package_dir], missing=missing)
+
+    def _may_appear(self, package: _Resolved, name: str) -> bool:
+        """Whether a submodule ``name`` appearing in ``package`` would change what
+        ``from package import name`` takes: the package is the project's own, and
+        its ``__init__.py`` -- a namespace package has none -- does not bind the
+        name itself (a binding there wins)."""
+        if not _first_party_target(package):
+            return False
+        init = package.module
+        if init is None or package.package_dir is None or init.parent != package.package_dir.resolve():
+            return True
+        state = self.files.get(init)
+        if state is not None:
+            syntax = state.syntax
+        else:
+            # Read, never walked: deciding this makes the file no part of the closure.
+            try:
+                payload = self.sources.get(str(init))
+                syntax = self.syntax.get(payload if payload is not None else init.read_bytes(), str(init))
+            except (OSError, *_UNANALYSABLE):
+                syntax = None
+        return syntax is None or not (
+            name in syntax.definitions or name in syntax.preamble_bound or name in syntax.aliases)
 
     # -- files -------------------------------------------------------------------
 
@@ -526,7 +575,7 @@ class _Walk:
         """A module that executes (its preamble), by import."""
         if path == self.root or not is_first_party_source_file(path):
             return
-        if self.model_boundaries and self._pinned_models(path):
+        if self.model_boundaries and self._composed_models(path):
             self.model_taken.setdefault(path, set())
             self._reclassify(path)
             return
@@ -670,14 +719,14 @@ class _Walk:
 
     # -- edges -------------------------------------------------------------------
 
-    def _resolve(self, importer: Path, alias: Alias) -> _Resolved | None:
+    def _resolve(self, importer: Path, alias: Alias, *, missing: bool = False) -> _Resolved | None:
         if alias.level == 0:
-            return self._dotted(alias.module.split("."), self.roots) if alias.module else None
+            return self._dotted(alias.module.split("."), self.roots, missing=missing) if alias.module else None
         base = importer.parent
         for _ in range(alias.level - 1):
             base = base.parent
         if alias.module:
-            return self._dotted(alias.module.split("."), [base])
+            return self._dotted(alias.module.split("."), [base], missing=missing)
         init = base / "__init__.py"
         return _Resolved((init.resolve(),) if init.is_file() else (), init.resolve() if init.is_file() else None, base)
 
@@ -724,25 +773,29 @@ class _Walk:
             state.names.add(name)
 
     def _beyond_call(self, module: Path, name: str) -> None:
-        """``arm.__wrapped__``: an attribute of a pinned model function can reach
-        what the pin stands for -- its body -- so the file is taken as source."""
-        if self.model_boundaries and name in self._pinned_models(module):
+        """``arm.__wrapped__``: an attribute of a composed model function can reach
+        what the call stands for -- its body -- so the file is taken as source."""
+        if self.model_boundaries and name in self._composed_models(module):
             self.escape(module)
 
     def import_edge(self, importer: Path, alias: Alias, *, whole: bool = False) -> None:
+        # An import statement: what it finds, and -- when it finds nothing, as a
+        # guarded optional import does -- what would have satisfied it.
         if alias.executes:
             # ``import a.b.c`` binds ``a`` but executes every package on the way.
-            executes = self._dotted(alias.executes.split("."), self.roots)
+            executes = self._dotted(alias.executes.split("."), self.roots, missing=True)
             for executed in (executes.executed if executes is not None else ()):
                 self.touch(executed)
-        resolved = self._resolve(importer, alias)
+        resolved = self._resolve(importer, alias, missing=True)
         if resolved is None:
             return
         for executed in resolved.executed:
             self.touch(executed)
         target = resolved
         if alias.attr is not None:
-            sub = self._sub(resolved, alias.attr)
+            # A name the package does not bind is a submodule or nothing: one that
+            # appears satisfies the import.
+            sub = self._sub(resolved, alias.attr, missing=self._may_appear(resolved, alias.attr))
             if sub is None:
                 # A from-import reaches the name it binds -- the importer's body
                 # may call it. Importing alone runs none of it: an import-time walk
@@ -798,7 +851,7 @@ class _Walk:
     def name_edge(self, target: Path, name: str) -> None:
         if target == self.root or not is_first_party_source_file(target):
             return
-        if self.model_boundaries and self._pinned_models(target):
+        if self.model_boundaries and self._composed_models(target):
             taken = self.model_taken.setdefault(target, set())
             if taken is not None and name not in taken:
                 taken.add(name)
@@ -812,7 +865,7 @@ class _Walk:
         module bound in it (it is reachable by any name too)."""
         if target == self.root or not is_first_party_source_file(target):
             return
-        if self.model_boundaries and self._pinned_models(target):
+        if self.model_boundaries and self._composed_models(target):
             if self.model_taken.get(target, set()) is not None:
                 self.model_taken[target] = None
                 self._reclassify(target)
@@ -832,14 +885,14 @@ class _Walk:
     def _reclassify(self, target: Path) -> None:
         """Constants by value, functions by reach, every decorated model by
         result. A module import with no statically taken names is also a
-        result edge; actual model calls supply the exact function pins."""
+        result edge; actual model calls supply the exact functions composed."""
         if target in self.model_source:
             return
         taken = self.model_taken[target]
         if taken is None:
             source = True
         else:
-            beyond = taken - self._pinned_models(target)
+            beyond = taken - self._composed_models(target)
             literals = (module_constant_hashes(target, beyond) or {}) if beyond else {}
             source = set(literals) != beyond
             if not source and literals:
@@ -894,14 +947,23 @@ def static_closure(script: Path) -> StaticImports:
 # --- hash at execution ----------------------------------------------------------
 
 
-_ACTIVE_HASHES: dict[str, str] | None = None
-_ACTIVE_SOURCES: dict[str, bytes] | None = None
+_ACTIVE: "ExecutionHashes | None" = None  # the innermost scope open on this process
 _HOOK_INSTALLED = False
+# Which first-party files ran while a module was being executed by the build's loader
+# (``generation_runner._SourceOnlyLoader``): its own, and every module its import ran,
+# transitively. A model's build inside its parent's takes its module's from here
+# (:class:`ExecutionHashes`); the stack is the modules this thread is executing now.
+_IMPORT_RUNS: dict[str, set[str]] = {}
+_IMPORTING = threading.local()
 
 
 def _exec_hash_hook(event: str, args: tuple) -> None:
-    hashes = _ACTIVE_HASHES
-    if hashes is None or event != "exec" or not args:
+    # The scope is the build's thread's: what another thread of the process executes
+    # meanwhile -- a pool job of this process writing a STEP or deriving a part -- is
+    # cadgen's own, never the build's input. Read once: the owning thread may leave the
+    # scope while this runs.
+    scope = _ACTIVE
+    if scope is None or event != "exec" or not args or scope.thread != threading.get_ident():
         return
     file_name = getattr(args[0], "co_filename", None)
     if not file_name:
@@ -911,7 +973,7 @@ def _exec_hash_hook(event: str, args: tuple) -> None:
     except (OSError, ValueError):
         return
     key = str(path)
-    if key in hashes or not path.is_file() or not is_first_party_source_file(path):
+    if key in scope.facts or not path.is_file() or not is_first_party_source_file(path):
         return
     try:
         payload = path.read_bytes()
@@ -920,40 +982,89 @@ def _exec_hash_hook(event: str, args: tuple) -> None:
     # One read: the hash AND the bytes the reach analysis will slice, taken at
     # the moment the module body executes. Analysed once, here: the walk over
     # the same bytes is a memo hit.
-    hashes[key] = execution_digest(payload, key)
-    sources = _ACTIVE_SOURCES
-    if sources is not None:
-        sources[key] = payload
+    _executed(key, payload)
+
+
+def _executed(key: str, payload: bytes) -> None:
+    """A first-party file ran with ``payload``: a fact of the build (the first value
+    stands; a file edited mid-build is caught by the gate), owned by the innermost
+    scope, and by every module this thread is importing."""
+    scope = _ACTIVE
+    if scope is None:
+        return
+    if key not in scope.facts:
+        scope.facts[key] = execution_digest(payload, key)
+        scope.sources[key] = payload
+    scope.hashes.setdefault(key, scope.facts[key])
+    for module in getattr(_IMPORTING, "stack", ()):
+        _IMPORT_RUNS[module].add(key)
+
+
+@contextlib.contextmanager
+def importing(path: Path | str) -> Iterator[None]:
+    """The loader is executing the module at ``path``: every first-party file that
+    runs meanwhile ran because it was imported (``_IMPORT_RUNS``)."""
+    key = str(Path(path).resolve())
+    stack = getattr(_IMPORTING, "stack", None)
+    if stack is None:
+        stack = _IMPORTING.stack = []
+    _IMPORT_RUNS[key] = set()
+    stack.append(key)
+    try:
+        yield
+    finally:
+        stack.pop()
 
 
 class ExecutionHashes:
     """Context: hash every first-party file at the moment it executes, and keep
-    the bytes so the closure's reach analysis describes the revision that ran."""
+    the bytes so the closure's reach analysis describes the revision that ran.
 
-    def __init__(self) -> None:
-        self.hashes: dict[str, str] = {}
-        self.sources: dict[str, bytes] = {}
-        self._previous: tuple[dict[str, str] | None, dict[str, bytes] | None] = (None, None)
+    Nests, for a child model built inside its parent's body: the inner scope owns
+    what executes while it is the innermost and, with ``imported``, what importing
+    that module ran in this build (:func:`importing`) -- so a child's closure is the
+    same built alone or inside its parent -- and the outer scope never owns the
+    inner's executions; what the inner scope executed first leaves the module space at
+    its exit (:meth:`ran_first`). The facts are the build's: the hash and the bytes
+    each file ran with, shared by every scope of the build and read by any closure
+    walk."""
+
+    def __init__(self, *, imported: Path | str | None = None) -> None:
+        self.hashes: dict[str, str] = {}  # what this scope's build executed, by path, as it ran
+        self.facts: dict[str, str] = {}  # every file the build executed, by path, as it ran
+        self.sources: dict[str, bytes] = {}  # the bytes each of those ran with
+        self.thread = threading.get_ident()  # the build's thread: the only one whose executions are its
+        self._imported = imported
+        self._previous: ExecutionHashes | None = None
+        self._known: frozenset[str] = frozenset()  # the facts when this scope opened
 
     def __enter__(self) -> "ExecutionHashes":
-        global _ACTIVE_HASHES, _ACTIVE_SOURCES, _HOOK_INSTALLED
+        global _ACTIVE, _HOOK_INSTALLED
         if not _HOOK_INSTALLED:
             sys.addaudithook(_exec_hash_hook)
             _HOOK_INSTALLED = True
-        self._previous = (_ACTIVE_HASHES, _ACTIVE_SOURCES)
-        _ACTIVE_HASHES = self.hashes
-        _ACTIVE_SOURCES = self.sources
+        self._previous = _ACTIVE
+        if _ACTIVE is not None:
+            self.facts, self.sources = _ACTIVE.facts, _ACTIVE.sources
+        if self._imported is not None:
+            key = str(Path(self._imported).resolve())
+            for path in (key, *sorted(_IMPORT_RUNS.get(key, ()))):
+                if path in self.facts:
+                    self.hashes[path] = self.facts[path]
+        self._known = frozenset(self.facts)
+        _ACTIVE = self
         return self
 
+    def ran_first(self) -> set[str]:
+        """The files whose first execution in the build was this scope's own -- a module a
+        child's body imported first -- which leave ``sys.modules`` when a child's scope
+        closes (``generation_runner``), so the parent's body imports them itself, as it
+        does when the child is decoded, and hit and miss record one closure."""
+        return set(self.hashes) - self._known
+
     def __exit__(self, *exc: object) -> None:
-        global _ACTIVE_HASHES, _ACTIVE_SOURCES
-        _ACTIVE_HASHES, _ACTIVE_SOURCES = self._previous
-        if _ACTIVE_HASHES is not None:
-            for key, value in self.hashes.items():
-                _ACTIVE_HASHES.setdefault(key, value)
-        if _ACTIVE_SOURCES is not None:
-            for key, payload in self.sources.items():
-                _ACTIVE_SOURCES.setdefault(key, payload)
+        global _ACTIVE
+        _ACTIVE = self._previous
 
 
 def note_compiled_source(path: Path | str, source: bytes) -> None:
@@ -961,17 +1072,13 @@ def note_compiled_source(path: Path | str, source: bytes) -> None:
     and the bytes, so the reach analysis reads the revision that ran. The first
     value stands; a file edited mid-build is caught by the gate.
     """
-    hashes = _ACTIVE_HASHES
-    if hashes is None:
+    if _ACTIVE is None:
         return
     try:
         key = str(Path(path).expanduser().resolve())
     except (OSError, ValueError):
         return
-    if key not in hashes:
-        hashes[key] = execution_digest(source, key)
-        if _ACTIVE_SOURCES is not None:
-            _ACTIVE_SOURCES[key] = source
+    _executed(key, source)
 
 
 # --- assembling the closure ------------------------------------------------------
@@ -1013,7 +1120,7 @@ def _child_ownership(script: Path, statics: StaticImports, called_files: set[Pat
     sources belong to the child that calls it, and the whole subtree runs in
     this process when the body imports its child. Stopping one level down put
     every grandchild model file in the parent's closure, so an edit two levels
-    away rebuilt the root even when the pinned trees were unchanged.
+    away reached the root's own closure instead of its child's key.
     """
     child_owned: set[Path] = set()
     ours: set[Path] = {script, *statics.source_files}
@@ -1045,6 +1152,7 @@ def build_closure(
     outputs: Iterable[Path] = (),
     children: Iterable[Path | str] = (),
     sources: Mapping[str, bytes] | None = None,
+    environment: Mapping[str, str | None] | None = None,
 ) -> Closure:
     """The closure a build records.
 
@@ -1055,7 +1163,9 @@ def build_closure(
     the hash it was read with -- minus files that belong to a child model (its
     script and files reached only through it), which the boundary rule
     excludes. ``listings`` are the folders its code listed, each hashed by its
-    entry names less the model's own ``outputs`` there (``Closure.own``). The
+    entry names less the model's own ``outputs`` there (``Closure.own``).
+    ``environment`` is the variables the model's own code read, each with the
+    value it read or None when it was unset (``cadgen._internal.filetrace``). The
     reach walk starts at the script, then at every
     executed first-party ``.py`` file it did not reach and no child owns, each
     walked whole; what the children's import-time code reaches in shared files
@@ -1071,7 +1181,7 @@ def build_closure(
 
     # Runtime calls carry exact script::function identities. Ownership of
     # executed source remains file-based, while the record keeps those exact
-    # function pins independently in its children list.
+    # functions, by key, in its children list.
     called_files = {split_model_ref(child)[0] for child in children}
     ours, child_owned = _child_ownership(script, statics, called_files)
     # What executed but static reach never saw — a plugin imported for its side
@@ -1084,7 +1194,7 @@ def build_closure(
     statics = walk.result()
     ours.update(statics.source_files)
     child_owned -= ours
-    # A child's files stay out of this closure (models by result), but
+    # A child's files stay out of this closure (models by key), but
     # importing a child runs its import-time code in this process: what that
     # reaches in a file this closure shares with it is this model's too.
     imports = _Walk(script, syntax=_SYNTAX, sources=captured, model_boundaries=False, import_time=True)
@@ -1177,6 +1287,10 @@ def build_closure(
     if root_used > 0:
         count = root_used + 1
         pairs.append((ROOTS_KEY.format(count=count), _roots_digest(walk.roots[:count], base)))
+    # A variable the model's own code read, by the value it read -- or its
+    # absence. Never the value itself: it may be a secret.
+    for name, value in sorted((environment or {}).items()):
+        pairs.append((environment_entry(name), environment_digest(value)))
     constants = {_relative(Path(module), base): dict(values) for module, values in statics.constants.items()}
     return Closure(
         hash=closure_hash(pairs),
@@ -1215,12 +1329,16 @@ def import_sliced_source_hash(path: Path, names: Iterable[str]) -> str:
 # A closure entry for a file the imports relied on NOT existing is its path
 # behind ABSENT_MARK, hashed ABSENT while it still does not exist; ROOTS_KEY is
 # the entry for the search roots past the script's own folder that an import
-# resolved in. Both describe themselves, so any re-hash reads them without the
-# recorded hashes.
+# resolved in; ENVIRONMENT_KEY is a variable the model's own code read, hashed
+# by its value (``environment_digest``), UNSET while it is not set. Each
+# describes itself, so any re-hash reads it without the recorded hashes.
 ABSENT_MARK = "!"
 ABSENT = "absent"
 ROOTS_KEY = "<import roots {count}>"
 _ROOTS_PREFIX = "<import roots "
+ENVIRONMENT_KEY = "<environment {name}>"
+_ENVIRONMENT_PREFIX = "<environment "
+UNSET = "unset"
 
 
 def _roots_count(rel: str) -> int | None:
@@ -1232,10 +1350,55 @@ def _roots_count(rel: str) -> int | None:
         return None
 
 
+def environment_entry(name: str) -> str:
+    """The closure entry for the environment variable ``name``."""
+    return ENVIRONMENT_KEY.format(name=name)
+
+
+def environment_name(rel: str) -> str | None:
+    """The variable an environment entry names, or None for any other entry."""
+    if rel.startswith(_ENVIRONMENT_PREFIX) and rel.endswith(">"):
+        return rel[len(_ENVIRONMENT_PREFIX):-1]
+    return None
+
+
+def environment_digest(value: str | None) -> str:
+    """A variable's value as a closure hash: UNSET when it is not set, else a
+    digest -- a record never holds the value, which may be a secret."""
+    if value is None:
+        return UNSET
+    return "env:" + hashlib.sha256(value.encode("utf-8", "surrogateescape")).hexdigest()
+
+
 def source_files(files: Iterable[str]) -> list[str]:
-    """The files a closure names that exist -- without its absent, roots and listing entries."""
+    """The files a closure names that exist -- without its absent, roots, environment and listing entries."""
     return [rel for rel in files
-            if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
+            if _roots_count(rel) is None and environment_name(rel) is None
+            and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
+
+
+def describe_changes(changed: Iterable[str]) -> str:
+    """Clause 2's phrase for the closure entries that moved: ``closure changed:``
+    and the files edited, each file that appeared where an import would find it,
+    a listed folder or the import roots; then the environment variables whose
+    value changed."""
+    moved: list[str] = []
+    variables: list[str] = []
+    for rel in changed:
+        name = environment_name(rel)
+        if name is not None:
+            variables.append(name)
+        elif rel.startswith(ABSENT_MARK):
+            moved.append(f"{rel[len(ABSENT_MARK):]} appeared")
+        else:
+            moved.append(rel)
+    phrases = []
+    if moved:
+        phrases.append(f"closure changed: {', '.join(moved)}")
+    if variables:
+        noun = "environment variable" if len(variables) == 1 else "environment variables"
+        phrases.append(f"{noun} {', '.join(variables)} changed")
+    return "; ".join(phrases) or "closure changed"
 
 
 def _listing_digest(directory: Path, own: Iterable[str] = ()) -> str:
@@ -1304,7 +1467,12 @@ def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | No
     """One recorded closure entry as it hashes now, relative to the model's
     folder ``base``: a file (``file_hash_now``), or None when it is gone; a file
     recorded absent, ABSENT while it still is; the search roots, their digest; a
-    listed folder, its entry names less the recorded ``own`` ones."""
+    listed folder, its entry names less the recorded ``own`` ones; an
+    environment variable, its value in this process's environment -- the
+    caller's, which a daemon job applies (``cadgen.daemon.worker``)."""
+    name = environment_name(rel)
+    if name is not None:
+        return environment_digest(os.environ.get(name))
     if rel.startswith(ABSENT_MARK):
         candidate = Path(rel[len(ABSENT_MARK):])
         return ABSENT if not (candidate if candidate.is_absolute() else base / candidate).exists() else "present"

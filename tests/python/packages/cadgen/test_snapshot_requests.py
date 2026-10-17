@@ -8,8 +8,8 @@ point. The rules:
 * a refused request leaves an existing OUT untouched; an accepted one clears it
   before anything is built;
 * an option an input cannot honour is refused BY NAME, never ignored;
-* each setting has one name, and a retired name says which replaced it;
-* sizes, timeouts and section planes are closed and ranged here, not in the page.
+* each setting has one name, and any other is an unknown name;
+* sizes and timeouts are closed and ranged here, not in the page.
 """
 
 from __future__ import annotations
@@ -102,8 +102,7 @@ class RefusedRequestsLeaveOutUntouched(_Workspace):
             (stl_door, [self.stl, self.out, "--display", '{"clip":{"axis":"x"}}'], r"display\.clip applies to STEP"),
             (stl_door, [self.stl, self.out, "--display", '{"lighting":{"fill":9}}'], r"display\.lighting\.fill"),
             (step_door, [self.stl, self.out], r"does not render \.stl inputs"),
-            (step_door, [script, self.out], r"a model script is a program"),
-            (stl_door, [self.stl, self.out, "--mode", "section"], r"section mode requires STEP topology"),
+            (step_door, [script, self.out], r"does not render \.py inputs"),
             (stl_door, [self.stl, self.out, "--mode", "orbit"], r"Unsupported render mode: orbit"),
             (stl_door, ["--job", job], r"unknown render job key\(s\): framerate"),
             (stl_door, [self.stl, self.out, "--width", "0"], r"output width must be a positive whole number"),
@@ -112,7 +111,6 @@ class RefusedRequestsLeaveOutUntouched(_Workspace):
             (stl_door, [self.stl, self.out, "--camera", "30:20:5"], r"exactly\s+azimuth:elevation"),
             (any_door, [self.stl, self.out, "--joint-values", '{"elbow": 10}'], r"jointValues pose a robot description"),
             (any_door, [self.stl, self.out, "--kinematics", "open"], r"kinematics values require a STEP model"),
-            (any_door, [self.stl, self.out, "--section", "XZ:4"], r"section mode requires STEP topology"),
             (any_door, [srdf, self.out], r"no paired URDF"),
             (urdf_door, [urdf, self.out, "--joint-values", '{"elbow": 10}'], r"Unknown joint\(s\): elbow"),
         ]
@@ -156,14 +154,14 @@ class RefusedRequestsLeaveOutUntouched(_Workspace):
         """Preparation is what runs before the clear, so it may not compile a tree."""
         step = self.write("part.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
         with mock.patch.object(snapshot_cli, "document_snapshot", side_effect=AssertionError("compiled")), \
-             mock.patch.object(snapshot_cli, "ensure_step_topology_artifact", side_effect=AssertionError("built")):
+             mock.patch.object(snapshot_cli, "ensure_step_artifact", side_effect=AssertionError("built")):
             single, prepared = snapshot_cli.prepare_render_job_packet(
-                {"input": str(step), "mode": "section", "section": {"plane": "YZ", "offset": 2},
-                 "selection": {"hide": ["#o1.2"]}, "outputs": [{"path": str(self.root / "cut.svg")}]},
+                {"input": str(step), "display": {"clip": {"axis": "y"}},
+                 "selection": {"hide": ["#o:3f2a9c1d7e5b"]}, "outputs": [{"path": str(self.root / "cut.png")}]},
                 cwd=self.root,
             )
         self.assertTrue(single)
-        self.assertEqual({"plane": "YZ", "offset": 2}, prepared[0].job["section"])
+        self.assertEqual({"axis": "y"}, prepared[0].job["display"]["clip"])
 
 
 class CrossKindOptionsAreRefusedByName(_Workspace):
@@ -186,16 +184,9 @@ class CrossKindOptionsAreRefusedByName(_Workspace):
         # cannot honour must not cost a flattening first.
         with mock.patch.object(snapshot_cli, "drawing_payload_file", side_effect=AssertionError("flattened")):
             with self.assertRaises(SnapshotError) as caught:
-                self.resolve({"input": "panel.dxf", "outputs": [{"path": "o.png"}],
-                              "quality": {"tessellation": {"chordTolerance": 0.001}}})
-        self.assertIn("a DXF drawing is line work, not a tessellated surface", str(caught.exception))
+                self.resolve({"input": "panel.dxf", "outputs": [{"path": "o.png"}], "kinematics": "open"})
+        self.assertIn("a DXF drawing has no kinematics", str(caught.exception))
         self.assertNotIn("GLB", str(caught.exception))
-
-    def test_a_robots_link_meshes_cannot_be_retessellated_either(self) -> None:
-        self.write("arm.urdf", URDF)
-        with self.assertRaisesRegex(SnapshotError, r"quality\.tessellation requires an exact-surface STEP package"):
-            self.resolve({"input": "arm.urdf", "outputs": [{"path": "o.png"}],
-                          "quality": {"tessellation": {"chordTolerance": 0.001}}})
 
     def test_a_mesh_doors_mode_error_offers_only_the_modes_it_accepts(self) -> None:
         """S12: `--display Wireframe` on an STL used to list all five presets."""
@@ -218,9 +209,11 @@ class SrdfPairingTests(_Workspace):
 
     def test_the_pairing_is_by_robot_name_not_by_file_stem(self) -> None:
         self.write("robots/description.urdf", URDF)
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='all'><link name='base'/></group></robot>\n")
         packet = self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
-        self.assertIn("description.urdf", packet["jobs"][0]["resolved"]["urdfUrl"])
+        # The payload is the paired URDF's robot, with the SRDF's semantics on it.
+        robot = packet["jobs"][0]["resolved"]["robot"]
+        self.assertEqual(("srdf", "base", ["all"]), (robot["kind"], robot["root"], robot["srdf"]["groupsByLink"]["base"]))
 
     def test_no_match_names_what_was_looked_for_and_what_was_found(self) -> None:
         self.write("robots/other.urdf", "<robot name='crane'/>\n")
@@ -249,15 +242,22 @@ class SrdfPairingTests(_Workspace):
             "<joint name='elbow' type='revolute'><parent link='a'/><child link='b'/>"
             "<axis xyz='0 0 1'/><limit lower='-1' upper='1' effort='1' velocity='1'/></joint></robot>\n"
         ))
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='arm'><joint name='elbow'/></group></robot>\n")
         job = {"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]}
         self.resolve({**job, "jointValues": {"elbow": 10}})
         with self.assertRaisesRegex(SnapshotError, r"Unknown joint\(s\): elbw"):
             self.resolve({**job, "jointValues": {"elbw": 10}})
 
+    def test_an_srdf_the_validator_refuses_is_refused_at_the_door(self) -> None:
+        # One door validates: what `cadgen srdf validate` calls an error never reaches a browser.
+        self.write("robots/description.urdf", URDF)
+        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        with self.assertRaisesRegex(SnapshotError, "SRDF must define at least one planning group"):
+            self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
 
-class SectionPlaneTests(_Workspace):
-    """S4: the plane is a validated job key and a STEP flag, and OUT's extension is the format."""
+
+class OutputFormatTests(_Workspace):
+    """OUT's extension is the format, and one a view cannot write is refused."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -265,91 +265,46 @@ class SectionPlaneTests(_Workspace):
 
     def prepared(self, **job) -> dict:
         _single, prepared = snapshot_cli.prepare_render_job_packet(
-            {"input": "part.step", "outputs": [{"path": "cut.png"}], **job}, cwd=self.root
+            {"input": "part.step", "outputs": [{"path": "iso.png"}], **job}, cwd=self.root
         )
         return prepared[0].job
 
-    def section_from_argv(self, *argv: str) -> dict:
-        captured = {}
-
-        def capture(options, **_kwargs):
-            captured["job"] = load_job_from_options(options, cwd=self.root)
-            return snapshot_core.snapshot_result({"ok": True, "outputs": []})
-
-        with mock.patch.object(snapshot_cli, "run_snapshot", capture):
-            code, said = run_door(step_door, [self.step, self.root / "cut.png", *argv])
-        self.assertEqual(0, code, said)
-        return captured["job"]
-
-    def test_the_flag_and_the_job_key_are_the_same_request(self) -> None:
-        self.assertEqual({"plane": "XZ", "offset": 12.5},
-                         self.section_from_argv("--mode", "section", "--section", "XZ:12.5")["section"])
-        self.assertEqual({"plane": "YZ", "offset": 0},
-                         self.section_from_argv("--mode", "section", "--section", "YZ")["section"])
-        self.assertEqual({"plane": "XZ", "offset": -3},
-                         self.prepared(mode="section", section={"plane": "XZ", "offset": -3})["section"])
-        # Section mode with no plane named is the XY cut at 0, stated on the job.
-        self.assertEqual({"plane": "XY", "offset": 0}, self.prepared(mode="section")["section"])
-
-    def test_the_python_verb_takes_the_same_two_spellings(self) -> None:
-        from cadgen import step
-
-        seen = []
-        with mock.patch.object(snapshot_cli, "run_snapshot", lambda options, **_: seen.append(options) or "result"):
-            step.snapshot(self.step, self.out, mode="section", section="XZ:4")
-            step.snapshot(self.step, self.out, mode="section", section={"plane": "YZ", "offset": 1})
-        jobs = [load_job_from_options(options, cwd=self.root) for options in seen]
-        self.assertEqual([{"plane": "XZ", "offset": 4.0}, {"plane": "YZ", "offset": 1}],
-                         [job["section"] for job in jobs])
-
-    def test_the_plane_vocabulary_is_closed_and_ranged(self) -> None:
-        for section, pattern in (
-            ({"plane": "XW"}, r"section\.plane must be one of: XY, XZ, YZ; got 'XW'"),
-            ({"plane": "xy"}, r"section\.plane must be one of"),
-            ({"plane": "XY", "offset": "3"}, r"section\.offset must be a finite number"),
-            ({"plane": "XY", "offset": float("inf")}, r"section\.offset must be a finite number"),
-            ({"plane": "XY", "offset": True}, r"section\.offset must be a finite number"),
-            ({"normal": [0, 0, 1]}, r"section has unknown key\(s\): normal; supported keys: offset, plane"),
-            ({"plane": "XY", "format": "svg"}, r"section has unknown key\(s\): format"),
-            ("XZ", r"section must be a \{"),
-        ):
-            with self.subTest(section=section), self.assertRaisesRegex(SnapshotError, pattern):
-                self.prepared(mode="section", section=section)
-        for flag, pattern in (("XZ:deep", r"--section offset must be a number"), ("", r"--section requires PLANE")):
-            with self.subTest(flag=flag), self.assertRaisesRegex(SnapshotError, pattern):
-                snapshot_core.parse_section_option(flag)
-
-    def test_a_section_outside_section_mode_is_refused_not_ignored(self) -> None:
-        with self.assertRaisesRegex(SnapshotError, r"section positions the cut of section mode.*mode is view"):
-            self.prepared(section={"plane": "XZ"})
-
     def test_outs_extension_decides_the_format_and_a_wrong_one_is_refused(self) -> None:
-        def prepared_path(mode: str, path: str) -> str:
-            return self.prepared(mode=mode, outputs=[{"path": path}])["outputs"][0]["path"]
+        def prepared_path(path: str) -> str:
+            return self.prepared(outputs=[{"path": path}])["outputs"][0]["path"]
 
-        self.assertTrue(prepared_path("section", "cut.svg").endswith("cut.svg"))
-        self.assertTrue(prepared_path("section", "cut.PNG").endswith("cut.PNG"))
-        self.assertTrue(prepared_path("view", "iso.png").endswith("iso.png"))
-        for mode, path, pattern in (
-            ("view", "iso.svg", r"view mode writes \.png: render output 0 names 'iso\.svg'.*--mode section"),
-            ("view", "iso.jpg", r"view mode writes \.png"),
-            ("view", "iso", r"view mode writes \.png"),
-            ("section", "cut.pdf", r"section mode writes \.png or \.svg"),
-        ):
-            with self.subTest(mode=mode, path=path), self.assertRaisesRegex(SnapshotError, pattern):
-                prepared_path(mode, path)
+        self.assertTrue(prepared_path("iso.png").endswith("iso.png"))
+        self.assertTrue(prepared_path("iso.PNG").endswith("iso.PNG"))
+        for path in ("iso.svg", "iso.jpg", "iso"):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                SnapshotError, rf"view mode writes \.png: render output 0 names '{re.escape(path)}'"
+            ):
+                prepared_path(path)
         # `format` was never reachable from Python and is not a key anywhere now.
         with self.assertRaisesRegex(SnapshotError, r"render output 0 has unknown key\(s\): format"):
-            self.prepared(mode="section", outputs=[{"path": "cut.png", "format": "svg"}])
+            self.prepared(outputs=[{"path": "iso.png", "format": "svg"}])
 
-    def test_the_planes_match_the_page_that_cuts(self) -> None:
-        source = repo_path("packages/core/src/common/renderMeshScene.js").read_text(encoding="utf-8")
-        declared = re.search(r"export const SECTION_PLANES = Object\.freeze\(\[(.*?)\]\)", source)
-        self.assertIsNotNone(declared, "renderMeshScene.js no longer declares SECTION_PLANES")
-        self.assertEqual(tuple(re.findall(r'"(\w+)"', declared.group(1))), snapshot_core.SECTION_PLANES)
-        # The page reads exactly the keys Python validates: nothing else of `section`.
-        read = set(re.findall(r"\bsection\??\.(\w+)", source)) - {"segmentCount"}
-        self.assertEqual(set(snapshot_core.SECTION_KEYS), read)
+
+class ClipAtTests(_Workspace):
+    """display.clip places its plane by one key: `at`, a coordinate in millimetres on its axis."""
+
+    def prepared(self, clip: dict) -> dict:
+        self.write("part.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
+        _single, prepared = snapshot_cli.prepare_render_job_packet(
+            {"input": "part.step", "display": {"clip": clip}, "outputs": [{"path": "cut.png"}]}, cwd=self.root
+        )
+        return prepared[0].job["display"]["clip"]
+
+    def test_a_coordinate_reaches_the_page_unchanged(self) -> None:
+        for clip in ({"axis": "y", "at": 12.5}, {"axis": "z", "at": -3, "invert": True}, {}, {"enabled": False, "at": 0}):
+            with self.subTest(clip=clip):
+                self.assertEqual(clip, self.prepared(clip))
+
+    def test_an_at_that_is_not_a_finite_number_is_refused(self) -> None:
+        pattern = r"display\.clip\.at must be a finite number: the plane's coordinate on its axis, in millimetres"
+        for value in ("12.5", True, None, float("inf"), float("nan")):
+            with self.subTest(at=value), self.assertRaisesRegex(SnapshotError, pattern):
+                self.prepared({"at": value})
 
 
 class SizingTests(_Workspace):
@@ -364,12 +319,6 @@ class SizingTests(_Workspace):
         for name, expected in snapshot_core.SIZE_PROFILES.items():
             with self.subTest(profile=name):
                 self.assertEqual(expected, self.size(output={"sizeProfile": name}))
-        for retired, replacement in snapshot_core.RETIRED_SIZE_PROFILES.items():
-            self.assertIn(replacement, snapshot_core.SIZE_PROFILES)
-            with self.subTest(retired=retired), self.assertRaisesRegex(
-                SnapshotError, rf"size profile '{retired}' was removed; use '{replacement}'"
-            ):
-                self.size(output={"sizeProfile": retired})
         with self.assertRaisesRegex(SnapshotError, r"Unknown size profile: 'nonsense'\. Size profiles: simple \(1200x900\)"):
             self.size(output={"sizeProfile": "nonsense"})
         # No case or underscore folding: exactly the listed names.
@@ -466,7 +415,7 @@ class TimeoutAndModeTests(_Workspace):
             SnapshotOptions(job=str(packet), mode="LIST", mode_specified=True), cwd=self.root
         )
         self.assertEqual("list", overridden["mode"])
-        with self.assertRaisesRegex(SnapshotError, r"Unsupported render mode: orbit\. Modes: list, section, view"):
+        with self.assertRaisesRegex(SnapshotError, r"Unsupported render mode: orbit\. Modes: list, view"):
             load_job_from_options(SnapshotOptions(input="part.stl", output="o.png", mode="orbit"), cwd=self.root)
 
 
@@ -474,7 +423,8 @@ class JobFileAndDisplayFileTests(_Workspace):
     """S5/S11: a job is a file, and a path that is not one is said so."""
 
     def test_there_is_no_stdin_job(self) -> None:
-        with self.assertRaisesRegex(SnapshotError, r"reading a job from stdin \(--job -\) was removed"):
+        # `-` is a path like any other: no file of that name, no job.
+        with self.assertRaisesRegex(SnapshotError, r"--job file does not exist: -"):
             load_job_from_options(SnapshotOptions(job="-"), cwd=self.root)
         with self.assertRaisesRegex(SnapshotError, r"render requires a TARGET or --job") as caught:
             load_job_from_options(SnapshotOptions(), cwd=self.root)
@@ -504,20 +454,13 @@ class OneNamePerSettingTests(_Workspace):
     def test_selection_is_focus_or_hide(self) -> None:
         self.write("part.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
         with self.assertRaisesRegex(
-            SnapshotError, r"selection has unknown key\(s\): refs; supported keys: focus, hide; "
-                           r"selection\.refs was removed; use selection\.focus"
+            SnapshotError, r"selection has unknown key\(s\): refs; supported keys: focus, hide$"
         ):
-            self.resolve({"input": "part.step", "selection": {"refs": ["#o1.2"]}, "outputs": [{"path": "o.png"}]})
+            self.resolve({"input": "part.step", "selection": {"refs": ["#pin"]}, "outputs": [{"path": "o.png"}]})
         with self.assertRaisesRegex(SnapshotError, "selection must be a"):
-            self.resolve({"input": "part.step", "selection": ["#o1.2"], "outputs": [{"path": "o.png"}]})
+            self.resolve({"input": "part.step", "selection": ["#pin"], "outputs": [{"path": "o.png"}]})
 
     def test_each_view_has_one_camera_preset(self) -> None:
-        for retired, replacement in snapshot_core.RETIRED_CAMERA_PRESETS.items():
-            for camera in (retired, {"preset": retired}):
-                with self.subTest(camera=camera), self.assertRaisesRegex(
-                    SnapshotError, rf"camera preset '{retired}' was removed; use '{replacement}'"
-                ):
-                    self.resolve(self.stl_job(camera=camera))
         for preset in snapshot_core.CAMERA_PRESETS:
             self.resolve(self.stl_job(camera=preset))
         self.resolve(self.stl_job(camera="35:-20"))
@@ -529,9 +472,6 @@ class OneNamePerSettingTests(_Workspace):
         block = re.search(r"RENDER_CAMERA_PRESETS = Object\.freeze\(\{(.*?)\n\}\);", source, re.S)
         self.assertEqual(set(re.findall(r"^\s+(\w+): Object\.freeze", block.group(1), re.M)),
                          set(snapshot_core.CAMERA_PRESETS))
-        retired = re.search(r"RETIRED_CAMERA_PRESETS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
-        self.assertEqual(dict(re.findall(r'(\w+): "(\w+)"', retired.group(1))),
-                         snapshot_core.RETIRED_CAMERA_PRESETS)
 
 
 class DisplayIsValidatedOncePerJob(_Workspace):
@@ -576,8 +516,8 @@ class PythonVerbTests(_Workspace):
 
     def test_an_explicit_none_is_an_omitted_option(self) -> None:
         options = self.options_for(display=None, camera=None, kinematics=None, animation=None,
-                                   video=None, section=None, time=None)
-        for name in ("display", "camera", "kinematics", "animation", "video", "section"):
+                                   video=None, time=None)
+        for name in ("display", "camera", "kinematics", "animation", "video"):
             self.assertFalse(getattr(options, f"{name}_specified"), name)
         self.write("part.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
         job = load_job_from_options(options, cwd=self.root)
@@ -586,11 +526,11 @@ class PythonVerbTests(_Workspace):
     def test_a_bare_string_is_not_a_sequence_of_refs(self) -> None:
         for name in ("focus", "hide"):
             with self.subTest(option=name), self.assertRaisesRegex(
-                ValueError, rf"{name} takes a sequence of occurrence refs, not one string: pass {name}=\('#o1\.2',\)"
+                ValueError, rf"{name} takes a sequence of occurrence refs, not one string: pass {name}=\('#pin',\)"
             ):
-                self.options_for(**{name: "#o1.2"})
-        self.assertEqual(["#o1.2", "#o1.3"], self.options_for(focus=["#o1.2", "#o1.3"]).focus)
-        self.assertEqual(["#o1.2"], self.options_for(hide=("#o1.2",)).hide)
+                self.options_for(**{name: "#pin"})
+        self.assertEqual(["#pin", "#o:3f2a9c1d7e5b"], self.options_for(focus=["#pin", "#o:3f2a9c1d7e5b"]).focus)
+        self.assertEqual(["#pin"], self.options_for(hide=("#pin",)).hide)
 
 
 class StepDebugReportsWhatWasResolved(unittest.TestCase):
@@ -622,6 +562,101 @@ class StepDebugReportsWhatWasResolved(unittest.TestCase):
         )
         self.assertEqual((resolved["documentHash"], resolved["tree"]), (entry["documentHash"], entry["tree"]))
         self.assertEqual((1, 1, False), (entry["componentCount"], entry["occurrenceCount"], entry["selectorIndex"]))
+
+
+ARM_URDF = (
+    "<robot name='arm'><link name='a'/><link name='b'/><link name='c'/><link name='d'/><link name='e'/>"
+    "<joint name='elbow' type='revolute'><parent link='a'/><child link='b'/><axis xyz='0 0 1'/>"
+    "<limit lower='-1' upper='1' effort='1' velocity='1'/></joint>"
+    "<joint name='slide' type='prismatic'><parent link='b'/><child link='c'/><axis xyz='1 0 0'/>"
+    "<limit lower='0' upper='0.1' effort='1' velocity='1'/></joint>"
+    "<joint name='wheel' type='continuous'><parent link='c'/><child link='d'/><axis xyz='0 0 1'/></joint>"
+    "<joint name='finger' type='revolute'><parent link='a'/><child link='e'/><axis xyz='0 0 1'/>"
+    "<limit lower='0' upper='0.5' effort='1' velocity='1'/><mimic joint='elbow'/></joint>"
+    "</robot>\n"
+)
+
+
+class PoseLimitTests(_Workspace):
+    """A pose value outside its DOF's limits is refused before a browser starts.
+
+    The page clamps an out-of-range value, so letting one through rendered a pose
+    the request did not ask for and exited 0.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cadgen._internal.source_sidecar import write_source_sidecar
+        from cadgen.kinematics import couple, cylindrical, normalize_kinematics, revolute
+
+        self.step = self.write("hinge.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
+        block = normalize_kinematics({
+            "mates": [
+                revolute("swing", parent="#base", child="#flap",
+                         origin=(0, 0, 0), direction=(0, 0, 1), limits=(0, 120)),
+                cylindrical("crown", parent="#base", child="#crown", origin=(0, 0, 0),
+                            direction=(1, 0, 0), limits={"turn": (-90, 90), "travel": (0, 2)}),
+            ],
+            "couplings": [couple("wind", {"crown.turn": 90})],
+        }, where="test").block
+        write_source_sidecar(self.step, {"kinematics": block})
+
+    def prepare(self, job: dict) -> None:
+        snapshot_cli.prepare_render_job_packet({"outputs": [{"path": "o.png"}], **job}, cwd=self.root)
+
+    def test_step_kinematics_values_must_lie_within_each_dofs_limits(self) -> None:
+        self.prepare({"input": "hinge.step", "kinematics": {"swing": 120, "crown.travel": 0, "wind": 1}})
+        refused = [
+            ({"swing": 121}, r"kinematics\[swing\] = 121 deg is outside the limits \[0, 120\] deg of DOF 'swing'"),
+            ({"crown.travel": -0.5}, r"kinematics\[crown\.travel\] = -0\.5 mm is outside .*\[0, 2\] mm"),
+            ({"crown.turn": 91}, r"kinematics\[crown\.turn\] = 91 deg is outside .*\[-90, 90\] deg"),
+            # A coupling with no declared limits spans (0, 1).
+            ({"wind": 1.5}, r"kinematics\[wind\] = 1\.5 is outside the limits \[0, 1\] of DOF 'wind';"),
+            ({"swing": "90"}, r"kinematics\[swing\] must be a number"),
+        ]
+        for values, pattern in refused:
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(SnapshotError, pattern):
+                    self.prepare({"input": "hinge.step", "kinematics": values})
+
+    def test_the_step_door_refuses_before_a_browser_starts(self) -> None:
+        with mock.patch.object(snapshot_core.BatchSnapshotRenderer, "start", side_effect=AssertionError("browser")):
+            code, said = run_door(step_door, [self.step, self.out, "--kinematics", '{"swing": 200}'])
+        self.assertEqual(1, code, said)
+        self.assertIn("pass a value within them", said)
+
+    def test_urdf_joint_values_must_lie_within_each_joints_limits(self) -> None:
+        self.write("arm.urdf", ARM_URDF)
+        job = {"input": "arm.urdf"}
+        # The limit itself passes though degrees are converted from radians; a continuous
+        # joint has no limits. A mimic follower is posed by its leader, so a value of its own
+        # is refused by name rather than accepted and ignored, and a leader value that puts
+        # the follower past the follower's own limits is refused too.
+        self.prepare({**job, "jointValues": {"elbow": 20, "slide": 0.1, "wheel": 720}})
+        refused = [
+            ({"elbow": 60}, r"jointValues\[elbow\] = 60 deg is outside the limits \[-57\.2958, 57\.2958\] deg of joint 'elbow'"),
+            ({"slide": 0.2}, r"jointValues\[slide\] = 0\.2 m is outside the limits \[0, 0\.1\] m of joint 'slide'"),
+            ({"finger": 5}, r"jointValues\[finger\]: joint 'finger' mimics 'elbow' \(finger = 1 × elbow\), so it is posed "
+                            r"by the value of 'elbow'; set jointValues\[elbow\] instead"),
+            ({"elbow": 40}, r"jointValues\[elbow\] = 40 deg puts joint 'finger', which mimics 'elbow', at 40 deg, "
+                            r"outside its limits \[0, 28\.6479\] deg"),
+            ({"elbow": -10}, r"puts joint 'finger', which mimics 'elbow', at -10 deg"),
+        ]
+        for values, pattern in refused:
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(SnapshotError, pattern):
+                    self.prepare({**job, "jointValues": values})
+
+    def test_sdf_joint_values_must_lie_within_each_joints_limits(self) -> None:
+        self.write("arm.sdf", (
+            "<sdf version='1.9'><model name='arm'><link name='a'/><link name='b'/>"
+            "<joint name='elbow' type='revolute'><parent>a</parent><child>b</child>"
+            "<axis><xyz>0 0 1</xyz><limit><lower>0</lower><upper>1.5707963267948966</upper></limit></axis>"
+            "</joint></model></sdf>\n"
+        ))
+        self.prepare({"input": "arm.sdf", "jointValues": {"elbow": 90}})
+        with self.assertRaisesRegex(SnapshotError, r"jointValues\[elbow\] = 91 deg is outside .*\[0, 90\] deg"):
+            self.prepare({"input": "arm.sdf", "jointValues": {"elbow": 91}})
 
 
 if __name__ == "__main__":

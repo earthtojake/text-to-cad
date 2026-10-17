@@ -22,20 +22,21 @@ from cadgen._internal.generation import (
     EntrySpec,
     _generate_part_outputs,
     _manifest_records_edge_visibility_classes,
+    _tree_progress_sink,
 )
-from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, artifact_build
+from cadgen.coordination import PHASE_GENERATE, STEP_IMPORT, artifact_build
 from cadgen._internal.doors import STEP_SUFFIXES
 from cadgen.catalog import build_scope
 from cadgen.render import relative_to_cwd
 from cadgen._internal.step_scene import step_file_hash
 from cadgen._internal.step_scene_package import load_step_scene_exact
 from cadgen.step_targets import (
-    StepTopologyArtifact,
+    StepArtifact,
 )
 
 
 @dataclass(frozen=True, kw_only=True)
-class _ImportedArtifactSnapshot(StepTopologyArtifact):
+class _ImportedArtifactSnapshot(StepArtifact):
     """One verified document selection, owned only by this currency check."""
 
     document_hash: str
@@ -69,11 +70,12 @@ def _build_entry_spec(repo_root: Path, step_path: Path) -> EntrySpec:
     )
 
 
-def _compiled_result_payload(spec: EntrySpec, stats: dict[str, object] | None) -> dict[str, object]:
+def _compiled_result_payload(spec: EntrySpec) -> dict[str, object]:
     from cadgen.catalog import result_tree_for
-    from cadgen.store.trees import tree_kind_for
+    from cadgen.store.trees import capture_tree, tree_kind_for
 
     tree = result_tree_for(spec.entry_path)
+    stats = capture_tree(tree, retain_payloads=False)[0].get("stats") if tree else None
     return {
         "ok": True,
         "document": relative_to_cwd(spec.step_path),
@@ -82,7 +84,8 @@ def _compiled_result_payload(spec: EntrySpec, stats: dict[str, object] | None) -
         "tree": tree,
         # Off the tree (store.trees.tree_kind) — the one place kind is decided.
         "entryKind": tree_kind_for(tree) or "part",
-        "stats": stats or {},
+        # The tree's own counts, as a current compile reports them.
+        "stats": stats if isinstance(stats, dict) else {},
     }
 
 
@@ -118,8 +121,12 @@ def _current_artifact_for_spec(spec: EntrySpec) -> _ImportedArtifactSnapshot | N
     """The complete tree the store holds for this document's bytes, or None.
 
     A compile completes when its native geometry is available. Display
-    derivations belong to their consumers and must never run in this gate."""
+    derivations belong to their consumers and must never run in this gate. An
+    export's pending entry is confirmed first, as at every door
+    (``store.exports.confirm_document``): one whose verify could not answer is
+    compiled again from the bytes."""
     from cadgen.catalog import result_snapshot_for
+    from cadgen.store.exports import confirm_document
     from cadgen.store.objects import object_path
     from cadgen.store.trees import capture_tree
 
@@ -128,6 +135,10 @@ def _current_artifact_for_spec(spec: EntrySpec) -> _ImportedArtifactSnapshot | N
     snapshot = result_snapshot_for(spec.entry_path)
     if snapshot is None:
         return None
+    tree = confirm_document(spec.step_path, *snapshot)
+    if tree is None:
+        return None
+    snapshot = (snapshot[0], tree)
     try:
         manifest, _ = capture_tree(snapshot[1], retain_payloads=False)
     except (OSError, ValueError):
@@ -143,6 +154,15 @@ def _current_artifact_for_spec(spec: EntrySpec) -> _ImportedArtifactSnapshot | N
         document_hash=snapshot[0],
         tree=snapshot[1],
     )
+
+
+def _megabytes(path: Path) -> str:
+    """A document's size as a person reads it: ``168 MB``, ``240 KB``."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "size unknown"
+    return f"{size / 1e6:.0f} MB" if size >= 1e6 else f"{max(1, round(size / 1e3))} KB"
 
 
 def build_step_artifact(
@@ -185,11 +205,14 @@ def build_step_artifact(
     with cli_progress_line(
         spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
-        STEP_PACKAGE,
+        STEP_IMPORT,
         scope,
         is_current=lambda: _current_artifact_for_spec(spec) is not None,
         force=force,
-        sink=progress_sink,
+        # The phases reach the daemon's job ledger as a model build's do, so a CAD
+        # Viewer waiting on this compile shows the read and each part counted, not a
+        # bare "submitted" for the whole minute a large document takes.
+        sink=_tree_progress_sink(spec, progress_sink),
     ) as progress:
         if progress.skipped:
             artifact = _current_artifact_for_spec(spec)
@@ -204,18 +227,17 @@ def build_step_artifact(
         with broker.held(spec.source_ref):
             # _generate_part_outputs reports this phase itself when it does the loading;
             # here the scene is preloaded, so the parse would otherwise go unreported.
-            progress.phase(PHASE_GENERATE)
+            # OCCT's reader reports no fraction of its own, so the read names the file
+            # and its size: about half a large document's compile happens here.
+            progress.phase(PHASE_GENERATE, detail=f"Reading {step_path.name} ({_megabytes(step_path)})")
             with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
                 scene = load_step_scene_exact(step_path)
-            result = _generate_part_outputs(
+            _generate_part_outputs(
                 spec,
-                # A document compile has no source dependencies to discover.
-                entries_by_step_path={spec.step_path.resolve(): spec},
                 preloaded_scene=scene,
                 require_step_file=True,
                 force=force,
                 logger=logger,
                 progress=progress,
             )
-    stats = result.selector_bundle.manifest.get("stats") if result.selector_bundle is not None else {}
-    return _compiled_result_payload(spec, stats if isinstance(stats, dict) else {})
+    return _compiled_result_payload(spec)

@@ -3,8 +3,7 @@ from cadgen import build123d as bd, step
 from lib.phalanx import make_phalanx
 from lib.layout import FINGERS
 
-@step(out='../STEP/phalanx_variants_review.step',
-      mesh_tolerance=.003,mesh_angular_tolerance=.012)
+@step(out='../STEP/phalanx_variants_review.step')
 def phalanx_variants_review():
     children=[]
     variants=[(f.name,f.lengths,f.widths) for f in FINGERS]

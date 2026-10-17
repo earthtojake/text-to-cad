@@ -339,6 +339,43 @@ class Lifecycle(_PoolFixture):
         self.assertEqual(self.pool.snapshot()["crashes"], 1)
         self.pool.release(replacement)
 
+    def test_a_worker_killed_for_a_cancelled_job_is_dropped_but_no_crash(self):
+        with self._spares(0):
+            worker = self.pool.acquire("/m/a.py")
+            worker._alive = False
+            self.pool.release(worker, healthy=False, cancelled=True)
+            replacement = self.pool.acquire("/m/a.py")
+        self.assertIsNot(worker, replacement)
+        self.assertEqual(self.pool.snapshot()["crashes"], 0)
+        self.pool.release(replacement)
+
+    def test_a_worker_that_ended_mid_job_has_its_scratch_swept_once_it_is_reaped(self):
+        # Its own sweep ran as it started; what it left when it was killed (an import copy
+        # is a whole document) goes now, not whenever another worker happens to start.
+        import threading
+
+        from cadgen._internal import temp_leftovers
+
+        def retired():
+            for thread in threading.enumerate():
+                if thread.name == "cadgen-worker-retire":
+                    thread.join(10)
+
+        swept = threading.Event()
+        with self._spares(0), mock.patch.object(temp_leftovers, "sweep", side_effect=lambda: swept.set()):
+            worker = self.pool.acquire("/m/a.py")
+            self.pool.release(worker, healthy=False, cancelled=True)
+            retired()
+            self.assertTrue(worker.killed)
+            self.assertTrue(swept.is_set(), "no sweep after the worker was dropped")
+            swept.clear()
+            healthy = self.pool.acquire("/m/b.py")
+            with mock.patch.dict(os.environ, {"CADGEN_DAEMON_RECYCLE": "1"}):
+                self.pool.release(healthy)  # recycled: it ended between jobs, its own cleanup ran
+            retired()
+            self.assertTrue(healthy.killed)
+            self.assertFalse(swept.is_set())
+
     def test_a_worker_is_recycled_after_n_jobs(self):
         with self._spares(0), mock.patch.dict(os.environ, {"CADGEN_DAEMON_RECYCLE": "2"}):
             first = self.pool.acquire("/m/a.py")

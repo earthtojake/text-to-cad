@@ -17,6 +17,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.cad_test_roots import IsolatedCadRoots
+from tests.python.support.tree_ids import leaf_id, node_id, node_ids
 
 add_repo_path("packages/cadgen/src")
 
@@ -43,8 +44,6 @@ def hinge():
 if __name__ == "__main__":
     hinge()
 """
-
-ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
 
 # The same hinge, but each side is a GROUP of two parts. Mating the groups is
 # what "a mate on a parent occurrence carries its whole instance subtree" means
@@ -83,7 +82,9 @@ if __name__ == "__main__":
 
 
 # Three distinct components; the mate's axis is a face of the placed, rotated
-# arm, so it resolves through that occurrence's own topology alone.
+# arm, so it resolves through that occurrence's own topology alone. ARM_FACE is the
+# name of the arm cylinder's side (``_arm_face``), written where a person would paste
+# it from `inspect refs`.
 AXIS_MODEL = """
 import cadgen
 from cadgen import label_shape, step
@@ -91,7 +92,7 @@ from cadgen import build123d as bd
 
 KINEMATICS = {
     "mates": [
-        cadgen.revolute("swing", parent="#base", child="#arm", axis="#arm.f1", limits=(0, 90)),
+        cadgen.revolute("swing", parent="#base", child="#arm", axis="#arm/ARM_FACE", limits=(0, 90)),
     ],
 }
 
@@ -108,6 +109,111 @@ if __name__ == "__main__":
 """
 
 
+# A quarter torus whose face is the mate's axis: its parameters give the torus's centre, not an
+# origin of the face, so the axis passes through the face's exact centroid -- which is neither
+# its box's middle nor the point at its parametric middle.
+TORUS_MODEL = """
+import cadgen
+from cadgen import label_shape, step
+from cadgen import build123d as bd
+
+KINEMATICS = {
+    "mates": [
+        cadgen.revolute("swing", parent="#base", child="#ring", axis="#ring/RING_FACE", limits=(0, 90)),
+    ],
+}
+
+@step(kinematics=KINEMATICS)
+def elbow():
+    base = label_shape(bd.Box(20, 20, 4), "base")
+    ring = label_shape(bd.Pos(4, 2, 9) * bd.Rot(0, 30, 0) * bd.Torus(6, 1.5, major_angle=90), "ring")
+    return bd.Compound(children=[base, ring])
+
+
+if __name__ == "__main__":
+    elbow()
+"""
+
+
+def _face_of(make, geom_type=None) -> str:
+    """The name a build gives one face of the part ``make`` makes (its first, or its one face
+    of ``geom_type``), as a person would paste it from `inspect refs`: a part placed as it is
+    names its faces by the function and the operation that made them and their number among
+    what that construction made (its label names the occurrence), so ``make``, named as the
+    model's function is, names them as the model's build does."""
+    from cadgen._internal import kernel_memo
+    from cadgen._internal.entity_ordinals import entity_map
+    from OCP.TopLoc import TopLoc_Location
+
+    with kernel_memo.run(None) as run:
+        part = make()
+    _key, lineage = run.identify(part)
+    faces = entity_map(part.wrapped.Located(TopLoc_Location()), "face")
+    names = [lineage["faces"][faces.FindIndex(face.wrapped.Located(TopLoc_Location())) - 1]
+             for face in part.faces() if geom_type is None or face.geom_type == geom_type]
+    if geom_type is None:
+        return names[0]
+    (name,) = names
+    return name
+
+
+def _arm_face() -> str:
+    """The name of AXIS_MODEL's arm cylinder's side."""
+    from cadgen import build123d as bd
+    from cadgen import label_shape
+
+    def pivot():  # the model's function, whose name its features take
+        return label_shape(bd.Pos(10, 3, 6) * bd.Rot(0, 40, 30) * bd.Cylinder(2, 16), "arm")
+
+    return _face_of(pivot, bd.GeomType.CYLINDER)
+
+
+def _ring_face_by_geometry() -> str:
+    """The geometric token of TORUS_MODEL's ring's torus face (``geometric_tokens``), the one
+    face of its component whose surface is a torus."""
+    from cadgen import build123d as bd
+    from cadgen._internal.entity_ordinals import entity_map
+    from cadgen._internal.geometric_tokens import element_tokens
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS
+
+    ring = bd.Pos(4, 2, 9) * bd.Rot(0, 30, 0) * bd.Torus(6, 1.5, major_angle=90)
+    unlocated = ring.wrapped.Located(TopLoc_Location())
+    faces = entity_map(unlocated, "face")
+    (ordinal,) = [index for index in range(1, faces.Extent() + 1)
+                  if BRepAdaptor_Surface(TopoDS.Face_s(faces.FindKey(index))).GetType()
+                  == GeomAbs_SurfaceType.GeomAbs_Torus]
+    return element_tokens(unlocated)["faces"][ordinal - 1]
+
+
+def _arm_face_by_geometry() -> str:
+    """The geometric token of AXIS_MODEL's arm cylinder's side: what a reader with no
+    lineage names it by (the fallback matcher, ``geometric_tokens``)."""
+    from cadgen import build123d as bd
+    from cadgen._internal.entity_ordinals import entity_map
+    from cadgen._internal.geometric_tokens import element_tokens
+    from OCP.TopLoc import TopLoc_Location
+
+    part = bd.Pos(10, 3, 6) * bd.Rot(0, 40, 30) * bd.Cylinder(2, 16)
+    unlocated = part.wrapped.Located(TopLoc_Location())
+    (side,) = [face for face in part.faces() if face.geom_type == bd.GeomType.CYLINDER]
+    ordinal = entity_map(unlocated, "face").FindIndex(side.wrapped.Located(TopLoc_Location()))
+    return element_tokens(unlocated)["faces"][ordinal - 1]
+
+
+def _hinge_arm_face() -> str:
+    """The name of HINGE_MODEL's arm box's first face."""
+    from cadgen import build123d as bd
+    from cadgen import label_shape
+
+    def hinge():  # the model's function, whose name its features take
+        return label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
+
+    return _face_of(hinge)
+
+
 class KinematicsBuildTests(unittest.TestCase):
     def setUp(self) -> None:
         self._roots = IsolatedCadRoots(self, prefix="cadkin-")
@@ -118,12 +224,10 @@ class KinematicsBuildTests(unittest.TestCase):
         self._tempdir.cleanup()
 
     def _build(self, script: Path) -> int:
-        from cadgen.catalog import StepImportOptions
         from cadgen.generation import generate_step_targets
 
         return generate_step_targets(
             [str(script)],
-            step_options=StepImportOptions(),
             force=True,
             verbose=False,
         )
@@ -148,11 +252,13 @@ class KinematicsBuildTests(unittest.TestCase):
         return script
 
     def test_kinematics_lands_in_the_sidecar(self) -> None:
+        from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
+
         script = self._write("hinge.py")
         self.assertEqual(0, self._build(script))
 
         sidecar = self._sidecar(script)
-        self.assertEqual(sidecar["schemaVersion"], 9)
+        self.assertEqual(sidecar["schemaVersion"], SOURCE_SIDECAR_SCHEMA_VERSION)
         # The sidecar file carries the branded suffix.
         self.assertTrue((self.root / "hinge.step.json").is_file())
 
@@ -166,8 +272,7 @@ class KinematicsBuildTests(unittest.TestCase):
         self.assertEqual(mate["axis"], {"origin": [0.0, 0.0, 6.0], "dir": [0.0, 0.0, 1.0]})
         self.assertEqual(block["poses"], {"open": {"swing": 45.0}})
 
-        # Choreography is not a sidecar section: the render module beside the
-        # document (hinge.step.js) is the viewer's, never the build's.
+        # A model that declares no clips carries no animation section.
         self.assertNotIn("animation", sidecar)
 
         # The descriptor stays STEP-pure: kinematics is sidecar-only.
@@ -177,16 +282,16 @@ class KinematicsBuildTests(unittest.TestCase):
         # "Saving STEP" names the output and the source result, and its readers
         # read no more: kinematics, appearance and animation live in the
         # sidecar alone, resolved once, after the preview has gone out.
+        from cadgen._internal import kinematics_resolve
         from cadgen.daemon import executors
 
         script = self._write("owned.py")
         events: list[dict] = []
+        real = kinematics_resolve.resolve_kinematics_block
 
-        def resolve(block, **_kwargs):
+        def resolve(block, **kwargs):
             self.assertTrue(any("preview" in event for event in events), "kinematics held back the preview")
-            resolved = json.loads(json.dumps(block))
-            resolved["mates"][0].update(parentId="o1.1", childId="o1.2")
-            return resolved, {"#base": "o1.1", "#arm": "o1.2"}
+            return real(block, **kwargs)
 
         executors.set_event_sink(events.append)
         try:
@@ -198,12 +303,17 @@ class KinematicsBuildTests(unittest.TestCase):
         finally:
             executors.set_event_sink(None)
 
-        self.assertEqual(resolve_call.call_count, 1)
-        (preview,) = [event["preview"] for event in events if "preview" in event]
+        self.assertEqual(resolve_call.call_count, 1, "resolved once, for the preview and the sidecar alike")
+        previews = [event["preview"] for event in events if "preview" in event]
+        (annotations,) = [event["annotations"] for event in events if "annotations" in event]
         (saved,) = [event["saved"] for event in events if "saved" in event]
-        self.assertEqual(set(preview), {"output", "tree"})
+        # A status names objects: the preview its tree and parts, the annotations one object.
+        self.assertTrue(previews)
+        self.assertTrue(all(set(preview) == {"output", "tree", "producer", "parts", "complete"} for preview in previews))
+        self.assertEqual(set(annotations), {"output", "tree", "object"})
         self.assertEqual(set(saved), {"output", "tree", "documentHash"})
-        self.assertEqual(self._sidecar(script)["kinematics"]["mates"][0]["parentId"], "o1.1")
+        self.assertEqual(self._sidecar(script)["kinematics"]["mates"][0]["parentId"],
+                         leaf_id(self._descriptor(script), "base"))
 
     def test_axis_selector_refs_resolve_to_world_numbers(self) -> None:
         script = self.root / "pivot.py"
@@ -212,7 +322,7 @@ class KinematicsBuildTests(unittest.TestCase):
                 'cadgen.revolute("swing", parent="#base", child="#arm",\n'
                 '                        origin=(0, 0, 6), direction=(0, 0, 1), limits=(0, 90)),',
                 'cadgen.revolute("swing", parent="#base", child="#arm",\n'
-                '                        axis="#arm.f1", limits=(0, 90)),',
+                f'                        axis="#arm/{_hinge_arm_face()}", limits=(0, 90)),',
             ),
             encoding="utf-8",
         )
@@ -236,43 +346,50 @@ class KinematicsBuildTests(unittest.TestCase):
         (mate,) = self._sidecar(script)["kinematics"]["mates"]
         self.assertEqual(mate["parent"], "#base_group")
         self.assertEqual(mate["child"], "#arm_group")
-        # The resolved ids ride the sidecar beside the labels, so the viewer
-        # matches a whole subtree by id prefix rather than redoing topology.
-        self.assertEqual(mate["parentId"], "o1.1")
-        self.assertEqual(mate["childId"], "o1.2")
+        # The resolved ids ride the sidecar beside the labels: the groups' tokens, which
+        # the viewer carries whole subtrees by, rather than redoing topology.
+        descriptor = self._descriptor(script)
+        self.assertEqual(mate["parentId"], node_id(descriptor, "base_group"))
+        self.assertEqual(mate["childId"], node_id(descriptor, "arm_group"))
 
         # Both of the arm group's leaves sit under the mated occurrence.
-        leaves = {o["id"] for o in self._descriptor(script)["occurrences"]}
-        self.assertEqual({"o1.1.1", "o1.1.2", "o1.2.1", "o1.2.2"}, leaves)
+        from cadgen.assembly_lookup import assembly_group_members
+
+        members = assembly_group_members(descriptor)
+        self.assertEqual(set(node_ids(descriptor, "arm_tube", "arm_tip")), set(members[mate["childId"]]))
+        self.assertEqual({"base_plate", "base_boss", "arm_tube", "arm_tip"},
+                         {row["name"] for row in descriptor["occurrences"]})
 
     def test_mates_resolve_without_reading_any_component(self) -> None:
         # A mate's ends name occurrences, never topology: a group, a leaf, a
-        # label or an id. Resolving them reads no component's SURF and writes no
-        # view of the tree; each of those cost seconds on a large assembly and
-        # derived SURF inside the build when the store had none.
+        # label or an id. Resolving them reads no component's selector table and
+        # writes no view of the tree; each of those cost seconds on a large assembly
+        # and derived display data inside the build when the store had none.
         script = self.root / "grouped.py"
         script.write_text(GROUPED_MODEL, encoding="utf-8")
         refused = AssertionError("mate ends need no component topology")
         with mock.patch("cadgen.store.view.export_view", side_effect=refused), \
-                mock.patch("cadgen.store.view.materialize_view_surfaces", side_effect=refused), \
-                mock.patch("cadgen.assembly_lookup._read_component_bundle", side_effect=refused):
+                mock.patch("cadgen.store.view.materialize_parts", side_effect=refused), \
+                mock.patch("cadgen.store.parts.derive", side_effect=refused), \
+                mock.patch("cadgen.assembly_lookup._read_component_table", side_effect=refused):
             self.assertEqual(0, self._build(script))
         (mate,) = self._sidecar(script)["kinematics"]["mates"]
-        self.assertEqual((mate["parentId"], mate["childId"]), ("o1.1", "o1.2"))
+        self.assertEqual((mate["parentId"], mate["childId"]),
+                         tuple(node_ids(self._descriptor(script), "base_group", "arm_group")))
 
     def test_an_axis_ref_reads_only_its_own_component_and_matches_the_composed_index(self) -> None:
         from cadgen._internal.kinematics_resolve import _axis_from_ref
         from cadgen.assembly_lookup import index_with_assembly_occurrences
         from cadgen.lookup import build_selector_index
         from cadgen.selector_types import SelectorBundle
-        from cadgen.step_topology_artifact import StepTopologyArtifact
+        from cadgen.step_targets import StepArtifact
         from cadgen.store import view
         from cadgen.store.index import model_ref
         from cadgen.store.records import read_record
         from cadgen.store.trees import flatten
 
         script = self.root / "pivot.py"
-        script.write_text(AXIS_MODEL, encoding="utf-8")
+        script.write_text(AXIS_MODEL.replace("ARM_FACE", _arm_face()), encoding="utf-8")
         exported = []
         original = view.export_view
 
@@ -294,12 +411,13 @@ class KinematicsBuildTests(unittest.TestCase):
         package = original(tree)
         try:
             manifest = json.loads((package / "assembly.json").read_text(encoding="utf-8"))
-            artifact = StepTopologyArtifact(
+            artifact = StepArtifact(
                 cad_path="pivot", source_path=script, step_path=script.with_suffix(".step"),
                 artifact_path=package, manifest=manifest, selector_bundle=SelectorBundle(manifest=manifest),
             )
             composed = index_with_assembly_occurrences(build_selector_index(manifest), artifact)
-            expected = _axis_from_ref(composed, "#arm.f1", mate="swing", source_ref="pivot")
+            expected = _axis_from_ref(composed, f"#arm/{_arm_face()}", mate="swing", source_ref="pivot",
+                                      centroid=lambda row: self.fail("a cylinder's axis needs no centroid"))
         finally:
             import shutil
 
@@ -307,6 +425,37 @@ class KinematicsBuildTests(unittest.TestCase):
         (mate,) = self._sidecar(script)["kinematics"]["mates"]
         self.assertEqual(mate["axis"], expected)
         self.assertNotIn(mate["axis"]["dir"], ([0.0, 0.0, 1.0], [0.0, 0.0, -1.0]))
+
+    def test_an_axis_through_a_torus_face_passes_through_its_exact_centroid(self) -> None:
+        # No selector row carries a face's centroid: the axis measures it on the stored component,
+        # exactly, and places it as the occurrence places the face.
+        from cadgen import build123d as bd
+
+        script = self.root / "elbow.py"
+        script.write_text(TORUS_MODEL.replace("RING_FACE", _ring_face_by_geometry()), encoding="utf-8")
+        self.assertEqual(0, self._build(script))
+        (mate,) = self._sidecar(script)["kinematics"]["mates"]
+        ring = bd.Pos(4, 2, 9) * bd.Rot(0, 30, 0) * bd.Torus(6, 1.5, major_angle=90)
+        (face,) = [face for face in ring.faces() if face.geom_type == bd.GeomType.TORUS]
+        centroid, middle = face.center(bd.CenterOf.MASS), face.center(bd.CenterOf.BOUNDING_BOX)
+        self.assertGreater((centroid - middle).length, 0.5, "the fixture tells a centroid from a box's middle")
+        for got, want in zip(mate["axis"]["origin"], centroid):
+            self.assertAlmostEqual(got, want, places=6)
+
+    def test_an_axis_ref_by_geometry_resolves_as_its_face_by_name(self) -> None:
+        # A ref by geometric token -- copied from a reader with no lineage, or before the
+        # face had a name -- names the face with that geometry: the fallback is the one
+        # resolver's, so a mate's axis takes it as read_scene does.
+        script = self.root / "pivot.py"
+        script.write_text(AXIS_MODEL.replace("ARM_FACE", _arm_face()), encoding="utf-8")
+        self.assertEqual(0, self._build(script))
+        (by_name,) = self._sidecar(script)["kinematics"]["mates"]
+        token = _arm_face_by_geometry()
+        self.assertNotEqual(_arm_face(), token)
+        script.write_text(AXIS_MODEL.replace("ARM_FACE", token), encoding="utf-8")
+        self.assertEqual(0, self._build(script))
+        (by_geometry,) = self._sidecar(script)["kinematics"]["mates"]
+        self.assertEqual(by_name["axis"], by_geometry["axis"])
 
     def test_an_unresolvable_mate_ref_fails_the_build(self) -> None:
         script = self.root / "broken.py"

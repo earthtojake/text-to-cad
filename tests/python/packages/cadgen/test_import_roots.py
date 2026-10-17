@@ -56,8 +56,7 @@ def _base_env(work: Path) -> dict[str, str]:
         "CADGEN_CACHE_DIR": str(work / "store"),
         "CADGEN_DAEMON_STATE_DIR": str(work / "state"),
     })
-    for key in ("CADGEN_DAEMON_CHILD", "CADGEN_ROOT_ID", "CADGEN_BROKER", "CADGEN_BROKER_KEY", "CADGEN_EVENTS"):
-        env.pop(key, None)
+    env.pop("CADGEN_DAEMON_CHILD", None)
     return env
 
 

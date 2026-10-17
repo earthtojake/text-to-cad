@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<sdf version="1.9"><world name="lab"><light name="sun" type="directional"/><model name="swing">
+  <link name="base"><visual name="v"><pose>0 0 0.05 0 0 0</pose><geometry><box><size>0.4 0.4 0.1</size></box></geometry></visual></link>
+  <link name="arm"><pose relative_to="hinge">0.05 0 0 0 0 0</pose><visual name="v"><pose>0.25 0 0 0 0 0</pose><geometry><box><size>0.5 0.08 0.06</size></box></geometry></visual></link>
+  <joint name="hinge" type="revolute"><pose relative_to="base">0 0 0.2 0 0 0</pose><parent>base</parent><child>arm</child><axis><xyz>0 1 0</xyz><limit><lower>-1.2</lower><upper>1.2</upper></limit></axis></joint>
+</model></world></sdf>

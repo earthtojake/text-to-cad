@@ -8,7 +8,7 @@ import { testHost } from '../../../../../dist/host/testing/host.js';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const resource = { kind: 'workspace-file', path: '/models/parts/bracket.step', revision: 'r1' } as const;
-const face = { resource, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } as const;
+const face = { resource, target: { kind: 'cad-selector', selectors: ['o:1a2b3c4d5e6f/f:base.extrude1.2'] } } as const;
 const composer = { kind: 'composer', available: true } as const;
 
 function mount(host = testHost(), props: Record<string, unknown> = {}) {
@@ -29,7 +29,7 @@ const field = () => screen.getByRole('textbox', { name: 'Describe your changes' 
 const buttons = () => within(box()!).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent);
 
 it('follows what it would carry while the note is empty: open for the person with the keyboard, for an agent without it', () => {
-  const edge = { resource, target: { kind: 'cad-selector', selectors: ['o1.e3'] } } as const;
+  const edge = { resource, target: { kind: 'cad-selector', selectors: ['o:1a2b3c4d5e6f/e:base.extrude1.3'] } } as const;
   const { update } = mount();
   // With nothing to carry there is nothing at all: no box, and no button standing in for one.
   expect(box()).toBeNull();
@@ -53,10 +53,10 @@ it('follows what it would carry while the note is empty: open for the person wit
   expect(document.activeElement).toBe(field());
   expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('2 refs');
   // A reference naming several picks counts each, and each is listed by its id.
-  const several = [{ resource, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3', 'o1.e4'] } }] as const;
+  const several = [{ resource, target: { kind: 'cad-selector', selectors: ['o:1a2b3c4d5e6f/f:base.extrude1.2', 'o:1a2b3c4d5e6f/e:base.extrude1.3', 'o:1a2b3c4d5e6f/e:base.fillet1.4'] } }] as const;
   update({ references: several });
   expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('3 refs');
-  expect(quickEditReferenceIds(several)).toEqual(['o1.f2', 'o1.e3', 'o1.e4']);
+  expect(quickEditReferenceIds(several)).toEqual(['o:1a2b3c4d5e6f/f:base.extrude1.2', 'o:1a2b3c4d5e6f/e:base.extrude1.3', 'o:1a2b3c4d5e6f/e:base.fillet1.4']);
   // A note keeps it open when the selection goes.
   fireEvent.change(field(), { target: { value: 'Round it.' } });
   update({ references: [] });
@@ -125,7 +125,7 @@ it('copies the note with its references by their files\' absolute paths, and its
   let copied: Promise<string> | string = '';
   const saved: string[] = [];
   const host = testHost({
-    clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async text => { copied = text; }, writeImage: async () => {} },
     attachments: { save: async (_png, name) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } },
   });
   const sketch = { ink: true, capture: async () => new Blob(['png'], { type: 'image/png' }) };
@@ -137,7 +137,7 @@ it('copies the note with its references by their files\' absolute paths, and its
   // Copied, nothing has gone yet: the note and what it carries stay, and the button says so.
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([field().value, clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
-  expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
+  expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#o:1a2b3c4d5e6f/f:base.extrude1.2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
   expect(saved).toEqual(['bracket-sketch.png']);
 });
 

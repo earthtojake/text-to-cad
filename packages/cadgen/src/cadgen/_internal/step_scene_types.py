@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from cadgen._internal.glb_topology import STEP_EDGE_DEFAULT_RENDER_VISIBILITY_CLASSES
+from cadgen._internal.step_names import ComponentNames
 
 ColorRGBA = tuple[float, float, float, float]
 
@@ -15,11 +16,11 @@ ColorRGBA = tuple[float, float, float, float]
 class SelectorOptions:
     """How a build extracts a tree's topology.
 
-    Carries no mesh tolerance. A tree is tessellation-free — it
-    stores surfaces (``.surf``) and the client meshes them — so the only
-    option here with a consequence is which edge classes get built.
-    ``--mesh-tolerance`` belongs to the mesh EXPORT path (``MeshExportJob``),
-    which never reads this.
+    Carries no mesh tolerance. A tree is tessellation-free -- each part is
+    meshed once, at the one display tolerance, into its part record -- so the
+    only option here with a consequence is which edge classes get built. A mesh
+    tolerance belongs to the mesh EXPORT path (``MeshExportJob``), which never
+    reads this.
     """
 
     edge_deflection: float | None = None
@@ -41,6 +42,14 @@ class LoadedStepScene:
     # decoded from, where the scene knows it: the facts a scene's edge policy
     # reads are then remembered by that BREP (store.bounds.cached_component_topology).
     prototype_components: dict[int, tuple[str, str]] = field(default_factory=dict)
+    # Prototype key -> what its stored component is named by, where the scene was
+    # read from a tree whose component carries it: the construction key and the
+    # lineage (``component_package.read_lineage``), either None. A tree built from
+    # the scene names the prototype the same (``store.build``).
+    prototype_identity: dict[int, tuple[str | None, dict[str, Any] | None]] = field(default_factory=dict)
+    # Prototype key -> what the file names it by, where it names it: its product's part key
+    # and its faces' and edges' names, by the prototype's own ordinals (``step_names``).
+    prototype_step_names: dict[int, ComponentNames] = field(default_factory=dict)
     load_elapsed: float = 0.0
     step_hash: str | None = None
     source_kind: str = "step"
@@ -51,6 +60,10 @@ class LoadedStepScene:
     kinematics: dict[str, Any] | None = None
     materials: dict[str, Any] | None = None
     animation: dict[str, str] | None = None
+    # The model run that made a generated scene's shapes (kernel_memo.run): the
+    # tree build asks it what names each component it prepares, and the publish
+    # writes its features beside the record (STORE.md §3).
+    kernel_run: Any | None = None
     source_hash: str | None = None
     source_closure_hash: str | None = None
     source_closure_files: tuple[str, ...] = ()
@@ -71,30 +84,17 @@ class LoadedStepScene:
     # is what tells the sidecar writer this is a re-emit rather than an import.
     reemit_source_hash: str | None = None
     reemit_annotation_hash: str | None = None
-    # compound_from_instances carries its assembly hierarchy as an explicit
-    # occurrence-metadata tree (cadgen.instances). The XCAF doc built for an
-    # in-memory scene flattens such a compound to ONE leaf (it has no
-    # build123d children), so scene consumers that need placed leaf
-    # occurrences (interference) walk this tree instead when present.
-    instance_occurrence_tree: dict[str, Any] | None = None
     doc: Any | None = None
-    # A reference scene (cadgen.store._references.source_scene) decodes its
-    # prototypes only to classify the topology for the adaptive edge policy;
-    # the build reads geometry from the pinned trees. The generator may drop
-    # them once that policy is decided, before the export owns its own copy.
-    disposable_prototypes: bool = False
 
 
 @dataclass(frozen=True)
 class AdaptiveMeshResolution:
     """What the scene's topology says about how to RENDER it.
 
-    Not tessellation settings: there is one tessellator, it is JS, and it takes
-    its own relative tolerances. What survives here is the classification —
-    ``profile`` plus the ``hints`` it was computed from — because
-    ``_edge_visibility_classes_for_resolution`` turns the pair into the edge
-    classes a tree actually renders. The absolute deflection numbers this
-    once carried reached no mesher and are gone.
+    Not tessellation settings: cadgen's tessellator (``tessellate``) takes its
+    own relative tolerances. This is the classification — ``profile`` plus the
+    ``hints`` it was computed from — which ``step_scene_mesh.edge_visibility_classes``
+    turns into the edge classes a tree renders.
     """
 
     profile: str
@@ -103,6 +103,9 @@ class AdaptiveMeshResolution:
 
 @dataclass
 class OccurrenceNode:
+    # ``path`` is the node's position in the parsed product hierarchy (the reader's own
+    # bookkeeping, never a name); ``id`` is its token in the document tree
+    # (``cadgen._internal.tree_tokens``) where the scene came from one, else None.
     path: tuple[int, ...]
     name: str | None
     source_name: str | None
@@ -113,6 +116,7 @@ class OccurrenceNode:
     location: object | None = None
     children: list["OccurrenceNode"] = field(default_factory=list)
     row_index: int = -1
+    id: str | None = None
 
 
 @lru_cache(maxsize=512)

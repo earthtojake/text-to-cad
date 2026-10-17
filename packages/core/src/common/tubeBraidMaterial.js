@@ -1,15 +1,14 @@
 import {
   TUBE_BRAID_STAGE,
-  TUBE_GPU_STAGE,
   TUBE_MATERIAL_ATTRIBUTE,
   TUBE_MATERIAL_VARYING,
   ensureTubeMaterialStage
 } from "./tubeMaterialShader.js";
 
 // A braid is a procedural surface finish on the real STEP tube, not additional
-// collision geometry. Rest material coordinates (arc length, transverse offsets)
-// survive mesh deformation: the CPU path stores them in an attribute, the GPU
-// path derives them from its mapping texture; both write the shared varying.
+// collision geometry. Its rest material coordinates (arc length, transverse
+// offsets) are an attribute cadgen binds with the tube's skin, so they ride with
+// every vertex however the tube bends or twists.
 const PARS = `
 uniform vec3 cadBraidParameters;
 uniform float cadBraidEnabled;
@@ -35,12 +34,10 @@ vec3 cadBraidNormal(vec3 surfacePosition, vec3 surfaceNormal, float height) {
 }
 `;
 
-function applyBraidStage(shader, stages) {
-  if (!stages[TUBE_GPU_STAGE]) {
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\nattribute vec3 ${TUBE_MATERIAL_ATTRIBUTE};`)
-      .replace("#include <begin_vertex>", `#include <begin_vertex>\n${TUBE_MATERIAL_VARYING} = ${TUBE_MATERIAL_ATTRIBUTE};`);
-  }
+function applyBraidStage(shader) {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", `#include <common>\nattribute vec3 ${TUBE_MATERIAL_ATTRIBUTE};`)
+    .replace("#include <begin_vertex>", `#include <begin_vertex>\n${TUBE_MATERIAL_VARYING} = ${TUBE_MATERIAL_ATTRIBUTE};`);
   shader.fragmentShader = shader.fragmentShader
     .replace("#include <common>", `#include <common>\n${PARS}`)
     .replace(

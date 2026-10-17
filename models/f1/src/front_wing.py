@@ -1,7 +1,7 @@
 """F1 part model: front wing.
 
 The geometry `lib/front_wing.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.1`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#front_wing`; rebuild `f1.py`
 to pick up a change here.
 """
 

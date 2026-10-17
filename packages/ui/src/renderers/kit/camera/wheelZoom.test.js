@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { PerspectiveCamera } from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
 import {
   isPinchWheelEvent,
   isTrackpadLikeWheelEvent,
+  orbitControlsBoostsPinch,
   WHEEL_PINCH_DELTA_BOOST
 } from "./viewportCameraKit.js";
 
@@ -15,31 +19,32 @@ import {
 const ACCELERATED_WHEEL_ZOOM_SPEED = 5.0;
 const TRACKPAD_PINCH_ZOOM_SPEED = 7;
 
-/** OrbitControls r161+: deltaMode is normalized to pixels, and a pinch is boosted. */
-function normalizeWheelDelta(event) {
+/** OrbitControls r161+: deltaMode is normalized to pixels, and a pinch -- a ctrl+wheel while, by its
+ * own record of the key (`_controlActive`), Control is up -- is boosted. */
+function normalizeWheelDelta(event, controls = { _controlActive: false }) {
   let deltaY = event.deltaY;
   if (event.deltaMode === 1) {
     deltaY *= 16;
   } else if (event.deltaMode === 2) {
     deltaY *= 100;
   }
-  if (event.ctrlKey) {
+  if (event.ctrlKey && !controls._controlActive) {
     deltaY *= WHEEL_PINCH_DELTA_BOOST;
   }
   return deltaY;
 }
 
 /** What the viewer hands OrbitControls for a given event. */
-function zoomSpeedFor(event) {
-  if (isPinchWheelEvent(event)) {
+function zoomSpeedFor(event, controls = { _controlActive: false }) {
+  if (orbitControlsBoostsPinch(event, controls)) {
     return TRACKPAD_PINCH_ZOOM_SPEED / WHEEL_PINCH_DELTA_BOOST;
   }
   return isTrackpadLikeWheelEvent(event) ? TRACKPAD_PINCH_ZOOM_SPEED : ACCELERATED_WHEEL_ZOOM_SPEED;
 }
 
 /** Fraction of the camera distance left after one event. r161+: 0.95 ^ (speed * |d| * 0.01). */
-function stepFor(event) {
-  return 0.95 ** (zoomSpeedFor(event) * Math.abs(normalizeWheelDelta(event) * 0.01));
+function stepFor(event, controls) {
+  return 0.95 ** (zoomSpeedFor(event, controls) * Math.abs(normalizeWheelDelta(event, controls) * 0.01));
 }
 
 const pct = (event) => Number((((1 - stepFor(event)) * 100)).toFixed(1));
@@ -138,4 +143,31 @@ test("input classes are told apart", () => {
   assert.equal(isTrackpadLikeWheelEvent({ deltaY: 100, deltaMode: 0 }), false);
   assert.equal(isTrackpadLikeWheelEvent({ deltaY: 3, deltaMode: 1 }), false);
   assert.equal(isTrackpadLikeWheelEvent({ deltaY: 4, deltaMode: 0 }), true);
+});
+
+test("a pinch zooms at one rate whatever OrbitControls believes of the Control key", () => {
+  // OrbitControls boosts a ctrl+wheel only while, by its record, Control is up; a Control keydown
+  // whose keyup the page never saw (the key let go in another Space) leaves it sure the key is
+  // down. Dividing the pinch speed by a boost it did not apply made every pinch a tenth as fast.
+  const pinch = { deltaY: -4, deltaMode: 0, ctrlKey: true };
+  const believedUp = stepFor(pinch, { _controlActive: false });
+  const believedDown = stepFor(pinch, { _controlActive: true });
+  assert.ok(Math.abs(believedUp - believedDown) < 1e-12, `${believedUp} vs ${believedDown}`);
+});
+
+test("the OrbitControls these steps model is the installed one: its pinch boost and its record of Control", () => {
+  // A canvas and its root node, enough for OrbitControls to connect: its keydown listener on the
+  // root is how a Control press reaches it.
+  const listeners = {};
+  const root = { addEventListener: (type, listener) => { (listeners[type] ||= []).push(listener); }, removeEventListener() {} };
+  const canvas = { style: {}, addEventListener() {}, removeEventListener() {}, getRootNode: () => root, ownerDocument: root };
+  const controls = new OrbitControls(new PerspectiveCamera(), canvas);
+  const pinch = { deltaY: -4, deltaMode: 0, ctrlKey: true, clientX: 0, clientY: 0 };
+  assert.equal(controls._customWheelEvent(pinch).deltaY, normalizeWheelDelta(pinch, controls), "a pinch, boosted");
+  assert.equal(orbitControlsBoostsPinch(pinch, controls), true);
+  for (const listener of listeners.keydown) listener({ key: "Control" });
+  assert.equal(controls._controlActive, true, "a Control keydown is recorded");
+  assert.equal(controls._customWheelEvent(pinch).deltaY, normalizeWheelDelta(pinch, controls), "and then nothing is boosted");
+  assert.equal(orbitControlsBoostsPinch(pinch, controls), false);
+  controls.dispose();
 });

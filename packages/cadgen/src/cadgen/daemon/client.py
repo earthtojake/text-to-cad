@@ -52,37 +52,38 @@ _RESTART = object()
 # A frame did not arrive in time, as distinct from the channel closing.
 _TIMED_OUT = object()
 
-# Cache resolution is per-CLIENT, never per-daemon. A worker inherits the
-# environment of whichever build spawned the daemon, so without forwarding
-# these the first build's cache root silently became every later build's,
-# across projects (a model that set XDG_CACHE_HOME at import relocated the
-# cache for every other project on the machine until the daemon recycled).
-# They travel with every request and the worker applies them per JOB —
-# a name absent here means "unset for this job" (see worker._apply_request_env).
-# PYTHONPATH rides along too: it is how a project declares an import root beyond the
-# script's own folder (``PYTHONPATH=src``), and a build must resolve imports exactly as
-# ``python script.py`` run by the client would. Entries are absolutized against the
-# client's cwd, because the worker runs elsewhere.
-# CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
-# with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
-# shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
-# idle housekeeping holds the client's store to (STORE.md §8). CADGEN_VERIFY_READBACK
-# is one build's request (STORE.md §10): a daemon started with it verified every
-# later build, and one started without it skipped the check a maintainer asked for.
-# The telemetry switches (``cadgen.analytics.ENVIRONMENT``) are the client's too: a
-# client whose environment turns telemetry off has none of its builds counted, whatever
-# the environment of the build that started the daemon said (``cadgen.daemon.telemetry``).
-FORWARDED_ENV_VARS = (
-    "CADGEN_CACHE_DIR",
-    "XDG_CACHE_HOME",
-    "LOCALAPPDATA",
-    "PYTHONPATH",
-    "CADGEN_FFMPEG",
-    "CADGEN_STORE_MAX",
-    "CADGEN_VERIFY_READBACK",
-    "DO_NOT_TRACK",
-    "CADGEN_TELEMETRY",
-)
+# A job runs in its CALLER's environment, never the daemon's. A worker inherits the
+# environment of whichever build spawned the daemon, so a model that read
+# ``os.environ["SIZE"]`` saw that build's SIZE warm and its own caller's cold, and the
+# first build's cache root silently became every later build's, across projects. So
+# the caller's whole environment travels with every request and the worker applies it
+# per JOB: a name the caller has is set, a name it lacks is unset, which also clears
+# what a previous job's model code exported (worker._apply_request_env). That is
+# also how the per-client choices reach a job: the cache root (CADGEN_CACHE_DIR,
+# XDG_CACHE_HOME, LOCALAPPDATA), the import roots (PYTHONPATH, absolutized against the
+# client's cwd because the worker runs elsewhere), the cap the daemon's idle housekeeping
+# holds the client's store to (CADGEN_STORE_MAX, STORE.md §8), and the telemetry switches
+# (``cadgen.analytics.ENVIRONMENT``): a client whose environment turns telemetry off has
+# none of its builds counted, whatever the environment of the build that started the
+# daemon said (``cadgen.daemon.telemetry``). CADGEN_FFMPEG is resolved here, below.
+#
+# Except the names the daemon, its pool and a job's own machinery set for themselves:
+# a caller never sends them, and applying a job's environment leaves them as they are.
+INTERNAL_ENV_VARS = frozenset({
+    # A daemon worker's own: that it serves a daemon, and that daemon's address and
+    # key, which live in its own state directory (pool.Worker, worker.serve).
+    "CADGEN_DAEMON",
+    "CADGEN_DAEMON_CHILD",
+    "CADGEN_DAEMON_SOCKET",
+    "CADGEN_DAEMON_STATE_DIR",
+    # A request's own field (worker._apply_request_env).
+    "CADGEN_JOB_ID",
+    # The daemon's processes report their installation's channel, whoever started
+    # them (_spawn_daemon), and a Windows worker names its virtual environment so
+    # (pool.interpreter).
+    "CADGEN_INSTALL_CHANNEL",
+    "__PYVENV_LAUNCHER__",
+})
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
 # in the worker because a PATH lookup only answers for the process that does it:
@@ -105,8 +106,9 @@ def _client_ffmpeg() -> str:
 
 
 def forwarded_env() -> dict[str, str]:
-    """The requesting process's environment that a job must see, for the payload."""
-    env = {name: os.environ[name] for name in FORWARDED_ENV_VARS if name in os.environ}
+    """The requesting process's environment, which a job runs in, for the payload:
+    all of it but the daemon's own names (``INTERNAL_ENV_VARS``)."""
+    env = {name: value for name, value in os.environ.items() if name not in INTERNAL_ENV_VARS}
     if "PYTHONPATH" in env:
         entries = [os.path.abspath(e) for e in env["PYTHONPATH"].split(os.pathsep) if e]
         env["PYTHONPATH"] = os.pathsep.join(entries)
@@ -152,10 +154,12 @@ def log_path(address: str | None = None) -> Path:
     """Where the daemon's lifecycle and OCP noise go.
 
     Derived from the identity rather than from the address: a pipe name is not a path, so
-    there is nothing to hang a sibling .log off on Windows.
+    there is nothing to hang a sibling .log off on Windows. On POSIX it is the socket's
+    sibling, kept in the state directory when the socket had to move out of it
+    (``transport.beside``).
     """
     if address and os.name != "nt":
-        return Path(address).with_suffix(".log")
+        return transport.beside(address, Path(address).with_suffix(".log").name)
     return transport.state_dir() / f"cadgen-daemon-{daemon_identity()}.log"
 
 
@@ -164,9 +168,40 @@ def request_timeout() -> float:
     return DEFAULT_REQUEST_TIMEOUT_SECONDS
 
 
+def _declared_version(base: Path) -> str:
+    """The version declared beside the code under ``base``: its source tree's pyproject,
+    else the metadata installed with it. Never the first ``cadgen`` metadata on
+    ``sys.path``: a checkout can carry several (a stale editable install's, a wheel
+    build's egg-info under ``src``), the daemon and its clients put ``src`` at different
+    places on their paths, and two answers for the same files would retire every daemon
+    the moment a client spoke to it."""
+    import tomllib
+
+    pyproject = base.parent.parent / "pyproject.toml"
+    try:
+        with pyproject.open("rb") as handle:
+            project = tomllib.load(handle).get("project") or {}
+        if project.get("name") == "cadgen" and project.get("version"):
+            return str(project["version"])
+    except (OSError, ValueError):
+        pass
+    # More than one only after an install that failed midway: the last one written is
+    # the install that put these files here.
+    found = []
+    for metadata in base.parent.glob("cadgen-*.dist-info"):
+        try:
+            found.append((metadata.stat().st_mtime_ns, metadata.name))
+        except OSError:
+            continue
+    if found:
+        return max(found)[1][len("cadgen-"):-len(".dist-info")]
+    return "0+unknown"
+
+
 def compute_version_token(root: Path | None = None) -> str:
-    """The running daemon's identity: cadgen's version plus the newest ``.py`` mtime under
-    it. Client and server compute this identically; inequality means restart."""
+    """The running daemon's identity: the version declared beside its code plus the newest
+    ``.py`` mtime under it. Client and server compute this identically from the same
+    files; inequality means restart."""
     base = Path(root) if root is not None else CADGEN_DIR
     newest = 0
     for dirpath, dirnames, filenames in os.walk(base):
@@ -179,10 +214,7 @@ def compute_version_token(root: Path | None = None) -> str:
             except OSError:
                 continue
             newest = max(newest, mtime)
-
-    from cadgen import __version__
-
-    return f"{__version__}:{newest}"
+    return f"{_declared_version(base)}:{newest}"
 
 
 def _request_payload(
@@ -192,7 +224,6 @@ def _request_payload(
     prog: str | None,
     *,
     store_root: str | None = None,
-    root_id: str | None = None,
     closure: str | None = None,
     coalesce: bool = False,
     dependency: bool = False,
@@ -212,12 +243,9 @@ def _request_payload(
         # The store this job reads and writes: an explicit request field, never
         # the worker's ambient environment, so one daemon serves isolated stores.
         "store_root": str(store_root) if store_root else str(default_store_root()),
-        # The top-level request this job belongs to; child-build events carry it
-        # so the root's build tree can place them.
-        "root_id": str(root_id) if root_id else None,
-        # In-flight coalescing (cadgen.daemon.broker): a child submit carries its source's
-        # closure hash and may join a job already building the same thing. A top-level
-        # request never does -- the model the user asked for runs.
+        # In-flight coalescing (cadgen.daemon.broker): a compile carries its document's
+        # digest and may join a job already compiling the same bytes. A top-level request
+        # never does -- the model the user asked for runs.
         "closure": str(closure) if closure else None,
         "coalesce": bool(coalesce and closure),
         # A nested request may consume the reserved dependency-progress
@@ -247,8 +275,14 @@ def run_via_daemon(
         return None
     from cadgen.daemon.executors import emit_event
 
-    payload = _request_payload(tool, argv, cwd, prog, root_id=os.environ.get("CADGEN_ROOT_ID"))
-    return _run_with_retry(payload, on_event=emit_event)
+    payload = _request_payload(tool, argv, cwd, prog)
+    try:
+        return _run_with_retry(payload, on_event=emit_event)
+    except KeyboardInterrupt:
+        # Ctrl-C while this process only waits on the daemon: the build service stops the
+        # job when its caller leaves. The same KeyboardInterrupt a cold run raises, so a
+        # script's own handler catches it either way, without the transport's wait in it.
+        raise KeyboardInterrupt from None
 
 
 def run_nested(
@@ -258,23 +292,22 @@ def run_nested(
     *,
     prog: str | None = None,
     store_root: str | None = None,
-    root_id: str | None = None,
     closure: str | None = None,
     on_stream: Callable[[str], None] | None = None,
     on_event: Callable[[dict], None] | None = None,
 ) -> int | None:
-    """A child build submitted from INSIDE a build (a worker or a client).
+    """A job submitted from INSIDE a build or a door (a worker or a client): a
+    document's compile, coalesced by ``closure`` (the document's bytes).
 
     Unlike :func:`run_via_daemon` this ignores ``CADGEN_DAEMON_CHILD``: a worker
-    submitting a child is the pool's nesting, not recursion into itself. Stream
+    submitting a compile is the pool's nesting, not recursion into itself. Stream
     frames go to ``on_stream`` (captured for the error path), events to
     ``on_event``. ``None`` still means "the daemon could not take it".
     """
     if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
         return None
     payload = _request_payload(
-        tool, argv, cwd, prog, store_root=store_root, root_id=root_id, closure=closure,
-        coalesce=True, dependency=True,
+        tool, argv, cwd, prog, store_root=store_root, closure=closure, coalesce=True, dependency=True,
     )
     return _run_with_retry(payload, on_stream=on_stream, on_event=on_event)
 
@@ -283,8 +316,7 @@ def artifact_payload(request: dict, *, store_root: str, dependency: bool = False
     """Capture a structured source-free request on the calling thread."""
     from cadgen.daemon.artifacts import normalize_request, store_path
 
-    payload = _request_payload("artifact", [], None, None, store_root=store_path(store_root),
-                               root_id=os.environ.get("CADGEN_ROOT_ID"), dependency=dependency)
+    payload = _request_payload("artifact", [], None, None, store_root=store_path(store_root), dependency=dependency)
     payload["artifact"] = normalize_request(request)
     return payload
 
@@ -334,6 +366,14 @@ def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
             # No request was submitted: preserve the ordinary source/CLI
             # fallback, without spawning repeatedly over a live listener.
             return None
+        except transport.AddressUnusable as error:
+            # No daemon can listen there and none was asked: say why, once, and fall back.
+            if strict:
+                if on_stream is not None:
+                    on_stream(f"{error}\n")
+            else:
+                print(f"cadgen-daemon: {error} Running this in this process.", file=sys.stderr, flush=True)
+            return None
         if conn is None:
             return None
         try:
@@ -352,6 +392,10 @@ def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
                 on_connection(None)
         if outcome is not _RESTART:
             return outcome if isinstance(outcome, int) else None
+        # Ask again as the code on disk is now. The token was stamped when the request was
+        # built, and a successor takes its own at start: a request built before an edit and
+        # resent as it was made every successor exit on it, until the deadline.
+        payload = {**payload, "token": compute_version_token()}
         if not restarted:
             restarted = True
             continue  # the stale daemon is going; an idle one already released its address
@@ -391,10 +435,15 @@ def _connect(address: str) -> transport.Channel:
         raise
 
 
+# Connect failures no spawn can fix: a live peer that rejects the key, or an address no
+# daemon could listen at. The rest mean "nothing is listening yet".
+_FINAL = (transport.AuthenticationError, transport.AddressUnusable)
+
+
 def _connect_or_spawn(address: str) -> transport.Channel | None:
     try:
         return _connect(address)
-    except transport.AuthenticationError:
+    except _FINAL:
         raise
     except OSError:
         pass
@@ -412,7 +461,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
             # released it. If the daemon answers now, there is nothing to spawn.
             try:
                 return _connect(address)
-            except transport.AuthenticationError:
+            except _FINAL:
                 raise
             except OSError:
                 pass
@@ -424,7 +473,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
         while time.monotonic() < deadline:
             try:
                 return _connect(address)
-            except transport.AuthenticationError:
+            except _FINAL:
                 raise
             except OSError:
                 if process is not None and process.poll() is not None:
@@ -432,7 +481,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
                     # already bound. One more connect tells the two apart.
                     try:
                         return _connect(address)
-                    except transport.AuthenticationError:
+                    except _FINAL:
                         raise
                     except OSError:
                         return None
@@ -491,7 +540,7 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
     # The daemon and its workers must import THIS cadgen from whatever directory they
     # run in; a relative PYTHONPATH entry would otherwise pick the installed one. The
     # daemon serves every client, so it takes no telemetry switch from the one that
-    # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
+    # started it: each client's travels with its own builds (forwarded_env).
     env = for_others(worker_env())
     # Nor its install channel: it reports the one its installation's plugin wrote down, whoever started it
     # (``cadgen/_internal/channel.py``).
@@ -630,6 +679,14 @@ def worker_died_message(payload: dict, death: dict, *, falling_back: bool = Fals
     )
 
 
+def daemon_lost_message(payload: dict, reason: str) -> str:
+    """What the user reads when the build service itself goes away mid-request (it was
+    killed, or crashed) and the job is about to run again, cold, in this process."""
+    prog, args, _cold = _job_words(payload)
+    return (f"cadgen-daemon: lost the build service running `{' '.join([prog, *args])}` (it {reason}). "
+            "Running it cold now, in this process; what follows is that run.\n")
+
+
 def _run_request(
     channel: transport.Channel, payload: dict, *, on_stream=None, on_event=None,
     on_artifact_result=None, strict: bool = False, cancelled=None,
@@ -641,8 +698,14 @@ def _run_request(
     given (a nested child build captures them); ``event`` frames — the build
     tree's model transitions — go to ``on_event``."""
     def protocol_failure(reason):
-        if strict and on_stream is not None:
-            on_stream(f"The geometry service {reason}.\n")
+        if strict:
+            if on_stream is not None:
+                on_stream(f"The geometry service {reason}.\n")
+        elif pending_death is None:
+            # The ordinary fallback runs this job again, cold, in this process: say so,
+            # or a rerun from the start reads as a slow build. A worker's death says it
+            # itself (``settled``).
+            emit(daemon_lost_message(payload, reason))
         return None
 
     def emit(text: str) -> None:
@@ -707,6 +770,12 @@ def _run_request(
             return settled(_RESTART)
         if "exit" in message:
             return settled(int(message["exit"]))
+        if "released" in message:
+            # The command's answer is complete (--no-wait): the worker writes the files
+            # after this, and the exit frame it sends then reaches nobody.
+            if strict:
+                return protocol_failure("released a geometry request")
+            return settled(int(message["released"]))
         if "artifactResult" in message:
             if on_artifact_result is None:
                 return settled(None)

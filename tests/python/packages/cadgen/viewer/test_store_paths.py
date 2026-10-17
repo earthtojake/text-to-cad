@@ -80,22 +80,30 @@ class DelegatesToCadgen(unittest.TestCase):
                 self.assertEqual(component["kind"], "native")
                 from cadgen.store.objects import has_object
                 self.assertTrue(has_object(component["brep"]))
-                self.assertNotIn("surf", component)
 
     def test_the_virtual_store_asset_serves_the_tree_and_its_components(self) -> None:
+        import json
+
+        from cadgen.store.objects import read_verified_object
+        from tests.python.support.inline_artifacts import inline_artifacts
+
         tree = seed_result(self.probes[0])
         body, content_type = store_paths.virtual_store_asset(f"{tree}/assembly.json", document_hash=catalog.artifact_file_hash(Path(self.probes[0])))
         self.assertEqual(content_type, "application/json")
-        self.assertIn(b'"kind": "assembly-package"', body)
+        served = json.loads(body)
+        self.assertEqual(served["kind"], "assembly-package")
         descriptor = store_paths.result_descriptor(tree)
-        from cadgen.store.objects import read_verified_object
         cid, component = next(iter(descriptor["components"].items()))
         payload, content_type = store_paths.virtual_store_asset(f"{tree}/components/{cid}.brep")
         self.assertEqual(Path(payload).read_bytes(), read_verified_object(component["brep"]))
         self.assertEqual(content_type, "application/octet-stream")
-        for bad in ("", "/etc/hosts", f"{tree}/../x", f"{tree}/components/nope.surf", "zz/assembly.json"):
-            with self.subTest(bad=bad):
-                self.assertEqual(store_paths.virtual_store_asset(bad), (None, ""))
+        with inline_artifacts() as jobs:
+            # A component's SURF is not served: nothing on the page reads one.
+            for bad in ("", "/etc/hosts", f"{tree}/../x", f"{tree}/components/{cid}.surf", f"{tree}/components/nope.brep",
+                        f"{tree}/components/{'0' * 16}.brep", "zz/assembly.json"):
+                with self.subTest(bad=bad):
+                    self.assertEqual(store_paths.virtual_store_asset(bad), (None, ""))
+        self.assertEqual(jobs.call_count, 0, "a path that names no component of the tree starts no job")
 
 
 class ReadPerCall(unittest.TestCase):

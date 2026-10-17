@@ -124,41 +124,26 @@ def cadgen() -> str:
     return str(executable if executable.exists() else "cadgen")
 
 
-def commands(include_video: bool = False) -> list[tuple[str, list[str]]]:
+def commands() -> list[tuple[str, list[str]]]:
     python = sys.executable
     step_file = ROOT / "STEP/hand_mechanical_candidate_r13.step"
-    result = [
-        ("Test the generated animation module's runtime", ["node", "--test", str(ROOT / "validation/showcase_runtime.test.mjs")]),
-        # The model reads src/<name>_animation.js through lib.embedded_animation, so a
-        # module has to exist before the build that writes the frames the real one needs.
-        ("Seed the placeholder animation module", [python, str(ROOT / "validation/write_showcase_presentation.py"), "--placeholder"]),
+    return [
         ("Build R13 once to write the body-frame manifest", [python, str(ROOT / "src/hand_mechanical_candidate_r13.py"), "--force"]),
-        ("Regenerate the animation module from those frames", [python, str(ROOT / "validation/write_showcase_presentation.py")]),
         ("Regenerate the indexed capstan overlay from those frames", [python, str(ROOT / "src/capstan_index_overlay.py")]),
         ("Rebuild final R13 with the regenerated overlay", [python, str(ROOT / "src/hand_mechanical_candidate_r13.py")]),
         ("Validate every final STEP placement", [cadgen(), "step", "inspect", "validate", str(step_file), "--every-placement"]),
     ]
-    animation = lambda clip: json.dumps(
-        {"clip": clip, "fps": 30, "deform": "morph", "deformTolerance": 1.0, "drop": ["visible"]},
-        separators=(",", ":"),
-    )
-    for clip in ("fist", "wave", "pinch", "signs", "drive"):
-        result.append((f"Export website clip {clip}", [cadgen(), "glb", "build", str(step_file), str(ROOT / f"website/hand_{clip}.glb"), "--animation", animation(clip)]))
-    if include_video:
-        result.append(("Render the optional showcase video (requires ffmpeg)", [cadgen(), "step", "snapshot", str(step_file), str(ROOT / "tmp/showcase.mp4"), "--animation", "showcase", "--video", '{"fps":30,"quality":"review"}']))
-    result.append(("Test the authored HTML presentation", ["node", "--test", str(ROOT / "website/preview.behavior.test.mjs")]))
-    return result
 
 
-def print_plan(include_video: bool) -> None:
+def print_plan() -> None:
     print("0. Import and verify the archival checkpoint (see README).")
-    for index, (description, command) in enumerate(commands(include_video), 1):
+    for index, (description, command) in enumerate(commands(), 1):
         print(f"{index}. {description}\n   {shlex.join(command)}")
 
 
-def run(include_video: bool) -> None:
+def run() -> None:
     check_checkpoint()
-    for description, command in commands(include_video):
+    for description, command in commands():
         print(f"\n==> {description}", flush=True)
         subprocess.run(command, cwd=REPO, check=True)
 
@@ -166,21 +151,20 @@ def run(include_video: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="action", required=True)
-    subparsers.add_parser("plan", help="print the dependency-ordered commands without executing them").add_argument("--video", action="store_true")
+    subparsers.add_parser("plan", help="print the dependency-ordered commands without executing them")
     importer = subparsers.add_parser("import-checkpoint", help="copy and verify the ignored legacy checkpoint")
     importer.add_argument("--from", dest="assemblies", required=True, type=Path, help="legacy models/assemblies directory")
     subparsers.add_parser("check", help="verify imported checkpoint files without loading CAD")
-    runner = subparsers.add_parser("run", help="execute the full final-asset rebuild")
-    runner.add_argument("--video", action="store_true", help="also render tmp/showcase.mp4; requires ffmpeg")
+    subparsers.add_parser("run", help="execute the full final-asset rebuild")
     args = parser.parse_args()
     if args.action == "plan":
-        print_plan(args.video)
+        print_plan()
     elif args.action == "import-checkpoint":
         import_checkpoint(args.assemblies)
     elif args.action == "check":
         check_checkpoint()
     elif args.action == "run":
-        run(args.video)
+        run()
 
 
 if __name__ == "__main__":

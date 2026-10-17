@@ -6,7 +6,6 @@
 const VIEWER_MEMORY_MIB = 1024 * 1024;
 const DEFAULT_VIEWER_MEMORY_BUDGET_BYTES = 1536 * VIEWER_MEMORY_MIB;
 const DEFAULT_VIEWER_GPU_HEADROOM_BYTES = 256 * VIEWER_MEMORY_MIB;
-const DEFAULT_VIEWER_REPLACEMENT_HEADROOM_BYTES = 128 * VIEWER_MEMORY_MIB;
 
 const VIEWER_MEMORY_CATEGORIES = Object.freeze([
   "displayCpu",
@@ -36,7 +35,6 @@ export class ViewerMemoryLimitError extends Error {
 export function createViewerMemoryPolicy({
   budgetBytes = DEFAULT_VIEWER_MEMORY_BUDGET_BYTES,
   gpuHeadroomBytes = DEFAULT_VIEWER_GPU_HEADROOM_BYTES,
-  replacementHeadroomBytes = DEFAULT_VIEWER_REPLACEMENT_HEADROOM_BYTES,
   onLimitation = null,
 } = {}) {
   const retained = new Map(VIEWER_MEMORY_CATEGORIES.map((category) => [category, 0]));
@@ -47,7 +45,6 @@ export function createViewerMemoryPolicy({
 
   const budget = bytes(budgetBytes);
   const gpuHeadroom = Math.min(budget, bytes(gpuHeadroomBytes));
-  const replacementHeadroom = bytes(replacementHeadroomBytes);
   const ownedLimit = Math.max(0, budget - gpuHeadroom);
 
   function refreshRetainedProviders() {
@@ -86,7 +83,6 @@ export function createViewerMemoryPolicy({
       budgetBytes: budget,
       gpuHeadroomBytes: gpuHeadroom,
       ownedLimitBytes: ownedLimit,
-      replacementHeadroomBytes: replacementHeadroom,
       retainedByCategory,
       inFlightByCategory,
       retainedBytes: retainedTotal,
@@ -121,26 +117,21 @@ export function createViewerMemoryPolicy({
     bytes: requested,
     label = "",
     kind = "allocate",
-    replacingBytes = 0,
-    finalBytes = null,
     recordLimitation = true,
   } = {}) {
     refreshRetainedProviders();
     const amount = bytes(requested);
     const before = retainedBytes() + reservedBytes();
-    const isReducingReplacement = kind === "coarsen" &&
-      bytes(replacingBytes) > bytes(finalBytes) && bytes(replacingBytes) > 0;
-    const limit = ownedLimit + (isReducingReplacement ? replacementHeadroom : 0);
-    if (before + amount > limit) {
+    if (before + amount > ownedLimit) {
       const detail = {
         category,
         label: String(label || ""),
         kind,
         requestedBytes: amount,
         estimatedOwnedBytes: before,
-        availableBytes: Math.max(0, limit - before),
+        availableBytes: Math.max(0, ownedLimit - before),
         ownedLimitBytes: ownedLimit,
-        preservingCurrentView: kind === "refine" || kind === "replace",
+        preservingCurrentView: kind === "replace",
       };
       if (recordLimitation) {
         lastLimitation = detail;
@@ -191,11 +182,7 @@ export function createViewerMemoryPolicy({
   };
 }
 
-// One ledger spans the asset hook, viewport LOD, renderer diagnostics and idle
-// accelerators. It accounts only disposable browser-side data; persistent
-// store/tessellation-provider records are outside its ownership.
+// One ledger spans the asset hook, renderer diagnostics and idle accelerators. It
+// accounts only disposable browser-side data; persistent store/tessellation-provider
+// records are outside its ownership.
 export const viewerMemoryPolicy = createViewerMemoryPolicy();
-// Read-only browser diagnostic (`window.__cadViewerMemoryPolicySnapshot`), published by a
-// mounted viewport (`useViewportLod`), never at import: unlike performance.memory it reports
-// the same categories and admission math in every supported browser.
-export const viewerMemoryPolicySnapshot = () => viewerMemoryPolicy.snapshot();

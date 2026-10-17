@@ -53,7 +53,8 @@ For each non-fixed joint:
 After generating or modifying an `.sdf`, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 - confirm direct model links, joints, frames, visuals, and collisions are placed correctly;
-- confirm includes, plugins, sensors, lights, nested models, and unsupported geometry are listed as static metadata;
+- confirm includes, plugins, sensors and lights are listed as static metadata, and nested models are drawn with the model;
+- confirm the Viewer refuses by name any geometry or mesh it cannot draw, rather than leaving it out;
 - record any simulator-only behavior that CAD Viewer cannot execute.
 
 ### Sensor and plugin check

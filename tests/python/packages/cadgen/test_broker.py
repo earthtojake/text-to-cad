@@ -1,16 +1,15 @@
-"""The broker: FIFO job slots that a waiting parent gives back, and in-flight coalescing.
+"""The broker: job slots -- work under way first, then FIFO -- that a waiting parent gives
+back and a nested build shares, and in-flight coalescing.
 
-Driven through a real private broker over the real transport, in threads, so the lease
-semantics (a slot is a connection; closing it releases) are the ones production uses.
+The slots are driven through a real broker served on a private address over the real
+transport, in threads, so the lease semantics (a slot is a connection; closing it
+releases) are the ones production uses. The in-flight registry is the daemon's own
+object, driven as ``server._handle_request`` drives it.
 """
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
-import subprocess
-import sys
-import textwrap
 import threading
 import time
 import unittest
@@ -21,152 +20,28 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen.daemon import broker  # noqa: E402
-
-
-@unittest.skipUnless(os.name == "posix", "POSIX listeners own a socket filesystem entry")
-class PrivateBrokerCleanup(unittest.TestCase):
-    def test_delayed_accept_owner_keeps_socket_until_listener_disposal(self):
-        entered, native_done, release = threading.Event(), threading.Event(), threading.Event()
-        original_accept = broker.transport.mpc.Listener.accept
-
-        def delayed_accept(listener):
-            entered.set()
-            try:
-                return original_accept(listener)
-            finally:
-                native_done.set()
-                if not release.wait(5):
-                    raise TimeoutError("test did not release the accept owner")
-
-        # close() waits a bounded time for its threads; this owner is held past it.
-        with mock.patch.object(broker.transport.mpc.Listener, "accept", new=delayed_accept), \
-                mock.patch.object(broker, "CLOSE_JOIN_SECONDS", 0.05):
-            private = broker.PrivateBroker(limit=1)
-            # Capture the stdlib unlink receipt to check both its active lifetime
-            # and its idempotence after the accept owner disposes the listener.
-            finalizer = private._server._listener._listener._unlink
-            try:
-                self.assertTrue(entered.wait(2), "accept did not begin")
-                private.close()
-                private.close()
-                self.assertTrue(native_done.wait(2), "close did not wake native accept")
-                self.assertTrue(private._thread.is_alive(), "accept owner was not held")
-                self.assertTrue(Path(private.address).exists(), "broker unlinked the listener's live socket")
-                self.assertTrue(finalizer.still_active())
-            finally:
-                release.set()
-                private.close()
-                private._thread.join(2)
-            self.assertFalse(private._thread.is_alive())
-            self.assertFalse(Path(private.address).exists())
-            self.assertFalse(finalizer.still_active())
-            self.assertIsNone(finalizer())
-
-    def test_process_exit_finalizes_socket_before_delayed_accept_owner(self):
-        script = textwrap.dedent("""
-            import threading
-            from cadgen.daemon import broker, transport
-
-            entered = threading.Event()
-            native_done = threading.Event()
-            parked = threading.Event()
-            original_accept = transport.mpc.Listener.accept
-
-            def delayed_accept(listener):
-                entered.set()
-                try:
-                    return original_accept(listener)
-                finally:
-                    native_done.set()
-                    parked.wait(30)
-
-            transport.mpc.Listener.accept = delayed_accept
-            broker.CLOSE_JOIN_SECONDS = 0.05  # this owner is held past close's bounded wait
-            private = broker.PrivateBroker(limit=1)
-            assert entered.wait(2), 'accept did not begin'
-            private.close()
-            assert native_done.wait(2), 'close did not wake native accept'
-            assert private._thread.is_alive(), 'accept owner was not held'
-            print(private.address, flush=True)
-            # Normal process exit runs multiprocessing's finalizers while the
-            # daemon accept thread is still parked above.
-        """)
-        completed = subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, text=True, timeout=10,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        address = completed.stdout.strip()
-        self.assertTrue(address, "child did not report its owned socket")
-        self.addCleanup(broker.transport.clear_address, address)
-        self.assertEqual(completed.stderr, "", "process-exit finalizer wrote a traceback")
-        self.assertFalse(Path(address).exists())
-
-
-class PrivateBrokerCloseWaits(unittest.TestCase):
-    """close() returns only once the broker's own threads have ended. A daemon thread
-    still returning from a socket call when the interpreter finalizes takes the GIL
-    from a dying runtime, which crashed a no-op build (SIGSEGV, sock_accept -> take_gil)."""
-
-    def test_close_returns_after_its_accept_thread_ends(self):
-        entered = threading.Event()
-        original_accept = broker.transport.mpc.Listener.accept
-
-        def slow_wakeup(listener):
-            entered.set()
-            try:
-                return original_accept(listener)
-            finally:
-                time.sleep(0.2)  # still busy when an unwaited close would have returned
-
-        with mock.patch.object(broker.transport.mpc.Listener, "accept", new=slow_wakeup):
-            private = broker.PrivateBroker(limit=1)
-            self.assertTrue(entered.wait(2), "accept did not begin")
-            private.close()
-        self.assertFalse(private._thread.is_alive(), "close returned while its accept thread ran")
-
-    def test_close_waits_for_a_request_in_flight(self):
-        private = broker.PrivateBroker(limit=1)
-        with mock.patch.dict(os.environ, private.env()):
-            before = set(threading.enumerate())
-            lease = broker.acquire_slot("held")
-            serving = set(threading.enumerate()) - before
-            release = threading.Timer(0.2, lease.release)
-            release.start()
-            private.close()
-            alive = [t for t in serving if t.is_alive()]  # read before the lease is surely gone
-            release.join()
-        self.assertTrue(serving, "no thread served the lease")
-        self.assertEqual(alive, [], "close returned while a request was served")
-
-    def test_close_returns_after_a_silent_peers_handshake_ends(self):
-        private = broker.PrivateBroker(limit=1)
-        before = set(threading.enumerate())
-        # Connected, challenged, and never answering: its handshake runs until close.
-        silent = broker.transport.mpc.Client(private.address, family=broker.transport._family())
-        self.addCleanup(silent.close)
-        self.assertTrue(silent.poll(10), "the broker sent no challenge")
-        self.assertTrue(silent.recv_bytes().startswith(b"#CHALLENGE#"))
-        handshakes = [t for t in set(threading.enumerate()) - before if t.name == "cadgen-handshake"]
-        self.assertTrue(handshakes, "no thread ran the handshake")
-        private.close()
-        alive = [t for t in handshakes if t.is_alive()]
-        self.assertEqual(alive, [], "close returned while a silent peer's handshake ran")
+from tests.python.support.broker import PrivateBroker  # noqa: E402
 
 
 class PrivateBrokerFixture(unittest.TestCase):
-    def setUp(self):
-        self.private = broker.PrivateBroker(limit=self.LIMIT)
-        self.addCleanup(self.private.close)
-        patcher = mock.patch.dict(os.environ, self.private.env())
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    LIMIT = 1
-
-
-class Slots(PrivateBrokerFixture):
     LIMIT = 2
 
+    def setUp(self):
+        self.private = PrivateBroker(limit=self.LIMIT)
+        self.addCleanup(self.private.close)
+        self.enterContext(self.private.served())
+
+    def _settle(self, predicate, timeout: float = 5.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate(self.private.broker.snapshot()):
+                return
+            time.sleep(0.01)
+        self.fail(f"broker never reached the expected state: {self.private.broker.snapshot()}")
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX listeners own a socket filesystem entry")
+class Slots(PrivateBrokerFixture):
     def test_a_slot_is_granted_and_released_by_closing(self):
         lease = broker.acquire_slot("a")
         self.assertIsNotNone(lease)
@@ -205,6 +80,67 @@ class Slots(PrivateBrokerFixture):
         self.assertEqual(order, ["first", "second", "third"])
         self.assertLessEqual(self.private.broker.snapshot()["peakRunning"], 2)
 
+    def test_work_under_way_goes_ahead_of_jobs_not_yet_started(self):
+        """A slot asked for to continue work under way -- an artifact job something waits on
+        -- is granted before every job not yet started, in order among themselves."""
+        held = [broker.acquire_slot(f"h{i}") for i in range(2)]
+        order: list[str] = []
+
+        def waiter(name: str, first: bool) -> None:
+            lease = broker.acquire_slot(name, first=first)
+            order.append(name)
+            lease.release()
+
+        threads = []
+        for name, first in (("new1", False), ("display1", True), ("new2", False), ("display2", True)):
+            thread = threading.Thread(target=waiter, args=(name, first))
+            thread.start()
+            threads.append(thread)
+            self._settle(lambda s, n=len(threads): s["queued"] == n)
+        # One slot freed: the grants cascade one at a time, in the broker's order.
+        held[0].release()
+        for thread in threads:
+            thread.join(timeout=10)
+        held[1].release()
+        self.assertEqual(order, ["display1", "display2", "new1", "new2"])
+
+    def test_a_block_entered_while_this_thread_holds_a_slot_runs_in_that_slot(self):
+        # A child model's build inside its parent's body: no second slot, no queue, and
+        # leaving the nested block keeps the parent's.
+        with broker.held("parent") as parent:
+            self.assertIsNotNone(parent)
+            with broker.held("child") as child:
+                self.assertIs(child, parent)
+                self.assertEqual(self.private.broker.snapshot()["running"], 1)
+            self.assertIs(broker.current_lease(), parent, "leaving the nested block released the parent's slot")
+            self.assertEqual(self.private.broker.snapshot()["running"], 1)
+        self._settle(lambda s: s["running"] == 0)
+
+    def test_a_yielded_slot_is_taken_back_ahead_of_jobs_not_yet_started(self):
+        other = broker.acquire_slot("other")
+        order: list[str] = []
+        with broker.held("parent"):
+            with broker.yielded():
+                child = broker.acquire_slot("child")
+                waiting = threading.Thread(target=lambda: (broker.acquire_slot("new").release(), order.append("new")))
+                waiting.start()
+                self._settle(lambda s: s["queued"] == 1)
+
+                def release_child_once_the_parent_asks() -> None:
+                    self._settle(lambda s: s["queued"] == 2)
+                    child.release()
+
+                # The child's slot comes free once the parent asks for its own back: the
+                # parent is granted it, and the job queued before it waits.
+                releaser = threading.Thread(target=release_child_once_the_parent_asks)
+                releaser.start()
+            releaser.join(timeout=10)
+            order.append("parent")
+            self.assertEqual(self.private.broker.snapshot()["queued"], 1, "the new job still waits")
+        waiting.join(timeout=10)
+        other.release()
+        self.assertEqual(order, ["parent", "new"])
+
     def test_yielded_gives_the_slot_back_for_the_wait(self):
         other = broker.acquire_slot("other")
         with broker.held("parent") as lease:
@@ -230,14 +166,13 @@ class Slots(PrivateBrokerFixture):
         self._settle(lambda s: s["running"] == 0 and s["queued"] == 0)
 
     def test_no_broker_means_no_limit_and_no_error(self):
-        with mock.patch.dict(os.environ, {broker.BROKER_ADDRESS_VAR: "", broker.BROKER_KEY_VAR: ""}):
-            os.environ.pop(broker.BROKER_ADDRESS_VAR)
-            os.environ.pop(broker.BROKER_KEY_VAR)
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+        # A build with no daemon: its body and its pool jobs run on its own threads.
+        with mock.patch.object(broker, "_endpoint", return_value=None):
             with broker.held("free") as lease:
                 self.assertIsNone(lease)
                 with broker.yielded():
                     pass
+        self.assertEqual(self.private.broker.snapshot()["granted"], 0)
 
     def test_the_limit_is_the_core_count_unless_overridden(self):
         with mock.patch.dict(os.environ, {"CADGEN_JOBS": ""}):
@@ -247,90 +182,49 @@ class Slots(PrivateBrokerFixture):
         with mock.patch.dict(os.environ, {"CADGEN_JOBS": "0"}):
             self.assertEqual(broker.job_limit(), 1)
 
-    def _settle(self, predicate, timeout: float = 5.0) -> None:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if predicate(self.private.broker.snapshot()):
-                return
-            time.sleep(0.01)
-        self.fail(f"broker never reached the expected state: {self.private.broker.snapshot()}")
 
+class Coalescing(unittest.TestCase):
+    """The in-flight registry, for the jobs the daemon coalesces: a compile of a
+    document's bytes (an artifact request's typed entries: test_daemon_artifacts)."""
 
-class Coalescing(PrivateBrokerFixture):
-    LIMIT = 4
-
-    def test_late_subscriber_gets_exact_source_result_before_exit(self):
-        mine = broker.claim_inflight("/m/leaf.py::leaf", "sha-1")
-        event = {"sourceResult": {"model": "/m/leaf.py::leaf", "tree": "immutable-source"}}
-        broker.report_result(mine[1], event)
-        theirs = broker.claim_inflight("/m/leaf.py::leaf", "sha-1")
-        ready = threading.Event()
-        results = []
-        exits = []
-
-        def receive(event):
-            results.append(event)
-            ready.set()
-
-        thread = threading.Thread(target=lambda: exits.append(broker.wait_attached(theirs[1], on_event=receive)))
-        thread.start()
-        try:
-            self.assertTrue(ready.wait(3))
-            self.assertEqual(results, [event])
-            self.assertEqual(exits, [])
-        finally:
-            broker.report_done(mine[1], 1)
-            thread.join(5)
-        self.assertEqual(exits, [1])
-
-    def test_different_stores_do_not_share_source_results(self):
-        first = broker.claim_inflight("/m/leaf.py", "sha-1", store_root="/store/first")
-        second = broker.claim_inflight("/m/leaf.py", "sha-1", store_root="/store/second")
-        self.assertEqual((first[0], second[0]), ("yours", "yours"))
-        broker.report_done(first[1], 0)
-        broker.report_done(second[1], 0)
+    def setUp(self):
+        self.registry = broker.Broker(limit=4)
 
     def test_identical_source_in_flight_is_joined_not_rebuilt(self):
-        mine = broker.claim_inflight("/m/leaf.py", "sha-1")
-        self.assertEqual(mine[0], "yours")
-        theirs = broker.claim_inflight("/m/leaf.py", "sha-1")
-        self.assertEqual(theirs[0], "attached")
-        result: dict = {}
+        owns, mine = self.registry.claim_entry("/m/leaf.step", "sha-1")
+        self.assertTrue(owns)
+        owns, theirs = self.registry.claim_entry("/m/leaf.step", "sha-1")
+        self.assertFalse(owns)
+        self.assertIs(theirs, mine)
+        self.assertEqual(self.registry.snapshot()["coalesced"], 1)
+        _result, done, _code = self.registry.wait_update(theirs, result_seen=False, timeout=0.01)
+        self.assertFalse(done, "the attached party was released before the job finished")
+        self.registry.finish_entry(mine, 1, error="the body is wrong on purpose")
+        _result, done, code = self.registry.wait_update(theirs, result_seen=False)
+        self.assertEqual((done, code), (True, 1))
+        self.assertEqual(theirs["error"], "the body is wrong on purpose", "the attached party gets the owner's reason")
+        self.registry.detach(theirs)
+        self.assertEqual(self.registry.snapshot()["inflight"], 0)
 
-        def follow() -> None:
-            result["exit"] = broker.wait_attached(theirs[1])
-
-        thread = threading.Thread(target=follow)
-        thread.start()
-        time.sleep(0.1)
-        self.assertTrue(thread.is_alive(), "the attached party returned before the job finished")
-        broker.report_done(mine[1], 0)
-        thread.join(timeout=10)
-        self.assertEqual(result["exit"], 0)
-        self.assertEqual(self.private.broker.snapshot()["coalesced"], 1)
-
-    def test_a_different_closure_is_a_different_job(self):
-        first = broker.claim_inflight("/m/leaf.py", "sha-1")
-        second = broker.claim_inflight("/m/leaf.py", "sha-2")
-        self.assertEqual((first[0], second[0]), ("yours", "yours"))
-        broker.report_done(first[1], 0)
-        broker.report_done(second[1], 0)
+    def test_a_different_closure_or_store_is_a_different_job(self):
+        owns, first = self.registry.claim_entry("/m/leaf.step", "sha-1", store_root="/store/first")
+        self.assertTrue(owns)
+        for closure, store in (("sha-2", "/store/first"), ("sha-1", "/store/second")):
+            owns, entry = self.registry.claim_entry("/m/leaf.step", closure, store_root=store)
+            self.assertTrue(owns, (closure, store))
+            self.assertIsNot(entry, first)
+            self.registry.finish_entry(entry, 0)
+        self.registry.finish_entry(first, 0)
+        self.assertEqual(self.registry.snapshot()["coalesced"], 0)
 
     def test_a_finished_job_is_never_joined_later(self):
-        first = broker.claim_inflight("/m/leaf.py", "sha-1")
-        broker.report_done(first[1], 0)
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and self.private.broker.snapshot()["inflight"]:
-            time.sleep(0.01)
-        again = broker.claim_inflight("/m/leaf.py", "sha-1")
-        self.assertEqual(again[0], "yours", "coalescing looked into the past")
-        broker.report_done(again[1], 0)
-
-    def test_a_claimer_that_dies_releases_the_attached_with_a_failure(self):
-        mine = broker.claim_inflight("/m/leaf.py", "sha-9")
-        theirs = broker.claim_inflight("/m/leaf.py", "sha-9")
-        mine[1].close()  # the claimer vanished without reporting
-        self.assertEqual(broker.wait_attached(theirs[1]), 1)
+        owns, first = self.registry.claim_entry("/m/leaf.step", "sha-1")
+        self.registry.finish_entry(first, 0)
+        self.assertEqual(self.registry.snapshot()["inflight"], 0)
+        owns, again = self.registry.claim_entry("/m/leaf.step", "sha-1")
+        self.assertTrue(owns, "coalescing looked into the past")
+        self.assertIsNot(again, first)
+        self.registry.finish_entry(again, 0)
 
 
 if __name__ == "__main__":

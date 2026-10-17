@@ -11,6 +11,7 @@ import sysconfig
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Iterable
 
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -315,8 +316,9 @@ def repo_local_loaded_modules(module_names: object) -> dict[str, Path]:
 _NEVER_EVICTED = frozenset({"__main__"})
 
 
-def evict_first_party_modules() -> tuple[str, ...]:
-    """Drop every first-party module from ``sys.modules`` and return the evicted names.
+def evict_first_party_modules(only: Iterable[str] | None = None) -> tuple[str, ...]:
+    """Drop every first-party module from ``sys.modules`` and return the evicted names --
+    or, with ``only``, those whose source file is one of those paths.
 
     Run BEFORE loading a generator: with a clean first-party module space, the
     generator's full dependency closure is freshly imported (and therefore freshly
@@ -334,13 +336,23 @@ def evict_first_party_modules() -> tuple[str, ...]:
     warm worker builds pins ``lib`` to ITS directory and every later project in
     that worker either fails to import (``cannot import name X from 'lib'
     (unknown location)``) or, when the module names happen to line up, silently
-    builds against the wrong project's helpers."""
+    builds against the wrong project's helpers.
+
+    ``only``: the files a child model's scope first executed
+    (``ExecutionHashes.ran_first``), evicted when that scope closes. A module the
+    child's body imported first would otherwise stay loaded, the parent's own later
+    import of it would execute nothing, and the parent's closure would miss what a hit
+    run -- the child decoded, the parent importing the module itself -- records.
+    Namespace packages stay: they execute nothing, and a submodule evicted from under
+    one is imported again by name."""
     protected = _packages_owning_loaded_extensions()
-    evicted = tuple(
-        name
-        for name in {*repo_local_loaded_modules(set(sys.modules)), *_first_party_namespace_packages()}
-        if name.partition(".")[0] not in protected and name not in _NEVER_EVICTED
-    )
+    loaded = repo_local_loaded_modules(set(sys.modules))
+    if only is None:
+        names = {*loaded, *_first_party_namespace_packages()}
+    else:
+        wanted = {str(Path(path).resolve()) for path in only}
+        names = {name for name, path in loaded.items() if str(path) in wanted}
+    evicted = tuple(name for name in names if name.partition(".")[0] not in protected and name not in _NEVER_EVICTED)
     for name in evicted:
         sys.modules.pop(name, None)
     return evicted

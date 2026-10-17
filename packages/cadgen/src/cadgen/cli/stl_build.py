@@ -5,12 +5,11 @@ from the verb function's signature by
 :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift from a
 parameter (README law 6).
 
-One of the three per-format doors that replace the retired
-``cadgen step export``. A door takes a STEP DOCUMENT and writes ONLY its own
-format: it tessellates the tree behind the document's bytes (compiled on demand
-when the store has none), reads no model declaration, never runs a script and
-writes no ``.step`` — ``python <model>.py`` and ``cadgen step build`` are how
-documents get written.
+One of the three per-format mesh doors (STL, 3MF, GLB). A door takes a STEP
+DOCUMENT and writes ONLY its own format: it tessellates the tree behind the
+document's bytes (compiled on demand when the store has none), reads no model
+declaration, never runs a script and writes no ``.step`` — ``python
+<model>.py`` and ``cadgen step build`` are how documents get written.
 """
 
 from __future__ import annotations

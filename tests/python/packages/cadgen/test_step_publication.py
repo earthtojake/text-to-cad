@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.python.support.documents import assert_same_document
 from tests.python.support.tmp_root import generated_cad_directory
 
 
@@ -76,7 +77,43 @@ class StepPublicationTests(unittest.TestCase):
         self.assertEqual(self.step.read_bytes(), before)
         self.assertEqual(self.sidecar.read_bytes(), annotation)
         self.assertEqual(read_record(f"{self.model}::part"), record)
-        self.assertEqual(list(self.root.glob(".part-*")), [], "private stages are cleaned")
+        self.assertEqual(list(self.root.glob(".cadgen-stage-*")), [], "private stages are cleaned")
+
+    def test_a_build_removes_the_stage_a_killed_build_left_and_names_its_own_by_owner(self) -> None:
+        # A build killed while it saves (its caller left, so the daemon ended its worker)
+        # leaves its staging folder, a full STEP copy, in the project. The next build there
+        # removes it; a live build's and another machine's stay.
+        import subprocess
+        import sys
+
+        from cadgen._internal import atomic_replace, temp_leftovers
+
+        exited = subprocess.Popen([sys.executable, "-c", "pass"])
+        exited.wait()
+        host = temp_leftovers._host()
+        other = "0" * 8 if host != "0" * 8 else "1" * 8
+        dead = self.root / f".cadgen-stage-p{exited.pid}-h{host}-part-ab12cd34"
+        live = self.root / f".cadgen-stage-p{os.getpid()}-h{host}-part-ef56gh78"
+        elsewhere = self.root / f".cadgen-stage-p{exited.pid}-h{other}-part-ab12cd34"
+        for stage in (dead, live, elsewhere):
+            stage.mkdir()
+            (stage / "part.step").write_text("ISO-10303-21;", encoding="utf-8")
+        own: list[str] = []
+        replace = atomic_replace.replace_atomic
+
+        def publish(temp_path, target_path):
+            staged = Path(temp_path).parent
+            if Path(target_path) == self.step and staged != self.root:
+                own.append(staged.name)
+            replace(temp_path, target_path)
+
+        with mock.patch.object(atomic_replace, "replace_atomic", publish):
+            self.assertEqual(self.build(10), 0, self.output)
+        self.assertFalse(dead.exists())
+        self.assertTrue(live.is_dir() and elsewhere.is_dir())
+        [stage] = own
+        self.assertTrue(stage.startswith(f".cadgen-stage-p{os.getpid()}-h{host}-part-"), stage)
+        self.assertFalse((self.root / stage).exists())
 
     def test_a_stale_build_skips_the_saved_tree_reuse_check(self) -> None:
         # The gate already called this build stale. The reuse check hashes the
@@ -136,9 +173,9 @@ class StepPublicationTests(unittest.TestCase):
             self.assertEqual(self.build(12), 0, self.output)
             self.assertLessEqual(step_reads(), 1, reads)
             reads.clear()
-            # A label edit keeps the document, and nothing reads it.
+            # An edit that draws the same document keeps it, and nothing reads it.
             self.model.write_text(self.model.read_text(encoding="utf-8").replace(
-                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    box.label = 'renamed'\n    return box\n"),
+                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    return box\n"),
                 encoding="utf-8")
             output = io.StringIO()
             with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
@@ -165,20 +202,20 @@ class StepPublicationTests(unittest.TestCase):
             self.assertEqual(self.build(12, annotated=True), 0, self.output)
         self.assertEqual(len(asked), 2, asked)
 
-    def test_failed_readback_keeps_the_saved_pair(self) -> None:
+    def test_a_failed_export_keeps_the_saved_pair(self) -> None:
         self.assertEqual(self.build(10), 0, self.output)
         before = self.step.read_bytes()
         self.sidecar.write_text('{"kinematics":{"authored":"previous"}}', encoding="utf-8")
         annotation = self.sidecar.read_bytes()
-        with mock.patch("cadgen.store.build._reread_component", side_effect=RuntimeError("injected read-back failure")):
+        with mock.patch("cadgen.store.exports.export_step", side_effect=RuntimeError("injected export failure")):
             self.assertNotEqual(self.build(12), 0)
         self.assertEqual(self.step.read_bytes(), before)
         self.assertEqual(self.sidecar.read_bytes(), annotation)
         self.assertEqual(list(self.root.glob(".part-*")), [])
 
-    def test_preview_is_complete_before_readback_and_saved_file_is_still_previous(self) -> None:
+    def test_preview_is_complete_before_the_export_and_saved_file_is_still_previous(self) -> None:
         from cadgen.daemon import executors
-        from cadgen.store import build as store_build
+        from cadgen.store import exports
         from cadgen.store.trees import tree_complete
 
         self.assertEqual(self.build(10), 0, self.output)
@@ -186,24 +223,26 @@ class StepPublicationTests(unittest.TestCase):
         events = []
         executors.set_event_sink(events.append)
         self.addCleanup(executors.set_event_sink, None)
-        original = store_build._reread_component
+        original = exports.export_step
 
-        def reread(*args, **kwargs):
+        def export(*args, **kwargs):
             previews = [event["preview"] for event in events if "preview" in event]
-            self.assertTrue(previews, "preview must precede STEP read-back")
+            self.assertTrue(previews, "the preview must precede the export")
             self.assertTrue(tree_complete(previews[-1]["tree"]))
             self.assertEqual(self.step.read_bytes(), before)
             return original(*args, **kwargs)
 
-        with mock.patch.object(store_build, "_reread_component", side_effect=reread):
+        with mock.patch.object(exports, "export_step", side_effect=export):
             self.assertEqual(self.build(12), 0, self.output)
         saved = [event["saved"] for event in events if "saved" in event]
         self.assertEqual(len(saved), 1)
-        self.assertTrue(tree_complete(saved[0]["tree"]))
+        self.assertEqual(saved[0]["tree"], [event["preview"] for event in events if "preview" in event][-1]["tree"],
+                         "the saved file is the preview's result")
         self.assertNotEqual(self.step.read_bytes(), before)
 
     def test_external_document_edit_during_build_is_not_overwritten(self) -> None:
         from cadgen._internal import generation
+        from cadgen.store.gate import stale
         from cadgen.store.records import read_record
 
         self.assertEqual(self.build(10), 0, self.output)
@@ -219,7 +258,9 @@ class StepPublicationTests(unittest.TestCase):
             self.assertNotEqual(self.build(12), 0)
         self.assertEqual(self.step.read_bytes(), b"externally replaced STEP")
         self.assertIn("changed during the build", self.output)
-        self.assertEqual(read_record(f"{self.model}::part"), record)
+        # The record names the new result from its source result on, its STEP never written.
+        self.assertNotEqual(read_record(f"{self.model}::part")["tree"], record["tree"])
+        self.assertEqual("never written", stale(f"{self.model}::part").reason().split(":")[0])
 
     def test_incomplete_saved_tree_keeps_last_document(self) -> None:
         from cadgen.store import build as store_build
@@ -227,22 +268,22 @@ class StepPublicationTests(unittest.TestCase):
 
         self.assertEqual(self.build(10), 0, self.output)
         before = self.step.read_bytes()
-        original = store_build.build_tree_through_step
+        original = store_build.build_tree_from_compound
 
         def lose_component(*args, **kwargs):
             result = original(*args, **kwargs)
-            # Simulate cache deletion after the prepared STEP has been read
-            # back, before the saved root is admitted for publication.
+            # Simulate cache deletion after the result is published, before the
+            # record claims it.
             from cadgen.store.objects import object_path
             tree = trees.get_tree(result[0])
             component = next(iter(tree["components"].values()))
             object_path(component["brep"]).unlink()
             return result
 
-        with mock.patch.object(store_build, "build_tree_through_step", side_effect=lose_component):
+        with mock.patch.object(store_build, "build_tree_from_compound", side_effect=lose_component):
             self.assertNotEqual(self.build(12), 0)
         self.assertEqual(self.step.read_bytes(), before)
-        self.assertIn("pinned geometry disappeared", self.output)
+        self.assertIn("geometry disappeared", self.output)
 
     def test_failure_after_each_publication_boundary_is_readable_by_saved_bytes(self) -> None:
         from cadgen._internal import atomic_replace
@@ -251,7 +292,10 @@ class StepPublicationTests(unittest.TestCase):
         from cadgen.store import records
         from cadgen.store.trees import tree_complete
 
-        for boundary in ("document-index", "step", "sidecar", "output-index", "model-record"):
+        # In the order a save crosses them: the output notes and the record at the source
+        # result (its STEP pending), then the file, its sidecar and its bytes' entry, then
+        # the record again with the file's digest.
+        for boundary in ("output-index", "pending-record", "step", "sidecar", "document-index", "model-record"):
             with self.subTest(boundary=boundary):
                 self.assertEqual(self.build(10, force=True, annotated=True), 0, self.output)
                 old_bytes = self.step.read_bytes()
@@ -276,29 +320,41 @@ class StepPublicationTests(unittest.TestCase):
                     injection = mock.patch.object(atomic_replace, "replace_atomic", side_effect=replace)
                 else:
                     name = {"document-index": "note_document_tree", "output-index": "note_output",
-                            "model-record": "write_record"}[boundary]
+                            "pending-record": "write_record", "model-record": "write_record"}[boundary]
                     original = getattr(records, name)
-                    injection = mock.patch.object(records, name, side_effect=lambda *a, **kw: after_write(original, *a, **kw))
+                    calls = []
+
+                    def write(*args, **kwargs):
+                        calls.append(1)
+                        # The record is written twice: pending, then with the file's digest.
+                        if boundary == "model-record" and len(calls) == 1:
+                            return original(*args, **kwargs)
+                        return after_write(original, *args, **kwargs)
+
+                    injection = mock.patch.object(records, name, side_effect=write)
                 with injection:
                     self.assertNotEqual(self.build(12, force=True, annotated=True), 0, self.output)
                 self.assertEqual(fired, [boundary])
                 self.assertIn(f"injected failure after {boundary}", self.output)
                 self.assertEqual(list(self.root.glob(".part-*")), [])
-                if boundary == "document-index":
-                    self.assertEqual(self.step.read_bytes(), old_bytes)
+                written = boundary in ("step", "sidecar", "document-index", "model-record")
+                self.assertEqual(self.step.read_bytes() != old_bytes, written)
+                if boundary in ("output-index", "pending-record"):
                     self.assertEqual(self.sidecar.read_bytes(), old_sidecar)
-                else:
-                    self.assertNotEqual(self.step.read_bytes(), old_bytes)
                 if boundary == "step":
                     self.assertEqual(self.sidecar.read_bytes(), old_sidecar)
                     with self.assertRaises(SidecarBindingError):
                         read_source_sidecar(self.step)
                 else:
                     self.assertIsNotNone(read_source_sidecar(self.step))
-                if boundary != "model-record":
-                    self.assertEqual(records.read_record(f"{self.model}::part"), old_record)
+                record = records.read_record(f"{self.model}::part")
+                if boundary == "output-index":
+                    self.assertEqual(record, old_record)
                 else:
-                    self.assertNotEqual(records.read_record(f"{self.model}::part"), old_record)
+                    # The record names the new result from its source result on.
+                    self.assertNotEqual(record["tree"], old_record["tree"])
+                    self.assertEqual(bool(record["outputs"][str(self.step.resolve())]["sha256"]),
+                                     boundary == "model-record")
                 with mock.patch.object(records, "read_record", side_effect=AssertionError("saved reader read a record")), \
                         mock.patch.object(records, "model_for_output", side_effect=AssertionError("saved reader read output ownership")):
                     self.assertTrue(tree_complete(document_tree(self.step)))
@@ -354,7 +410,7 @@ class StepPublicationTests(unittest.TestCase):
             executors.set_event_sink(events.append)
             self.assertEqual(self.build(10, force=True), 0, self.output)
             previews = [event["preview"]["tree"] for event in events if "preview" in event]
-            self.assertEqual(len(previews), 1)
+            self.assertEqual(len(set(previews)), 1, "one result tree, announced as its parts are derived")
             identities.append((self.step.read_bytes(), result_tree_for(self.step), previews[0]))
             for root_hash in (identities[-1][1], previews[0]):
                 for digest in tree_objects(root_hash):
@@ -367,11 +423,11 @@ class StepPublicationTests(unittest.TestCase):
         from cadgen.catalog import result_tree_for
         from cadgen.step import compile as compile_step
         from cadgen.store import index, records
-        from cadgen.store.trees import tree_complete
+        from cadgen.store.trees import get_tree, tree_complete
 
         self.assertEqual(self.build(10), 0, self.output)
         saved_bytes = self.step.read_bytes()
-        expected_tree = result_tree_for(self.step)
+        expected_tree = get_tree(result_tree_for(self.step))
         self.model.unlink()
         shutil.rmtree(self.root / "store")
         self.assertIsNone(result_tree_for(self.step))
@@ -385,7 +441,7 @@ class StepPublicationTests(unittest.TestCase):
         read_entry = index.read_entry
 
         def artifact_read(kind, key):
-            self.assertNotIn(kind, ("model", "output"), "cold compile consulted a code record")
+            self.assertNotIn(kind, ("model", "output", "provenance"), "cold compile consulted a code record")
             return read_entry(kind, key)
 
         output = io.StringIO()
@@ -396,7 +452,9 @@ class StepPublicationTests(unittest.TestCase):
             # patching only a parent document reader misses worker-side reads.
             result = compile_step(self.step)
         self.assertTrue(result.ok, output.getvalue())
-        self.assertEqual(result.tree, expected_tree)
+        # The same document, every component read from the file: the store that knew
+        # which component the build wrote each from is gone.
+        assert_same_document(self, expected_tree, get_tree(result.tree))
         self.assertTrue(tree_complete(result.tree))
         self.assertEqual(self.step.read_bytes(), saved_bytes)
         self.assertEqual(records.read_record(self.step)["outputs"], {})
@@ -429,7 +487,10 @@ class StepPublicationTests(unittest.TestCase):
         self.assertIn("saved files changed during publication", self.output)
         self.assertEqual(self.step.read_bytes(), previous_bytes)
         self.assertEqual(document_tree(self.step), previous_tree)
-        self.assertEqual(read_record(f"{self.model}::part"), previous_record)
+        # The record names the new result, its STEP never written: no success is claimed.
+        record = read_record(f"{self.model}::part")
+        self.assertNotEqual(record["tree"], previous_record["tree"])
+        self.assertEqual("", record["outputs"][str(self.step.resolve())]["sha256"])
         with self.assertRaises(SidecarBindingError):
             read_source_sidecar(self.step)
 
@@ -522,7 +583,8 @@ class AssemblyJobReads(unittest.TestCase):
         return done.stdout.strip().splitlines()[-1].split(" ", 1)[0]
 
     def closure(self, model: Path) -> dict[str, str]:
-        """Every object of the model's result closure, by digest."""
+        """Every object of the model's result closure, which its saved document's is, by
+        digest."""
         from cadgen.store.records import read_record
         from cadgen.store.trees import tree_objects
 
@@ -551,6 +613,8 @@ class AssemblyJobReads(unittest.TestCase):
         with counted:
             self.assertEqual(self.run_here(self.arm), "current")
         counts = Counter(reads)
+        # The saved document's tree is the result's: the no-op's check that its parts'
+        # display data is stored (``_ensure_reused_display``) reads nothing more.
         self.assertEqual(set(counts), set(closure))
         # Clause 3 verifies each child's closure; clause 4 takes those verified
         # subtrees as they are and reads only the parent's own objects. The
@@ -611,6 +675,9 @@ class AssemblyJobReads(unittest.TestCase):
         counts = Counter(reads)
         self.assertEqual(max(counts.values()), 1, counts)
         root = next(digest for digest, tree in whole.items() if digest == tree)
+        # The no-op's display check of the parent's saved document (``_ensure_reused_display``)
+        # reads nothing more: the document is the parent's result, and what the child's
+        # rebuild claimed of it the gate verified.
         self.assertEqual(set(reads), {*pinned, root}, counts)
 
 

@@ -5,8 +5,7 @@ from lib.phalanx import make_phalanx
 from lib.pulley import make_pulley
 from lib.layout import MCP_YAW_DRIVE_PLANES
 
-@step(out='../STEP/universal_carrier_review.step',
-      mesh_tolerance=.001,mesh_angular_tolerance=.008)
+@step(out='../STEP/universal_carrier_review.step')
 def universal_carrier_review():
     children=[make_universal_carrier(),make_phalanx(45,18)]
     for sign in (-1,1):

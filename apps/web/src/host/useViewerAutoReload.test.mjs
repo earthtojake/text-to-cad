@@ -9,15 +9,17 @@ function driver(answers) {
   const queued = [];
   const reloads = [];
   let clock = 0;
+  let asked = Promise.resolve();
   return {
     reloads,
     options: {
-      fetchServerInfo: async () => answers.shift() ?? { ok: true, identityToken: 'a' },
+      fetchServerInfo: () => (asked = Promise.resolve(answers.shift() ?? { ok: true, identityToken: 'a' })),
       reload: () => reloads.push(clock), now: () => clock,
       schedule: (run, delayMs) => { const timer = { run, delayMs }; queued.push(timer); return timer; },
       cancel: timer => { const index = queued.indexOf(timer); if (index >= 0) queued.splice(index, 1); },
     },
     get scheduled() { return queued.length; },
+    get asked() { return asked; },
     async advance() { const next = queued.shift(); if (next) { clock += next.delayMs; await next.run(); } },
   };
 }
@@ -30,6 +32,8 @@ async function mount(serverInfo, drive) {
   await act(() => root.render(createElement(Probe)));
   return {
     advance: () => act(() => drive.advance()),
+    // The hook's own answer is handled before this await resumes: it awaited the same promise first.
+    focus: () => act(async () => { dom.window.dispatchEvent(new dom.window.Event('focus')); await drive.asked; }),
     async dispose() {
       await act(() => root.unmount()); dom.window.close();
       for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
@@ -37,11 +41,23 @@ async function mount(serverInfo, drive) {
   };
 }
 
-test('production viewer schedules no reload polling', async () => {
-  const drive = driver([]);
+test('an installed viewer reloads for another install on its port, not for its own restart', async () => {
+  const drive = driver([{ ok: false }, { ok: true, identityToken: 'a' }, { ok: true, identityToken: 'b' }]);
   const view = await mount({ autoReload: false, identityToken: 'a' }, drive);
-  try { assert.equal(drive.scheduled, 0); }
-  finally { await view.dispose(); }
+  try {
+    await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
+    await view.advance();
+    assert.deepEqual(drive.reloads, [10_000], 'asked every 5 s, answered or not'); assert.equal(drive.scheduled, 0);
+  } finally { await view.dispose(); }
+});
+
+test('coming back to the window asks at once', async () => {
+  const drive = driver([{ ok: true, identityToken: 'b' }]);
+  const view = await mount({ autoReload: false, identityToken: 'a' }, drive);
+  try {
+    await view.focus();
+    assert.equal(drive.reloads.length, 1); assert.equal(drive.scheduled, 0, 'the tick it pre-empted is cancelled');
+  } finally { await view.dispose(); }
 });
 
 test('a development restart reloads exactly once, when the new server answers', async () => {

@@ -10,6 +10,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
+from tests.python.support.tree_ids import tokenized
 
 add_repo_path("packages/cadgen/src")
 
@@ -50,20 +51,25 @@ class ImportedCompileSnapshot(unittest.TestCase):
                          source_path=document, display_name=document.stem,
                          source="imported", step_path=document)
 
-    def test_hit_captures_once_without_source_surface_or_native_work(self):
+    def test_hit_captures_once_without_source_topology_or_native_work(self):
         from cadgen import catalog, step_artifact_cli as artifact
-        from cadgen._internal import component_package, surface_extract
+        from cadgen._internal import component_package, topology_extract
         from cadgen.store import trees
 
         document = self.document()
         first = self.compile(document)
         expected_kind = trees.tree_kind_for(first["tree"])
         expected_stats = trees.capture_tree(first["tree"], retain_payloads=False)[0]["stats"]
+        self.assertTrue(expected_stats)
+        self.assertEqual(first["stats"], expected_stats, "a compile reports its tree's counts")
+        # The first compile derived its parts' display data; a hit derives nothing more.
+        derived = sorted((self.root / "store/index/part").iterdir())
+        self.assertTrue(derived)
         forbidden = AssertionError("imported hit did extra work")
         with mock.patch.object(trees, "capture_tree", wraps=trees.capture_tree) as capture, \
              mock.patch.object(artifact, "load_step_scene_exact", side_effect=forbidden), \
              mock.patch.object(component_package, "decode_geometry_component", side_effect=forbidden), \
-             mock.patch.object(surface_extract, "extract_surface_component", side_effect=forbidden), \
+             mock.patch.object(topology_extract, "extract_topology_facts", side_effect=forbidden), \
              mock.patch.object(catalog, "result_tree_for", side_effect=forbidden), \
              mock.patch.object(trees, "tree_kind_for", side_effect=forbidden):
             current = self.compile(document)
@@ -72,7 +78,7 @@ class ImportedCompileSnapshot(unittest.TestCase):
         self.assertEqual(current["tree"], first["tree"])
         self.assertEqual(current["stats"], expected_stats)
         self.assertEqual(current["entryKind"], expected_kind)
-        self.assertFalse((self.root / "store/index/surface").exists())
+        self.assertEqual(sorted((self.root / "store/index/part").iterdir()), derived)
 
     def test_edge_policy_well_formedness_gate_remains(self):
         from cadgen import step_artifact_cli as artifact
@@ -94,7 +100,7 @@ class ImportedCompileSnapshot(unittest.TestCase):
         child = self.compile(document)["tree"]
         child_tree = trees.get_tree(child)
         child_brep = next(iter(child_tree["components"].values()))["brep"]
-        parent = trees.put_tree({
+        parent = trees.put_tree(tokenized({
             "units": "mm", "entryKind": "assembly", "components": {}, "occurrences": [],
             "edgeRendering": child_tree["edgeRendering"],
             "links": [{"id": "o1.1", "name": "linked", "tree": child,
@@ -102,7 +108,7 @@ class ImportedCompileSnapshot(unittest.TestCase):
             "assembly": {"root": {"id": "o1", "nodeType": "assembly", "children": [
                 {"id": "o1.1", "nodeType": "link", "children": []}],
             }},
-        })
+        })[0])
         selected = (hashlib.sha256(document.read_bytes()).hexdigest(), parent)
         with mock.patch.object(catalog, "result_snapshot_for", return_value=selected):
             initial = artifact._current_artifact_for_spec(self.spec(document))

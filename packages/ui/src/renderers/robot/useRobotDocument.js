@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { entryAssetUrl, entryUrdfAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
-import { isAbortError, loadRenderText } from "@text-to-cad/core/lib/renderAssetClient.js";
-import {
-  loadRobotDescription, loadRobotMeshes, peekRobotDescription, peekRobotMeshes, robotMeshUrls, robotModel
-} from "@text-to-cad/core/lib/urdf/loadRobot.js";
+import { entryUrdfAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
+import { isAbortError, loadRenderRobot, peekRenderRobot } from "@text-to-cad/core/lib/renderAssetClient.js";
+import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@text-to-cad/core/lib/urdf/loadRobot.js";
 
 // Link meshes are fetched and parsed off the main thread where a worker exists, so the
 // cap only bounds sockets and the worker's queue; it is tied to cores because the
@@ -17,70 +15,54 @@ function meshConcurrency() {
   return Number.isFinite(cores) && cores > 0 ? Math.max(2, Math.min(MESH_LOAD_CONCURRENCY, cores)) : MESH_LOAD_CONCURRENCY;
 }
 
-// Where the entry's description lives: the file itself, and for an SRDF the URDF the
-// catalog paired with it. Loading is core's (`lib/urdf/loadRobot.js`), shared with the
-// snapshot CLI, so both read a robot the same way.
-function descriptionSource(entry, resources) {
-  const kind = kindOf(entry);
-  return { kind, url: entryAssetUrl(entry, kind === "sdf" ? "sdf" : kind === "srdf" ? "srdf" : "urdf"),
-    urdfUrl: entryAssetUrl(entry, "urdf"), resources };
-}
-
-// An SRDF holds planning semantics only; what is drawn is the URDF it is about, which the
-// catalog pairs with it: the ONE `.urdf` in the same folder whose `<robot name>` matches.
-// No match (or two) is not something to wait for, so it is said, with what was looked for.
-async function unpairedSrdfError(entry, { resources, signal }) {
-  let robotName = "";
-  try {
-    const text = await loadRenderText(entryAssetUrl(entry, "srdf"), { resources, signal });
-    robotName = /<robot\b[^>]*?\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(text)?.slice(1).find(Boolean)?.trim() || "";
-  } catch (error) {
-    if (isAbortError(error) || signal.aborted) throw error;
-  }
+// An SRDF holds planning semantics only; what is drawn is the URDF it is about, which
+// cadgen pairs with it: the ONE `.urdf` in the same folder whose `<robot name>` matches.
+// cadgen's refusal says what it looked for; this is the alert a person reads around it.
+function unpairedSrdfAlert(entry, error) {
   const file = String(entry?.file || "");
   const folder = file.includes("/") ? `“${file.slice(0, file.lastIndexOf("/"))}”` : "the folder this SRDF is in";
-  const wanted = robotName ? `whose <robot name> is “${robotName}”` : "with the same <robot name> (this SRDF's <robot> element has no name to match)";
-  const error = new Error(`No URDF is paired with ${file || "this SRDF"}: looked in ${folder} for exactly one .urdf file ${wanted}.`);
-  // The alert a person reads; the message above is its Details.
-  error.alert = {
+  const alert = {
     summary: "URDF not found",
     title: "No URDF beside this SRDF",
-    message: `An SRDF says how a robot is planned, not what it looks like, so the viewer draws the URDF it belongs to. It looked in ${folder} for exactly one .urdf file ${wanted}, and found none, or more than one.`,
+    message: `An SRDF says how a robot is planned, not what it looks like, so the viewer draws the URDF it belongs to. It looked in ${folder} for exactly one .urdf file with the same <robot name>, and found none, or more than one. ${String(error?.message || "")}`.trim(),
     recovery: "Put the robot's URDF next to this SRDF, or make the two <robot name> attributes match, then reload."
   };
-  return error;
+  return Object.assign(new Error(`No URDF is paired with ${file || "this SRDF"}: ${String(error?.message || "")}`.trim(), { cause: error }), { alert });
 }
 
-function robotOf(entry, description, urls, meshes) {
-  return { file: String(entry?.file || ""), kind: kindOf(entry), revision: entryUrdfAssetHash(entry), ...robotModel(description, urls, meshes) };
+const UNPAIRED_SRDF = /has no paired URDF|is ambiguous: \d+ \.urdf files|has no readable <robot name>/;
+
+function robotOf(entry, robot, urls, meshes) {
+  return { file: String(entry?.file || ""), kind: kindOf(entry), revision: entryUrdfAssetHash(entry), ...robotModel(robot, urls, meshes) };
 }
 
-// A warm file (its description and every link mesh still decoded) is whole at once.
+// A warm file (its payload and every mesh still decoded) is whole at once.
 function peekRobot(entry, resources) {
   if (!KINDS.has(kindOf(entry))) return null;
-  const source = descriptionSource(entry, resources);
-  const description = peekRobotDescription(source.kind, source);
-  if (!description) return null;
-  const urls = robotMeshUrls(description);
+  const robot = peekRenderRobot(String(entry?.file || ""), { revision: entryUrdfAssetHash(entry) });
+  if (!robot) return null;
+  const urls = robotMeshUrls(robot);
   const meshes = peekRobotMeshes(urls, { resources });
-  return meshes ? robotOf(entry, description, urls, meshes) : null;
+  return meshes ? robotOf(entry, robot, urls, meshes) : null;
 }
 
 /**
- * A robot description and every mesh it names, as the once-built part list a scene is
- * made from. URDF, SRDF (its paired URDF, with the SRDF's semantics on it) and SDF differ
- * only in which core loader reads them. The robot is published ONCE, complete: a
- * half-drawn robot with the loading card gone reads as a broken model, so the counted
- * stage is the progress signal instead. A missing link mesh fails the load. A warm file
- * is there on the first render; a new revision loads behind the robot on screen.
+ * A robot as cadgen resolved it (`GET /__cad/robot`: the articulation to play, the visuals
+ * to draw and the facts a person reads back) and every mesh its visuals name, as the
+ * once-built part list a scene is made from. URDF, SRDF (its paired URDF, with the SRDF's
+ * semantics on it) and SDF are one payload: nothing here asks which it was. The robot is
+ * published ONCE, complete: a half-drawn robot with the loading card gone reads as a broken
+ * model, so the counted stage is the progress signal instead. A missing mesh fails the
+ * load. A warm file is there on the first render; a new revision loads behind the robot
+ * on screen.
  *
- * @returns {{ robot: { file: string, kind: string, revision: string, description: object, parts: object[],
+ * @returns {{ robot: { file: string, kind: string, revision: string, robot: object, parts: object[],
  *   components: object[] } | null, busy: boolean, progress: object | null, error: unknown }}
  */
-export function useRobotDocument({ entry, resources }) {
+export function useRobotDocument({ entry, client, resources }) {
   const kind = kindOf(entry);
+  const file = String(entry?.file || "");
   const revision = entryUrdfAssetHash(entry);
-  const { url: primary, urdfUrl: urdf } = descriptionSource(entry, null);
   const label = `Loading ${kind.toUpperCase()}`;
   const [state, setState] = useState(() => {
     const robot = peekRobot(entry, resources);
@@ -88,6 +70,8 @@ export function useRobotDocument({ entry, resources }) {
   });
   const resourcesRef = useRef(resources);
   resourcesRef.current = resources;
+  const clientRef = useRef(client);
+  clientRef.current = client;
   const entryRef = useRef(entry);
   entryRef.current = entry;
   const loadedRef = useRef(state.robot?.revision ?? null);
@@ -107,24 +91,32 @@ export function useRobotDocument({ entry, resources }) {
     (async () => {
       const warm = peekRobot(current, resourcesRef.current);
       if (warm) return warm;
-      if (kind === "srdf" && !urdf) throw await unpairedSrdfError(current, { resources: resourcesRef.current, signal });
-      if (!primary) throw new Error(`${kind.toUpperCase()} entry is missing its ${kind.toUpperCase()} asset: ${current?.file || "(unknown)"}`);
-      const source = descriptionSource(current, resourcesRef.current);
-      const description = await loadRobotDescription(source.kind, { ...source, signal });
-      const urls = robotMeshUrls(description);
-      const counted = done => ({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.length, determinate: true } });
-      if (urls.length) publish(counted(0));
+      if (!KINDS.has(kind) || !file) throw new Error(`${kind.toUpperCase() || "robot"} entry has no file to resolve: ${current?.file || "(unknown)"}`);
+      let robot;
+      try {
+        robot = await loadRenderRobot(file, { client: clientRef.current, revision, signal });
+      } catch (error) {
+        if (kind === "srdf" && UNPAIRED_SRDF.test(String(error?.message || ""))) throw unpairedSrdfAlert(current, error);
+        // cadgen refuses a description at the door with a sentence about the FILE (a 400: a
+        // validator's finding, a mesh the page cannot draw): that sentence is the diagnosis a
+        // person reads, as a mesh that would not load is, not a request that failed.
+        if (error?.failure?.kind === "http" && error.failure.status === 400) throw Object.assign(new Error(String(error.message || "")), { cause: error });
+        throw error;
+      }
+      const urls = robotMeshUrls(robot);
+      const counted = done => ({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.size, determinate: true } });
+      if (urls.size) publish(counted(0));
       const meshes = await loadRobotMeshes(urls, { resources: resourcesRef.current, signal, concurrency: meshConcurrency(),
         onMeshLoaded: done => publish(counted(done)) });
       signal.throwIfAborted();
       publish({ progress: { phase: "view", label: "Building robot", determinate: false } });
-      return robotOf(current, description, urls, meshes);
+      return robotOf(current, robot, urls, meshes);
     })().then((robot) => {
       if (signal.aborted) return;
       loadedRef.current = revision;
       setState({ robot, busy: false, progress: null, error: null });
     }, fail);
     return () => controller.abort();
-  }, [kind, primary, urdf, revision, label]);
+  }, [kind, file, revision, label]);
   return state;
 }

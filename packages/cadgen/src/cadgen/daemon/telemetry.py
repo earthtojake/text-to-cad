@@ -38,8 +38,8 @@ _RECORDER = None  # the daemon's, while it serves
 # A command's format, by the daemon tool it runs (``cadgen.cli``); a model script's is what it declares.
 _COMMANDS = {"step-build": "step", "step-compile": "step", "stl-build": "stl", "3mf-build": "3mf", "glb-build": "glb"}
 _MESHES = (".stl", ".3mf", ".glb")
-# What the pool counts from its start (``Pool.snapshot``), by the name a batch gives it. Its own count of
-# crashes takes in workers killed because their client left, so crashes are counted here (``Build.finish``).
+# What the pool counts from its start (``Pool.snapshot``), by the name a batch gives it. Crashes are
+# counted here, as each job ends (``worker_died``), with the job's own evidence.
 _POOL = {"workers": "imports", "recycles": "recycles", "refusals": "memoryRefusals"}
 _MOST = 16  # the most crashes one job's exit frame carries
 
@@ -132,8 +132,9 @@ def building() -> bool:
 
 
 def job_child() -> None:
-    """The job's model called another: an assembly. Called wherever a model composes a child; it counts
-    only for a build made in this process (``cold_build``) -- the daemon sees a worker's in its events."""
+    """The job's model called another: an assembly. Called where a model's body composes a child
+    (``cadgen.authoring``); it counts only for a build made in this process (``cold_build``) -- the
+    daemon sees a worker's in its events, which carry the parent."""
     if _JOB is not None:
         _JOB["children"] = True
 
@@ -201,7 +202,7 @@ class Build:
     def __init__(self, kind: str, via: str, job: str, meshes: bool) -> None:
         self.kind, self.via, self.job, self.meshes = kind, via, job, meshes
         self.states: set[str] = set()  # the model's own transitions (``cadgen.daemon.executors.model_event``)
-        self.children = False  # a child's, announced by this model: an assembly
+        self.children = False  # a child's, built inside this model's body: an assembly
         self.reused = False  # its worker said everything it made was the store's (``exited``)
         self.failure: str | None = None  # why it failed, as its worker decided (``exited``)
 

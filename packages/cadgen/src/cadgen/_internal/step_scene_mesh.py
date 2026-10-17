@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Mapping, Sequence
 
 from OCP.BRepAdaptor import BRepAdaptor_Curve
 from OCP.BRepAdaptor import BRepAdaptor_Surface
@@ -30,7 +30,9 @@ def _iter_leaf_occurrences(nodes: list[OccurrenceNode]) -> list[OccurrenceNode]:
 
 
 def occurrence_selector_id(node: OccurrenceNode) -> str:
-    return _selector_id(node.path)
+    """How a scene node is named in a message: its occurrence token where the
+    scene carries one, else the reader's positional path (never a ref)."""
+    return node.id or _selector_id(node.path)
 
 
 def scene_leaf_occurrences(scene: LoadedStepScene) -> list[OccurrenceNode]:
@@ -96,7 +98,9 @@ def scene_to_build123d_compound(scene: LoadedStepScene, *, label: str | None = N
     import build123d
 
     def node_label(node: OccurrenceNode) -> str:
-        return str(node.name or node.source_name or occurrence_selector_id(node)).strip()
+        # An unnamed node stays unnamed: the tree build gives it the default
+        # name ("part"/"group"), never a positional id masquerading as one.
+        return str(node.name or node.source_name or "").strip()
 
     def node_color(node: OccurrenceNode) -> tuple[float, ...] | None:
         if node.color is not None:
@@ -127,7 +131,7 @@ def scene_to_build123d_compound(scene: LoadedStepScene, *, label: str | None = N
             if face_colors:
                 # Ordinal-keyed (TopExp.MapShapes order) so the value survives the
                 # BinTools round-trip to component-build workers and lands in the
-                # component's .surf, which keys face colors by ordinal.
+                # part's display data, which keys face colors by ordinal.
                 shape.cad_face_ordinal_colors = _face_colors_by_ordinal(
                     scene.prototype_shapes[node.prototype_key], face_colors)
         return shape
@@ -139,9 +143,9 @@ def scene_to_build123d_compound(scene: LoadedStepScene, *, label: str | None = N
         # A single-root STEP is returned as that root, never wrapped: build123d's
         # own import_step does the same ("Remove empty Compound wrapper if single
         # free object"). Wrapping would add an assembly level that is not in the
-        # file, pushing every occurrence path one segment deeper (o1.1 -> o1.1.1)
-        # so selector refs differ depending on whether the STEP was opened
-        # directly or returned from a generator's @step entry.
+        # file, pushing every occurrence one level deeper, so the tree (and the
+        # tokens its nodes take from it) would differ depending on whether the
+        # STEP was opened directly or returned from a generator's @step entry.
         single = roots[0]
         if label:
             single.label = label
@@ -157,9 +161,10 @@ def import_step(step_path: Path, *, label: str | None = None) -> Any:
     Returns the file's geometry as ``import_step`` reads it — the root itself,
     not a wrapper around it — but reuses the tree's binary BREP when the store
     has one for these bytes, so warm loads are ~tens of ms instead of a full
-    text-STEP parse. The tree's components are the STEP's own re-read
-    prototypes (``build_tree_through_step``), never the shapes a script
-    returned, so a warm load and a cold parse cannot disagree. Per-occurrence
+    text-STEP parse. The tree is the one the bytes map to: the result a build
+    wrote the file from, once a parse of the file verified it holds that result
+    within the display tolerance (``cadgen.store.exports``), else the compile of
+    the file's own bytes, so a warm load and a cold parse agree. Per-occurrence
     and prototype STEP colors are applied via ``scene_to_build123d_compound``,
     so the returned shape is a colored drop-in. Cache misses compile and return
     through the same canonical representation as hits.
@@ -170,12 +175,6 @@ def import_step(step_path: Path, *, label: str | None = None) -> Any:
     # name, and deriving it from the path would make identical STEP content
     # produce different trees depending on where the file happens to live.
     return scene_to_build123d_compound(scene, label=label)
-
-
-def scene_occurrence_prototype_shape(scene: LoadedStepScene, node: OccurrenceNode) -> Any:
-    if node.prototype_key is None or node.prototype_key not in scene.prototype_shapes:
-        raise RuntimeError(f"Occurrence {occurrence_selector_id(node)} has no prototype shape")
-    return scene.prototype_shapes[node.prototype_key]
 
 
 def prototype_topology(shape: Any) -> dict[str, Any]:
@@ -214,55 +213,23 @@ def prototype_topology(shape: Any) -> dict[str, Any]:
     }
 
 
-def _prototype_topologies(scene: LoadedStepScene) -> dict[int, dict[str, Any]]:
-    """:func:`prototype_topology` of every prototype key. A prototype the scene
-    says was decoded from a stored component (``prototype_components``) is read
-    from the store by that component's BREP and measured, from the scene's own
-    shape, only when the entry is missing; so a scene that defers decoding its
-    prototypes decodes none whose facts are stored."""
-    from cadgen.store.bounds import cached_component_topology
-
-    components = getattr(scene, "prototype_components", None) or {}
-    facts: dict[int, dict[str, Any]] = {}
-    for key in scene.prototype_shapes:
-        component = components.get(key)
-        if component is None:
-            facts[key] = prototype_topology(scene.prototype_shapes[key])
-            continue
-        codec, brep = component
-        facts[key] = cached_component_topology(
-            codec, brep, lambda key=key: prototype_topology(scene.prototype_shapes[key]))
-    return facts
-
-
-def _scene_mesh_resolution_hints(scene: LoadedStepScene) -> dict[str, Any]:
-    topologies = _prototype_topologies(scene)
+def topology_hints(topologies: Mapping[Any, Mapping[str, Any]],
+                   leaves: Iterable[tuple[Any, Sequence[float]]]) -> dict[str, Any]:
+    """What the adaptive edge policy classifies a tree by: ``topologies``, each distinct
+    component's facts (:func:`prototype_topology`) by its key, and ``leaves``, each placed
+    occurrence as its component's key and its world transform (16 numbers, row major).
+    Counts per occurrence and per component, the whole's diagonal and the scores the
+    ladder reads (:func:`adaptive_mesh_resolution_from_hints`)."""
+    leaves = list(leaves)
     prototype_face_counts = {key: facts["faces"] for key, facts in topologies.items()}
     prototype_edge_counts = {key: facts["edges"] for key, facts in topologies.items()}
     prototype_curved_face_counts = {key: facts["curvedFaces"] for key, facts in topologies.items()}
     prototype_curved_edge_counts = {key: facts["curvedEdges"] for key, facts in topologies.items()}
 
-    leaves = scene_leaf_occurrences(scene)
-    occurrence_face_count = sum(
-        prototype_face_counts.get(int(node.prototype_key), 0)
-        for node in leaves
-        if node.prototype_key is not None
-    )
-    occurrence_edge_count = sum(
-        prototype_edge_counts.get(int(node.prototype_key), 0)
-        for node in leaves
-        if node.prototype_key is not None
-    )
-    occurrence_curved_face_count = sum(
-        prototype_curved_face_counts.get(int(node.prototype_key), 0)
-        for node in leaves
-        if node.prototype_key is not None
-    )
-    occurrence_curved_edge_count = sum(
-        prototype_curved_edge_counts.get(int(node.prototype_key), 0)
-        for node in leaves
-        if node.prototype_key is not None
-    )
+    occurrence_face_count = sum(prototype_face_counts.get(key, 0) for key, _transform in leaves)
+    occurrence_edge_count = sum(prototype_edge_counts.get(key, 0) for key, _transform in leaves)
+    occurrence_curved_face_count = sum(prototype_curved_face_counts.get(key, 0) for key, _transform in leaves)
+    occurrence_curved_edge_count = sum(prototype_curved_edge_counts.get(key, 0) for key, _transform in leaves)
     prototype_face_count = sum(prototype_face_counts.values())
     prototype_edge_count = sum(prototype_edge_counts.values())
     prototype_curved_face_count = sum(prototype_curved_face_counts.values())
@@ -283,16 +250,16 @@ def _scene_mesh_resolution_hints(scene: LoadedStepScene) -> dict[str, Any]:
     # only thing size contributes to the profile, and the scenes where size
     # matters most (thousands of occurrence faces, e.g. a full launch stack)
     # are exactly the ones a face-count guard would skip. The cost is small:
-    # _bbox_from_shape uses BRepBndLib without tessellation per unique
-    # prototype, plus an 8-corner transform per leaf occurrence.
+    # each component's loose box is among its facts, plus an 8-corner
+    # transform per leaf occurrence.
     prototype_boxes = {
         key: _bbox_from_points([facts["looseBox"][:3], facts["looseBox"][3:]])
         for key, facts in topologies.items()
     }
     occurrence_boxes = [
-        _transform_bbox(prototype_boxes[int(node.prototype_key)], node.transform)
-        for node in leaves
-        if node.prototype_key is not None and int(node.prototype_key) in prototype_boxes
+        _transform_bbox(prototype_boxes[key], tuple(transform))
+        for key, transform in leaves
+        if key in prototype_boxes
     ]
     bbox = _merge_bbox(occurrence_boxes) if occurrence_boxes else _bbox_from_points([])
     diagonal: float | None = float(bbox.get("diag") or 0.0)
@@ -327,12 +294,12 @@ def adaptive_mesh_resolution_from_hints(hints: dict[str, Any]) -> AdaptiveMeshRe
     """Classify a scene's topology into a render ``profile``.
 
     The profile is the ONE thing this resolver still decides, and it decides it
-    for edge rendering: ``_edge_visibility_classes_for_resolution`` turns
-    profile + hints into the visibility classes the tree is built with, so a
-    scene that lands on ``coarse-assembly`` renders feature edges only. It
-    decides nothing about tessellation — the one tessellator is JS
-    (``packages/core/src/lib/surf/tessellate.js``) and takes relative
-    tolerances of its own.
+    for edge rendering: :func:`edge_visibility_classes` turns profile + hints
+    into the visibility classes the tree is built with, so a tree that lands on
+    ``coarse-assembly`` renders feature edges only. It
+    decides nothing about meshing — the one mesher is cadgen's tessellator
+    (``cadgen._internal.tessellate``), at the relative tolerances each request
+    names.
 
     The thresholds below are therefore a complexity ladder, not a quality
     ladder: each rung says "this much topology", and only the top two rungs
@@ -374,6 +341,13 @@ def adaptive_mesh_resolution_from_hints(hints: dict[str, Any]) -> AdaptiveMeshRe
     return AdaptiveMeshResolution(profile=profile, hints=hints)
 
 
-def adaptive_mesh_resolution_for_scene(scene: LoadedStepScene) -> AdaptiveMeshResolution:
-    return adaptive_mesh_resolution_from_hints(_scene_mesh_resolution_hints(scene))
+def edge_visibility_classes(hints: Mapping[str, Any]) -> tuple[str, ...]:
+    """The edge classes a tree built over ``hints`` (:func:`topology_hints`) renders:
+    feature edges only where the profile is large or coarse, or past 8000 occurrence
+    edges; every class otherwise."""
+    from cadgen._internal.glb_topology import STEP_EDGE_VISIBILITY_CLASSES, normalize_step_edge_render_visibility_classes
 
+    profile = adaptive_mesh_resolution_from_hints(dict(hints)).profile
+    if profile in {"large-topology", "coarse-assembly"} or int(hints["occurrenceEdgeCount"]) >= 8000:
+        return (STEP_EDGE_VISIBILITY_CLASSES["FEATURE"],)
+    return normalize_step_edge_render_visibility_classes(None)

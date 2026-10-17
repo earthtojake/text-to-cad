@@ -1,4 +1,5 @@
-"""The build feed reports what a build of a STEP file -- named by its absolute path -- is doing, never geometry."""
+"""The build feed reports what a build of a STEP file -- named by its absolute path -- is doing, and names
+the objects of its preview revision: never geometry."""
 from __future__ import annotations
 
 import os
@@ -32,8 +33,50 @@ class BuildStatusTests(unittest.TestCase):
         # `file` is the catalog's spelling of the file: its absolute path, with "/".
         self.assertEqual((result["state"], result["phase"], result["file"]),
                          ("building", "tessellating", self.output.replace(os.sep, "/")))
-        for private in ("subject", "storeRoot", "preview", "saved", "previewUnavailable", "superseded"):
+        # The preview revision is names: the tree published, no parts yet, no annotations.
+        self.assertEqual(result["preview"], {"tree": "a" * 64, "producer": None, "parts": {}, "complete": False,
+                                             "annotations": None})
+        for private in ("subject", "storeRoot", "previews", "savedResults", "previewUnavailable", "superseded"):
             self.assertNotIn(private, result)
+        self.assertIsNone(result["saved"], "nothing written yet")
+
+    def test_the_saved_file_is_the_feeds_own_event_from_the_moment_it_lands(self):
+        """A build records its result (its preview, then `done`) and writes its file after
+        (STORE.md §3, *Exports*): the feed names the save the moment the ledger has it,
+        whatever the build's state, and the viewer reads the catalog then."""
+        building = self.job(previews={self.output: {"tree": "a" * 64}},
+                            savedResults={self.output: {"tree": "a" * 64, "documentHash": "d" * 64}})
+        result = preview_status(self.output, jobs=[building])
+        self.assertEqual((result["state"], result["saved"]), ("building", {"tree": "a" * 64, "documentHash": "d" * 64}))
+        # Another output the same build saved is not this file's event.
+        other = self.job(savedResults={str(self.root / "other.step"): {"tree": "a" * 64, "documentHash": "d" * 64}})
+        self.assertIsNone(preview_status(self.output, jobs=[other])["saved"])
+
+    def test_the_status_names_the_preview_revision_and_its_annotations_by_their_objects(self):
+        from cadgen.catalog import artifact_file_hash
+
+        producer = {"build123d": "0.11.1", "ocp": "7.9.3.1", "cadqueryOcp": "7.9.3.1.1"}
+        published = self.job(previews={self.output: {"tree": "a" * 64, "producer": producer, "parts": {"c1": "k1"},
+                                                     "complete": True}},
+                             annotations={self.output: {"tree": "a" * 64, "object": "b" * 64}})
+        self.assertEqual(preview_status(self.output, jobs=[published])["preview"],
+                         {"tree": "a" * 64, "producer": producer, "parts": {"c1": "k1"}, "complete": True,
+                          "annotations": "b" * 64})
+        # Annotations resolved against another tree are not this preview's.
+        stale = self.job(previews={self.output: {"tree": "a" * 64}},
+                         annotations={self.output: {"tree": "c" * 64, "object": "b" * 64}})
+        self.assertIsNone(preview_status(self.output, jobs=[stale])["preview"]["annotations"])
+        # Before the result exists there is no revision.
+        self.assertIsNone(preview_status(self.output, jobs=[self.job()])["preview"])
+        # A finished build keeps its preview until the file moves past it, when it is dropped.
+        Path(self.output).write_bytes(b"saved document")
+        done = self.job(state="done", finishedAt=2000.0, previews={self.output: {"tree": "a" * 64}},
+                        savedResults={self.output: {"tree": "d" * 64, "documentHash": artifact_file_hash(Path(self.output))}})
+        self.assertEqual(preview_status(self.output, jobs=[done])["preview"]["tree"], "a" * 64)
+        Path(self.output).write_bytes(b"written by another build")
+        moved = preview_status(self.output, jobs=[done])
+        self.assertTrue(moved["superseded"])
+        self.assertIsNone(moved["preview"])
 
     def test_changed_feed_uses_its_atomic_job_snapshot_and_only_exposes_cursor(self):
         payload = {"jobsCursor": "epoch:8", "jobs": [self.job()]}
@@ -71,20 +114,6 @@ class BuildStatusTests(unittest.TestCase):
     def test_compiling_saved_bytes_cannot_supersede_an_editing_request(self):
         jobs = [self.job(1), self.job(2, tool="step-compile", state="done")]
         self.assertEqual(preview_status(self.output, jobs=jobs)["revision"], 1)
-
-    def test_coalesced_subscriber_does_not_advance_edit_ordering(self):
-        from cadgen.daemon.jobs import JobLedger
-
-        ledger = JobLedger()
-        producer = ledger.start(tool="run", subject="model.py", store_root=self.store)
-        producer.update(outputs=[self.output], state="building")
-        follower = ledger.start(tool="run", subject="model.py", store_root=self.store, editing_producer=False)
-        follower.update(outputs=[self.output])
-        result = preview_status(self.output, jobs=ledger.snapshot())
-        self.assertEqual(result["request"], producer["id"])
-        ledger.accept_editing_producer(follower)
-        result = preview_status(self.output, jobs=ledger.snapshot())
-        self.assertEqual(result["request"], follower["id"])
 
     def test_other_store_and_output_are_not_visible(self):
         result = preview_status(self.output, jobs=[

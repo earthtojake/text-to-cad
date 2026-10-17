@@ -119,6 +119,7 @@ it('keeps one section order in every preset, Display first', () => {
 });
 
 // Explode and Cross-section remain independent STEP tools, with their own stack panels.
+const BOUNDS = { min: [0, -50, 0], max: [100, 50, 40] };
 function Tools() {
   const [store] = React.useState(() => createViewSettingsStore({ mode: 'solid' }));
   const { display: settings } = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -127,8 +128,8 @@ function Tools() {
     <button type="button" onClick={() => store.setEnabled('exploded', !resolveViewSettings(settings).exploded.enabled)}>Explode</button>
     <button type="button" onClick={() => store.setEnabled('clip', !resolveViewSettings(settings).clip.enabled)}>Cross-section</button>
     <ExplodeControls viewSettings={settings} onViewSettingsPatch={store.patch} />
-    <output aria-label="Clip summary">{clipSummary(settings)}</output>
-    <CrossSectionControls viewSettings={settings} onViewSettingsPatch={store.patch} bounds={{ min: [0, 0, 0], max: [100, 100, 100] }} />
+    <output aria-label="Clip summary">{clipSummary(settings, BOUNDS)}</output>
+    <CrossSectionControls viewSettings={settings} onViewSettingsPatch={store.patch} bounds={BOUNDS} />
   </>;
 }
 
@@ -154,11 +155,11 @@ it('Explode turns on at half, its slider sets the amount, zero removes it, and i
   expect(amount().getAttribute('aria-valuenow')).toBe('50');
 });
 
-it('Cross-section turns on at an X centre cut; its body is the axis dropdown and one slider: the slider sets the amount, zero removes it, the dropdown moves the cut', async () => {
+it('Cross-section turns on at an X centre cut; its body is the axis dropdown and one slider: the slider places the plane in millimetres, zero removes it, the dropdown keeps the share on the new axis', async () => {
   const user = userEvent.setup();
   render(<Tools />);
   await user.click(screen.getByRole('button', { name: 'Cross-section' }));
-  expect(resolveViewSettings(current).clip.offsets.x).toBe(0.5);
+  expect(resolveViewSettings(current).clip).toEqual({ enabled: true, axis: 'x', invert: false });
   // One slider and nothing else: no typed value, no Flip.
   expect(screen.queryByRole('textbox', { name: 'Clip amount value' })).toBeNull();
   expect(screen.queryByRole('checkbox', { name: 'Flip' })).toBeNull();
@@ -172,13 +173,22 @@ it('Cross-section turns on at an X centre cut; its body is the axis dropdown and
   expect(axis.compareDocumentPosition(amount()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole('status', { name: 'Clip summary' }).textContent).toBe('50%');
   amount().focus();
+  await user.keyboard('{ArrowRight}');
+  // 50.1% of X's 0..100 cut away from the top: the plane stands at x = 49.9 mm.
+  expect(resolveViewSettings(current).clip.at).toBeCloseTo(49.9, 9);
   await user.keyboard('{End}');
-  expect(resolveViewSettings(current).clip.offsets.x).toBe(0);
+  expect(resolveViewSettings(current).clip.at).toBe(0);
   expect(screen.getByRole('status', { name: 'Clip summary' }).textContent).toBe('100%');
+  await user.keyboard('{PageDown}');
+  const share = Number(amount().getAttribute('aria-valuenow'));
+  expect(share).toBeGreaterThan(50);
+  expect(share).toBeLessThan(100);
   fireEvent.keyDown(axis, { key: 'ArrowDown' });
   fireEvent.click(screen.getByRole('option', { name: 'Y', exact: true }));
   expect(resolveViewSettings(current).clip.axis).toBe('y');
-  expect(resolveViewSettings(current).clip.offsets.y).toBe(0);
+  // The same share of Y's -50..50.
+  expect(resolveViewSettings(current).clip.at).toBeCloseTo(50 - share, 9);
+  expect(Number(amount().getAttribute('aria-valuenow'))).toBeCloseTo(share, 9);
   // The dropdown hands focus back to its trigger as it closes; take it to the slider after that.
   await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   await act(async () => {});
@@ -224,7 +234,7 @@ it('Explode and Clip report their value at their step\'s precision, never float 
   render(<ExplodeControls viewSettings={{ exploded: { enabled: true, amount: 0.28 } }} onViewSettingsPatch={() => {}} />);
   expect(screen.getByRole('slider', { name: 'Explode amount' }).getAttribute('aria-valuenow')).toBe('28');
   cleanup();
-  render(<CrossSectionControls viewSettings={{ clip: { enabled: true, axis: 'x', offsets: { x: 0.7, y: 1, z: 1 }, invert: false } }}
+  render(<CrossSectionControls viewSettings={{ clip: { enabled: true, axis: 'x', at: 70, invert: false } }}
     onViewSettingsPatch={() => {}} bounds={{ min: [0, 0, 0], max: [100, 100, 100] }} />);
   expect(screen.getByRole('slider', { name: 'Clip amount' }).getAttribute('aria-valuenow')).toBe('30');
 });

@@ -1,62 +1,53 @@
-// The LOD picking invariant (the regression behind "striped highlights and
-// picks through faces"): a composed package's selector runtime and its display
-// mesh must come from ONE tessellation of each component. faceRuns are
-// triangle ranges of a specific tessellation, so faceIds built from a
-// level-0 runtime against a finer level's mesh mislabel triangles. These
-// tests pin the invariant with real geometry at two levels, prove the
-// mismatch is detectable (the test would have caught the bug), and prove
-// swapCompositionBundle restores it — the exact repair the LOD swap performs.
+// The picking invariant (the regression behind "striped highlights and picks
+// through faces"): a composed package's selector runtime and its display mesh
+// must come from ONE mesh of each component. faceRuns are triangle ranges of a
+// specific mesh, so faceIds built from another mesh's runtime mislabel
+// triangles. These tests pin the invariant with real geometry and pin the
+// package composer to a full recomposition.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
 
-import { parseSurf } from "@text-to-cad/core/lib/surf/container.js";
-import { tessellateComponent } from "@text-to-cad/core/lib/surf/tessellate.js";
-import { buildMeshDataFromSurf } from "@text-to-cad/core/lib/surf/surfMeshData.js";
-import { buildSelectorBundleFromSurf } from "@text-to-cad/core/lib/surf/surfSelectorBundle.js";
+import { decodeComponentTessellation } from "@text-to-cad/core/lib/parts/tessellationCache.js";
+import { buildComponentMeshData } from "@text-to-cad/core/lib/parts/partMeshData.js";
+import { joinSelectorTable, parseSelectorTable } from "@text-to-cad/core/lib/parts/selectorTable.js";
 import { buildGlbFaceIdsForPart, TOPOLOGY_FACE_ID_NONE } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
 import { buildEdgeChainGraph } from "../../../workbench/edgeChainSelection.js";
 import { buildTangentFaceGraph } from "../../../workbench/tangentFaceSelection.js";
 
 import {
-  baseLodReferenceComposition,
-  reconcileLodReferencePublication,
   buildPackageOccurrenceRuntimes,
   composePackageSelectorRuntime,
-  compositionUsesComponent,
   createPackageReferenceComposer,
-  reconcileLivePackageSelectorBundles,
-  swapCompositionBundle
 } from "./packageReferenceComposition.js";
 
 const require = createRequire(import.meta.url);
-const FIXTURE = path.join(
-  path.dirname(require.resolve("@text-to-cad/core/lib/surf/container.js")),
-  "fixtures",
-  "sun_gear.surf"
-);
+// The gear's selector table and cadgen's stored display mesh of it (core's part fixtures).
+const FIXTURES = path.join(path.dirname(require.resolve("@text-to-cad/core/lib/parts/tessellationCache.js")), "fixtures");
 
-function loadLevel(chordTolerance) {
-  const buffer = fs.readFileSync(FIXTURE);
-  const { index, floats } = parseSurf(
-    buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-  );
-  const component = tessellateComponent(index, floats, chordTolerance ? { chordTolerance } : {});
+// Each call joins the table anew: a new bundle object over the same geometry, as a new file
+// revision's is.
+function loadMesh() {
+  const table = parseSelectorTable(fs.readFileSync(path.join(FIXTURES, "sun_gear.selectors.json"), "utf8"));
+  const decoded = decodeComponentTessellation(new Uint8Array(fs.readFileSync(path.join(FIXTURES, "sun_gear.glb"))));
   return {
-    meshData: buildMeshDataFromSurf(index, floats, { component }),
-    bundle: buildSelectorBundleFromSurf(index, floats, { component }),
-    component
+    meshData: buildComponentMeshData(decoded.component),
+    bundle: joinSelectorTable(table, decoded.component),
+    component: decoded.component
   };
 }
 
 const ENTRY = { fileRefPrefix: "sun_gear.step", kind: "assembly", file: "sun_gear.step" };
-const OCCURRENCES = [{ id: "o1.1", component: "c0", transform: null }];
+// An occurrence token of the tree's shape (`o:` + 12 hex) for the n-th placed occurrence.
+const occurrenceToken = (index) => `o:${(0xa0 + index).toString(16).padStart(12, "0")}`;
+const GEAR = occurrenceToken(0);
+const OCCURRENCES = [{ id: GEAR, component: "c0", transform: null }];
 
 function partForMeshData(meshData) {
   return {
-    occurrenceId: "o1.1",
+    occurrenceId: GEAR,
     primitiveIndex: 0,
     triangleOffset: 0,
     triangleCount: Math.floor(meshData.indices.length / 3)
@@ -95,71 +86,17 @@ function faceIdInvariant(meshData, runtime) {
   return { ok: true, reason: "" };
 }
 
-test("levels tessellate differently (precondition for the suite)", () => {
-  const level0 = loadLevel(0);
-  const level1 = loadLevel(5e-4);
-  assert.notEqual(
-    Math.floor(level0.meshData.indices.length / 3),
-    Math.floor(level1.meshData.indices.length / 3),
-    "fixture must produce different triangle counts per level"
-  );
-});
-
-test("matched level: every displayed triangle maps to a face row", () => {
-  for (const chord of [0, 5e-4]) {
-    const { meshData, bundle } = loadLevel(chord);
-    const runtime = composePackageSelectorRuntime(ENTRY, OCCURRENCES, { c0: bundle }, {
-      singleComponentPart: false
-    });
-    const verdict = faceIdInvariant(meshData, runtime);
-    assert.ok(verdict.ok, `chord=${chord}: ${verdict.reason}`);
-  }
-});
-
-test("MISmatched levels violate the invariant — the regression this suite exists for", () => {
-  const level0 = loadLevel(0);
-  const level1 = loadLevel(5e-4);
-  const level0Runtime = composePackageSelectorRuntime(ENTRY, OCCURRENCES, { c0: level0.bundle }, {
+test("every displayed triangle maps to a face row of its own mesh's runtime", () => {
+  const { meshData, bundle } = loadMesh();
+  const runtime = composePackageSelectorRuntime(ENTRY, OCCURRENCES, { c0: bundle }, {
     singleComponentPart: false
   });
-  const verdict = faceIdInvariant(level1.meshData, level0Runtime);
-  assert.ok(
-    !verdict.ok,
-    "a level-0 runtime labeling a level-1 mesh must be detectably wrong; if this ever " +
-      "passes, the invariant check has lost its teeth and the striped-highlight/" +
-      "through-pick regression can return unseen"
-  );
-});
-
-test("swapCompositionBundle restores the invariant after a level swap", () => {
-  const level0 = loadLevel(0);
-  const level1 = loadLevel(5e-4);
-  const composition = {
-    file: ENTRY.file,
-    entry: ENTRY,
-    occurrencesToLoad: OCCURRENCES,
-    bundleByCid: { c0: level0.bundle },
-    loadedTopologyKey: "",
-    isSingleComponentPart: false
-  };
-  assert.ok(compositionUsesComponent(composition, "c0"));
-  assert.ok(!compositionUsesComponent(composition, "missing"));
-  const swapped = swapCompositionBundle(composition, "c0", level1.bundle);
-  // Pure swap: the original composition is untouched (a stale-apply race must
-  // not corrupt the remembered composition).
-  assert.equal(composition.bundleByCid.c0, level0.bundle);
-  const runtime = composePackageSelectorRuntime(
-    swapped.entry,
-    swapped.occurrencesToLoad,
-    swapped.bundleByCid,
-    { singleComponentPart: swapped.isSingleComponentPart }
-  );
-  const verdict = faceIdInvariant(level1.meshData, runtime);
+  const verdict = faceIdInvariant(meshData, runtime);
   assert.ok(verdict.ok, verdict.reason);
 });
 
 test("occurrence runtimes build identically through both entrypoints", () => {
-  const { bundle } = loadLevel(0);
+  const { bundle } = loadMesh();
   const runtimes = buildPackageOccurrenceRuntimes(ENTRY, OCCURRENCES, { c0: bundle }, {
     singleComponentPart: false
   });
@@ -167,108 +104,7 @@ test("occurrence runtimes build identically through both entrypoints", () => {
   // The occurrence namespace is what keeps picks aligned with the composed
   // mesh's sourcePartRanges — pin it.
   const reference = runtimes[0].references?.[0];
-  assert.ok(String(reference?.id || "").includes("o1.1"), `reference ids carry the occurrence: ${reference?.id}`);
-});
-
-test("topology landing after a LOD swap composes from the live bundle", async () => {
-  let releaseLevel0;
-  const level0Pending = new Promise((resolve) => { releaseLevel0 = resolve; });
-  let live = { levelByCid: { c0: 0 }, bundleByCid: {} };
-  const load = (async () => {
-    const level0Bundle = await level0Pending;
-    return reconcileLivePackageSelectorBundles({
-      cids: ["c0"],
-      initialBundleByCid: { c0: level0Bundle },
-      initialKeyByCid: { c0: "c0:t0" },
-      snapshotLiveLod: () => live,
-      keyForLevel: (cid, level) => `${cid}:t${level}`,
-      loadForLevel: async () => assert.fail("published live bundle needs no second fetch")
-    });
-  })();
-  const level0Bundle = { level: 0 };
-  const level1Bundle = { level: 1 };
-  live = { levelByCid: { c0: 1 }, bundleByCid: { c0: level1Bundle } };
-  releaseLevel0(level0Bundle);
-  assert.deepEqual(await load, { c0: level1Bundle });
-});
-
-test("missing live selector state fetches the exact level and rechecks after another swap", async () => {
-  let live = { levelByCid: { c0: 1 }, bundleByCid: {} };
-  const fetched = [];
-  const level2Bundle = { level: 2 };
-  const result = await reconcileLivePackageSelectorBundles({
-    cids: ["c0"],
-    initialBundleByCid: { c0: { level: 0 } },
-    initialKeyByCid: { c0: "c0:t0" },
-    snapshotLiveLod: () => live,
-    keyForLevel: (cid, level) => `${cid}:t${level}`,
-    loadForLevel: async (cid, level, key) => {
-      fetched.push({ cid, level, key });
-      live = { levelByCid: { c0: 2 }, bundleByCid: { c0: level2Bundle } };
-      return { level: 1 };
-    }
-  });
-  assert.deepEqual(fetched, [{ cid: "c0", level: 1, key: "c0:t1" }]);
-  assert.deepEqual(result, { c0: level2Bundle });
-});
-
-test("an obsolete reference job stops before publishing", async () => {
-  let current = true;
-  const result = await reconcileLivePackageSelectorBundles({
-    cids: ["c0"],
-    initialBundleByCid: { c0: { level: 0 } },
-    initialKeyByCid: { c0: "c0:t0" },
-    snapshotLiveLod: () => ({ levelByCid: { c0: 1 }, bundleByCid: {} }),
-    keyForLevel: (cid, level) => `${cid}:t${level}`,
-    loadForLevel: async () => {
-      current = false;
-      return { level: 1 };
-    },
-    isCurrent: () => current
-  });
-  assert.equal(result, null);
-});
-
-test("late selectors preserve unrelated CIDs in the candidate and exact base-level recovery overlay", () => {
-  const low = { level: "base" }, high = { level: "live" }, unrelated = { level: "unrelated" };
-  const composition = { entry: ENTRY, loadedTopologyKey: "newly-demanded-subset",
-    occurrencesToLoad: [...OCCURRENCES, { id: "other", component: "other" }],
-    bundleByCid: { c0: high, other: unrelated } };
-  const base = baseLodReferenceComposition(composition, { cid: "c0" }, low);
-  assert.equal(base.occurrencesToLoad, composition.occurrencesToLoad);
-  assert.equal(base.loadedTopologyKey, composition.loadedTopologyKey);
-  assert.equal(base.bundleByCid.other, unrelated); assert.equal(base.bundleByCid.c0, low);
-  assert.equal(composition.bundleByCid.c0, high, "candidate remains immutable");
-  assert.equal(baseLodReferenceComposition(composition, { cid: "not-demanded" }, null), composition);
-  assert.equal(baseLodReferenceComposition(composition, { cid: "c0", phase: "restoring" }, null), composition);
-  assert.throws(() => baseLodReferenceComposition(composition, { cid: "c0" }, null), /Previous detail/);
-});
-
-test("reference publication rechecks pending ownership after base-selector and live-selector awaits", async () => {
-  const first = { cid: "a" }, second = { cid: "b" };
-  let pending = first, current = true, calls = 0;
-  const result = await reconcileLodReferencePublication({ pendingForContext: () => pending,
-    loadBaseBundle: async owner => { if (owner === first) pending = second; return owner.cid; },
-    reconcile: async () => { calls++; return { current: pending.cid }; }, isCurrent: () => current });
-  assert.equal(result.pending, second); assert.equal(result.baseBundle, "b"); assert.equal(calls, 2);
-  const stopped = await reconcileLodReferencePublication({ pendingForContext: () => pending,
-    loadBaseBundle: async () => { current = false; return "unused"; },
-    reconcile: async () => { throw new Error("must not publish after abort"); }, isCurrent: () => current });
-  assert.equal(stopped, null);
-});
-
-test("a mixed-level batch restores every changed selector bundle while keeping late unrelated demand", () => {
-  const lowA = { level: "base-a" }, highA = { level: "live-a" };
-  const lowB = { level: "base-b" }, highB = { level: "live-b" }, other = {};
-  const occurrencesToLoad = [...OCCURRENCES, { id: "b", component: "b" }, { id: "late", component: "late" }];
-  const candidate = { entry: ENTRY, occurrencesToLoad, loadedTopologyKey: "late-demand",
-    bundleByCid: { c0: highA, b: highB, late: other } };
-  const base = baseLodReferenceComposition(candidate, { items: [{ cid: "c0" }, { cid: "b" }] },
-    { c0: lowA, b: lowB });
-  assert.equal(base.occurrencesToLoad, occurrencesToLoad); assert.equal(base.loadedTopologyKey, "late-demand");
-  assert.equal(base.bundleByCid.c0, lowA); assert.equal(base.bundleByCid.b, lowB); assert.equal(base.bundleByCid.late, other);
-  assert.equal(candidate.bundleByCid.c0, highA); assert.equal(candidate.bundleByCid.b, highB);
-  assert.throws(() => baseLodReferenceComposition(candidate, { items: [{ cid: "c0" }, { cid: "b" }] }, { c0: lowA }), /Previous detail/);
+  assert.ok(String(reference?.id || "").includes(GEAR), `reference ids carry the occurrence: ${reference?.id}`);
 });
 
 // ---- incremental composition: the same runtime as composing everything again ----------------
@@ -276,30 +112,30 @@ test("a mixed-level batch restores every changed selector bundle while keeping l
 function placedOccurrence(index, component = "c0") {
   const angle = 0.5 * index;
   return {
-    id: `o1.${Math.floor(index / 4) + 1}.${(index % 4) + 1}`,
+    id: occurrenceToken(index),
     component,
     transform: [Math.cos(angle), -Math.sin(angle), 0, 40 * index, Math.sin(angle), Math.cos(angle), 0, -7 * index, 0, 0, 1, 3.5 * index, 0, 0, 0, 1]
   };
 }
 
 test("the package composer composes exactly what recomposing every occurrence does", () => {
-  const level0 = loadLevel(0).bundle;
-  const level1 = loadLevel(0.02).bundle;
-  const revised = loadLevel(0).bundle; // the same geometry from a new file revision: a new bundle
+  const first = loadMesh().bundle;
+  const replaced = loadMesh().bundle; // the same geometry under a new bundle, as a new revision's is
+  const revised = loadMesh().bundle;
   const occurrences = Array.from({ length: 10 }, (_, index) => placedOccurrence(index, index % 3 ? "c0" : "c1"));
   const composer = createPackageReferenceComposer();
   const steps = [
-    ["nothing loaded", ENTRY, [], { c0: level0, c1: level0 }],
-    ["one part", ENTRY, occurrences.slice(0, 1), { c0: level0, c1: level0 }],
-    ["parts appended as they scroll on", ENTRY, occurrences.slice(0, 4), { c0: level0, c1: level0 }],
-    ["more appended", ENTRY, occurrences.slice(0, 8), { c0: level0, c1: level0 }],
-    ["one unloaded from the middle", ENTRY, [...occurrences.slice(0, 3), ...occurrences.slice(4, 8)], { c0: level0, c1: level0 }],
-    ["it comes back", ENTRY, occurrences.slice(0, 8), { c0: level0, c1: level0 }],
-    ["a component swapped to a finer LOD level", ENTRY, occurrences.slice(0, 8), { c0: level1, c1: level0 }],
-    ["appended at the finer level", ENTRY, occurrences, { c0: level1, c1: level0 }],
-    ["the swap restored", ENTRY, occurrences, { c0: level0, c1: level0 }],
+    ["nothing loaded", ENTRY, [], { c0: first, c1: first }],
+    ["one part", ENTRY, occurrences.slice(0, 1), { c0: first, c1: first }],
+    ["parts appended as they scroll on", ENTRY, occurrences.slice(0, 4), { c0: first, c1: first }],
+    ["more appended", ENTRY, occurrences.slice(0, 8), { c0: first, c1: first }],
+    ["one unloaded from the middle", ENTRY, [...occurrences.slice(0, 3), ...occurrences.slice(4, 8)], { c0: first, c1: first }],
+    ["it comes back", ENTRY, occurrences.slice(0, 8), { c0: first, c1: first }],
+    ["a component's bundle replaced", ENTRY, occurrences.slice(0, 8), { c0: replaced, c1: first }],
+    ["appended under the replacement", ENTRY, occurrences, { c0: replaced, c1: first }],
+    ["the first bundle back", ENTRY, occurrences, { c0: first, c1: first }],
     ["a changed file revision", { ...ENTRY, fileRefPrefix: "sun_gear_v2.step" }, occurrences.slice(0, 5), { c0: revised, c1: revised }],
-    ["a single-component part", { ...ENTRY, kind: "part" }, occurrences.slice(0, 1), { c0: level0 }],
+    ["a single-component part", { ...ENTRY, kind: "part" }, occurrences.slice(0, 1), { c0: first }],
   ];
   for (const [label, entry, loaded, bundleByCid] of steps) {
     const singleComponentPart = entry.kind === "part";
@@ -314,15 +150,15 @@ test("the package composer composes exactly what recomposing every occurrence do
   }
 });
 
-test("the package composer keeps the LOD picking invariant", () => {
-  const level1 = loadLevel(0.02);
+test("the package composer keeps the picking invariant", () => {
+  const mesh = loadMesh();
   const composer = createPackageReferenceComposer();
-  const runtime = composePackageSelectorRuntime(ENTRY, OCCURRENCES, { c0: level1.bundle }, { composer });
-  assert.ok(faceIdInvariant(level1.meshData, runtime).ok);
+  const runtime = composePackageSelectorRuntime(ENTRY, OCCURRENCES, { c0: mesh.bundle }, { composer });
+  assert.ok(faceIdInvariant(mesh.meshData, runtime).ok);
 });
 
 test("the package composer builds each occurrence once and releases what stops being composed", () => {
-  const { bundle } = loadLevel(0);
+  const { bundle } = loadMesh();
   const occurrences = Array.from({ length: 6 }, (_, index) => placedOccurrence(index));
   const composer = createPackageReferenceComposer({ retainCompositions: 2 });
   const first = composePackageSelectorRuntime(ENTRY, occurrences.slice(0, 3), { c0: bundle }, { composer });
@@ -338,24 +174,26 @@ test("the package composer builds each occurrence once and releases what stops b
 });
 
 test("Group edges and Group faces group the same references through the package composer", () => {
-  // One square face bounded by four line edges that meet at shared corners, one tangent edge
-  // between two faces: chains and tangent groups both exist.
+  // One square face bounded by four line edges, three of them one chain as cadgen decided it,
+  // and one tangent edge between two faces of one tangent group: chains and groups both exist.
+  // The table's rows lead with their names (schema 3) and name no occurrence: the composer
+  // places them by each occurrence's token.
   const bundle = {
     manifest: {
       tables: {
-        occurrenceColumns: ["id"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "edgeStart", "edgeCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "faceStart", "faceCount", "segmentStart", "segmentCount", "visibilityClass"],
+        occurrenceColumns: ["bbox"],
+        shapeColumns: ["ordinal", "kind"],
+        faceColumns: ["name", "ordinal", "shape", "surfaceType", "edgeStart", "edgeCount", "tangentGroup"],
+        edgeColumns: ["name", "ordinal", "shape", "curveType", "faceStart", "faceCount", "segmentStart", "segmentCount", "visibilityClass", "chain"],
       },
-      occurrences: [["o1"]],
-      shapes: [["o1.s1", "o1", 1, "solid"]],
-      faces: [["o1.f1", "o1", "o1.s1", 1, "plane", 0, 4], ["o1.f2", "o1", "o1.s1", 2, "cylinder", 0, 1]],
+      occurrences: [[null]],
+      shapes: [[1, "solid"]],
+      faces: [["f:base.extrude1.1", 1, 1, "plane", 0, 4, 1], ["f:base.hole1.1", 2, 1, "cylinder", 0, 1, 1]],
       edges: [
-        ["o1.e1", "o1", "o1.s1", 1, "line", 0, 2, 0, 1, "tangent"],
-        ["o1.e2", "o1", "o1.s1", 2, "line", 0, 1, 1, 1, "feature"],
-        ["o1.e3", "o1", "o1.s1", 3, "line", 0, 1, 2, 2, "feature"],
-        ["o1.e4", "o1", "o1.s1", 4, "line", 0, 1, 4, 1, "feature"],
+        ["e:base.hole1.1", 1, 1, "line", 0, 2, 0, 1, "tangent", 1],
+        ["e:base.extrude1.1", 2, 1, "line", 0, 1, 1, 1, "feature", 2],
+        ["e:base.extrude1.2", 3, 1, "line", 0, 1, 2, 2, "feature", 2],
+        ["e:base.extrude1.3", 4, 1, "line", 0, 1, 4, 1, "feature", 2],
       ],
       relations: { faceEdgeRows: [0, 1, 2, 3, 0], edgeFaceRows: [0, 1, 0, 0, 0] },
     },

@@ -40,13 +40,13 @@ test("View has the same feature groups for every preset, with Render second", ()
 });
 
 test("group edits are sparse and disabling discards only that group's overrides", () => {
-  const view = panel({ mode: "render", floor: { color: "#abcdef", opacity: 0.8 }, clip: { enabled: true, offset: 0.3 } });
+  const view = panel({ mode: "render", floor: { color: "#abcdef", opacity: 0.8 }, clip: { enabled: true, at: 0.3 } });
   labelled(view.tree, "Floor color").props.onOpacityChange(0.4);
   assert.deepEqual(view.settings().floor, { color: "#abcdef", opacity: 0.4 });
   const floor = sections(view.tree).find(section => section.title === "Floor");
   floor.onEnabledChange(false);
   assert.deepEqual(view.settings().floor, { enabled: false });
-  assert.deepEqual(view.settings().clip, { enabled: true, offset: 0.3 });
+  assert.deepEqual(view.settings().clip, { enabled: true, at: 0.3 });
   floor.onEnabledChange(true);
   assert.deepEqual(resolveViewSettings(view.settings()).floor, resolveViewSettings({ mode: "render" }).floor);
   view.unmount();

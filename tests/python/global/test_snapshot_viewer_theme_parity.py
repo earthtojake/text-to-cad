@@ -80,7 +80,8 @@ class SharedDisplayContractParityTests(unittest.TestCase):
             {"background": {"opacity": 0.35}}, {"edges": {"visibility": "all", "color": "#fff"}},
             {"floor": {"placement": "lowest", "opacity": 1}},
             {"floor": {"finish": "glossy"}}, {"floor": {"placement": "origin", "finish": "matte"}},
-            {"clip": {"enabled": True, "axis": "y", "offset": 0.5, "offsets": {"x": 0, "y": 1}, "invert": False}},
+            {"clip": {"axis": "z", "at": -12.5, "invert": True}}, {"clip": {"enabled": False, "at": 3}},
+            {"clip": {"enabled": True, "axis": "y", "at": 0, "invert": False}},
             {"exploded": {"enabled": True, "amount": 1}},
         ]
         invalid = [
@@ -98,8 +99,9 @@ class SharedDisplayContractParityTests(unittest.TestCase):
             {"lighting": {"fill": "0.5"}}, {"floor": {"placement": "auto"}},
             {"floor": {"finish": "shiny"}}, {"floor": {"finish": True}},
             {"background": {"opacity": -0.1}}, {"background": {"color": "white"}},
-            {"clip": {"axis": "w"}}, {"clip": {"offsets": {"w": 0.5}}},
-            {"clip": {"offsets": None}}, {"exploded": {"amount": 1.01}},
+            {"clip": {"axis": "w"}},
+            {"exploded": {"amount": 1.01}},
+            *({"clip": {"at": value}} for value in (None, "3", True, [])),
         ]
         cases = valid + invalid
         python = python_accepts(cases, lambda value: validate_display_settings_values(value, source_label="parity"))

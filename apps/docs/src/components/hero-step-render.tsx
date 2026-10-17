@@ -14,23 +14,23 @@ import {
   firstAnimationClipId,
 } from "@text-to-cad/core/common/animationClock.js";
 import { CAD_SCENE_SCALE, buildModel } from "@text-to-cad/core/common/cadScene.js";
-import { loadSourceAnimation } from "@text-to-cad/core/common/renderModule.js";
+import { loadSourceAnimation } from "@text-to-cad/core/common/animationRuntime.js";
 import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 import {
   loadSource,
   packageSourceFromBaseUrl,
-  stepParameterRuntime,
 } from "@text-to-cad/core/common/source.js";
 import { cloneThemePresetSettings } from "@text-to-cad/core/common/themeSettings.js";
 
 // The hero renders the planetary gear STEP the way every @text-to-cad/core client
-// renders a STEP: the model's render package (exact surfaces, tessellated in
-// the browser) plus its sidecar (kinematics for the mate graph, copied
-// animation clips for choreography). No GLB export, no site-local gear math —
-// the same clip the viewer's Animation tab plays drives this scene.
+// renders a STEP: the model's render package (each component's mesh, as cadgen
+// made it) plus what cadgen resolved its sidecar into — the articulation of its
+// mates, and the clips' baked keyframes for choreography — as static files beside
+// the tree. No GLB export, no site-local gear math — the same clip the viewer's
+// Animation tool plays drives this scene.
 const HERO_PACKAGE_BASE_URL = "/hero/planetary";
-const HERO_SIDECAR_URL = "/hero/planetary_gear_assembly.step.json";
-const HERO_DOCUMENT_HASH = "58dfc3609e12077876821915a7aff14e2333359142c0fd3770d357d55044c77d";
+const HERO_ARTICULATION_URL = `${HERO_PACKAGE_BASE_URL}/articulation.json`;
+const HERO_ANIMATION_URL = `${HERO_PACKAGE_BASE_URL}/animation.json`;
 const HERO_STEP_CAD_PATH = "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step";
 const HERO_STEP_LABEL = "PLANETARY_GEAR_ASSEMBLY.STEP";
 const HERO_CLIP_ID = "meshCycle";
@@ -249,14 +249,18 @@ export function HeroStepRender() {
       try {
         setStatus("loading step");
         const resources = createHttpCadResourceProvider({ cache: "no-store" });
-        const descriptor = await resources.readJson(`${HERO_PACKAGE_BASE_URL}/assembly.json`);
+        const [descriptor, articulation, heroAnimation] = await Promise.all([
+          resources.readJson(`${HERO_PACKAGE_BASE_URL}/assembly.json`),
+          resources.readJson(HERO_ARTICULATION_URL),
+          resources.readJson(HERO_ANIMATION_URL),
+        ]);
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
-          stepParameterUrl: HERO_SIDECAR_URL,
-          documentHash: HERO_DOCUMENT_HASH,
+          articulation,
+          sourceAnimation: heroAnimation,
           cadPath: HERO_STEP_CAD_PATH,
         }, { resources });
-        const animation = await loadSourceAnimation(source.sourceSidecar, { name: "hero animation" });
+        const animation = await loadSourceAnimation({ animation: source.animation });
         const clips = (animation?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {
           return;
@@ -273,7 +277,7 @@ export function HeroStepRender() {
           theme: buildWorkbenchTheme(scheme),
           displayMode: "shaded_edges",
           edgeSettings: buildWorkbenchEdges(scheme),
-          stepParameters: stepParameterRuntime(source.stepParameterSource),
+          stepParameters: source.pose,
           scale: CAD_SCENE_SCALE.CAD,
           selection: {
             showEdges: true,

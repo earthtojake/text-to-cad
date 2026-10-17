@@ -1,8 +1,12 @@
+import { splitElementRef } from "../cadRefs.js";
+
 export const STEP_MODEL_ROOT_ID = "__step_model__";
 export const STEP_MODEL_RENDER_PART_ID = "__model__";
 export const STEP_TREE_TOPOLOGY_NODE_PREFIX = "step-topology:";
 
-const STEP_TREE_TOPOLOGY_SELECTOR_TYPES = new Set(["occurrence", "shape", "face", "edge"]);
+// A body carries no ref of its own: the occurrence names it, so the tree holds faces and
+// edges under their occurrence and nothing for a solid.
+const STEP_TREE_TOPOLOGY_SELECTOR_TYPES = new Set(["occurrence", "face", "edge"]);
 
 function normalizeString(value, fallback = "") {
   return String(value ?? fallback).trim();
@@ -144,12 +148,14 @@ function topologyReferenceSelector(reference) {
   return normalizeString(reference?.displaySelector || reference?.normalizedSelector || reference?.id);
 }
 
-function topologySelectorToken(selector) {
+// An element ref is `<occurrence token>/<element name>`: the element's name says what made
+// it, the owner the occurrence that places it.
+function topologySelectorElement(selector) {
   const normalizedSelector = normalizeString(selector);
   if (!normalizedSelector) {
     return "";
   }
-  return normalizedSelector.split(".").filter(Boolean).pop() || normalizedSelector;
+  return splitElementRef(normalizedSelector)?.element || normalizedSelector;
 }
 
 function topologyOccurrenceIdFromSelector(selector) {
@@ -157,8 +163,7 @@ function topologyOccurrenceIdFromSelector(selector) {
   if (!normalizedSelector) {
     return "";
   }
-  const match = normalizedSelector.match(/^(.*)\.[sfe]\d+$/i);
-  return match ? match[1] : normalizedSelector;
+  return splitElementRef(normalizedSelector)?.owner || normalizedSelector;
 }
 
 function topologyReferenceOccurrenceId(reference) {
@@ -185,21 +190,18 @@ function topologyReferenceName(reference) {
 function topologyReferenceLabel(reference) {
   const selectorType = normalizeString(reference?.selectorType);
   const selector = topologyReferenceSelector(reference);
-  const selectorToken = topologySelectorToken(selector);
+  const element = topologySelectorElement(selector);
   const name = topologyReferenceName(reference);
   const summary = normalizeString(reference?.summary || reference?.shortSummary);
 
   if (selectorType === "occurrence") {
     return summary || name || selector || "Occurrence";
   }
-  if (selectorType === "shape") {
-    return name || (selectorToken ? `Shape ${selectorToken}` : "Shape");
-  }
   if (selectorType === "face") {
-    return selectorToken ? `Face ${selectorToken}` : "Face";
+    return element ? `Face ${element}` : "Face";
   }
   if (selectorType === "edge") {
-    return selectorToken ? `Edge ${selectorToken}` : "Edge";
+    return element ? `Edge ${element}` : "Edge";
   }
   return summary || selector || "Topology";
 }
@@ -211,9 +213,6 @@ function topologyReferenceDetail(reference) {
   const summary = normalizeString(reference?.summary || reference?.shortSummary);
   if (selectorType === "occurrence") {
     return summary && summary !== selector && summary !== label ? selector : "";
-  }
-  if (selectorType === "shape") {
-    return summary && summary !== label ? summary : selector;
   }
   return summary;
 }
@@ -248,7 +247,6 @@ function buildTopologyReferenceNode({ reference, selectorType, partId, occurrenc
     displaySelector: selector,
     partId,
     occurrenceId,
-    shapeId: normalizeString(reference?.shapeId),
     children: []
   };
 }
@@ -428,16 +426,15 @@ function collectStepTreeTopologyPartTargets(root) {
   ));
 }
 
+// A token carries no position, so a reference's occurrence is a part's target only when it
+// IS that target: the leaves a part covers are listed (`leafPartIds`), never spelled.
 function occurrenceMatchesStepTreePartTarget(occurrenceId, targetOccurrenceId) {
   const normalizedOccurrenceId = normalizeString(occurrenceId);
   const normalizedTargetOccurrenceId = normalizeString(targetOccurrenceId);
   return Boolean(
     normalizedOccurrenceId &&
     normalizedTargetOccurrenceId &&
-    (
-      normalizedOccurrenceId === normalizedTargetOccurrenceId ||
-      normalizedOccurrenceId.startsWith(`${normalizedTargetOccurrenceId}.`)
-    )
+    normalizedOccurrenceId === normalizedTargetOccurrenceId
   );
 }
 
@@ -491,7 +488,6 @@ function buildTopologyChildrenByPart(references, fallbackPartId) {
     if (!occurrenceGroup) {
       occurrenceGroup = {
         occurrence: null,
-        shapes: [],
         faces: [],
         edges: []
       };
@@ -499,8 +495,6 @@ function buildTopologyChildrenByPart(references, fallbackPartId) {
     }
     if (selectorType === "occurrence") {
       occurrenceGroup.occurrence = reference;
-    } else if (selectorType === "shape") {
-      occurrenceGroup.shapes.push(reference);
     } else if (selectorType === "face") {
       occurrenceGroup.faces.push(reference);
     } else if (selectorType === "edge") {
@@ -513,12 +507,6 @@ function buildTopologyChildrenByPart(references, fallbackPartId) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([occurrenceId, group]) => {
         const children = [
-          ...group.shapes.sort(compareTopologyReferences).map((reference) => buildTopologyReferenceNode({
-            reference,
-            selectorType: "shape",
-            partId,
-            occurrenceId
-          })),
           ...group.faces.sort(compareTopologyReferences).map((reference) => buildTopologyReferenceNode({
             reference,
             selectorType: "face",

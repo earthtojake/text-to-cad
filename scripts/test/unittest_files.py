@@ -190,11 +190,11 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, fl
             finally:
                 shutil.rmtree(store, ignore_errors=True)
                 shutil.rmtree(state, ignore_errors=True)
-        output = "".join(_read_back(stream) for stream in (stdout, stderr))
+        output = "".join(_read_all(stream) for stream in (stdout, stderr))
     return path, completed.returncode, output, time.perf_counter() - started
 
 
-def _read_back(stream) -> str:
+def _read_all(stream) -> str:
     stream.seek(0)
     # What `text=True` did to a pipe: its encoding, and universal newlines. A Windows
     # child ends lines with \r\n, and a summary line left ending in \r matches no regex.

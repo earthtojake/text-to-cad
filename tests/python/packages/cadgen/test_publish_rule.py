@@ -3,7 +3,8 @@
 Real processes on the transient executor (``CADGEN_DAEMON=0``), which is the unbrokered
 mode -- the one where the publish rule and atomic writes are all that stand between two
 builders of one model. Also the parent/child snapshot-isolation story: a child rebuilt
-while its parent is mid-body leaves the parent built against its pin and flagged stale.
+while its parent is mid-body leaves the parent built against the child's earlier key and
+flagged stale.
 """
 
 from __future__ import annotations
@@ -91,7 +92,6 @@ class PublishRuleTest(unittest.TestCase):
             "CADGEN_CACHE_DIR": str(self.root / "store"),
             "CADGEN_DAEMON_STATE_DIR": str(self.root / "state"),
         })
-        self.env.pop("CADGEN_ROOT_ID", None)
         self.env.pop("CADGEN_DAEMON_CHILD", None)
         # The model scripts run from a temp dir: a relative PYTHONPATH entry would resolve
         # there and the scripts would import whatever cadgen is installed, not this one.
@@ -141,10 +141,10 @@ class PublishRuleTest(unittest.TestCase):
 
         self.assertFalse(stale(script).stale)
 
-    def test_reading_back_a_step_a_peer_is_replacing_waits_it_out(self):
+    def test_hashing_a_step_a_peer_is_replacing_waits_it_out(self):
         # The race above, pinned without a second process: Windows refuses an open of a
         # file another build is renaming over with EACCES and no winerror, and the
-        # publish's read-back of the .step must wait that out rather than fail the save.
+        # publish's hash of the .step must wait that out rather than fail the save.
         import errno
         import hashlib
 
@@ -196,7 +196,7 @@ class PublishRuleTest(unittest.TestCase):
         self.assertTrue(done, err)
         self.assertIn("stale", done[-1], "the tree did not say the parent is already stale")
         # The notice is the gate's phrase, not a repr of the method that makes it.
-        self.assertIn("child result moved", done[-1]["stale"], done[-1])
+        self.assertIn("child rebuilt", done[-1]["stale"], done[-1])
         from cadgen.store.gate import stale
 
         self.assertTrue(stale(parent).stale, "the parent built against its pin and must read stale now")

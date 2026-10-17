@@ -4,7 +4,7 @@ import type { ViewerHost } from '../types.js';
 export function testHost(overrides: Partial<ViewerHost> = {}): ViewerHost {
   return {
     files: { id: 'fixture', stat: async () => { throw new Error('unused'); } },
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async () => {}, writeImage: async () => {} },
     promptContext: unavailablePromptContext,
     navigation: { openFile() {} },
     environment: { colorScheme: 'dark' },

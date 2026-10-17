@@ -3,13 +3,12 @@ import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 // The STEP renderer's kit scene (`kit/scene.js`): ONE identity for as long as a file
 // is mounted, around whatever core's `buildModel` has built for it right now.
 //
-// A STEP does not arrive once. A large assembly is published in pieces, each
-// component's detail is swapped as the camera moves, and a display mode that changes
-// how records are BUILT replaces the whole build. None of that is a new scene to the
-// viewport: the roots below never change, so the viewport adopts this object once
-// and is told (`viewport.commitScene()`) when what is inside it changed. Re-adopting
-// a fresh identity per publish would re-dress every material and re-walk every mesh
-// six times while a big model opens.
+// A STEP does not arrive once. A large assembly is published in pieces, and a display
+// mode that changes how records are BUILT replaces the whole build. None of that is a
+// new scene to the viewport: the roots below never change, so the viewport adopts this
+// object once and is told (`viewport.commitScene()`) when what is inside it changed.
+// Re-adopting a fresh identity per publish would re-dress every material and re-walk
+// every mesh six times while a big model opens.
 //
 // Ownership. The build (`cadScene`) owns its records, materials and the geometries it
 // created. Component geometry is SHARED between builds and between scenes through
@@ -64,7 +63,7 @@ export function createStepScene(THREE) {
   // Overlays that belong WITH the surfaces rather than with the linework -- the reference
   // highlight's face fill -- hang here, inside this scene's own root. The viewport's
   // `modelGroup` is the viewport's: nothing here may add to it, because nothing here clears
-  // it (`render/lodSceneCleanup.js` clears the edge and pick groups and deliberately leaves
+  // it (`render/sceneCleanup.js` clears the edge and pick groups and deliberately leaves
   // the model group alone), and an overlay parked there outlives the build it was drawn
   // against -- a picked face whose outline goes with the rebuild while its fill stays lit.
   const overlayObject3D = new THREE.Group();
@@ -98,7 +97,6 @@ export function createStepScene(THREE) {
     edgesObject3D,
     overlayObject3D,
     get cadScene() { return cadScene; },
-    get source() { return cadScene?.source || null; },
     get displayRecords() { return cadScene?.displayRecords || EMPTY_RECORDS; },
     /** As posed now: what lighting, shadows and the floor's height follow. */
     get bounds() { return cadScene?.bounds || cadScene?.source?.bounds || EMPTY_BOUNDS; },

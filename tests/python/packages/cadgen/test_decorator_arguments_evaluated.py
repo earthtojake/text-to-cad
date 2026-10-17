@@ -15,7 +15,7 @@ from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
-from tests.python.support.warm_daemon import warm_entries
+from tests.python.support.warm_daemon import verified, warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -35,7 +35,7 @@ FOLDER = "out"
 
 
 @stl(out=f"{FOLDER}/{NAME}.stl", mesh_tolerance=TOL)
-@step(out=FOLDER + "/" + NAME + ".step", mesh_tolerance=TOL * 2)
+@step(out=FOLDER + "/" + NAME + ".step")
 def plate():
     return bd.Box(20, 10, 2)
 
@@ -47,8 +47,10 @@ if __name__ == "__main__":
 
 class DecoratorArgumentsAreEvaluated(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp = temporary_directory(prefix="cadgen-decorator-args-")
-        self.root = Path(self._tmp.name)
+        tmp = temporary_directory(prefix="cadgen-decorator-args-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.addCleanup(verified, self.root / "store")
         self.src = self.root / "src"
         (self.src / "lib").mkdir(parents=True)
         (self.src / "lib" / "__init__.py").write_text("", encoding="utf-8")
@@ -62,9 +64,6 @@ class DecoratorArgumentsAreEvaluated(unittest.TestCase):
                 "PYTHONPATH": str(REPO_ROOT / "packages/cadgen/src"),
             }
         )
-
-    def tearDown(self) -> None:
-        self._tmp.cleanup()
 
     def run_py(self, *argv: str) -> subprocess.CompletedProcess:
         completed = subprocess.run(
@@ -102,7 +101,6 @@ class DecoratorArgumentsAreEvaluated(unittest.TestCase):
 
         metadata = parse_generator_metadata(self.src / "plate.py")
         self.assertEqual(metadata.out_target, "out/plate_rev_b.step")
-        self.assertAlmostEqual(metadata.mesh_tolerance, 0.04)
         (stl_decl,) = metadata.mesh_exports
         self.assertEqual(stl_decl.out, "out/plate_rev_b.stl")
         self.assertAlmostEqual(stl_decl.mesh_tolerance, 0.02)

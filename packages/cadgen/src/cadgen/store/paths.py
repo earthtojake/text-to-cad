@@ -1,12 +1,10 @@
-"""Where the store lives — ONE resolution rule, honored by both languages.
+"""Where the store lives — ONE resolution rule.
 
 1. ``$CADGEN_CACHE_DIR`` when set — the explicit override.
 2. ``$XDG_CACHE_HOME/cadgen`` on POSIX / ``%LOCALAPPDATA%\\cadgen`` on Windows when set.
 3. ``~/.cache/cadgen`` otherwise.
 
-The JS mirror is ``cadgenCacheRootDir`` in
-``packages/core/src/lib/surf/tessellationCacheFs.mjs``;
-``tests/python/global/test_cache_root_sync.py`` pins the two together.
+Only cadgen opens the store; every client reaches it through a host's routes.
 """
 
 from __future__ import annotations
@@ -14,24 +12,24 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-# Mirror of TESSELLATION_VERSION in packages/core/src/lib/surf/tessellate.js
-# (sync-tested). It is part of the MESH index key, not a store salt.
-MESH_TESSELLATION_VERSION = 9
-
 # "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
 # other kind is the code/dependency side. STORE.md §2, the law.
-INDEX_KINDS = ("model", "document", "output", "component", "surface", "bounds", "mesh", "drawing")
+INDEX_KINDS = ("model", "document", "output", "provenance", "result", "component", "bounds", "part", "drawing",
+               "skin", "robot")
 
 # Kinds an older cadgen wrote and this one never reads: the sweeper removes
 # them, with every object only they named (STORE.md §8). A folder under index/
 # in neither list is not this cadgen's to judge -- a newer cadgen's, or no
-# cadgen's at all -- and nothing here touches it.
-RETIRED_KINDS = ("op",)
+# cadgen's at all -- and nothing here touches it. ``op``: the operation cache of
+# cadgen 0.7.4 and earlier; ``surface``, ``selector`` and ``mesh``: a part's
+# display data as three records, before ``part`` named its two objects in one.
+RETIRED_KINDS = ("op", "surface", "selector", "mesh")
 
 # The kinds eviction may drop (STORE.md §8): derivations that a build or a
-# reader recomputes on a miss. Records, document entries and output entries
-# are never evicted.
-DERIVED_KINDS = ("component", "surface", "bounds", "mesh", "drawing")
+# reader recomputes on a miss, and the results stored by key, which a build
+# recomputes by running (``store/results.py``). Records, document entries, output
+# entries and provenance entries are never evicted.
+DERIVED_KINDS = ("result", "component", "bounds", "part", "drawing", "skin", "robot")
 
 def store_root() -> Path:
     override = os.environ.get("CADGEN_CACHE_DIR", "").strip()

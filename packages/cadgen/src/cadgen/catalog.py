@@ -1,55 +1,14 @@
 from __future__ import annotations
 
 import os
-import sys
 import threading
-from collections.abc import Sequence
 from dataclasses import dataclass
-from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
-from .metadata import GeneratorMetadata, normalize_mesh_numeric, parse_generator_metadata
+from .metadata import GeneratorMetadata, parse_generator_metadata
 
 from ._internal.doors import STEP_SUFFIXES
 from ._internal.shared_read import open_shared_for_read
-
-# Discovery skips EVERY dot-directory (matching the CAD Viewer's catalog scan),
-# plus these well-known build/dependency dirs. An enumerated dot-list rotted
-# here once: `.claude/worktrees/` checkouts carrying pre-rename sources
-# poisoned every scan run from a repo root.
-IGNORED_DISCOVERY_DIR_NAMES = {
-    "__pycache__",
-    "build",
-    "dist",
-    "env",
-    "node_modules",
-    "site-packages",
-    "venv",
-}
-# Cheap byte sniff before the AST parse: a decorated model script imports cadgen.
-GENERATOR_NAME_MARKERS = (b"cadgen",)
-
-
-class CadSourceError(ValueError):
-    pass
-
-
-@dataclass(frozen=True)
-class StepImportOptions:
-    # Tree mesh settings only. Standalone STEP/STL/3MF/GLB files are not
-    # configured here — they are one-off exports owned by cadgen.step_export_target
-    # (the `cadgen stl|3mf|glb build` doors), which builds and meshes the scene itself.
-    mesh_tolerance: float | None = None
-    mesh_angular_tolerance: float | None = None
-
-    @property
-    def has_metadata(self) -> bool:
-        return any(
-            (
-                self.mesh_tolerance is not None,
-                self.mesh_angular_tolerance is not None,
-            )
-        )
 
 
 @dataclass(frozen=True)
@@ -58,128 +17,24 @@ class CadSource:
     cad_ref: str
     source_path: Path
     source: str
-    origin_path: Path
     script_path: Path | None = None
     generator_metadata: GeneratorMetadata | None = None
     step_path: Path | None = None
     dxf_path: Path | None = None
-    mesh_tolerance: float | None = None
-    mesh_angular_tolerance: float | None = None
-    color: tuple[float, float, float, float] | None = None
-
-    @property
-    def entry_path(self) -> Path | None:
-        # The actual on-disk ENTRY file the tree is keyed by: the `.step.py` generator
-        # for a generated model, or the `.step`/`.stp` itself for an imported one.
-        return self.script_path if self.script_path is not None else self.step_path
-
-    @property
-    def generated_paths(self) -> tuple[Path, ...]:
-        # FILE outputs only — the store view directory is deliberately absent:
-        # two same-content documents legally SHARE one content-keyed package,
-        # so it can never be a duplicate-output identity.
-        paths: list[Path] = []
-        if self.source == "generated":
-            if self.step_path is not None:
-                paths.append(self.step_path)
-            if self.dxf_path is not None:
-                paths.append(self.dxf_path)
-        return tuple(path.resolve() for path in paths)
-
-
-def iter_cad_sources(root: Path | None = None) -> tuple[CadSource, ...]:
-    # Discovery scans `root`; callers on the build path pass it explicitly. When omitted (catalog
-    # listing/tooling) default to the live cwd rather than a frozen import-time root.
-    root = Path.cwd().resolve() if root is None else root
-    resolved_root = root.resolve()
-    python_sources = _iter_python_sources(resolved_root)
-    generated_step_paths = {
-        source.step_path.resolve()
-        for source in python_sources
-        if source.step_path is not None
-    }
-    sources = [
-        *python_sources,
-        *_iter_step_sources(resolved_root, excluded_step_paths=generated_step_paths),
-    ]
-    by_cad_ref: dict[str, CadSource] = {}
-    by_source_ref: dict[str, CadSource] = {}
-    by_step_path: dict[Path, CadSource] = {}
-    by_generated_path: dict[Path, CadSource] = {}
-    for source in sources:
-        existing = by_cad_ref.get(source.cad_ref)
-        if existing is not None:
-            raise CadSourceError(
-                "Duplicate CAD STEP ref "
-                f"{source.cad_ref!r}: {_source_label(existing)} and {_source_label(source)}"
-            )
-        by_cad_ref[source.cad_ref] = source
-        existing_source = by_source_ref.get(source.source_ref)
-        if existing_source is not None:
-            raise CadSourceError(
-                "Duplicate CAD source ref "
-                f"{source.source_ref!r}: {_source_label(existing_source)} and {_source_label(source)}"
-            )
-        by_source_ref[source.source_ref] = source
-        if source.step_path is not None:
-            existing_step = by_step_path.get(source.step_path.resolve())
-            if existing_step is not None:
-                raise CadSourceError(
-                    "Duplicate CAD STEP source "
-                    f"{_display_path(source.step_path)}: {_source_label(existing_step)} and {_source_label(source)}"
-            )
-            by_step_path[source.step_path.resolve()] = source
-        for generated_path in source.generated_paths:
-            resolved_generated_path = generated_path.resolve()
-            existing_generated = by_generated_path.get(resolved_generated_path)
-            if existing_generated is not None and existing_generated.source_ref != source.source_ref:
-                raise CadSourceError(
-                    "Duplicate CAD generated output "
-                    f"{_display_path(generated_path)}: "
-                    f"{_source_label(existing_generated)} and {_source_label(source)}"
-                )
-            by_generated_path[resolved_generated_path] = source
-    return tuple(sorted(by_cad_ref.values(), key=lambda source: source.source_ref))
 
 
 def source_from_path(
     path: Path,
     *,
     function: str | None = None,
-    step_options: StepImportOptions | None = None,
 ) -> CadSource | None:
     """The source behind ``path``: a model script (``function`` names one model of a
     file holding several; a file holding one needs no name) or a STEP document."""
     resolved = Path(path).expanduser().resolve()
     if resolved.suffix.lower() == ".py":
-        return _read_python_source(resolved, function=function, allow_dxf_only=True)
+        return _read_python_source(resolved, function=function)
     if resolved.suffix.lower() in STEP_SUFFIXES:
-        return _read_step_source(resolved, options=step_options)
-    return None
-
-
-def find_source_by_source_ref(source_ref: str, root: Path | None = None) -> CadSource | None:
-    normalized = normalize_source_ref(source_ref)
-    if not normalized:
-        return None
-    for source in iter_cad_sources(root):
-        if source.source_ref == normalized:
-            return source
-    return None
-
-
-def find_source_by_path(path: Path, root: Path | None = None) -> CadSource | None:
-    resolved_path = path.resolve()
-    for source in iter_cad_sources(root):
-        paths = [
-            source.source_path,
-            source.step_path,
-            source.script_path,
-            source.dxf_path,
-            *source.generated_paths,
-        ]
-        if any(candidate is not None and candidate.resolve() == resolved_path for candidate in paths):
-            return source
+        return _read_step_source(resolved)
     return None
 
 
@@ -202,40 +57,20 @@ def cad_ref_from_step_path(path: Path) -> str:
         relative = PurePosixPath(resolved.as_posix())
     if relative.suffix.lower() in STEP_SUFFIXES:
         return relative.with_suffix("").as_posix()
-    raise CadSourceError(f"{_display_path(path)} is not a CAD STEP source")
+    raise ValueError(f"{_display_path(path)} is not a CAD STEP source")
 
 
 def cad_ref_from_dxf_path(path: Path) -> str:
-    # DXF refs KEEP the `.dxf` suffix so a `<name>.dxf.py` drawing and a `<name>.step.py`
-    # model in the same folder never collide on cad_ref.
+    # A drawing's ref KEEPS the `.dxf` suffix, so it never reads as a same-stem
+    # model's STEP ref.
     resolved = path.resolve()
     try:
         relative = resolved.relative_to(Path.cwd().resolve())
     except ValueError:
         relative = PurePosixPath(resolved.as_posix())
     if relative.suffix.lower() != ".dxf":
-        raise CadSourceError(f"{_display_path(path)} is not a CAD DXF output path")
+        raise ValueError(f"{_display_path(path)} is not a CAD DXF output path")
     return relative.as_posix()
-
-
-def normalize_source_ref(raw_ref: str) -> str | None:
-    normalized = str(raw_ref or "").replace("\\", "/").strip().strip("/")
-    if not normalized:
-        return None
-    parts = normalized.split("/")
-    if any(not part or part in {".", ".."} for part in parts):
-        return None
-    return "/".join(parts)
-
-
-def normalize_cad_ref(raw_ref: str) -> str | None:
-    normalized = normalize_source_ref(raw_ref)
-    if not normalized:
-        return None
-    suffix = PurePosixPath(normalized).suffix.lower()
-    if suffix in {".py", *STEP_SUFFIXES}:
-        normalized = str(PurePosixPath(normalized).with_suffix(""))
-    return normalized
 
 
 def artifact_path_key(entry_path: Path) -> str:
@@ -400,7 +235,7 @@ def result_snapshot_for(entry_path: Path) -> tuple[str, str] | None:
 def result_tree_for(entry_path: Path) -> str | None:
     """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
-    ``index/document/<sha256(bytes)>`` → tree (STORE.md §2, the law): a reader
+    ``index/document/<sha256(bytes)>-v<schema>`` → tree (STORE.md §2, the law): a reader
     never opens a record to find an artifact. The same file copied anywhere
     resolves to the same tree; a file the store has no tree for answers None
     (a door then compiles it: ``cadgen._internal.doors.document_tree``). The
@@ -428,8 +263,8 @@ def result_descriptor_for(entry_path: Path) -> dict | None:
 
 def result_view_dir(entry_path: Path) -> Path:
     """A view directory (assembly.json + components/, a per-process temporary directory) of the tree
-    behind a CAD artifact, for consumers that need files on disk — the Node
-    exporters, the selector-index composer, the snapshot page. When the artifact
+    behind a CAD artifact, for consumers that need files on disk — the
+    selector-index composer, the snapshot page. When the artifact
     has no current tree, a deterministic never-created path, so existence checks
     answer "no result" without special cases. The store itself holds no result
     directories (``cadgen.store.view``)."""
@@ -446,32 +281,6 @@ def build_scope(entry_path: Path) -> str:
     directory). ``cadgen.coordination.paths`` derives the advisory progress
     record from it; the CAD Viewer derives the same name to find that record."""
     return artifact_path_key(entry_path)
-
-
-def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:
-    from cadgen.metadata import InvalidModelScriptError
-
-    sources: list[CadSource] = []
-    from cadgen.metadata import model_function_names
-
-    for script_path in _iter_paths(root, "*.py"):
-        if not _looks_like_generator_script(script_path):
-            continue
-        try:
-            found = [
-                _read_python_source(script_path, function=name)
-                for name in (model_function_names(script_path) or (None,))
-            ]
-        except (CadSourceError, InvalidModelScriptError, RuntimeError) as exc:
-            # Directory discovery is resilient: an unparseable script or a
-            # malformed model DECLARATION must not abort catalog-wide operations
-            # on unrelated targets. A single model's contract violations (a dict
-            # return, bad decorator args) still raise: an explicitly
-            # authored model that cannot build must fail loudly everywhere.
-            print(f"[cadgen] skipping invalid CAD source: {exc}", file=sys.stderr)
-            continue
-        sources.extend(source for source in found if source is not None)
-    return tuple(sources)
 
 
 def _model_source_ref(script_path: Path, metadata: GeneratorMetadata) -> str:
@@ -495,19 +304,14 @@ def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadat
         cad_ref=cad_ref_from_dxf_path(dxf_path),
         source_path=resolved_script_path,
         source="generated",
-        origin_path=resolved_script_path,
         script_path=resolved_script_path,
         generator_metadata=metadata,
         step_path=None,
         dxf_path=dxf_path,
-        mesh_tolerance=None,
-        mesh_angular_tolerance=None,
     )
 
 
-def _read_python_source(
-    script_path: Path, *, function: str | None = None, allow_dxf_only: bool = False
-) -> CadSource | None:
+def _read_python_source(script_path: Path, *, function: str | None = None) -> CadSource | None:
     resolved_script_path = script_path.resolve()
     metadata = parse_generator_metadata(resolved_script_path, function)
     if metadata is None:
@@ -524,37 +328,17 @@ def _read_python_source(
         cad_ref=cad_ref_from_step_path(step_path),
         source_path=resolved_script_path,
         source="generated",
-        origin_path=resolved_script_path,
         script_path=resolved_script_path,
         generator_metadata=metadata,
         step_path=step_path,
         dxf_path=None,
-        mesh_tolerance=metadata.mesh_tolerance,
-        mesh_angular_tolerance=metadata.mesh_angular_tolerance,
     )
 
 
-def _iter_step_sources(root: Path, *, excluded_step_paths: set[Path]) -> tuple[CadSource, ...]:
-    sources: list[CadSource] = []
-    for pattern in ("*.step", "*.stp"):
-        for step_path in _iter_paths(root, pattern):
-            if step_path.resolve() in excluded_step_paths:
-                continue
-            sources.append(_read_step_source(step_path))
-    return tuple(sorted(sources, key=lambda source: source.source_ref))
-
-
-def _read_step_source(
-    step_path: Path,
-    *,
-    options: StepImportOptions | None = None,
-) -> CadSource:
+def _read_step_source(step_path: Path) -> CadSource:
     resolved_step_path = step_path.resolve()
-    options = options or StepImportOptions()
-    if resolved_step_path.suffix.lower() not in STEP_SUFFIXES:
-        raise CadSourceError(f"{_display_path(resolved_step_path)} source must end in .step or .stp")
     if not resolved_step_path.is_file():
-        raise CadSourceError(
+        raise ValueError(
             f"{_display_path(resolved_step_path)} source does not exist"
         )
     cad_ref = cad_ref_from_step_path(resolved_step_path)
@@ -564,100 +348,8 @@ def _read_step_source(
         cad_ref=cad_ref,
         source_path=resolved_step_path,
         source="imported",
-        origin_path=resolved_step_path,
         step_path=resolved_step_path,
-        mesh_tolerance=normalize_step_numeric(
-            options.mesh_tolerance,
-            base_path=resolved_step_path,
-            field_name="mesh_tolerance",
-        ),
-        mesh_angular_tolerance=normalize_step_numeric(
-            options.mesh_angular_tolerance,
-            base_path=resolved_step_path,
-            field_name="mesh_angular_tolerance",
-        ),
     )
-
-
-def _iter_paths(root: Path, pattern: str) -> tuple[Path, ...]:
-    paths: list[Path] = []
-    for current_root, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(
-            dirname
-            for dirname in dirnames
-            if not dirname.startswith(".") and dirname not in IGNORED_DISCOVERY_DIR_NAMES
-        )
-        for filename in sorted(filenames):
-            if not fnmatch(filename, pattern):
-                continue
-            path = (Path(current_root) / filename).resolve()
-            if path.is_file():
-                paths.append(path)
-    return tuple(paths)
-
-
-def _looks_like_generator_script(script_path: Path) -> bool:
-    try:
-        source_bytes = script_path.read_bytes()
-    except OSError:
-        return False
-    return any(marker in source_bytes for marker in GENERATOR_NAME_MARKERS)
-
-
-def normalize_step_numeric(raw_value: object, *, base_path: Path, field_name: str) -> float | None:
-    try:
-        return normalize_mesh_numeric(raw_value, field_name=field_name)
-    except ValueError as exc:
-        raise CadSourceError(f"{_display_path(base_path)} {exc}") from exc
-
-
-def normalize_step_color(
-    raw_value: object,
-    *,
-    base_path: Path,
-    field_name: str,
-) -> tuple[float, float, float, float] | None:
-    if raw_value is None:
-        return None
-    if isinstance(raw_value, str):
-        value = raw_value.strip()
-        if value.startswith("#"):
-            value = value[1:]
-        if len(value) not in {6, 8}:
-            raise CadSourceError(f"{_display_path(base_path)} {field_name} must be #RRGGBB or #RRGGBBAA")
-        try:
-            components = [int(value[index : index + 2], 16) / 255.0 for index in range(0, len(value), 2)]
-        except ValueError as exc:
-            raise CadSourceError(f"{_display_path(base_path)} {field_name} must be valid hex") from exc
-    elif (
-        isinstance(raw_value, Sequence)
-        and not isinstance(raw_value, (bytes, bytearray))
-        and len(raw_value) in {3, 4}
-    ):
-        components = []
-        for component in raw_value:
-            try:
-                number = float(component)
-            except (TypeError, ValueError) as exc:
-                raise CadSourceError(
-                    f"{_display_path(base_path)} {field_name} components must be numeric"
-                ) from exc
-            if not 0.0 <= number <= 1.0:
-                raise CadSourceError(
-                    f"{_display_path(base_path)} {field_name} components must be between 0 and 1"
-                )
-            components.append(number)
-    else:
-        raise CadSourceError(f"{_display_path(base_path)} {field_name} must be an RGB/RGBA array or hex string")
-    if len(components) == 3:
-        components.append(1.0)
-    return (float(components[0]), float(components[1]), float(components[2]), float(components[3]))
-
-
-def _source_label(source: CadSource) -> str:
-    if source.script_path is not None:
-        return _display_path(source.script_path)
-    return _display_path(source.source_path)
 
 
 def _display_path(path: Path) -> str:

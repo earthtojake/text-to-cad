@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT
 
@@ -29,12 +28,6 @@ def generated_cad_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
     normal Windows handle policy.
     """
     return temporary_directory(prefix=prefix)
-
-
-def named_tmp_root(name: str) -> Path:
-    tmp_root = TMP_ROOT / name
-    tmp_root.mkdir(parents=True, exist_ok=True)
-    return tmp_root
 
 
 # ERROR_SHARING_VIOLATION -- the same error cadgen's atomic rename retries

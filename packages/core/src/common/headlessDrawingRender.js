@@ -84,6 +84,9 @@ function drawOutput(drawable, { width, height, scale, background, foreground }) 
 /**
  * Render one resolved `dxf` snapshot job.
  *
+ * What the picture says about itself (an empty drawing) is cadgen's to say,
+ * and it does, beside the job; the page only paints.
+ *
  * @param {object} job The resolved render job; `job.resolved.drawingUrl` names the payload.
  * @returns {Promise<object>} The host's result shape: `{ ok, mode, outputs, warnings }`.
  */
@@ -100,11 +103,6 @@ export async function runHeadlessDrawingJob(job) {
     throw new Error(`the drawing payload could not be read (HTTP ${response.status} for ${url})`);
   }
   const drawable = prepareDrawing(await response.json());
-  const warnings = [];
-  if (!drawable.bounds) {
-    // A true answer, and one nobody would guess from a blank PNG.
-    warnings.push("this drawing has no geometry in its modelspace, so the image is empty");
-  }
   const { background, foreground } = appThemeColors(job?.display?.appearance);
   const scale = renderScale(job);
   const transparent = job?.output?.transparent === true;
@@ -131,6 +129,6 @@ export async function runHeadlessDrawingJob(job) {
     appearance: job?.display?.appearance === "dark" ? "dark" : "light",
     primitiveCount: drawable.primitiveCount,
     outputs,
-    warnings
+    warnings: []
   };
 }

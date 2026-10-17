@@ -1,6 +1,6 @@
 import {
   buildPartTransformMatrix
-} from "./stepModuleEffects.js";
+} from "./recordEffects.js";
 import { syncCadSurfaceInstanceTransform } from "./cadSurfaceInstances.js";
 
 function applyObjectMatrix(THREE, object3d, matrix) {

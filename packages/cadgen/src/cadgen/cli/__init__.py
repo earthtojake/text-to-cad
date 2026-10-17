@@ -39,7 +39,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # and the viewer compile on demand, so no skill documentation names it.
     "step build": (
         "cadgen.cli.step_build",
-        "re-emit a STEP as a new one; can add kinematics, materials, animation",
+        "re-emit a STEP as a new one; can add kinematics and materials",
     ),
     "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
@@ -64,8 +64,9 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),
-    # The store. `store why <model>` is the debugging surface STORE.md describes.
-    "store": ("cadgen.cli.store", "the store: info, why <model> (gate verdict), forget <target>, gc"),
+    # The store. `store why <model>` is the debugging surface STORE.md describes;
+    # `store where <document> <ref>` is its sibling for provenance (README law 20).
+    "store": ("cadgen.cli.store", "the store: info, why <model> (gate verdict), where <document> <ref> (which operation made a face), forget <target>, gc"),
     "snapshot": ("cadgen.cli.snapshot", "render any supported input to an image"),
     "daemon": ("cadgen.daemon", "run the warm build daemon"),
     # The two-word entry is required, not cosmetic: dispatch matches argv[0:2] first, so
@@ -109,8 +110,8 @@ def read_skill_pin(skill_path) -> str | None:
 # happen BEFORE the command's module is imported -- which is why it lives here in dispatch
 # rather than inside each command.
 #
-# Snapshot orchestration stays in the caller. Its document compilation and
-# missing surfaces already use the build pool; rendering needs no kernel.
+# Snapshot orchestration stays in the caller. Its document compilation, missing
+# parts and missing meshes use the build pool; rendering needs no kernel.
 #
 # ONE table: a tool's name is its command with the space dashed, and its module is
 # the command's own (`_COMMANDS`). The daemon derives what it may import from here
@@ -169,35 +170,6 @@ def _format_usage(noun: str) -> str:
         + _command_lines(_format_verbs(noun))
         + f"\nRun 'cadgen {noun} <verb> --help' for a command's own options.\n"
     )
-
-
-# Law 8: every retired surface fails loudly with a teaching error naming its
-# replacement -- never an alias, never a shim. Matched on the leading words of argv;
-# `step inspect` keeps its own module (it is also reachable as `python -m`).
-_RETIRED: dict[tuple[str, ...], str] = {
-    ("gen",): (
-        "cadgen gen has been removed: generation has no CLI. A model script is a program "
-        "-- run it: python <model>.py (it gates, builds, and writes the STEP/DXF, the "
-        "sidecar and every declared mesh). Per-run flags ride the script's argv: "
-        "--force, --json, --verbose, --mesh-tolerance, --mesh-angular-tolerance."
-    ),
-    ("step", "export"): (
-        "cadgen step export has been removed: each mesh format is its own door. Use "
-        "cadgen stl build IN.step [OUT.stl], cadgen 3mf build IN.step [OUT.3mf] or "
-        "cadgen glb build IN.step [OUT.glb]; to write a new STEP document use "
-        "cadgen step build IN.step OUT.step. A model's maintained meshes are declared "
-        "with @stl/@threemf/@glb and written by python <model>.py."
-    ),
-    ("analytics",): (
-        "cadgen analytics has been renamed: use cadgen telemetry status|on|off. DO_NOT_TRACK=1 or "
-        "CADGEN_TELEMETRY=0 in an app's environment turns it off there."
-    ),
-    ("srdf", "snapshot"): (
-        "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
-        "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
-        "<file>.srdf [OUT.png], which routes it by suffix."
-    ),
-}
 
 
 def _harden_std_stream_errors() -> None:
@@ -283,15 +255,6 @@ def _main(argv: list[str] | None) -> int:
 
         sys.stdout.write(f"cadgen {__version__}\n")
         return 0
-
-    if argv[:2] == ["step", "inspect"]:
-        from cadgen.cli.step_inspect.cli import main as retired_inspect
-
-        return retired_inspect(argv[2:])
-    for words, message in _RETIRED.items():
-        if tuple(argv[: len(words)]) == words:
-            sys.stderr.write(message + "\n")
-            return 2
 
     # Longest match first, so `step build` beats a hypothetical `step`.
     command, rest = " ".join(argv[:2]), argv[2:]

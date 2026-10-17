@@ -42,7 +42,7 @@ export function useCadWorkspaceSelection({
         .map((id) => String(id || "").trim())
         .filter(Boolean)
     );
-    // LOD changes the valid-ID containers without changing their members.
+    // A republish changes the valid-ID containers without changing their members.
     // Replacing equal selections here causes a second workspace render and
     // rebuilds persistence callbacks, retaining earlier render contexts.
     setSelectedPartIds((current) => filterPreservingIdentity(current, (id) => validIds.has(id)));

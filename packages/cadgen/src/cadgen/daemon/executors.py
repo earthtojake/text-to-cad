@@ -1,34 +1,31 @@
-"""The pool: ``submit(model) -> Job``, one interface, two executors.
+"""Jobs beside a build: a document's compile on the pool, and the events a build emits.
 
-Every child build a parent's body causes goes through :func:`submit`. Which
-executor runs it is decided once per process:
+A model's children are no jobs: a child a parent's body calls is decoded or built
+serially in the parent's own process (``cadgen.authoring``, STORE.md §9a). What a
+build still hands to the pool is a document compile (:func:`submit_compile`), and
+what it waits on is a :class:`Job`: the compile's exit, or, for the top-level call
+of a model, the source result its own pipeline announces (:func:`capture_source_result`).
+Which executor runs a compile is decided once per process:
 
-* **daemon** (default) — the job is a ``run`` request to the warm daemon, exactly
-  the request a top-level ``python model.py`` makes, streamed on a background
-  thread. Inside a daemon worker this is the same client call back to the daemon
-  the worker belongs to, so nesting is free and a child lands on ITS model's
-  worker (or an extra, or a spare) while the parent's body keeps going.
-* **transient** (``CADGEN_DAEMON=0``) — a subprocess per job, alive for this
-  build only, discarded after. Each imports build123d once (~2.5 s, concurrently
-  with its siblings). It inherits the environment, so a test's
-  ``CADGEN_CACHE_DIR`` isolates its store with no protocol support; tests and CI
-  exercise the real parallel path this way.
+* **daemon** (default) -- the job is a request to the warm daemon, streamed on a
+  background thread. Inside a daemon worker this is the same client call back to the
+  daemon the worker belongs to.
+* **transient** (``CADGEN_DAEMON=0``) -- a subprocess alive for this job only. It
+  inherits the environment, so a test's ``CADGEN_CACHE_DIR`` isolates its store with
+  no protocol support; tests and CI run this way.
 
-There is no serial mode. The store root travels with every job as an explicit
-request field rather than as ambient environment, so one daemon serves any
-number of isolated stores.
+The store root travels with every job as an explicit request field rather than as
+ambient environment, so one daemon serves any number of isolated stores.
 
-Events (``{"event": {...}}`` frames) describe the child build for the build
-tree (§Output): they are forwarded to the current events sink, which in a
-worker re-emits them on its own frame channel and in the root client renders
-them. Ordinary stream frames from a child are captured and attached to its
-error if it fails; a successful child's chatter is not the parent's business.
+Events (``{"event": {...}}`` frames) describe a build's models for the build tree
+(``cadgen.cli_tree``): a build emits them for the model it runs and for each child it
+builds inside it, and they go to the current events sink, which in a worker re-emits
+them on its own frame channel and in the root client renders them.
 """
 
 from __future__ import annotations
 
 import contextlib
-import json
 import itertools
 import os
 import subprocess
@@ -39,7 +36,7 @@ from typing import Any, Callable
 
 
 class Job:
-    """One submitted build's immutable source result and eventual output completion."""
+    """One job's eventual exit, and the source result a model's build announces."""
 
     def __init__(self, model: Path | str) -> None:
         from cadgen.store.index import split_model_ref
@@ -106,20 +103,11 @@ class Job:
         with self._lock:
             return "".join(self._chunks)
 
-    def target_argv(self) -> list[str]:
-        """How the runner is told which model: the script, plus ``--model fn``
-        when the file holds more than one."""
-        from cadgen.metadata import model_function_names
-
-        argv = [str(self.script)]
-        if self.function and len(model_function_names(self.script)) > 1:
-            argv += ["--model", self.function]
-        return argv
-
 
 # --- events -------------------------------------------------------------------------
 
 _EVENT_SINK: Callable[[dict], None] | None = None
+_RELEASE_SINK: Callable[[int], None] | None = None
 _EVENT_LOCK = threading.Lock()
 _EVENT_SEQUENCE = itertools.count(1)
 _RESULT_CAPTURE = threading.local()
@@ -160,10 +148,29 @@ def sink_installed() -> bool:
         return _EVENT_SINK is not None
 
 
+def set_release_sink(sink: Callable[[int], None] | None) -> None:
+    """Where a command's release of its caller goes in this process: a daemon worker's
+    frame to its client (``worker.serve``); nowhere in a process of the caller's own."""
+    global _RELEASE_SINK
+    with _EVENT_LOCK:
+        _RELEASE_SINK = sink
+
+
+def release_caller(code: int) -> None:
+    """The command's answer is complete, with exit ``code`` so far: whoever asked may
+    return (``--no-wait``), the files the run still owes finishing after. In a daemon
+    worker the client gets the ``released`` frame and returns, the worker finishes the
+    exports before its next job; in a process of the caller's own the answer is on its
+    stdout already, so this is nothing."""
+    with _EVENT_LOCK:
+        sink = _RELEASE_SINK
+    if sink is not None:
+        sink(int(code))
+
+
 def emit_event(event: dict) -> None:
-    """Hand one model transition to the sink. Tags it with the root request's id
-    (``CADGEN_ROOT_ID``, inherited by every job of one top-level build) so the root's
-    renderer can tell its own tree from a stranger's."""
+    """Hand one model transition to the sink, tagged with the job it belongs to
+    (``CADGEN_JOB_ID``, a daemon worker's) and its place in that job's sequence."""
     for capture in getattr(_RESULT_CAPTURE, "jobs", ()):
         capture._observe(event)
     with _EVENT_LOCK:
@@ -174,10 +181,6 @@ def emit_event(event: dict) -> None:
         producer = os.environ.get("CADGEN_JOB_ID")
         if producer:
             event = {**event, "job": producer, "sequence": next(_EVENT_SEQUENCE)}
-    if "root" not in event:
-        root = os.environ.get("CADGEN_ROOT_ID")
-        if root:
-            event = {**event, "root": root}
     try:
         sink(event)
     except Exception:  # noqa: BLE001 - reporting never fails a build
@@ -197,17 +200,6 @@ def model_event(model: Path | str, state: str, **extra: Any) -> dict:
     return payload
 
 
-def install_line_sink() -> None:
-    """A transient worker's sink: every event is one ``CADGEN_EVENT {json}`` line on
-    stderr, which the parent's reader turns back into an event (``_event_line``)."""
-
-    def write(event: dict) -> None:
-        sys.stderr.write(EVENT_LINE_PREFIX + json.dumps(event, separators=(",", ":")) + "\n")
-        sys.stderr.flush()
-
-    set_event_sink(write)
-
-
 # --- executor selection ---------------------------------------------------------------
 
 
@@ -220,60 +212,6 @@ def use_daemon() -> bool:
     except ImportError:
         return False
     return daemon_supported()
-
-
-def submit(
-    model: Path | str,
-    *,
-    store_root: Path | None = None,
-    force: bool = False,
-    root_id: str | None = None,
-    parent: Path | str | None = None,
-    closure: str | None = None,
-) -> Job:
-    """Start building ``model`` now and return without waiting.
-
-    ``parent`` is the model whose body made the call; the build tree hangs the child's
-    line under it. ``closure`` is the child's current closure hash: a job already in
-    flight for the same ``(model, closure)`` is joined instead of duplicated (in-flight
-    coalescing, cadgen.daemon.broker)."""
-    from cadgen.store.paths import store_root as default_store_root
-
-    from cadgen.store.index import resolve_model_ref
-
-    model = resolve_model_ref(model)
-    root = Path(store_root) if store_root is not None else default_store_root()
-    job = Job(model)
-    emit_event(model_event(model, "submitted", parent=str(parent) if parent else None))
-    if use_daemon():
-        _submit_daemon(job, root, force=force, root_id=root_id, closure=closure)
-    else:
-        _submit_transient(job, root, force=force, root_id=root_id, closure=closure)
-    return job
-
-
-@contextlib.contextmanager
-def root_context():
-    """What a TOP-LEVEL transient build owns for its length: the private broker its
-    workers take job slots from and register in-flight jobs with. A no-op inside a
-    worker (its root, or the daemon, is the broker) and under the daemon executor."""
-    from cadgen.daemon import broker
-
-    if use_daemon() or broker.BROKER_ADDRESS_VAR in os.environ or os.environ.get("CADGEN_EVENTS") == "1":
-        yield None
-        return
-    private = broker.PrivateBroker()
-    previous = {k: os.environ.get(k) for k in private.env()}
-    os.environ.update(private.env())
-    try:
-        yield private
-    finally:
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-        private.close()
 
 
 # --- transient executor -----------------------------------------------------------------
@@ -306,7 +244,6 @@ def submit_compile(
     *,
     store_root: Path | None = None,
     force: bool = False,
-    root_id: str | None = None,
     parent: Path | str | None = None,
 ) -> Job:
     """Compile a document whose bytes have no tree, as a job.
@@ -332,14 +269,10 @@ def submit_compile(
     tool_argv = [str(document)] + (["--force"] if force else [])
     if use_daemon():
         _submit_daemon(
-            job, root, force=force, root_id=root_id, closure=closure,
-            tool="step-compile", argv=tool_argv, prog="cadgen step compile",
+            job, root, closure=closure, tool="step-compile", argv=tool_argv, prog="cadgen step compile",
         )
     else:
-        _submit_transient(
-            job, root, force=force, root_id=root_id, closure=closure,
-            command=[sys.executable, "-P", "-m", "cadgen.cli.step_compile", *tool_argv],
-        )
+        _submit_transient(job, root, command=[sys.executable, "-P", "-m", "cadgen.cli.step_compile", *tool_argv])
     emit_event(model_event(document, "building", phase="compile"))
 
     def finish() -> None:
@@ -351,38 +284,15 @@ def submit_compile(
     return job
 
 
-def _submit_transient(
-    job: Job,
-    store_root: Path,
-    *,
-    force: bool,
-    root_id: str | None,
-    closure: str | None = None,
-    command: list[str] | None = None,
-) -> None:
-    from cadgen.daemon import broker
-
-    ticket = broker.claim_inflight(str(job.model), closure, store_root=str(store_root)) if closure else None
-    if ticket is not None and ticket[0] == "attached":
-        # Identical source already building for this root: ride that job.
-        def follow() -> None:
-            job._finish(broker.wait_attached(ticket[1], on_event=job._observe))
-
-        threading.Thread(target=follow, name=f"cadgen-attach-{job.script.stem}", daemon=True).start()
-        return
-    claim = ticket[1] if ticket is not None else None
+def _submit_transient(job: Job, store_root: Path, *, command: list[str]) -> None:
+    """Run ``command`` as a subprocess of this one, in the job's own store, and finish
+    ``job`` with its exit; its output is kept for the error path."""
     env = worker_env()
     env["CADGEN_DAEMON"] = "0"
     env["CADGEN_CACHE_DIR"] = str(store_root)
-    env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr
-    if root_id:
-        env["CADGEN_ROOT_ID"] = root_id
-    argv = list(command) if command else [sys.executable, "-P", "-m", "cadgen.cli._run_model", *job.target_argv()]
-    if force and not command:
-        argv.append("--force")
     try:
         process = subprocess.Popen(
-            argv,
+            command,
             cwd=str(job.script.parent),
             env=env,
             stdout=subprocess.PIPE,
@@ -393,31 +303,15 @@ def _submit_transient(
         )
     except OSError as exc:
         job._say(f"could not start a worker for {job.script.name}: {exc}\n")
-        if claim is not None:
-            broker.report_done(claim, 1)
         job._finish(1)
         return
 
-    def pump_stderr() -> None:
-        assert process.stderr is not None
-        for line in process.stderr:
-            event = _event_line(line)
-            if event is not None:
-                job._observe(event)
-                result = event.get("sourceResult")
-                if claim is not None and isinstance(result, dict) and result.get("model") == job.model:
-                    broker.report_result(claim, event)
-                emit_event(event)
-            else:
-                job._say(line)
-
-    def pump_stdout() -> None:
-        assert process.stdout is not None
-        for line in process.stdout:
+    def pump(stream) -> None:
+        for line in stream:
             job._say(line)
 
     def finish() -> None:
-        readers = [threading.Thread(target=pump_stderr, daemon=True), threading.Thread(target=pump_stdout, daemon=True)]
+        readers = [threading.Thread(target=pump, args=(stream,), daemon=True) for stream in (process.stdout, process.stderr)]
         for reader in readers:
             reader.start()
         code = process.wait()
@@ -429,26 +323,9 @@ def _submit_transient(
                     stream.close()
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))
-        if claim is not None:
-            broker.report_done(claim, code)
         job._finish(code)
 
     threading.Thread(target=finish, name=f"cadgen-job-{job.script.stem}", daemon=True).start()
-
-
-def _event_line(line: str) -> dict | None:
-    """A ``CADGEN_EVENT {...}`` stderr line from a transient child, or None."""
-    text = line.strip()
-    if not text.startswith(EVENT_LINE_PREFIX):
-        return None
-    try:
-        payload = json.loads(text[len(EVENT_LINE_PREFIX):])
-    except ValueError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-EVENT_LINE_PREFIX = "CADGEN_EVENT "
 
 
 # --- daemon executor ---------------------------------------------------------------------
@@ -458,43 +335,33 @@ def _submit_daemon(
     job: Job,
     store_root: Path,
     *,
-    force: bool,
-    root_id: str | None,
-    closure: str | None = None,
-    tool: str = "run",
-    argv: list[str] | None = None,
-    prog: str | None = None,
+    closure: str,
+    tool: str,
+    argv: list[str],
+    prog: str,
 ) -> None:
+    """Run the daemon tool ``tool`` with ``argv`` as a job the daemon coalesces by
+    ``closure`` (a compile: the document's bytes), and finish ``job`` with its exit;
+    a daemon that cannot take it runs the same tool transiently."""
     from cadgen.daemon import client
 
-    if argv is None:
-        argv = job.target_argv()
-        if force:
-            argv.append("--force")
-    fallback = None
-    if tool != "run":
-        fallback = [sys.executable, "-P", "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
+    fallback = [sys.executable, "-P", "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
 
     def run() -> None:
-        def observe(event: dict) -> None:
-            job._observe(event)
-            emit_event(event)
-
         code = client.run_nested(
             tool,
             argv,
             str(job.script.parent),
-            prog=prog or f"python {job.script.name}",
+            prog=prog,
             store_root=str(store_root),
-            root_id=root_id,
             closure=closure,
             on_stream=job._say,
-            on_event=observe,
+            on_event=emit_event,
         )
         if code is None:
             # The daemon could not take the job (spawn failure, unsupported
-            # platform mid-flight): run it transiently rather than fail the parent.
-            _submit_transient(job, store_root, force=force, root_id=root_id, closure=closure, command=fallback)
+            # platform mid-flight): run it transiently rather than fail the caller.
+            _submit_transient(job, store_root, command=fallback)
             return
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))

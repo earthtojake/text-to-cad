@@ -6,9 +6,9 @@
 //
 // Per record: the record itself, whether it casts (visible and `castShadow`), its local
 // matrix, which the pose, the animation and the exploded view all write, its geometry, and
-// its tube deformation: the state that owns its bent surface and the spec it was last bent
-// to, which `applyRecordTubeDeformation` replaces only when the bend changed. A bend asked for
-// that no active state carries is not one a snapshot can vouch for. Nothing else of a record
+// its tube skin: the state that owns its bent surface and the pose it was last bent to,
+// which `applyRecordTubeSkin` replaces only when the bend changed. A bend asked for that no
+// active state carries is not one a snapshot can vouch for. Nothing else of a record
 // reaches a shadow pass: colour, emission, opacity, render order and draw membership
 // (instanced or not) never change what a caster occludes.
 //
@@ -29,7 +29,7 @@ function unvouched(record, bend) {
 }
 
 /**
- * @param {Array<object>} records  display records: `{ mesh, tubeDeformationState?, ... }`
+ * @param {Array<object>} records  display records: `{ mesh, tubeSkinState?, ... }`
  * @returns {{ records: object[], values: Float64Array, refs: Array<unknown> }}
  */
 export function captureShadowCasters(records) {
@@ -43,12 +43,12 @@ export function captureShadowCasters(records) {
     values[offset] = casts(mesh);
     const elements = mesh?.matrix?.elements;
     if (elements) for (let element = 0; element < 16; element += 1) values[offset + 1 + element] = elements[element];
-    const bend = record?.tubeDeformationState || null;
+    const bend = record?.tubeSkinState || null;
     const at = index * REFS_PER_RECORD;
     refs[at] = mesh?.geometry ?? null;
     refs[at + 1] = unvouched(record, bend) ? UNVOUCHED : bend;
     refs[at + 2] = bend?.active === true;
-    refs[at + 3] = bend?.lastSpec ?? null;
+    refs[at + 3] = bend?.lastPose ?? null;
   }
   return { records: list, values, refs };
 }
@@ -74,10 +74,10 @@ export function shadowCastersChanged(before, records) {
         if (!Object.is(elements[element], values[offset + 1 + element])) return true;
       }
     }
-    const bend = record?.tubeDeformationState || null;
+    const bend = record?.tubeSkinState || null;
     const at = index * REFS_PER_RECORD;
     if ((mesh?.geometry ?? null) !== refs[at] || bend !== refs[at + 1] || unvouched(record, bend)) return true;
-    if ((bend?.active === true) !== refs[at + 2] || (bend?.lastSpec ?? null) !== refs[at + 3]) return true;
+    if ((bend?.active === true) !== refs[at + 2] || (bend?.lastPose ?? null) !== refs[at + 3]) return true;
   }
   return false;
 }

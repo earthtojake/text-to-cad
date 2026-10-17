@@ -76,20 +76,12 @@ MESH_DOORS = ("stl", "3mf", "glb")
 
 
 class InputKindTests(unittest.TestCase):
-    def test_a_script_classifies_as_python_whatever_it_declares(self):
-        # DOCUMENTS-ONLY: every `.py` is one kind, because the resolver's only
-        # use for it is refusing it by naming the run. Which format the script
-        # declares no longer matters — nothing downstream will render it.
-        for sample in ("panel.dxf.py", "panel.py", "bracket.py"):
-            with self.subTest(sample=sample):
-                self.assertEqual("python", input_kind(Path(sample)))
-
     def test_every_kind_it_names_has_a_resolver_or_is_a_generator(self):
         for sample in ("a.step", "a.stp", "a.glb", "a.stl", "a.3mf",
                        "a.urdf", "a.srdf", "a.sdf", "a.dxf"):
             kind = input_kind(Path(sample))
             self.assertTrue(kind, f"{sample} resolved to no kind")
-            self.assertIn(kind, set(KIND_RESOLVERS) | {"python", "dxf"}, sample)
+            self.assertIn(kind, set(KIND_RESOLVERS) | {"dxf"}, sample)
 
 
 class EnabledKindsTests(unittest.TestCase):
@@ -231,7 +223,7 @@ class GeneratedHelpTests(unittest.TestCase):
 
     def test_step_only_options_appear_for_the_step_door(self):
         step_help = door_help("step")
-        for present in ("--kinematics", "--animation", "--time", "--focus", "section", "--view-labels"):
+        for present in ("--kinematics", "--animation", "--time", "--focus", "--view-labels"):
             self.assertIn(present, step_help)
 
     def test_display_is_the_one_view_option_on_every_door_that_has_a_scene(self):

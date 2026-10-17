@@ -14,15 +14,13 @@ import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_I
  * runtime (`runtimeCamera.js`).
  *
  * `modelBounds` is the authored `{ min, max }` a reset frames; `coordinateSystemFor`
- * names the coordinate system a stored camera belongs to, for a scale mode;
- * `cameraMovedRef.current()` is told when a presentation camera moved.
+ * names the coordinate system a stored camera belongs to, for a scale mode.
  */
 export function useViewportCamera({
   coordinateSystemFor,
   activeViewPlaneFaceRef,
   previewCameraRef,
   lastEmittedPerspectiveRef,
-  cameraMovedRef,
   modelBounds,
   modelKey,
   modelKeyRef,
@@ -55,9 +53,8 @@ export function useViewportCamera({
     if (!nextPerspective) {
       return;
     }
+    // A presentation camera is never the file's stored camera.
     if (previewModeRef.current || previewCameraRef.current) {
-      // LOD still follows the presentation camera, but session persistence does not.
-      cameraMovedRef.current?.();
       return;
     }
     if (suppressPerspectiveEventsRef.current > 0) {

@@ -27,9 +27,12 @@ export const TAB_FILE_LIMIT = 1;
 export type Appearance = 'system' | 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */
 export type LibraryLayout = 'grid' | 'list';
-export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean>; closed: Record<string, boolean> }
+export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean>; closed: Record<string, boolean>; hidden?: boolean }
 export interface TabSettings {
-  /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes, the folded panels and the closed ones. */
+  /**
+   * The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes, the folded panels,
+   * the closed ones, and whether the person hid the tools (absent until they hide or show them).
+   */
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
   appearance: Appearance;

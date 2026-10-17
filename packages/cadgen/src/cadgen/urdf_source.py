@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import warnings
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
@@ -9,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
 
-from cadgen.findings import FindingsReport, format_findings
+from cadgen.findings import FindingsReport
 from cadgen.xml_common import duplicate_values, display_path
 
 URDF_SUFFIX = ".urdf"
@@ -41,10 +40,6 @@ _AXIS_UNIT_TOLERANCE = 1e-3
 
 
 class UrdfSourceError(ValueError):
-    pass
-
-
-class UrdfSourceWarning(UserWarning):
     pass
 
 
@@ -91,24 +86,6 @@ class UrdfSource:
     visual_mesh_paths: tuple[Path, ...] = ()
     collision_mesh_paths: tuple[Path, ...] = ()
     total_mass: float = 0.0
-
-
-def file_ref_from_urdf_path(urdf_path: Path) -> str:
-    resolved = urdf_path.resolve()
-    if resolved.suffix.lower() != URDF_SUFFIX:
-        raise UrdfSourceError(f"{resolved} is not a URDF source file")
-    return display_path(resolved)
-
-
-def read_urdf_source(urdf_path: Path, *, package_map: dict[str, Path] | None = None) -> UrdfSource:
-    """Compatibility wrapper: raise on the first validation error, warn on warnings."""
-    source, result = validate_urdf_file(urdf_path, package_map=package_map)
-    for finding in result.deduplicated().warnings:
-        warnings.warn(finding.message, UrdfSourceWarning, stacklevel=2)
-    if result.errors:
-        raise UrdfSourceError(format_findings(result.errors))
-    assert source is not None
-    return source
 
 
 def validate_urdf_file(

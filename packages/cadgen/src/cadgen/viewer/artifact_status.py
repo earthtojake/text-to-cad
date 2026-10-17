@@ -6,7 +6,7 @@ matched to the document by declared output path) and this module reads it.
 
 The server answers status without loading the CAD kernel. Missing or damaged
 required geometry means not compiled. Complete native geometry means compiled;
-SURF derivation and browser pixels have separate lifecycles. A ref that is not an
+Parts' display data and browser pixels have separate lifecycles. A ref that is not an
 absolute path raises before any store read.
 
 The document's byte digest resolves through index/document to one immutable
@@ -60,9 +60,9 @@ class ARTIFACT_STATE:  # noqa: N801 - a namespace of wire constants, not a class
 # right branch rather than falling through to the error arm.
 BUILDABLE_CODES = frozenset(
     {
-        "missing_glb",
-        "missing_step_topology",
-        "unsupported_step_topology",
+        "missing_tree",
+        "missing_geometry",
+        "unsupported_tree",
         "missing_dxf_output",
     }
 )
@@ -92,8 +92,8 @@ def _read_json(file_path):
     return parsed if isinstance(parsed, dict) else None
 
 
-# A migration a project still owes -- a leftover ``<name>.step.js``, a sidecar
-# written to an older schema -- is announced by the BUILD and by the cad skill,
+# A migration a project still owes -- a sidecar written to an older schema --
+# is announced by the BUILD and by the cad skill,
 # where the words reach whoever can act on them and the next step is a command
 # to run. The viewer is not that place: it shows the document it is handed, and
 # what a stale neighbour costs (no kinematics, no materials, no routine) is
@@ -106,11 +106,7 @@ def owns_step_path(file_path) -> bool:
 
 
 def owns_dxf_path(file_path=None) -> bool:
-    """Always false.
-
-    Generated-DXF entries were ``.dxf.py`` scripts; scripts are no longer
-    entries, and a plain ``.dxf`` renders directly with no artifact to manage.
-    """
+    """Always false: a ``.dxf`` renders directly, with no artifact to manage."""
     return False
 
 
@@ -151,18 +147,18 @@ def _validate_step(step_path: str) -> dict:
     if tree is None:
         # No result for THESE bytes: never built, or its objects collected (the
         # lookup is by the bytes themselves, so an edited document simply misses).
-        return {"ok": False, "code": "missing_glb", "tree": None}
+        return {"ok": False, "code": "missing_tree", "tree": None}
     descriptor = result_descriptor(tree)
     if descriptor is None:
         return {
             "ok": False,
-            "code": "missing_step_topology",
+            "code": "missing_geometry",
             "tree": tree,
         }
     if descriptor.get("kind") != STEP_PACKAGE_KIND:
         return {
             "ok": False,
-            "code": "unsupported_step_topology",
+            "code": "unsupported_tree",
             "tree": tree,
             "descriptor": descriptor,
         }
@@ -170,12 +166,12 @@ def _validate_step(step_path: str) -> dict:
     if not components:
         return {
             "ok": False,
-            "code": "missing_glb",
+            "code": "missing_tree",
             "tree": tree,
             "descriptor": descriptor,
         }
-    # result_descriptor captured the full required geometry closure. Optional
-    # SURF/TESS availability is a separate runtime capability and cannot make
+    # result_descriptor captured the full required geometry closure. Whether its
+    # parts' display data is stored is a separate runtime capability and cannot make
     # this document need another compile.
     return {"ok": True, "tree": tree, "descriptor": descriptor}
 

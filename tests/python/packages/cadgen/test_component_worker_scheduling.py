@@ -85,7 +85,7 @@ class ComponentSchedulingParity(unittest.TestCase):
                                  for component in tree["components"].values() for kind in ("brep",)}
                     outputs.append((tree_hash, tree, artifacts))
                     self.assertEqual(stats["components_built"], 6)
-                    self.assertFalse((root / mode / "index/surface").exists())
+                    self.assertFalse((root / mode / "index/part").exists(), "a tree's publication derives no display data")
                 self.assertEqual([_shape_brep_bytes(part) for part in parts], original)
             self.assertEqual(outputs[0], outputs[1])
 

@@ -4,8 +4,8 @@ The parts `lib/engine_cover.py` builds around the cover shell (aerial fin, exit
 duct liner, aperture and cover flanges, Dzus fasteners, louvres), in car
 coordinates, plus the shell itself as a child model: the shell is nine tenths of
 the cover's build time, so an edit to anything else never rebuilds it. `f1.py`
-links the engine cover as occurrence `#o1.8`; rebuild `f1.py` to pick up a
-change here.
+links the engine cover as `#engine_cover`; rebuild `f1.py` to pick up a change
+here.
 """
 
 from __future__ import annotations

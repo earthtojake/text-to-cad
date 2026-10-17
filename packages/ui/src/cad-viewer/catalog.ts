@@ -33,7 +33,7 @@ export function joinPath(folder: string, name: string): string {
 
 /** Render-affecting revisions, not transient compiler progress, invalidate a document. */
 export function contentRevision(entry: CadEntry): string {
-  return JSON.stringify([entry.hash, entry.documentHash, entry.animationHash, entry.appearanceHash, entry.url, entry.relations, entry.sourceSidecar, entry.mtime, entry.bytes]);
+  return JSON.stringify([entry.hash, entry.documentHash, entry.animationHash, entry.appearanceHash, entry.url, entry.relations, entry.articulation, entry.display, entry.mtime, entry.bytes]);
 }
 
 /**

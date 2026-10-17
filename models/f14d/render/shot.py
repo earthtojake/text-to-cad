@@ -60,9 +60,11 @@ VIEWS = {
     "topfwd": {"direction": [-0.35, 0, 0.94], "up": [-1, 0, 0], "zoom": 1.30},
 }
 
-# Framing a TEARDOWN is not the same problem as framing the built jet, and the
-# CLI cannot drive one -- the staged separation lives in `ANIMATION_JS` in `src/f14d.py` and
-# plays in the CAD Viewer's Animation tab (clips: `teardown`, `explodedHold`).
+# Framing a TEARDOWN is not the same problem as framing the built jet. The
+# staged separation is the `teardown` and `explodedHold` clips in
+# `src/f14d.py`, baked into the sidecar: they play in the CAD Viewer's
+# Animation tab, and a snapshot job poses one with its `"animation": {"clip":
+# ..., "time": ...}` field, which the jobs this script writes do not set.
 # Kept here because the camera knowledge outlived the retired render/explode.py
 # that carried it: the separation is mostly on Z (skin up, gear and inlets
 # down) with the nozzles drawing aft, so a camera well above the waterline and

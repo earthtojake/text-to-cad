@@ -1,4 +1,6 @@
-"""A job's final authored geometry precedes, but never substitutes for, its saves."""
+"""A build's source result: the tree its run published, named before its files are
+written and never replaced by a later record. A top-level call hands back exactly that
+tree; a child a parent's body called owes its declared outputs and its failure to the run."""
 
 from __future__ import annotations
 
@@ -8,7 +10,6 @@ import io
 import json
 import runpy
 import sys
-import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -32,27 +33,15 @@ class SourceJobResults(unittest.TestCase):
     def event(self, model, tree):
         return executors.model_event(model, "building", sourceResult={"model": str(model), "tree": tree})
 
-    def geometry_tree(self):
-        from build123d import Solid
-        from cadgen.store.build import build_tree_from_compound
-        return build_tree_from_compound(Solid.make_box(1, 1, 1), root_name="child")[0]
-
-    def test_result_is_available_before_completion_and_never_reads_a_newer_record(self):
-        from cadgen.authoring import BuildFrame
-        from cadgen.store.lazy import LazyCompound
-
+    def test_a_result_announced_before_completion_stands_whatever_the_exit(self):
         model = f"{self.root / 'child.py'}::child"
-        tree = self.geometry_tree()
         job = executors.Job(model)
-        job._observe(self.event(model, tree))
+        job._observe(self.event(model, "tree-1"))
         self.assertFalse(job.done)
-        with mock.patch("cadgen.store.records.read_record", side_effect=AssertionError("latest record read")):
-            child = LazyCompound(model, job, frame=BuildFrame(None), label="child")
-            self.assertEqual(child.tree_hash(), tree)
+        self.assertTrue(job.result_ready)
+        job._observe(self.event(model, "tree-2"))  # a later announcement never replaces the first
         job._finish(1)
-        self.assertEqual(job.wait_result(), tree, "failed persistence cannot rewrite the published source result")
-        with self.assertRaisesRegex(RuntimeError, "failed"):
-            child.wait_outputs()
+        self.assertEqual(job.wait_result(), "tree-1", "failed persistence cannot rewrite the published source result")
 
     def test_wrong_function_result_and_success_without_a_result_do_not_resolve(self):
         model = f"{self.root / 'child.py'}::left"
@@ -61,22 +50,6 @@ class SourceJobResults(unittest.TestCase):
         job._finish(0)
         with self.assertRaisesRegex(RuntimeError, "source result"):
             job.wait_result()
-
-    def test_cache_loss_does_not_replace_the_job_pin(self):
-        from cadgen.authoring import BuildFrame
-        from cadgen.store.lazy import LazyCompound
-        from cadgen.store.objects import object_path
-
-        model = f"{self.root / 'child.py'}::child"
-        tree = self.geometry_tree()
-        job = executors.Job(model)
-        job._observe(self.event(model, tree))
-        object_path(tree).unlink()
-        child = LazyCompound(model, job, frame=BuildFrame(None), label="child")
-        with mock.patch("cadgen.store.records.read_record", side_effect=AssertionError("latest record read")):
-            with self.assertRaisesRegex(RuntimeError, "disappeared|missing"):
-                child.tree_hash()
-        job._finish(0)
 
     def test_top_level_return_keeps_the_completed_jobs_exact_tree(self):
         import cadgen.authoring as authoring
@@ -155,22 +128,6 @@ class SourceJobResults(unittest.TestCase):
         self.assertEqual(result["tree"], checked_tree)
         self.assertEqual(read_record(script)["tree"], newer_tree)
 
-    def test_failure_cleanup_waits_every_called_child_even_after_the_first_failure(self):
-        from cadgen.authoring import building, settle_child_builds
-
-        waited = []
-        first = mock.Mock()
-        first.wait_outputs.side_effect = RuntimeError("first child save failed")
-        second = mock.Mock()
-        second.wait_outputs.side_effect = lambda: waited.append("second")
-        with self.assertRaisesRegex(RuntimeError, "parent body failed") as error:
-            with settle_child_builds():
-                with building(None) as frame:
-                    frame.children.extend([("first", first), ("second", second)])
-                    raise RuntimeError("parent body failed")
-        self.assertEqual(waited, ["second"])
-        self.assertIn("first child save failed", error.exception.__notes__[0])
-
     def test_mesh_only_export_uses_its_source_result_after_a_newer_record(self):
         from build123d import Box
         from cadgen._internal.generation import _produce_declared_mesh_exports
@@ -186,106 +143,64 @@ class SourceJobResults(unittest.TestCase):
         write_record(script, {"tree": newer, "outputs": {}})
         seen = []
 
-        def export(directory, jobs, **kwargs):
-            seen.append(json.loads((directory / "assembly.json").read_text(encoding="utf-8"))["tree"])
+        def export(source, jobs, **kwargs):
+            seen.append(source.tree)
             for job in jobs:
                 job.out.write_bytes(b"requested mesh result")
+            return {"ok": True, "files": [{"path": str(job.out), "format": job.fmt, "triangleCount": 12} for job in jobs]}
 
         spec = _entry_spec_from_source(source_from_path(script))
         with mock.patch("cadgen._internal.mesh_export.run_mesh_exporter", side_effect=export):
             _produce_declared_mesh_exports(spec, logger=None, source_tree=old)
         self.assertEqual(seen, [old])
 
-    def exercise_nested(self, *, discard=False, fail=False, mesh_parent=False, block_mesh=False):
-        from cadgen.store.records import read_record
-        from cadgen.store.trees import tree_complete
-
+    def _nested(self, *, discard: bool, child_fails: bool) -> tuple[int, str]:
         child = self.root / "child.py"
         parent = self.root / "parent.py"
-        blocked, release = self.root / "blocked", self.root / "release"
         child.write_text(
-            "from cadgen import step, stl, build123d as bd\n"
-            + ("@stl\n" if block_mesh else "")
-            + "@step\ndef child():\n"
-            "    import time\n    from pathlib import Path\n"
-            + ("    import cadgen._internal.generation as writer\n    original = writer._produce_declared_mesh_exports\n" if block_mesh else
-               "    import cadgen.step_export as writer\n    original = writer.export_build123d_step_file\n")
-            +
-            "    def save(*args, **kwargs):\n"
-            f"        Path({str(blocked)!r}).write_text('blocked', encoding='utf-8')\n"
-            "        deadline = time.monotonic() + 35\n"
-            f"        while not Path({str(release)!r}).exists():\n"
-            "            if time.monotonic() > deadline: raise RuntimeError('save barrier timed out')\n"
-            "            time.sleep(.02)\n"
-            + ("        raise RuntimeError('injected child save failure')\n" if fail else
-               "        return original(*args, **kwargs)\n")
-            + ("    writer._produce_declared_mesh_exports = save\n" if block_mesh else
-               "    writer.export_build123d_step_file = save\n")
-            +
-            "    return bd.Box(4, 3, 2)\n",
+            "from cadgen import step, build123d as bd\n@step\ndef child():\n"
+            + ("    raise RuntimeError('the child is wrong on purpose')\n" if child_fails else "    return bd.Box(4, 3, 2)\n"),
             encoding="utf-8",
         )
         parent.write_text(
-            "from cadgen import step, stl, build123d as bd\nfrom child import child\n"
-            + ("@stl\n" if mesh_parent else "@step\n")
-            + "def parent():\n    piece = child()\n"
-            + ("    return bd.Box(7, 3, 2)\n" if discard else
-               "    return bd.Compound(children=[bd.Pos(8, 0, 0) * piece, bd.Pos(-8, 0, 0) * piece])\n"),
+            "from cadgen import step, build123d as bd\nfrom child import child\n@step\ndef parent():\n"
+            + ("    try:\n        piece = child()\n    except Exception:\n        piece = None\n" if child_fails
+               else "    piece = child()\n")
+            + ("    return bd.Box(7, 3, 2)\n" if discard
+               else "    return bd.Compound(children=[bd.Pos(8, 0, 0) * piece, bd.Pos(-8, 0, 0) * piece])\n"),
             encoding="utf-8",
         )
-        output = self.root / "parent.step"
-        output.write_bytes(b"previous parent document")
-        preview = threading.Event()
-        events = []
+        (self.root / "parent.step").write_bytes(b"previous parent document")
+        from cadgen.cli._run_model import run_model_argv
 
-        def observe(event):
-            events.append(event)
-            if event.get("preview", {}).get("output") == str(output):
-                preview.set()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            code = run_model_argv([str(parent)])
+        return code, err.getvalue()
 
-        executors.set_event_sink(observe)
-        self.addCleanup(executors.set_event_sink, None)
-        with executors.root_context():
-            job = executors.submit(f"{parent}::parent")
-            try:
-                source = job.wait_result(timeout=30)
-                self.assertTrue(tree_complete(source))
-                if not mesh_parent:
-                    self.assertTrue(preview.wait(5), job.output())
-                import time
+    def test_a_discarded_child_is_still_built_whole_and_is_the_parents_dependency(self):
+        # The body called it, so its declared outputs are written and the parent's
+        # record lists it, whatever the body made of the geometry.
+        from cadgen.store.records import read_record
 
-                deadline = time.monotonic() + 5
-                while not blocked.is_file() and time.monotonic() < deadline:
-                    time.sleep(.01)
-                self.assertTrue(blocked.is_file(), "the child never entered its STEP exporter")
-                self.assertFalse(job.done, "the explicit parent completed while its child save was blocked")
-                self.assertEqual(output.read_bytes(), b"previous parent document")
-                self.assertIsNone(read_record(f"{parent}::parent"))
-            finally:
-                release.write_text("continue", encoding="utf-8")
-                code = job.wait(timeout=40)
-        self.assertEqual(code != 0, fail, job.output())
-        if fail:
-            self.assertEqual(output.read_bytes(), b"previous parent document")
-            self.assertIsNone(read_record(f"{parent}::parent"))
-            if block_mesh:
-                self.assertTrue((self.root / "child.step").is_file(), "child STEP succeeded but its declared mesh did not")
-        else:
-            self.assertNotEqual(output.read_bytes(), b"previous parent document")
-            self.assertEqual(read_record(f"{parent}::parent")["tree"], source)
-            self.assertTrue((self.root / "child.step").is_file())
+        code, err = self._nested(discard=True, child_fails=False)
+        self.assertEqual(code, 0, err)
+        self.assertTrue((self.root / "child.step").is_file(), "the discarded child's declared STEP was not written")
+        self.assertNotEqual((self.root / "parent.step").read_bytes(), b"previous parent document")
+        self.assertEqual(read_record(self.root / "parent.py")["children"],
+                         [{"model": f"{self.root / 'child.py'}::child", "key": read_record(self.root / "child.py")["key"]}])
 
-    def test_parent_preview_precedes_child_save_and_explicit_completion_waits(self):
-        self.exercise_nested()
+    def test_a_child_failure_the_body_catches_still_fails_the_run_and_keeps_the_parents_file(self):
+        from cadgen.store.records import read_record
 
-    def test_discarded_child_still_has_to_finish_its_declared_outputs(self):
-        self.exercise_nested(discard=True)
+        code, err = self._nested(discard=True, child_fails=True)
+        self.assertNotEqual(code, 0)
+        self.assertIn("a child model failed to build", err)
+        self.assertIn("the child is wrong on purpose", err)
+        self.assertEqual((self.root / "parent.step").read_bytes(), b"previous parent document")
+        self.assertIsNone(read_record(self.root / "parent.py"))
+        self.assertIsNone(read_record(self.root / "child.py"))
 
-    def test_child_save_failure_preserves_parent_file_after_parent_preview(self):
-        self.exercise_nested(fail=True)
 
-    def test_mesh_only_parent_publishes_source_then_waits_its_child_outputs(self):
-        self.exercise_nested(mesh_parent=True, fail=True)
-
-    def test_child_mesh_failure_after_step_save_still_prevents_parent_save(self):
-        self.exercise_nested(block_mesh=True, fail=True)
+if __name__ == "__main__":
+    unittest.main()

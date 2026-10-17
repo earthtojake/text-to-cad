@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import Path
 
@@ -37,11 +36,3 @@ def relative_to_directory(path: Path, base_dir: Path) -> str:
 
 def relative_to_file(path: Path, owner_path: Path) -> str:
     return relative_to_directory(path, owner_path.expanduser().resolve().parent)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()

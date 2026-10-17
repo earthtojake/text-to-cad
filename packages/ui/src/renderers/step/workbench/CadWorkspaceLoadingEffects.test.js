@@ -114,8 +114,7 @@ test("persisted Render loads model documents and shared interaction assets", () 
       return Promise.resolve();
     },
     setReferenceState: () => referenceEvents.push("state"),
-    setReferenceStatus: () => referenceEvents.push("status"),
-    setReferenceError: () => referenceEvents.push("error")
+    setReferenceStatus: () => referenceEvents.push("status")
   });
   assert.deepEqual(referenceEvents, ["load"]);
   assert.deepEqual(referenceState, { cached: "topology" });

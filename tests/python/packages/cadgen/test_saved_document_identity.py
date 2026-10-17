@@ -11,10 +11,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.python.support.documents import assert_same_document
 from tests.python.support.tmp_root import generated_cad_directory
 
 
-IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 RGBA = [0.2, 0.4, 0.6, 0.75]
 ROUGH = {
     "name": "Rough finish",
@@ -141,11 +141,17 @@ class SavedDocumentIdentityTest(unittest.TestCase):
             rough_record["tree"], polished_record["tree"],
             "the authored model results retain their distinct intrinsic finishes",
         )
-        self.assertEqual(rough_record["documentTree"], polished_record["documentTree"])
-        document_tree_hash = rough_record["documentTree"]
-        canonical_before = flatten(document_tree_hash)
-        self.assertIsNotNone(canonical_before)
-        self.assertFalse(_materials(canonical_before), "PBR annotations do not belong in the byte-derived tree")
+        # Equal bytes map to the tree the last export wrote them from (store/exports.py),
+        # and every reader takes a file's finishes from its own sidecar, never from that tree.
+        import hashlib
+
+        from cadgen.store.records import tree_for_document_hash
+
+        digest = hashlib.sha256(rough_step.read_bytes()).hexdigest()
+        self.assertEqual(polished_record["tree"], tree_for_document_hash(digest))
+        canonical_before = {key: value for key, value in flatten(polished_record["tree"]).items()
+                            if key != "appearance"}
+        self.assertFalse(_materials(canonical_before), "a finish is no occurrence's: it rides the sidecar")
 
         rough_sidecar = read_source_sidecar(rough_step)
         polished_sidecar = read_source_sidecar(polished_step)
@@ -176,7 +182,9 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         )
 
         # The file pair must stand alone. Remove every source and every cached
-        # object/index; the document door can reconstruct only from STEP bytes.
+        # object/index; the document door can reconstruct only from STEP bytes: the
+        # same document, each component read from the file rather than the one the
+        # build wrote it from.
         rough_script.unlink()
         polished_script.unlink()
         shutil.rmtree(self.store)
@@ -185,10 +193,9 @@ class SavedDocumentIdentityTest(unittest.TestCase):
 
         rebuilt_rough_tree = document_tree(rough_step)
         rebuilt_polished_tree = document_tree(polished_step)
-        self.assertEqual(document_tree_hash, rebuilt_rough_tree)
         self.assertEqual(rebuilt_rough_tree, rebuilt_polished_tree)
         canonical_after = flatten(rebuilt_rough_tree)
-        self.assertEqual(canonical_before, canonical_after)
+        assert_same_document(self, canonical_before, canonical_after)
 
         rough_recovered = apply_appearance(canonical_after, read_source_sidecar(rough_step)["appearance"])
         polished_recovered = apply_appearance(canonical_after, read_source_sidecar(polished_step)["appearance"])
@@ -210,6 +217,7 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         from cadgen._internal.mesh_export import mesh_variant_key
         from cadgen._internal.source_sidecar import appearance_digest, write_source_sidecar
         from cadgen.store.index import read_entry
+        from cadgen.store.records import document_key
         from cadgen.step_export_target import export_cad_target
 
         rough_glb = rough_step.with_suffix(".glb")
@@ -249,7 +257,7 @@ class SavedDocumentIdentityTest(unittest.TestCase):
 
         rough_key = appearance_digest(read_source_sidecar(rough_step)["appearance"])
         polished_key = appearance_digest(read_source_sidecar(polished_step)["appearance"])
-        document_entry = read_entry("document", rough_sidecar["documentHash"])
+        document_entry = read_entry("document", document_key(rough_sidecar["documentHash"]))
         variants = set((document_entry.get("meshes") or {}))
         self.assertIn(mesh_variant_key("glb", None, None, appearance_key=rough_key), variants)
         self.assertIn(mesh_variant_key("glb", None, None, appearance_key=polished_key), variants)
@@ -265,7 +273,7 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         self.assertFalse(edited["files"][0]["skipped"])
         self.assertNotEqual(rough_bytes, rough_glb.read_bytes())
         self.assertEqual(polished_bytes, rough_glb.read_bytes())
-        self.assertEqual(document_tree_hash, document_tree(rough_step))
+        self.assertEqual(rebuilt_rough_tree, document_tree(rough_step))
         assert_finish(rough_glb, POLISHED)
 
     def test_parent_result_and_saved_sidecar_preserve_an_exact_pinned_child_finish(self) -> None:
@@ -312,8 +320,8 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         parent_record = read_record(parent)
         self.assertTrue(parent_record["children"])
         self.assertEqual(
-            {(entry["model"], entry["tree"]) for entry in parent_record["children"]},
-            {(child_record["model"], child_record["tree"])},
+            {(entry["model"], entry["key"]) for entry in parent_record["children"]},
+            {(child_record["model"], child_record["key"])},
         )
         parent_result = flatten(parent_record["tree"])
         self.assertEqual(
@@ -350,82 +358,38 @@ class SavedDocumentIdentityTest(unittest.TestCase):
             {frozenset(ROUGH.items()), frozenset(POLISHED.items())},
         )
 
-    def test_kinematics_remap_requires_an_exact_document_subtree(self) -> None:
-        from cadgen._internal.kinematics_resolve import remap_document_kinematics
-        from cadgen.store.trees import put_tree
+    def test_the_sidecars_mates_resolve_in_a_cold_compile_of_the_file(self) -> None:
+        """The file is an export of the result, so its sidecar binds the result's tokens -- and a
+        compile of its bytes in a store that never held the result names its nodes by them."""
+        from cadgen._internal.source_sidecar import read_source_sidecar
+        from cadgen.step_scene import read_scene
 
-        tree_hash = put_tree(
-            {
-                "label": "document",
-                "entryKind": "assembly",
-                "units": "mm",
-                "components": {"c": {"contentHash": "content", "brep": "object", "surf": "object"}},
-                "occurrences": [
-                    {"id": "o1.1.1", "name": "left", "component": "c", "transform": IDENTITY},
-                    {"id": "o1.1.2", "name": "right", "component": "c", "transform": IDENTITY},
-                    {"id": "o1.2.1.1", "name": "wrapped", "component": "c", "transform": IDENTITY},
-                ],
-                "links": [],
-                "assembly": {
-                    "root": {
-                        "id": "o1",
-                        "name": "document",
-                        "nodeType": "assembly",
-                        "leafPartIds": ["o1.1.1", "o1.1.2", "o1.2.1.1"],
-                        "children": [
-                            {
-                                "id": "o1.1",
-                                "name": "pair",
-                                "nodeType": "subassembly",
-                                "leafPartIds": ["o1.1.1", "o1.1.2"],
-                                "children": [
-                                    {"id": "o1.1.1", "name": "left", "nodeType": "part", "leafPartIds": ["o1.1.1"], "children": []},
-                                    {"id": "o1.1.2", "name": "right", "nodeType": "part", "leafPartIds": ["o1.1.2"], "children": []},
-                                ],
-                            },
-                            {
-                                "id": "o1.2",
-                                "name": "outer_wrapper",
-                                "nodeType": "subassembly",
-                                "leafPartIds": ["o1.2.1.1"],
-                                "children": [{
-                                    "id": "o1.2.1",
-                                    "name": "inner_wrapper",
-                                    "nodeType": "subassembly",
-                                    "leafPartIds": ["o1.2.1.1"],
-                                    "children": [{"id": "o1.2.1.1", "name": "wrapped", "nodeType": "part", "leafPartIds": ["o1.2.1.1"], "children": []}],
-                                }],
-                            },
-                        ],
-                    }
-                },
-            }
-        )
-        block = {
-            "mates": [{"name": "join", "parentId": "authored_pair", "childId": "authored_wrapper"}]
-        }
-        occurrence_map = {
-            "authored_pair": ["o1.1.1", "o1.1.2"],
-            "authored_wrapper": ["o1.2.1.1"],
-            "crossing": ["o1.1.1", "o1.2.1.1"],
-        }
-        node_map = {
-            "authored_pair": "o1.1",
-            "authored_wrapper": "o1.2",
-            "crossing": "o1",
-        }
+        script = self.root / "hinge.py"
+        script.write_text(textwrap.dedent(
+            """
+            import cadgen
+            from cadgen import label_shape, step
+            from cadgen import build123d as bd
 
-        remapped = remap_document_kinematics(block, occurrence_map, node_map, tree_hash)
-        self.assertEqual("o1.1", remapped["mates"][0]["parentId"])
-        self.assertEqual("o1.2", remapped["mates"][0]["childId"])
-        self.assertEqual("authored_pair", block["mates"][0]["parentId"])
+            @step(kinematics={"mates": [cadgen.revolute("swing", parent="#base", child="#arm_group",
+                                                        origin=(0, 0, 6), direction=(0, 0, 1), limits=(0, 90))]})
+            def hinge():
+                base = label_shape(bd.Box(20, 20, 4), "base")
+                arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
+                tip = label_shape(bd.Pos(18, 0, 6) * bd.Sphere(2), "tip")
+                return bd.Compound(children=[base, bd.Compound(children=[arm, tip], label="arm_group")])
 
-        missing = {"mates": [{"name": "missing", "parentId": "absent", "childId": "authored_wrapper"}]}
-        with self.assertRaisesRegex(ValueError, "parentId absent has no exact document subtree"):
-            remap_document_kinematics(missing, occurrence_map, node_map, tree_hash)
-        non_subtree = {"mates": [{"name": "cross", "parentId": "crossing", "childId": "authored_wrapper"}]}
-        with self.assertRaisesRegex(ValueError, "parentId crossing document subtree does not match its exact leaves"):
-            remap_document_kinematics(non_subtree, occurrence_map, node_map, tree_hash)
+            if __name__ == "__main__":
+                hinge()
+            """
+        ).lstrip(), encoding="utf-8")
+        self._build(script)
+        step_path = script.with_suffix(".step")
+        (mate,) = read_source_sidecar(step_path)["kinematics"]["mates"]
+        shutil.rmtree(self.store)
+        scene = read_scene(step_path)
+        self.assertEqual("base", scene.resolve(f"#{mate['parentId']}").label)
+        self.assertEqual("arm_group", scene.resolve(f"#{mate['childId']}").label)
 
 
 if __name__ == "__main__":

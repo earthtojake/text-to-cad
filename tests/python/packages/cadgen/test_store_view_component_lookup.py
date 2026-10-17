@@ -1,4 +1,4 @@
-"""Geometry routes resolve pinned BREP; disposable SURF needs a runtime view."""
+"""Geometry routes resolve pinned BREP; a runtime view names each component's part."""
 from __future__ import annotations
 import copy
 import json
@@ -7,8 +7,9 @@ from pathlib import Path
 import unittest
 from unittest import mock
 from tests.python.support.paths import add_repo_path
+from tests.python.support.tree_ids import tokenized
 from tests.python.support.tmp_root import generated_cad_directory
-from tests.python.support.store_fixtures import seed_result, FIXTURE_SURFACE_PRODUCER
+from tests.python.support.store_fixtures import seed_result, FIXTURE_PRODUCER
 add_repo_path("packages/cadgen/src")
 
 class ComponentLookup(unittest.TestCase):
@@ -28,18 +29,18 @@ class ComponentLookup(unittest.TestCase):
         from cadgen.store.trees import put_tree, IDENTITY_16
         links = [{"id": f"o1.{i}", "name": "child", "tree": child, "transform": IDENTITY_16}
                  for i, child in enumerate(children, 1)]
-        return put_tree({"label":"parent","units":"mm","entryKind":"assembly","components":{},"occurrences":[],"links":links,
+        return put_tree(tokenized({"label":"parent","units":"mm","entryKind":"assembly","components":{},"occurrences":[],"links":links,
             "assembly":{"root":{"id":"o1","nodeType":"assembly","children":[
-                {"id":link["id"],"nodeType":"link","children":[]} for link in links]}}})
+                {"id":link["id"],"nodeType":"link","children":[]} for link in links]}}})[0])
 
-    def test_root_lookup_does_not_resolve_surfaces_or_read_source_indexes(self):
+    def test_root_lookup_does_not_resolve_a_view_or_read_source_indexes(self):
         from cadgen.store import records, view
         with mock.patch.object(view, "descriptor_for_view", side_effect=AssertionError("flattened")), \
              mock.patch.object(records, "read_record", side_effect=AssertionError("record")), \
              mock.patch.object(records, "model_for_output", side_effect=AssertionError("output")):
             actual = view.component_object_for_tree(self.tree, self.cid + ".brep")
         self.assertEqual(actual, (self.entry["brep"], "brep"))
-        self.assertIsNone(view.component_object_for_tree(self.tree, self.cid + ".surf"))
+        self.assertIsNone(view.component_object_for_tree(self.tree, self.cid + ".glb"))
 
     def test_repeated_links_use_one_exact_brep(self):
         from cadgen.store import view
@@ -94,14 +95,14 @@ class ComponentLookup(unittest.TestCase):
         os.environ["CADGEN_CACHE_DIR"] = str(self.root / "other")
         self.assertIsNone(view.component_object_for_tree(self.tree, self.cid + ".brep"))
 
-    def test_runtime_descriptor_carries_surface_input_without_resolving_surface(self):
-        from cadgen.store import view, surfaces
-        with mock.patch.object(surfaces, "producer_identity", side_effect=AssertionError("native import")):
-            descriptor = view.descriptor_for_view(self.tree, producer=FIXTURE_SURFACE_PRODUCER)
+    def test_runtime_descriptor_names_each_part_without_deriving_it(self):
+        from cadgen.store import parts, view
+        with mock.patch.object(parts, "producer_identity", side_effect=AssertionError("native import")), \
+             mock.patch.object(parts, "derive", side_effect=AssertionError("derived")):
+            descriptor = view.descriptor_for_view(self.tree, producer=FIXTURE_PRODUCER)
         self.assertEqual(descriptor["kind"], "assembly-package")
         entry = descriptor["components"][self.cid]
         self.assertEqual(entry["brepObject"], self.entry["brep"])
-        self.assertEqual(len(entry["surfaceInput"]), 64)
-        self.assertNotIn("surfaceObject", entry)
+        self.assertEqual(entry["part"], parts.part_key(self.entry, FIXTURE_PRODUCER))
 
 if __name__ == "__main__": unittest.main()

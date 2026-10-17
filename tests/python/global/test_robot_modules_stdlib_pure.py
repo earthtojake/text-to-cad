@@ -41,7 +41,7 @@ FAMILY = [
     "cli/urdf_validate.py",
     "cli/srdf_validate.py",
     "cli/sdf_validate.py",
-    # The public namespaces the CLIs are shells over (design/format-doors.md).
+    # The public namespaces the CLIs are shells over (packages/cadgen/README.md, law 6).
     # They are the family's front door now, so they inherit its purity rule.
     "urdf.py",
     "srdf.py",

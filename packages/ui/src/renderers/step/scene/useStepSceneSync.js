@@ -12,7 +12,7 @@ import { disposeSectionCaps } from "@text-to-cad/core/lib/viewer/sectionCaps.js"
 import { resolveTopologyDisplayEdgeRuntimes } from "@text-to-cad/core/common/topologyDisplayEdgeRuntime.js";
 import { cancelCameraTransition } from "../../kit/camera/runtimeCamera.js";
 import { disposeSceneObject } from "../../kit/viewport/sceneObjects.js";
-import { disposeViewerCadScene } from "../render/lodSceneCleanup.js";
+import { disposeViewerCadScene } from "../render/sceneCleanup.js";
 import { renderMemoryAccounting } from "../render/renderMemoryAccounting.js";
 import { sceneBuildStructuralKey } from "../render/sceneBuildSettings.js";
 import { viewerMemoryPolicy } from "../render/viewerMemoryPolicy.js";
@@ -80,12 +80,10 @@ function recordSceneSyncTiming(startedAt, { mode, records, reason = "" }) {
  * (`stepScene.js`), and the viewport is told the scene changed in place.
  *
  * It decides reuse or rebuild (`stepScene.plan`): while the build settings hold for the same
- * model, a progressive publish or a detail swap is handed to the live build, which reconciles
- * its records -- occurrences on screen keep their meshes, materials, visual and deformation
- * state and BVHs. It answers the LOD publisher's ownership protocol (`onMeshSourceAdoption`):
- * every source this scene shows, releases or fails to show is named exactly once. And it
- * rebuilds what hangs off the records: the topology line, the pick groups, the raycast BVH
- * schedule and the section clip.
+ * model, a progressive publish is handed to the live build, which reconciles its records --
+ * occurrences on screen keep their meshes, materials, visual and deformation state and BVHs.
+ * And it rebuilds what hangs off the records: the topology line, the pick groups, the raycast
+ * BVH schedule and the section clip.
  *
  * What it does NOT do is the viewport's: the stage, the depth range and the camera's framing
  * all follow from `viewport.commitScene()`.
@@ -107,8 +105,7 @@ export function useStepSceneSync(layers) {
   } = policy;
   const { topologyDisplayEdgesVisible, surfaceStepEdgesVisible } = edges;
   const {
-    partVisualStateRef, clipSettingsRef, staticSceneResetRef, meshSourceAdoptionRef, viewerAlertChangeRef,
-    sceneUpdateAlertRef, lodCameraChangeRef
+    partVisualStateRef, clipSettingsRef, staticSceneResetRef, viewerAlertChangeRef, sceneUpdateAlertRef
   } = refs;
   const meshGeometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
     ? meshData.geometrySource
@@ -138,24 +135,21 @@ export function useStepSceneSync(layers) {
     const clearDisplayedModel = ({ preserveModelIdentity = false, releaseGpu = true } = {}) => {
       staticSceneResetRef.current.invalidate();
       cancelCameraTransition(runtime);
-      // Runtime-level teardown first: it certifies disposal (or throws and keeps the build
-      // reachable for a retry); only then does the scene forget the build it released.
-      const disposedSource = disposeViewerCadScene(runtime, { clearSceneGroup, preserveModelIdentity, releaseGpu });
+      // Runtime-level teardown first: it disposes (or throws and keeps the build reachable for
+      // a retry); only then does the scene forget the build it released.
+      disposeViewerCadScene(runtime, { clearSceneGroup, preserveModelIdentity, releaseGpu });
       stepScene.release({ releaseGpu, preserveModelIdentity });
       runtime.requestRender();
-      return disposedSource;
     };
 
     if (isLoading) {
-      const disposedSource = clearDisplayedModel();
-      meshSourceAdoptionRef.current?.(disposedSource, false, { disposed: true });
+      clearDisplayedModel();
       setError("");
       return;
     }
 
     if (!hasMeshGeometry(meshData)) {
-      const disposedSource = clearDisplayedModel();
-      meshSourceAdoptionRef.current?.(disposedSource, false, { disposed: true });
+      clearDisplayedModel();
       return;
     }
 
@@ -180,7 +174,9 @@ export function useStepSceneSync(layers) {
       pickMode
     });
     const materialSettings = { ...normalizedMaterialSettings };
-    const modelStepParameters = stepParameterRuntime?.definition
+    // The pose the scene is built at: cadgen's articulation at the Position values, as the
+    // renderer hands it over (`{ articulation, values }`), so the first frame is drawn posed.
+    const modelStepParameters = stepParameterRuntime?.articulation
       ? {
           ...stepParameterRuntime,
           selectorRuntime
@@ -209,8 +205,8 @@ export function useStepSceneSync(layers) {
           }
         };
     // Everything that decides how the scene's records are BUILT. While it holds
-    // for the same model, a new mesh state (a progressive publish, a LOD swap)
-    // is handed to the existing scene, which reconciles its records instead of
+    // for the same model, a new mesh state (a progressive publish) is handed to
+    // the existing scene, which reconciles its records instead of
     // rebuilding them: occurrences already on screen keep their meshes,
     // materials, visual and deformation state and BVHs.
     const sceneBuildKey = sceneBuildStructuralKey({
@@ -278,7 +274,6 @@ export function useStepSceneSync(layers) {
         edgeSettings: visualEdgeSettings,
         recomputeNormals: false,
         silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true,
-        parameterSetup: false,
         edgeRendering: {
           mode: "screen-space",
           Line2: runtime.Line2,
@@ -314,7 +309,7 @@ export function useStepSceneSync(layers) {
       runtime: initialSelectorRuntime
     } : null);
     const displaySelectorRuntime = initialEdgeRuntimes.selectorRuntime;
-    const displayEdgesRuntime = initialRecordTopologyEdgeTransforms ? null : initialEdgeRuntimes.topologyRuntime;
+    const displayEdgesRuntime = initialRecordTopologyEdgeTransforms ? null : displaySelectorRuntime;
     runtime.topologyDisplayEdgeTransformByRecord = initialRecordTopologyEdgeTransforms;
 
     syncTopologyDisplayEdgeLine(runtime, displayEdgesRuntime, {
@@ -359,12 +354,6 @@ export function useStepSceneSync(layers) {
         viewerMemoryPolicy.release(token);
         const current = viewerMemoryPolicy.snapshot().retainedByCategory.bvh || 0;
         viewerMemoryPolicy.setRetained("bvh", current + builtBytes);
-      },
-      onBuildDenied: (detail) => {
-        if (typeof window !== "undefined") {
-          window.__cadViewerMemoryLimitation = detail;
-          window.dispatchEvent(new CustomEvent("cad:memory-limitation", { detail }));
-        }
       }
     };
     runtime.raycastBvhOptions = raycastBvhOptions;
@@ -388,12 +377,6 @@ export function useStepSceneSync(layers) {
     runtime.edgePickThreshold = Math.max(radius / 320, 0.65);
 
     recordSceneSyncTiming(sceneSyncStartedAt, { mode: reuseScene ? "reuse" : "rebuild", records: runtime.displayRecords.length, reason: rebuildReason });
-    // A mode switch replaces the build. The parent's quality-change sample can arrive before
-    // this scene is ready, so resample its framed camera on construction too; otherwise the
-    // old quality remains until the next orbit.
-    // (The sample itself is collected a beat later by the LOD scheduler, by which time the
-    // viewport has framed the scene; asking again after the framing only restarts that beat.)
-    if (!reuseScene) lodCameraChangeRef.current?.();
     setError("");
     runtime.requestRender();
     if (shouldRenderParts) {
@@ -401,15 +384,11 @@ export function useStepSceneSync(layers) {
         source: meshData, runtime, visualState: currentPartVisualState, clipState: clipSettingsRef.current,
       });
     }
-    const adopted = runtime.cadScene === cadScene && stepScene.cadScene === cadScene && cadScene.source === meshData;
-    if (meshSourceAdoptionRef.current?.(meshData, adopted) === false) {
-      throw new Error("The displayed detail does not match its requested component occurrences.");
-    }
-    if (adopted && sceneUpdateAlertRef.current) {
+    if (sceneUpdateAlertRef.current) {
       const recoveredAlert = sceneUpdateAlertRef.current;
       sceneUpdateAlertRef.current = null;
-      // Clear this failure only after real adoption, preserving any newer
-      // environment or animation alert that replaced it during recovery.
+      // A scene built cleanly clears an earlier failure, preserving any newer
+      // environment or animation alert that replaced it meanwhile.
       viewerAlertChangeRef.current?.(current => current === recoveredAlert ? null : current);
     }
     } catch (error) {
@@ -422,23 +401,18 @@ export function useStepSceneSync(layers) {
         runtime.displayRecords = error.failedCadScene.displayRecords;
       }
       // Reconciliation is in-place: a failure may have disposed old records
-      // and attached new orphans. Full teardown precedes any recovery/release.
-      let recovery;
+      // and attached new orphans, so the scene is torn down whole.
       try {
         clearDisplayedModel();
-        recovery = meshSourceAdoptionRef.current?.(meshData, false, { disposed: true, recover: true });
       } catch (cleanupError) {
-        meshSourceAdoptionRef.current?.(meshData, false, { cleanupFailed: true });
         sceneUpdateAlertRef.current = { severity: "error", title: "Scene cleanup failed",
-          message: "Detail work has stopped because scene ownership could not be released. Reload the viewer." };
+          message: "The scene could not be released. Reload the viewer." };
         viewerAlertChangeRef.current?.(sceneUpdateAlertRef.current);
         setError(cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
         return;
       }
-      sceneUpdateAlertRef.current = { severity: "error", title: "Detail update failed",
-        message: recovery?.recovering
-          ? "The partial scene was cleared. The previous view is being restored; reload if restoration fails."
-          : "The scene was cleared after the display failed. Reload the model to continue." };
+      sceneUpdateAlertRef.current = { severity: "error", title: "Scene update failed",
+        message: "The scene was cleared after the display failed. Reload the model to continue." };
       viewerAlertChangeRef.current?.(sceneUpdateAlertRef.current);
       setError(error instanceof Error ? error.message : String(error));
     }
@@ -483,13 +457,9 @@ export function useStepSceneSync(layers) {
  * scene, which simply builds into it once more.
  */
 export function releaseStepRuntime(runtime, stepScene) {
-  if (!runtime) {
-    const source = stepScene.source;
-    stepScene.dispose();
-    return source;
+  if (runtime) {
+    disposeSectionCaps(runtime);
+    disposeViewerCadScene(runtime, { clearSceneGroup });
   }
-  disposeSectionCaps(runtime);
-  const source = disposeViewerCadScene(runtime, { clearSceneGroup });
   stepScene.dispose();
-  return source;
 }

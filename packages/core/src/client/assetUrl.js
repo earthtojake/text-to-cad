@@ -14,7 +14,7 @@
 // A package asset URL is either root-relative (the standalone viewer, same
 // origin as its backend) or absolute (an embedded surface pointed at another
 // `cadgen viewer`). Sub-assets must come back in the SAME shape: dropping the
-// origin would send the fetch — and the surf worker's fetch — at whatever host
+// origin would send the fetch — and the part worker's fetch — at whatever host
 // happens to be serving the page.
 import { isAbsoluteViewerUrl } from "./origin.js";
 

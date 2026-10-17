@@ -52,3 +52,23 @@ it('reads the catalog again at once when a build finishes or the file moves past
   expect(refreshes).toHaveLength(2);
   expect(result.current.state.error).toBe('');
 });
+
+// A build records its result and writes the file after: the feed names the save the moment it
+// lands, and the catalog is read then, before the build's done.
+it('reads the catalog again the moment the feed names the saved file', () => {
+  let update: (next: unknown) => void = () => {};
+  const refreshes: unknown[] = [];
+  const client = {
+    observeEditingPreview: (_file: string, onUpdate: any) => { update = onUpdate; return () => {}; },
+    refresh: (options: unknown) => { refreshes.push(options); return Promise.resolve(); },
+  };
+  renderHook(() => useEditingPreview('part.step', { enabled: true, client }));
+  act(() => update({ epoch: 'e1', revision: 3, state: 'building', saved: null }));
+  expect(refreshes).toEqual([]);
+  act(() => update({ epoch: 'e1', revision: 3, state: 'building', saved: { tree: 't'.repeat(64), documentHash: 'd'.repeat(64) } }));
+  expect(refreshes).toEqual([{ file: 'part.step', markRefreshing: false }]);
+  act(() => update({ epoch: 'e1', revision: 3, state: 'building', saved: { tree: 't'.repeat(64), documentHash: 'd'.repeat(64) } }));
+  expect(refreshes).toHaveLength(1);
+  act(() => update({ epoch: 'e1', revision: 3, state: 'done', saved: { tree: 't'.repeat(64), documentHash: 'd'.repeat(64) } }));
+  expect(refreshes).toHaveLength(2);
+});

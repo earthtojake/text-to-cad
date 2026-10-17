@@ -164,7 +164,7 @@ export function referencesForExpandedStepTree(references, occurrenceIds, referen
 export function stepTreeTopologyOwnersForSelectors(root, selectors, { isAssemblyView = true } = {}) {
   return uniqueStringList(selectors.flatMap(selector => {
     const parsed = parseCadRefSelector(selector);
-    if (!parsed || !['face', 'edge', 'vertex', 'shape'].includes(parsed.selectorType)) return [];
+    if (!parsed || !['face', 'edge', 'vertex'].includes(parsed.selectorType)) return [];
     if (!isAssemblyView) return [STEP_MODEL_ROOT_ID];
     const owner = findStepTreeNodeForWorkspace(root, parsed.occurrenceId || parsed.label);
     return owner ? [stepTreeNodeIdForWorkspace(owner)] : [];

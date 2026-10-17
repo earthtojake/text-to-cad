@@ -54,38 +54,39 @@ async function open(server) {
   };
 }
 
-test('a single-part STEP names a picked face after its part, never after the XCAF label entry its file carries for a name', async () => {
+test('a single-part STEP names a picked face after its part, by the name the view gives it', async () => {
   const view = await open(lone);
   const { page, pane, at, errors } = view;
   const reference = pane.getByRole('region', { name: 'Reference details', exact: true });
-  // The staging is what cadgen writes: one part, named `=>[0:1:1:2]` in the view.
-  assert.equal(lone.fixture.view.occurrences[0].name, '=>[0:1:1:2]');
+  // The staging is what cadgen writes: one part, named `base` in the view, in `hinge_base.step`.
+  assert.equal(lone.fixture.view.occurrences[0].name, 'base');
   assert.equal(await view.tool('Explode').count(), 0, 'a single part: no Explode, so this is the lone-part view');
-  // A single part opens with its tree closed and Select marked; Select, pressed, opens it.
-  const features = pane.locator('[data-cad-tool-stack] [data-tool-panel][aria-label="Features"]');
-  assert.equal(await features.isVisible(), false, 'a single part\'s tree starts closed');
-  assert.equal(await view.tool('Select').locator('[data-tool-panel-closed]').count(), 1);
-  await view.tool('Select').click();
-  await features.waitFor();
+  // A single part has no tree under Select (its one row would be all of it), and nothing marks
+  // Select; its modes are in the navbar, All, Faces and Edges, with no Parts.
+  assert.equal(await pane.locator('[data-cad-tool-stack] [data-tool-panel][aria-label="Features"]').count(), 0, 'no tree for a part file');
   assert.equal(await view.tool('Select').locator('[data-tool-panel-closed]').count(), 0);
+  await pane.locator('[data-view-controls]').getByRole('button', { name: 'Select mode: All', exact: true }).click();
+  assert.deepEqual(await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemradio').allInnerTexts(), ['All', 'Faces', 'Edges']);
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  // Its faces load once Select is up: under All a press picks one.
   await page.mouse.click(...at([6, 6, 5]));
-  await page.waitForFunction(() => /\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
+  await page.waitForFunction(() => /\/f:[\w.]+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
   const face = (await view.state()).selectedReferenceIds[0].split('|').at(-1);
-  const ordinal = face.replace(/^.*\.f/, '');
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^hinge_base · face ${ordinal} Area `),
-    'the heading is the part, named after the file, and the kind, over the face\'s area');
+  const name = face.replace(/^.*\//, '');
+  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^base · face ${name.replaceAll('.', '\\.')} Area `),
+    'the heading is the part, by its own name rather than the file\'s, and the kind, over the face\'s area');
   // A second face: the picker's name and every one of its entries read the same way.
   await page.keyboard.down('Shift');
   await page.mouse.click(...at([10, 0, 0]));
   await page.keyboard.up('Shift');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedReferenceIds.length === 2);
   const picker = reference.getByRole('combobox', { name: 'Inspect selected reference' });
-  assert.match((await picker.innerText()).replace(/\s+/g, ' '), /^hinge_base · face \d+ 2\/2$/);
+  assert.match((await picker.innerText()).replace(/\s+/g, ' '), /^base · face f:[\w.]+ 2\/2$/);
   await picker.click();
   const options = await page.getByRole('option').allInnerTexts();
   assert.equal(options.length, 2);
-  assert.ok(options.every(option => /^hinge_base · face \d+$/.test(option.trim())), `the picker's entries: ${options}`);
+  assert.ok(options.every(option => /^base · face f:[\w.]+$/.test(option.trim())), `the picker's entries: ${options}`);
   await page.keyboard.press('Escape');
-  assert.doesNotMatch(await pane.innerText(), /=>\[|0:1:1:2/, 'the raw label is nowhere on screen');
   assert.deepEqual(errors, []);
 });

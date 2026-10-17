@@ -6,7 +6,7 @@ import { builtGeometryBvhBytes, ensureFacePickBvh, estimateGeometryBvhBytes, sch
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-// Two triangles over four SHARED vertices (the indexed surf shape), the second
+// Two triangles over four SHARED vertices (the indexed shape of a part's mesh), the second
 // one raised so a ray down each column hits a known face index.
 function indexedGeometry() {
   const geometry = new THREE.BufferGeometry();
@@ -65,7 +65,7 @@ test("ensureFacePickBvh rebuilds when the proxy index array identity changes", a
   ensureFacePickBvh(runtime, { proxy });
   assert.equal(runtime.facePickMesh.geometry.boundsTree, first);
 
-  // New index array (a LOD swap): the cache misses and a new BVH is built.
+  // New index array (a new selector composition): the cache misses and a new BVH is built.
   proxy.faceIndices = new Uint32Array([0, 2, 1, 0, 3, 2]);
   runtime.facePickMesh = makeMesh();
   ensureFacePickBvh(runtime, { proxy });
@@ -127,14 +127,16 @@ test("a denied BVH reservation leaves correct stock raycasting available", async
   const geometry = indexedGeometry();
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
   mesh.updateMatrixWorld();
-  const denied = [];
+  const asked = [];
   scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh }] }, {
-    reserveBuild: ({ estimatedBytes }) => ({ ok: false, detail: { requestedBytes: estimatedBytes } }),
-    onBuildDenied: (detail) => denied.push(detail),
+    reserveBuild: ({ estimatedBytes }) => {
+      asked.push(estimatedBytes);
+      return { ok: false, detail: { requestedBytes: estimatedBytes } };
+    },
   });
   await tick();
   assert.equal(geometry.boundsTree, undefined);
-  assert.equal(denied[0].requestedBytes, estimateGeometryBvhBytes(geometry));
+  assert.deepEqual(asked, [estimateGeometryBvhBytes(geometry)], "the build asked for its estimate and was refused");
   const hits = new THREE.Raycaster(
     new THREE.Vector3(0.6, 0.3, 5),
     new THREE.Vector3(0, 0, -1)

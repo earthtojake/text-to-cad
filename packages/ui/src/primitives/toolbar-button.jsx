@@ -17,7 +17,9 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
 /**
  * `tooltip={false}` leaves the accessible name and shows nothing on hover: for a
  * toolbar over a canvas, where a tooltip would cover what is being pointed at.
- * @param {{ label: string, active?: boolean, tooltip?: boolean, tooltipSide?: "top" | "right" | "bottom" | "left", className?: string,
+ * `disclosure`: the button shows and hides content beside it (`aria-expanded`), not a popup,
+ * so it keeps its hint while expanded (`TooltipHint`'s `disclosure`).
+ * @param {{ label: string, active?: boolean, tooltip?: boolean, tooltipSide?: "top" | "right" | "bottom" | "left", disclosure?: boolean, className?: string,
  *   children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
 export function ToolbarButton({
@@ -25,12 +27,13 @@ export function ToolbarButton({
   active = false,
   tooltip = true,
   tooltipSide = "bottom",
+  disclosure = false,
   className,
   children,
   ...props
 }) {
   const tipsVisible = useContext(ToolbarTooltipVisibility);
-  const tipEnabled = tipsVisible && tooltip && !active && !props.disabled && props["aria-expanded"] !== true;
+  const tipEnabled = tipsVisible && tooltip && !active && !props.disabled && (disclosure || props["aria-expanded"] !== true);
   const button = (
     <Button
       type="button"
@@ -44,5 +47,5 @@ export function ToolbarButton({
     </Button>
   );
   if (!tooltip) return button;
-  return <TooltipHint content={label} disabled={!tipEnabled} side={tooltipSide}>{button}</TooltipHint>;
+  return <TooltipHint content={label} disabled={!tipEnabled} side={tooltipSide} disclosure={disclosure}>{button}</TooltipHint>;
 }

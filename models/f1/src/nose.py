@@ -1,7 +1,7 @@
 """F1 part model: nose.
 
 The geometry `lib/nose.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.2`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#nose`; rebuild `f1.py`
 to pick up a change here.
 """
 

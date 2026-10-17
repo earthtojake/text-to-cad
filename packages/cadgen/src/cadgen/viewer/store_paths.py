@@ -33,6 +33,7 @@ __all__ = [
     "result_tree",
     "source_sidecar_path",
     "virtual_store_asset",
+    "preview_annotations",
 ]
 
 # The source sidecar sits beside the model at ``<name>.step.json`` and carries
@@ -94,6 +95,14 @@ def virtual_store_asset(rel: str, *, producer: dict | None = None, document_hash
     from cadgen.store.view import virtual_path
 
     return virtual_path(str(rel or ""), producer=producer, document_hash=document_hash)
+
+
+def preview_annotations(object_hash: str) -> bytes | None:
+    """The preview annotations object a build feed names, as JSON bytes, or None
+    (``cadgen.store.view.preview_annotations``)."""
+    from cadgen.store.view import preview_annotations as read
+
+    return read(str(object_hash or ""))
 
 
 def source_sidecar_path(entry_path) -> str:

@@ -313,7 +313,7 @@ test("macro views fit visible occurrences without collapsing depth inside an ass
       const projected = point.applyMatrix4(records[0].effectMatrix).project(camera);
       assert.ok(projected.z > -1 && projected.z < 1);
     }
-    records[0].tubeGpuState = { active: true };
+    records[0].tubeSkinState = { active: true };
     fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
     assertClose(camera.near, aggregateNear, 1e-8 * scale);
   }
@@ -330,7 +330,7 @@ test("a perspective closeup with nothing to fit on keeps near at a fraction of t
     // fit has nothing to go on and near falls to the radius safety floor.
     const records = [
       { partBounds: { min: [-5 * scale, -25 * scale, 0], max: [5 * scale, 5 * scale, 20 * scale] } },
-      { partBounds: { min: [-2 * scale, -2 * scale, 9 * scale], max: [2 * scale, 2 * scale, 11 * scale] }, tubeGpuState: { active: true } }
+      { partBounds: { min: [-2 * scale, -2 * scale, 9 * scale], max: [2 * scale, 2 * scale, 11 * scale] }, tubeSkinState: { active: true } }
     ];
     fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
     const collapsed = camera.near;
@@ -432,7 +432,7 @@ test("output sizing and padding helpers preserve snapshot fallback semantics", (
   assert.equal(framePadding({ output: { padding: -0.02 } }), 0);
   assert.equal(framePadding({ output: { padding: 0.25 } }), 0.15);
   assert.equal(framePadding({ output: { padding: 0.13 } }), 0.13);
-  // One name: the retired `paddingPercent` is refused by the CLI and means nothing here.
+  // One name: `paddingPercent` is not an output key (the CLI refuses it as unknown) and means nothing here.
   assert.equal(framePadding({ output: { paddingPercent: 0.13 } }), 0.04);
 });
 

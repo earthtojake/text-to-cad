@@ -6,25 +6,21 @@ takes is declared beside the verb. What is DXF-specific is the SURFACE, and that
 is what these tests cover.
 
 A DXF is drawn as a flat 2D drawing — the same picture, from the same payload,
-with the same code as the CAD Viewer's DXF pane. It used to be rendered as a 3D
-flat pattern, so this door took a camera, display settings, a render mode and a
-view label. Those are gone, on two surfaces, and both are asserted here:
+with the same code as the CAD Viewer's DXF pane. It has no camera, display
+settings, render mode or view label, and both surfaces say so:
 
-* removed from the verb's SIGNATURE, so `--camera`, `--display`, `--mode` and
-  `--view-labels` are out of `--help` — and REFUSED BY NAME while parsing, with
-  what the flag meant, why a drawing has no such thing and what to pass
-  instead, rather than argparse's "unrecognized arguments";
-* refused by name in the shared per-kind check, so a `--job` file — and
+* the verb's SIGNATURE takes none of them, so `--camera`, `--display`, `--mode`
+  and `--view-labels` are out of `--help`, and argparse refuses each as an
+  unrecognized argument;
+* the shared per-kind check refuses them by name, so a `--job` file — and
   `cadgen snapshot`, which routes a `.dxf` through the same check — is told what
   a drawing is instead of being rendered as if the request had not been made.
-
-Both surfaces say it in the same words (the refusal clauses beside the verb),
-and the test that pins that is what keeps one cutover from growing two
-vocabularies.
 
 The pixels are `test_snapshot_render.py`.
 """
 
+import contextlib
+import io
 import subprocess
 import sys
 import unittest
@@ -40,7 +36,6 @@ add_repo_path("packages/cadgen/src")
 import cadgen.snapshot_cli as snapshot
 from cadgen._internal.snapshot_door import (
     DOOR_KINDS,
-    DRAWING_RETIRED_OPTIONS,
     drawing_camera_refusal,
     drawing_mode_refusal,
 )
@@ -108,10 +103,7 @@ class DxfSnapshotRefusalTests(unittest.TestCase):
             r"camera poses a model in space",
         )
 
-    def test_the_job_refusal_is_the_same_sentence_the_retired_flag_speaks(self) -> None:
-        # The flag half of this is asserted against the same two functions in
-        # DxfSnapshotDoorSurfaceTests: one cutover, one wording, the file being
-        # refused in place of "a drawing".
+    def test_the_job_refusal_is_the_drawing_sentence_naming_the_file(self) -> None:
         for job, sentence in (
             (self.job(camera="top"), drawing_camera_refusal("a.dxf")),
             (self.job(mode="list", outputs=[]), drawing_mode_refusal("a.dxf")),
@@ -122,11 +114,8 @@ class DxfSnapshotRefusalTests(unittest.TestCase):
                 self.assertEqual(sentence, str(raised.exception))
 
     def test_view_is_the_only_mode_a_drawing_renders_in(self) -> None:
-        # `list` reports a model's renderable parts and `section` cuts a solid;
-        # a drawing has neither. Both used to be accepted here.
-        self.refuses(self.job(mode="list", outputs=[]), r"no parts to list and no solid to section")
-        self.refuses(self.job(mode="section"), r"no parts to list and no solid to section")
-        self.refuses(self.job(section={"plane": "XY"}), r"no parts to list and no solid to section")
+        # `list` reports a model's renderable parts; a drawing has none.
+        self.refuses(self.job(mode="list", outputs=[]), r"no parts to list, so view is the only mode")
 
     def test_scene_scale_means_nothing_to_a_drawing(self) -> None:
         self.refuses(self.job(scale="urdf"), r"scale picks the units a 3D scene")
@@ -165,8 +154,6 @@ class DxfSnapshotRefusalTests(unittest.TestCase):
             (self.job(jointValues={"j1": 10}), r"jointValues pose a robot description"),
             (self.job(animation={"clip": "open"}), r"an animation frame requires a STEP document"),
             (self.job(selection={"focus": ["#o1"]}), r"selection focus/hide require STEP topology"),
-            (self.job(quality={"tessellation": {"chordTolerance": 0.01}}),
-             r"quality\.tessellation requires an exact-surface STEP package"),
         ):
             with self.subTest(keys=sorted(set(job) - {"input", "outputs"})):
                 self.refuses(job, pattern)
@@ -250,64 +237,23 @@ class DxfSnapshotDoorSurfaceTests(unittest.TestCase):
                        "--kinematics", "--focus", "--input", "--output"):
             self.assertNotIn(absent, result.stdout, f"{absent} is not a drawing's business")
 
-    def run_door(self, *argv: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [sys.executable, "-m", "cadgen.cli", "dxf", "snapshot", *argv],
-            check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
+    def test_a_scene_flag_is_an_ordinary_parse_error(self) -> None:
+        # The parser holds the signature and nothing else: a flag it does not
+        # have is argparse's usage error, whatever the flag is.
+        from cadgen.cli import dxf_snapshot
 
-    def test_every_retired_flag_teaches_instead_of_parsing(self) -> None:
-        # What the flag meant, why a drawing has no such thing, and what to do
-        # instead -- the standard the job-packet refusals already meet. An
-        # `unrecognized arguments` line meets none of it.
-        expected = {
-            "--camera": ("poses a model in space", "no camera and no views to choose between"),
-            "--display": ("describes a 3D scene", "--appearance light|dark"),
-            "--mode": ("view, section and list", "no parts to list and no solid to section"),
-            "--view-labels": ("view name into the image", "no camera"),
-        }
-        self.assertEqual(sorted(expected), sorted(DRAWING_RETIRED_OPTIONS))
-        for flag, (meant, because) in expected.items():
-            with self.subTest(flag=flag):
-                result = self.run_door("a.dxf", "a.png", flag, "top")
-                self.assertEqual(2, result.returncode, result.stderr)
-                self.assertEqual("", result.stdout)
-                message = result.stderr
-                self.assertIn(f"cadgen dxf snapshot no longer takes {flag}", message)
-                self.assertIn(meant, message)
-                self.assertIn(because, message)
-                self.assertIn("a DXF is drawn as a flat 2D drawing", message)
-                # The two things that used to be the whole answer.
-                self.assertNotIn("unrecognized arguments", message)
-                self.assertNotIn("usage:", message)
-
-    def test_a_retired_flag_is_refused_however_it_is_spelled(self) -> None:
-        # A value, an equals sign, or nothing at all: the flag is REFUSED, never
-        # accepted and never reported as the wrong number of arguments.
         for argv in (
-            ("a.dxf", "a.png", "--camera", "iso"),
-            ("a.dxf", "a.png", "--camera=iso"),
-            ("a.dxf", "a.png", "--view-labels"),
-            ("--mode", "list", "a.dxf", "a.png"),
+            ["a.dxf", "a.png", "--camera", "iso"],
+            ["a.dxf", "a.png", "--display=solid"],
+            ["a.dxf", "a.png", "--view-labels"],
+            ["--mode", "list", "a.dxf", "a.png"],
         ):
             with self.subTest(argv=argv):
-                result = self.run_door(*argv)
-                self.assertEqual(2, result.returncode)
-                self.assertIn("no longer takes", result.stderr)
-
-    def test_the_flag_speaks_the_shared_refusal_verbatim(self) -> None:
-        # One cutover, one vocabulary: `--camera` and a job's `"camera"` are the
-        # same request arriving two ways, so they may not drift into two
-        # explanations of one absence. The job half is pinned against the same
-        # two functions in DxfSnapshotRefusalTests below.
-        self.assertIn(
-            drawing_camera_refusal("a drawing"),
-            self.run_door("a.dxf", "a.png", "--camera", "iso").stderr,
-        )
-        self.assertIn(
-            drawing_mode_refusal("a drawing"),
-            self.run_door("a.dxf", "a.png", "--mode", "list").stderr,
-        )
+                errors = io.StringIO()
+                with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as caught:
+                    dxf_snapshot.main(argv)
+                self.assertEqual(2, caught.exception.code)
+                self.assertIn("unrecognized arguments", errors.getvalue())
 
     def test_appearance_takes_light_or_dark_and_says_so(self) -> None:
         import cadgen.dxf as dxf_door

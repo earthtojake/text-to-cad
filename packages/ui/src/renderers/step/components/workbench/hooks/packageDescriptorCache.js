@@ -34,7 +34,7 @@ export async function loadPackageDescriptor(packageAssetUrl, { signal, resources
   if (!descriptor || signal?.aborted) {
     return null;
   }
-  // A surface request can install a newer runtime view while this saved-view
+  // A part request can install a newer runtime view while this saved-view
   // read is in flight. That installed view wins; an older response must neither
   // overwrite it nor escape to the caller that is about to compose geometry.
   if (PACKAGE_DESCRIPTOR_CACHE.has(cacheKey)) {

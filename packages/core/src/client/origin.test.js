@@ -78,7 +78,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
     hash: "h1",
     url: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step&v=h1",
     poseUrl: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.json",
-    renderModuleUrl: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.js",
     relations: {
       glb: { url: "/__cad/asset?file=%2Fabs%2Fpkg&v=h2", hash: "h2", bytes: 3 },
       none: { hash: "h3" },
@@ -91,7 +90,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
   assert.notEqual(rebased, entry, "a rebase never mutates the catalog entry");
   assert.equal(rebased.url, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step&v=h1`);
   assert.equal(rebased.poseUrl, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.json`);
-  assert.equal(rebased.renderModuleUrl, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.js`);
   assert.equal(rebased.relations.glb.url, `${REMOTE}/__cad/asset?file=%2Fabs%2Fpkg&v=h2`);
   assert.equal(rebased.relations.glb.hash, "h2");
   assert.deepEqual(rebased.relations.none, { hash: "h3" });

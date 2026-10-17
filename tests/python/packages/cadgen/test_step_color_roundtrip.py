@@ -20,7 +20,7 @@ from tests.python.support.tmp_root import generated_cad_directory
 
 
 class StepColorRoundTripTest(unittest.TestCase):
-    def test_written_colour_is_the_intended_srgb_and_reads_back_as_the_channel(self) -> None:
+    def test_written_colour_is_the_intended_srgb_and_a_reader_takes_the_channel(self) -> None:
         import build123d as bd
         from cadgen._internal.component_package import _occurrence_color
         from cadgen._internal.step_scene_loader import load_step_scene
@@ -43,18 +43,21 @@ class StepColorRoundTripTest(unittest.TestCase):
             loaded = list(scene.prototype_colors.values())
             self.assertEqual(1, len(loaded))
         package_channel = _occurrence_color(box)
-        for read_back, channel in zip(loaded[0][:3], package_channel[:3]):
+        for read, channel in zip(loaded[0][:3], package_channel[:3]):
             # Reader (linear) == package channel (linear): one model, one colour.
-            self.assertAlmostEqual(read_back, channel, places=3)
-            self.assertEqual(round(linear_to_srgb(read_back) * 255), 128)
+            self.assertAlmostEqual(read, channel, places=3)
+            self.assertEqual(round(linear_to_srgb(read) * 255), 128)
 
     def test_repeated_geometry_keeps_occurrence_colors_and_one_component_payload(self) -> None:
         import build123d as bd
         from OCP.TopLoc import TopLoc_Location
 
         from cadgen._internal.component_package import _occurrence_color
-        from cadgen.store.build import build_tree_through_step
+        from cadgen._internal.step_scene_loader import load_step_scene
+        from cadgen.store.build import build_document_tree
+        from cadgen.store.records import document_entry_for_hash
         from cadgen.store.trees import get_tree
+        from tests.python.support.documents import save_step
 
         scratch = generated_cad_directory(prefix="step-occurrence-colour-")
         self.addCleanup(scratch.cleanup)
@@ -72,26 +75,27 @@ class StepColorRoundTripTest(unittest.TestCase):
         expected = [_occurrence_color(child) for child in children]
         output = root / "repeated.step"
         with mock.patch.dict("os.environ", {"CADGEN_CACHE_DIR": str(root / "store")}):
-            _, _, stats, _ = build_tree_through_step(
-                bd.Compound(children=children, label="repeated"),
-                output,
-                root_name="repeated",
+            tree_hash, _, stats, digest = save_step(bd.Compound(children=children, label="repeated"), output,
+                                                    root_name="repeated")
+            self.assertEqual({"ok": True}, stats["verify"])
+            # The saved document is the result it was written from; a cold compile of
+            # its bytes reads the same occurrences from the file.
+            self.assertEqual(tree_hash, document_entry_for_hash(digest)["tree"])
+            documents = [get_tree(tree_hash), build_document_tree(load_step_scene(output))[1]]
+
+        for document in documents:
+            occurrences = document["occurrences"]
+            self.assertEqual(3, len(occurrences))
+            for occurrence, color in zip(occurrences, expected):
+                for actual_channel, expected_channel in zip(occurrence["color"], color):
+                    self.assertAlmostEqual(actual_channel, expected_channel, places=3)
+            self.assertEqual(
+                1,
+                len({occurrence["component"] for occurrence in occurrences}),
+                "instance colors must not split identical geometry into component payloads",
             )
-            document = get_tree(stats["documentTree"])
-
-        occurrences = document["occurrences"]
-        self.assertEqual(3, len(occurrences))
-        for occurrence, color in zip(occurrences, expected):
-            for actual_channel, expected_channel in zip(occurrence["color"], color):
-                self.assertAlmostEqual(actual_channel, expected_channel, places=3)
-        self.assertEqual(
-            1,
-            len({occurrence["component"] for occurrence in occurrences}),
-            "instance colors must not split identical geometry into component payloads",
-        )
-        self.assertEqual(1, len(document["components"]))
-        self.assertEqual({}, next(iter(document["components"].values()))["faceColors"])
-
+            self.assertEqual(1, len(document["components"]))
+            self.assertEqual({}, next(iter(document["components"].values()))["faceColors"])
 
 if __name__ == "__main__":
     unittest.main()

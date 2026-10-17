@@ -71,7 +71,7 @@ const renderer = defineFileRenderer({
     dispose: () => { events.push(`${source.id}:${file.path}:disposed`); } }),
 });
 const renderers = [renderer];
-const clipboard = { writeText: async () => {}, readText: async () => "", writeImage: async () => {} };
+const clipboard = { writeText: async () => {}, writeImage: async () => {} };
 function host(root: ReturnType<typeof memorySource>, openFile: (path: string) => void) {
   return { files: root.source, fileActions: root.actions, clipboard, promptContext: unavailablePromptContext, environment: { colorScheme: "light" as const }, navigation: { openFile } };
 }

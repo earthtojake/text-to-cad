@@ -28,7 +28,7 @@ import { useViewportCamera } from "../camera/useViewportCamera.js";
 import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
   WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, createViewPlaneOrientationStore,
-  getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
+  getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, orbitControlsBoostsPinch, isTrackpadLikeWheelEvent,
   reframeReason, stepKeyboardOrbit
 } from "../camera/viewportCameraKit.js";
 import {
@@ -102,20 +102,13 @@ const ShellViewport = forwardRef(function ShellViewport({
   onPerspectiveChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
-  // The camera came to rest on a new view: a preview camera that moved (preview's
-  // orbit, which persists nothing and so emits no perspective), or a viewport whose size
-  // changed. A renderer that samples the camera — to decide what detail the scene needs,
-  // say — cannot see either from the stored perspective alone: an aspect change can expose
-  // a part without changing position, target or zoom. The viewport says the camera settled;
-  // what that is worth is the renderer's.
-  onCameraSettled = null,
   // A scene drawn with hairlines keeps the idle pixel ratio while the camera moves: dropping
   // it mid-orbit turns one-pixel linework into a shimmer the surfaces never show.
   preserveInteractionPixelRatio = false,
   // What happens to the WebGL runtime UNDER the scene, for a renderer that hangs its own
   // objects or in-flight work on it: `onRelease(runtime, { handoff })` at teardown, while the
   // renderer is still alive (`handoff` says a replacement runtime follows: a context recovery,
-  // not an unmount); `onContextLost()`; `onInitializationError(error)`.
+  // not an unmount).
   runtimeLifecycle = null,
   // A renderer's own layer over the canvas: a node, or `(viewport) => node` for one that
   // needs the viewport itself ({ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene }:
@@ -190,8 +183,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   const perspectivePropRef = useRef(perspective);
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
-  const cameraMovedRef = useRef(null);
-  cameraMovedRef.current = onCameraSettled;
   const runtimeLifecycleRef = useRef(runtimeLifecycle);
   runtimeLifecycleRef.current = runtimeLifecycle;
   // Which model was framed once its rest box was FINAL. A scene whose box still grows while it
@@ -295,7 +286,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     resetZoomAndPan, syncPreviewCamera, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef, previewCameraRef,
-    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
+    lastEmittedPerspectiveRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef, previewMode,
     previewModeRef, previewOrbit: orbitPreview, previewOrbitSpeed, runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
     setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
@@ -343,9 +334,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (!runtime) return;
     if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
     emitPerspectiveChange(runtime);
-    // A resize can change what is on screen without changing the stored perspective,
-    // so the settle is reported here rather than left to perspective deduplication.
-    cameraMovedRef.current?.();
   }, []);
 
   const hasViewportContent = Boolean(scene);
@@ -479,10 +467,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     setRuntimeResetToken((value) => value + 1);
   }, []);
   const handleRuntimeInitializationError = useCallback((runtimeError) => {
-    runtimeLifecycleRef.current?.onInitializationError?.(runtimeError);
     viewerAlertChangeRef.current?.(buildRuntimeInitializationAlert(runtimeError));
   }, []);
-  const handleRuntimeContextLost = useCallback(() => { runtimeLifecycleRef.current?.onContextLost?.(); }, []);
   // The scene is its renderer's: teardown detaches it and leaves disposal to its owner.
   const detachScene = useCallback((runtime) => {
     runtime?.kitScene?.object3D?.removeFromParent?.();
@@ -505,7 +491,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   useViewerRuntime({
     mountRef, runtimeRef, previewModeRef, setError, setViewerReadyTick, viewerTheme, emitPerspectiveChange,
     setActiveViewPlaneFace, activeViewPlaneFaceRef, stepCameraTransition, stepKeyboardOrbit, getActiveViewPlaneFaceId,
-    cancelCameraTransition, clearKeyboardOrbitState, isTrackpadLikeWheelEvent, isPinchWheelEvent, WHEEL_PINCH_DELTA_BOOST,
+    cancelCameraTransition, clearKeyboardOrbitState, isTrackpadLikeWheelEvent, orbitControlsBoostsPinch, WHEEL_PINCH_DELTA_BOOST,
     getKeyboardOrbitCommand, getKeyboardOrbitAxes, applyOrbitDelta, getViewerThemeValue, getPixelRatioCap,
     applySceneBackground, onViewportResize: handleViewportResize, applyInitialPerspective,
     updateGridHelper: updateActiveGridHelper, disposeScene: releaseScene,
@@ -517,7 +503,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     INTERACTION_IDLE_DELAY_MS, TRACKPAD_PINCH_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, ACCELERATED_WHEEL_ZOOM_SPEED,
     KEYBOARD_ORBIT_NUDGE_RAD, defaultGridRadius, sceneScaleMode: normalizedSceneScaleMode, floorMode: resolvedFloorMode,
     renderMode, onInitializationError: handleRuntimeInitializationError, onFramePresented: handleFramePresented,
-    presentationRequestRef, onContextLost: handleRuntimeContextLost, onContextRestored: handleRuntimeContextRestored,
+    presentationRequestRef, onContextRestored: handleRuntimeContextRestored,
     preserveInteractionPixelRatio, runtimeResetToken
   });
 
@@ -959,7 +945,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     return () => { cancelled = true; };
   }, [viewUpdate?.revision, viewUpdate?.binding, viewerReadyTick]);
 
-  // A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under
+  // A scene that changes IN PLACE (it arrives in pieces, is rebuilt under
   // the same identity) says so from its own effect, and the viewport adopts it THEN: placed
   // objects, bounds, stage, depth range and the framing rules, synchronously, so whatever the
   // renderer does next in that effect pass already sees the fitted stage. A child's effects

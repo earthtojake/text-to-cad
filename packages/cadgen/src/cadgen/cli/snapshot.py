@@ -6,10 +6,8 @@ mixed-format ``--job`` packet needs.
 
 Its verb is the UNION shape — the STEP surface plus ``joint_values`` — so the
 CLI is GENERATED like every other command in the schema
-(:mod:`cadgen._internal.cli_from_function`). Snapshot used to be the schema's
-one adapter, with a hand-written argv scanner here and a declared option
-surface a policy test pinned; nothing about a snapshot's arguments is written
-down twice any more.
+(:mod:`cadgen._internal.cli_from_function`), and nothing about a snapshot's
+arguments is written down twice.
 
 The verb lives here rather than on a ``cadgen.snapshot`` namespace because
 there is no polymorphic FORMAT: `cadgen snapshot` is a routing convenience over

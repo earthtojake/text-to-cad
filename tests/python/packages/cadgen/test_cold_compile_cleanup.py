@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import re
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,32 @@ class ColdCompileCleanupTest(unittest.TestCase):
         finally:
             guard["enabled"] = False
 
+    def test_a_compile_tells_its_job_each_phase_and_counts_its_parts(self):
+        # A CAD Viewer waiting on a compile reads the daemon's job ledger: the phases
+        # must reach it as a model build's do, not stop at the terminal's line.
+        from cadgen.daemon import executors
+
+        document = self.document(nested=True)
+        events = []
+        executors.set_event_sink(events.append)
+        self.addCleanup(executors.set_event_sink, None)
+        self.assertTrue(self.compile(document)["ok"])
+        building = [event for event in events if event.get("state") == "building"]
+        self.assertTrue(building, "the compile reported nothing to its job")
+        self.assertEqual({os.path.realpath(event["model"]) for event in building}, {os.path.realpath(document)})
+        read = next(event for event in building if str(event.get("detail", "")).startswith("Reading "))
+        self.assertIn(document.name, read["detail"])
+        # Every phase says it is an import: the word a CAD Viewer's loading screen shows.
+        self.assertEqual(read["phase"], "Importing STEP")
+        collecting = [event for event in building if event.get("phase") == "Importing STEP: collecting parts"]
+        self.assertTrue(collecting and all(isinstance(event.get("total"), int) and event["total"] > 0 for event in collecting),
+                        "the parts are counted as they are collected")
+        # What a person reads: no component's hash, and no phase showing the last one's detail.
+        self.assertFalse([event for event in building if re.fullmatch(r"[0-9a-f]{16}", str(event.get("detail", "")))])
+        for before, after in zip(building, building[1:]):
+            if after.get("phase") != before.get("phase") and before.get("detail"):
+                self.assertNotEqual(after.get("detail"), before["detail"], f"{after.get('phase')} kept the detail")
+
     def test_raw_compile_matches_direct_canonical_objects_cold_warm_and_force(self):
         from cadgen._internal.step_scene_package import load_step_scene_exact
         from cadgen.store.build import build_document_tree
@@ -122,17 +149,20 @@ class ColdCompileCleanupTest(unittest.TestCase):
                         self.assertEqual(tree_for_document_hash(digest), tree)
                         self.assertEqual(document.read_bytes(), original_bytes)
 
-    def test_cold_and_warm_native_compile_never_prepare_display_surfaces(self):
-        from cadgen._internal import surface_extract, step_scene_package
+    def test_a_cold_compile_derives_each_part_once_and_a_warm_one_nothing(self):
+        from cadgen._internal import tessellate, topology_extract, step_scene_package
         document = self.document(nested=True)
-        with mock.patch.object(surface_extract, "extract_surface_component", side_effect=AssertionError("display work in native compile")), \
-             mock.patch("cadgen.store.view.view_dir_for", side_effect=AssertionError("display view in native compile")):
+        with mock.patch("cadgen.store.view.view_dir_for", side_effect=AssertionError("display view in native compile")):
             first = self.compile(document)
-            with mock.patch.object(step_scene_package, "_load_step_scene_text", side_effect=AssertionError("warm compile reparsed STEP")):
+            derived = sorted((self.root / "store/index/part").iterdir())
+            self.assertEqual(len(derived), 2, "the compile derived each part's display data before it reported done")
+            with mock.patch.object(step_scene_package, "_load_step_scene_text", side_effect=AssertionError("warm compile reparsed STEP")), \
+                 mock.patch.object(topology_extract, "extract_topology_facts", side_effect=AssertionError("display work in warm compile")), \
+                 mock.patch.object(tessellate, "mesh_component", side_effect=AssertionError("display work in warm compile")):
                 second = self.compile(document)
         self.assertEqual(second["tree"], first["tree"])
         self.assertTrue(second["skipped"])
-        self.assertFalse((self.root / "store/index/surface").exists())
+        self.assertEqual(sorted((self.root / "store/index/part").iterdir()), derived)
 
     def test_discarded_composition_preserves_prototype_bytes_and_canonical_result(self):
         from cadgen._internal.component_package import _shape_brep_bytes
@@ -163,8 +193,9 @@ class ColdCompileCleanupTest(unittest.TestCase):
                 self.assertIsNotNone(discarded.wrapped)  # Match the old wrapper's lifetime.
 
     def test_raw_compile_skips_discarded_native_and_adaptive_preparation(self):
-        from cadgen._internal import generation, step_scene_mesh, generation_spec
+        from cadgen._internal import step_scene_mesh
         from cadgen._internal.step_scene_package import load_step_scene_exact
+        from cadgen.store import build
         from cadgen.store.build import build_document_tree
 
         document = self.document(nested=True)
@@ -172,8 +203,7 @@ class ColdCompileCleanupTest(unittest.TestCase):
             tree, _, _ = build_document_tree(load_step_scene_exact(document))
             expected = self.snapshot(tree)
         with mock.patch.object(step_scene_mesh, "scene_to_build123d_compound", side_effect=AssertionError("unused native compound")), \
-             mock.patch.object(generation_spec, "adaptive_mesh_resolution_for_scene", side_effect=AssertionError("unused classification")), \
-             mock.patch.object(generation, "_assembly_provenance_manifest", side_effect=AssertionError("unused provenance")):
+             mock.patch.object(build, "_edge_rendering", side_effect=AssertionError("unused classification")):
             for force in (False, True):
                 result = self.compile(document, force=force)
                 self.assertEqual(expected, self.snapshot(result["tree"]))
@@ -182,7 +212,6 @@ class ColdCompileCleanupTest(unittest.TestCase):
         from cadgen import step_artifact_cli as artifact
         from cadgen._internal import generation, step_scene_mesh
         from cadgen._internal.step_scene_package import load_step_scene_exact
-        from cadgen._internal.step_scene_types import SelectorOptions
 
         class Reached(Exception):
             pass
@@ -196,15 +225,9 @@ class ColdCompileCleanupTest(unittest.TestCase):
                 scene = load_step_scene_exact(document)
                 scene.source_kind, scene.reemit_source_hash = kind, reemit
                 spec = replace(artifact._build_entry_spec(self.root, document), source=source)
-                with mock.patch.object(generation, "_selector_options_for_part", side_effect=Reached) as classified:
+                with mock.patch.object(step_scene_mesh, "scene_to_build123d_compound", side_effect=Reached) as composed:
                     with self.assertRaises(Reached):
-                        generation._generate_part_outputs(spec, entries_by_step_path={}, preloaded_scene=scene, force=True)
-                self.assertIs(classified.call_args.kwargs["scene"], scene)
-                with mock.patch.object(generation, "_selector_options_for_part", return_value=SelectorOptions()), \
-                     mock.patch.object(generation, "_assembly_provenance_manifest", return_value={}), \
-                     mock.patch.object(step_scene_mesh, "scene_to_build123d_compound", side_effect=Reached) as composed:
-                    with self.assertRaises(Reached):
-                        generation._generate_part_outputs(spec, entries_by_step_path={}, preloaded_scene=scene, force=True)
+                        generation._generate_part_outputs(spec, preloaded_scene=scene, force=True)
                 composed.assert_called_once_with(scene)
 
     def test_public_reader_still_constructs_private_return_geometry(self):
@@ -237,9 +260,11 @@ class ColdCompileCleanupTest(unittest.TestCase):
         document = self.document(nested=True)
         source_bytes = document.read_bytes()
         digest = hashlib.sha256(source_bytes).hexdigest()
+        # A sidecar names a document occurrence by its token, read off the compiled tree.
+        leaf = flatten(self.compile(document)["tree"])["occurrences"][0]["id"]
         payload = {"appearance": {
                        "materials": {"finish": {"name": "Finish", "roughness": .27, "metalness": .6}},
-                       "assignments": {"o1.1.1": "finish"},
+                       "assignments": {leaf: "finish"},
                    },
                    "kinematics": {"poses": {"rest": {}}}}
         write_source_sidecar(document, payload, document_hash=digest)
@@ -257,7 +282,7 @@ class ColdCompileCleanupTest(unittest.TestCase):
             self.assertEqual(declarations["kinematics"], payload["kinematics"])
             canonical = flatten(result["tree"])
             overlaid = apply_appearance(canonical, declarations["appearance"])
-            occurrence = next(occ for occ in overlaid["occurrences"] if occ["id"] == "o1.1.1")
+            occurrence = next(occ for occ in overlaid["occurrences"] if occ["id"] == leaf)
             self.assertEqual(
                 occurrence["material"],
                 {**SOURCE_MATERIAL_DEFAULTS, "roughness": .27, "metalness": .6},

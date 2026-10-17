@@ -42,22 +42,6 @@ class Accounting(unittest.TestCase):
             with mock.patch.dict(os.environ, {"CADGEN_MEMORY_MB": "0"}):
                 self.assertEqual(memory.MemoryPolicy.from_environment().limit_bytes, 0)
 
-    def test_removed_worker_reservation_settings_are_ignored_with_a_warning(self):
-        import contextlib
-        import io
-
-        for name in ("CADGEN_WORKER_MEMORY_MB", "CADGEN_DEPENDENCY_MEMORY_MB"):
-            env = {name: "512", "CADGEN_MEMORY_MB": "1024"}
-            with self.subTest(name), mock.patch.dict(os.environ, env):
-                stderr = io.StringIO()
-                with contextlib.redirect_stderr(stderr):
-                    policy = memory.MemoryPolicy.from_environment()
-                # The stale knob changes nothing; the budget still applies.
-                self.assertEqual(1024 * MIB, policy.limit_bytes)
-                self.assertEqual(memory.WORKER_SEED_BYTES, policy.seed_bytes)
-                self.assertIn(f"warning: {name} is ignored", stderr.getvalue())
-                self.assertIn("CADGEN_MEMORY_MB", stderr.getvalue())
-
     def test_baseline_is_the_leanest_never_used_worker_and_never_below_the_seed(self):
         seed = memory.WORKER_SEED_BYTES
         self.assertEqual(memory.worker_baseline([], seed=seed), seed)

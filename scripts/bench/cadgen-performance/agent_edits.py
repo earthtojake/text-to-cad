@@ -15,8 +15,10 @@ scenario then starts from a current baseline:
 - ``label`` / ``revert-label``: a label-only edit that leaves geometry alone.
 
 Edits are exact substitutions that must match once. Each iteration takes the
-next ``--*-to`` value, so an edit is new to the store; reverts return to bytes
-the store has built before. Sources are restored in ``finally``.
+next ``--*-to`` value, so an edit is new to the store and is built; a revert
+returns to sources the store has built, so it is a restore: outcome ``current``,
+nothing built, the STEP files written back to the baseline's bytes (the ones the
+edit changed, listed in ``changedSteps``). Sources are restored in ``finally``.
 """
 from __future__ import annotations
 
@@ -138,7 +140,7 @@ def main() -> int:
     parser.add_argument("--cadgen-src", default=str(REPO / "packages/cadgen/src"),
                         help="cadgen source root put on PYTHONPATH (default: this checkout)")
     parser.add_argument("--python", default=sys.executable)
-    parser.add_argument("--node-bin", help="Directory prepended to PATH (Node 22 for the mesh builders)")
+    parser.add_argument("--node-bin", help="Directory prepended to PATH (Node 22, for a checkout whose cadgen still exports meshes through Node)")
     parser.add_argument("--timeout", type=float, default=3600.0, help="Seconds before a run counts as failed")
     parser.add_argument("--max-load", type=float,
                         help="Before each run, wait (up to 30 min) for the one-minute load average to drop below this")
@@ -213,6 +215,7 @@ def main() -> int:
     logs.mkdir(parents=True, exist_ok=True)
     digests: dict[str, tuple[int, int, str]] = {}
     previous_steps = step_digests(project, digests)
+    baseline_steps: dict[str, str] = {}  # the STEP files of the current baseline, once it is built
 
     def write_variant(variant: dict[Path, bytes]) -> None:
         for path, (payload, _stat) in originals.items():
@@ -267,6 +270,11 @@ def main() -> int:
             problems.append(f"expected nothing to build, built {built or result.get('outcome')}")
         if expect == "built" and result.get("outcome") != "built":
             problems.append(f"expected a rebuild, outcome {result.get('outcome')}")
+        if expect == "restored":
+            unlike = sorted(key for key in steps.keys() | baseline_steps.keys() if steps.get(key) != baseline_steps.get(key))
+            if result.get("outcome") != "current" or built or unlike:
+                problems.append(f"expected a restore (outcome current, nothing built, the STEP files back to the baseline's "
+                                f"bytes), outcome {result.get('outcome')}, built {built}, unlike the baseline {unlike}")
         if problems:
             row["problems"] = problems
         report["runs"].append(row)
@@ -293,6 +301,7 @@ def main() -> int:
         # a forced root rebuild leaves the baseline current.
         run("warmup", 0, baseline, measured=False, expect="built", flags=("--force",))
         run("prime", 0, baseline, measured=False, expect="current")
+        baseline_steps.update(previous_steps)
         for iteration in range(args.iterations):
             run("noop", iteration, baseline, measured=True, expect="current")
             run("comment", iteration, commented, measured=True, expect="current")
@@ -300,7 +309,7 @@ def main() -> int:
             for kind in ("leaf", "parent", "label"):
                 if kind in edits:
                     run(kind, iteration, variant(kind, iteration), measured=True, expect="built")
-                    run(f"revert-{kind}", iteration, baseline, measured=True, expect="built")
+                    run(f"revert-{kind}", iteration, baseline, measured=True, expect="restored")
         report["summary"] = {}
         for row in report["runs"]:
             if row["measured"] and not row.get("problems"):

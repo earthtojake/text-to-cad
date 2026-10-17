@@ -4,7 +4,7 @@
 // Copy actions write only to the clipboard; a Quick Edit carries the selection's
 // references to the agent. In the other direction, selectReference asks the
 // surface to select geometry named by a reference from the host.
-import { isNativeCadSelector, parseCadRefToken } from "@text-to-cad/core/lib/cadRefs.js";
+import { elementRef, isNativeCadSelector, parseCadRefToken, splitElementRef } from "@text-to-cad/core/lib/cadRefs.js";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX, stepTreeNodeChildren } from "@text-to-cad/core/lib/step/stepTree.js";
 
 // The same two spellings stepTreeSelection.js uses, repeated here rather than
@@ -43,8 +43,6 @@ export function referencesFromCopyText(text, file) {
     .filter(Boolean)
     .map((line) => referenceFromCopyText(line, file));
 }
-
-const ENTITY_RE = /^([sfev])(\d+)$/;
 
 /**
  * The tree node a selector names, walking the display tree the way the copy
@@ -101,8 +99,8 @@ export function referenceLabel(selector, treeRoot) {
  *
  * Tried in order: the reference map, which knows every loaded entity by its
  * canonical, display and copy spellings; the tree, which knows parts and
- * subassemblies by occurrence id, name and label; and a label-qualified
- * entity (`bracket.f45`) resolved through the labelled node's occurrence.
+ * subassemblies by occurrence token, name and label; and a label-qualified
+ * element (`bracket/f:bracket.extrude1.3`) resolved through the labelled node's occurrence.
  * A list selects its first member.
  */
 export function resolveSelectorSelection(selector, { referenceMap, treeRoot } = {}) {
@@ -122,19 +120,16 @@ export function resolveSelectorSelection(selector, { referenceMap, treeRoot } = 
     }
     return { kind: "part", id: stepTreeNodeIdForWorkspace(node) };
   }
-  // `label.f45` / `o1.2.f45`: the entity of an occurrence, by the occurrence's spelling.
-  const dot = first.lastIndexOf(".");
-  if (dot > 0) {
-    const owner = first.slice(0, dot);
-    const entity = first.slice(dot + 1);
-    if (ENTITY_RE.test(entity)) {
-      const ownerNode = findStepTreeNodeForSelector(treeRoot, owner);
-      const occurrenceId = String(ownerNode?.occurrenceId || "").trim();
-      if (occurrenceId) {
-        const qualified = referenceMap?.get?.(`${occurrenceId}.${entity}`);
-        if (qualified?.id) {
-          return { kind: "reference", id: String(qualified.id) };
-        }
+  // `label/f:…` (or an occurrence/element pair the map does not hold under that spelling): the
+  // element of an occurrence, by the occurrence's spelling; the element's name is its part's.
+  const split = splitElementRef(first);
+  if (split) {
+    const ownerNode = findStepTreeNodeForSelector(treeRoot, split.owner);
+    const occurrenceId = String(ownerNode?.occurrenceId || "").trim();
+    if (occurrenceId) {
+      const qualified = referenceMap?.get?.(elementRef(occurrenceId, split.element));
+      if (qualified?.id) {
+        return { kind: "reference", id: String(qualified.id) };
       }
     }
   }

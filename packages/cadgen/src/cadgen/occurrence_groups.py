@@ -1,21 +1,18 @@
 """What a GROUP occurrence ref means, for every command that accepts one.
 
 ONE document, TWO occurrence namespaces (see :mod:`cadgen.assembly_lookup`): the
-assembly.json's instance tree, and the flat selector index whose rows are that tree's
-LEAVES, because only a leaf owns geometry. A subassembly node -- ``#o1.1``, the very
-kind of ref a kinematics mate names and poses without complaint -- carries no row, so
+tree's instance hierarchy, and the selector index whose rows are that tree's
+LEAVES, because only a leaf owns geometry. A subassembly node -- the very kind of
+ref a kinematics mate names and poses without complaint -- carries no row, so
 every command that resolved refs against rows alone refused it as "unknown".
 
-An occurrence id IS its path through the tree, so a group is an id PREFIX of its
-subtree, exactly as kinematicsModule.js and cadScene.js treat it. Everything here is
-derived from the leaf ids on that basis rather than read out of ``assembly.json``,
-which keeps it in step with how the runtime resolves a group instead of introducing
-another opinion about what the tree contains.
-
-This module exists because there were about to be two copies of that opinion --
-``snapshot``'s and ``step inspect``'s -- and the interesting part is the near-miss
-hint, which is exactly the kind of text that drifts unnoticed between two
-implementations until the two commands disagree about what a document contains.
+A token holds no hierarchy (README law 20), so a group's members come from the
+tree alone: ``SelectorIndex.members`` maps every node to the leaves beneath it,
+filled from the tree's ``leafPartIds`` by
+``assembly_lookup.merge_assembly_occurrences``. Every command that accepts a
+group ref reads this one copy of that opinion, near-miss hint included: that hint
+is exactly the kind of text that drifts unnoticed between two implementations
+until two commands disagree about what a document contains.
 """
 
 from __future__ import annotations
@@ -35,107 +32,66 @@ class UnknownOccurrenceSelector(ValueError):
     """
 
 
-def occurrence_sort_key(occurrence_id: str) -> tuple[int, ...]:
-    """Order occurrence ids by their numeric PATH, so o1.1.10 follows o1.1.2.
-
-    Mirrors ``label_refs._occurrence_sort_key``; these lists are user-facing, and
-    lexicographic order reads as arbitrary to anyone holding the instance tree.
-    """
-    body = str(occurrence_id or "").lstrip("oO")
-    parts: list[int] = []
-    for chunk in body.split("."):
-        try:
-            parts.append(int(chunk))
-        except ValueError:
-            return (1 << 30,)
-    return tuple(parts)
-
-
 def occurrence_group_ids(selector_index: lookup.SelectorIndex) -> set[str]:
-    """Every instance-tree node that is NOT itself a rendered occurrence.
-
-    Derived from the leaf ids: an occurrence id IS its path through the tree, so the
-    strict prefixes of a leaf are exactly its ancestors.
-    """
-    leaves = set(selector_index.occurrence_by_id)
-    groups: set[str] = set()
-    for occurrence_id in leaves:
-        parts = str(occurrence_id).split(".")
-        for depth in range(1, len(parts)):
-            groups.add(".".join(parts[:depth]))
-    return groups - leaves
+    """Every instance-tree node that is NOT itself a rendered occurrence."""
+    return set(selector_index.group_nodes) - set(selector_index.occurrence_by_id)
 
 
 def occurrence_group_members(
     selector: str, selector_index: lookup.SelectorIndex
 ) -> list[str]:
     """The rendered occurrences under a group ref, in tree order. Empty if it has none."""
-    prefix = f"{selector}."
-    return sorted(
-        (
-            occurrence_id
-            for occurrence_id in selector_index.occurrence_by_id
-            if occurrence_id.startswith(prefix)
-        ),
-        key=occurrence_sort_key,
-    )
+    if selector in selector_index.occurrence_by_id:
+        return []
+    return [leaf for leaf in selector_index.members.get(selector, []) if leaf in selector_index.occurrence_by_id]
+
+
+def _shown(selector_index: lookup.SelectorIndex, node_id: str) -> str:
+    row = selector_index.occurrence_by_id.get(node_id) or selector_index.group_nodes.get(node_id) or {}
+    name = str(row.get("name") or "").strip()
+    return f"#{node_id} {name}" if name and name != node_id else f"#{node_id}"
 
 
 def occurrence_near_miss_hint(selector: str, selector_index: lookup.SelectorIndex) -> str:
     """What DOES exist near a ref that does not.
 
-    A bare "unknown selector: o1.4" leaves the caller guessing whether the document has no
-    such branch or whether they mistyped a depth. This walks up to the deepest ancestor of
-    the ref that the document really has and names that node's children.
+    A bare "unknown selector" leaves the caller guessing what the document holds. A ref
+    carries no position to walk up from, so this names the root's children -- the parts
+    and subassemblies a person would pick next -- with their names.
     """
-    known = set(selector_index.occurrence_by_id) | occurrence_group_ids(selector_index)
+    known = set(selector_index.occurrence_by_id) | set(selector_index.group_nodes)
     if not known:
         return "this document declares no part/subassembly occurrences"
-    parts = str(selector).split(".")
-    ancestor = ""
-    for depth in range(len(parts) - 1, 0, -1):
-        candidate = ".".join(parts[:depth])
-        if candidate in known:
-            ancestor = candidate
-            break
-    scope = f"{ancestor}." if ancestor else ""
-    child_depth = len(ancestor.split(".")) + 1 if ancestor else 1
-    siblings = sorted(
-        {
-            occurrence_id
-            for occurrence_id in known
-            if occurrence_id.startswith(scope) and len(occurrence_id.split(".")) == child_depth
-        },
-        key=occurrence_sort_key,
-    )
-    if not siblings:
+    # ``members`` is in tree order, the root first; the root's children are the nodes it
+    # alone contains.
+    ordered = [node_id for node_id in selector_index.members if node_id in known]
+    root = ordered[0] if ordered else ""
+    containers = {node_id: set(leaves) for node_id, leaves in selector_index.members.items() if node_id in known}
+    top = [node_id for node_id in ordered if node_id != root and not any(
+        other not in (root, node_id) and containers[node_id] <= containers[other] and containers[node_id] != containers[other]
+        for other in containers
+    )] or [node_id for node_id in ordered if node_id != root]
+    listed = ", ".join(_shown(selector_index, node_id) for node_id in top[:OCCURRENCE_NEAR_MISS_LIMIT])
+    if len(top) > OCCURRENCE_NEAR_MISS_LIMIT:
+        listed += f", ... ({len(top)} total)"
+    if not listed:
         return "this document declares no part/subassembly occurrences"
-    listed = ", ".join(siblings[:OCCURRENCE_NEAR_MISS_LIMIT])
-    if len(siblings) > OCCURRENCE_NEAR_MISS_LIMIT:
-        listed += f", ... ({len(siblings)} total)"
-    if ancestor:
-        return f"{ancestor} does exist, and holds: {listed}"
-    return f"known occurrence refs start at: {listed}"
+    return f"the document holds: {listed}"
 
 
 def expand_occurrence_selector(
-    selector: str, *, selector_index: lookup.SelectorIndex | None, source_label: str
+    selector: str, *, selector_index: lookup.SelectorIndex, source_label: str
 ) -> list[str]:
     """The rendered occurrences a selection ref covers.
 
-    An exact leaf returns itself. A group expands to its subtree's leaves, sorted in
-    tree order. Anything else raises :class:`UnknownOccurrenceSelector` with the
-    near-miss hint attached.
+    An exact leaf returns itself. A group expands to its subtree's leaves, in tree order.
+    Anything else raises :class:`UnknownOccurrenceSelector` with the near-miss hint
+    attached.
 
     Expanded at the front door rather than passed through: the resolved job then says
     which parts it means, and a group with nothing rendered under it fails as a command
     error instead of as an empty answer.
-
-    With no selector index (no topology to check against) the ref travels unchanged, as
-    it always has.
     """
-    if selector_index is None:
-        return [selector]
     if selector in selector_index.occurrence_by_id:
         return [selector]
     members = occurrence_group_members(selector, selector_index)

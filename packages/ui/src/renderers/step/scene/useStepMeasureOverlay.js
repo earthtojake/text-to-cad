@@ -29,7 +29,10 @@ export function useStepMeasureOverlay({
   runtimeRef,
   mountRef,
   previewMode,
-  viewerReadyTick
+  viewerReadyTick,
+  // The view's faces' exact areas (`workbench/faceAreas.js`): the chip shows a face's once cadgen has
+  // measured it, asked for the first frame the pointer rests on the face.
+  faceAreas = null
 }) {
   const measureStateRef = useRef(measureState);
   measureStateRef.current = measureState;
@@ -154,7 +157,8 @@ export function useStepMeasureOverlay({
           const hoverPoint = projectWorldPointToClient(hover.point, camera, localRect);
           if (hoverPoint) {
             drawMeasureSnapMarker(context, hoverPoint, { snapKind: hover.snapKind, now });
-            const entityText = formatEntityMeasurement(entityMeasurementFromPick(hover));
+            const faceArea = hover.snapKind === "face" ? faceAreas?.read(hover.reference) : null;
+            const entityText = formatEntityMeasurement(entityMeasurementFromPick(hover, { faceArea }));
             const snapLabel = MEASURE_SNAP_LABELS[hover.snapKind] || "";
             const chipText = [snapLabel, entityText].filter(Boolean).join("  ");
             if (chipText) {
@@ -172,5 +176,5 @@ export function useStepMeasureOverlay({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [measureCanvasRef, measureHoverRef, measureModeActive, runtimeRef, mountRef, previewMode, viewerReadyTick, hasOverlayContent]);
+  }, [measureCanvasRef, measureHoverRef, measureModeActive, runtimeRef, mountRef, previewMode, viewerReadyTick, hasOverlayContent, faceAreas]);
 }

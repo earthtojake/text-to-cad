@@ -13,7 +13,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_FROM || 'playwright');
 const args = {};
 for (let i=2;i<process.argv.length;i+=2) {
   const flag=process.argv[i];
-  if (!['--url','--file','--other','--out','--first-part','--animation-ms','--edit-target','--edit-variant','--edit-cycles','--min-lod'].includes(flag) || !process.argv[i+1]) {
+  if (!['--url','--file','--other','--out','--first-part','--animation-ms','--edit-target','--edit-variant','--edit-cycles'].includes(flag) || !process.argv[i+1]) {
     throw new Error('Usage: lifecycle.mjs --url ORIGIN --file repeated.step --other assembly.step --out REPORT.json [--first-part box_1]');
   }
   args[flag.slice(2)]=process.argv[i+1];
@@ -23,8 +23,6 @@ const base=args.url.replace(/\/+$/, '');
 const repeatedFile=args.file, otherFile=args.other;
 const firstPart=args['first-part'] || 'box_1';
 const animationMs=Number(args['animation-ms'] || 0);
-const minimumLevel=Number(args['min-lod'] || 0);
-if(!Number.isInteger(minimumLevel)||minimumLevel<0||minimumLevel>3)throw new Error('--min-lod must be 0–3');
 if (!Number.isInteger(animationMs) || animationMs < 0 || animationMs > 30000) throw new Error('--animation-ms must be 0–30000');
 const editCycles=Number(args['edit-cycles'] || 0);
 if(!Number.isInteger(editCycles)||editCycles<0||editCycles>12||(editCycles>0&&editCycles<4))throw new Error('--edit-cycles must be 0 or 4–12; plateau checks require two observations of each revision');
@@ -62,7 +60,6 @@ let page;
 try {
 page=context.pages()[0] || await context.newPage();
 await page.addInitScript(installWorkerProbe);
-await page.addInitScript(level=>{window.__CAD_VIEWER_MIN_LOD__=level},minimumLevel);
 await page.addInitScript(() => {
   const stats={liveBytes:0,peakBytes:0,liveBufferCount:0,peakBufferCount:0,uploads:0,deletes:0,draws:0,instancedDraws:0};
   const sizes=new WeakMap();
@@ -95,16 +92,14 @@ page.on('response',response=>{
 });
 
 async function waitLoaded(file,previousModelKey=null){
-  await page.waitForFunction(({expected,previousModelKey,minimumLevel})=>{
+  await page.waitForFunction(({expected,previousModelKey})=>{
     const browse=[...document.querySelectorAll('button')].some(b=>b.getAttribute('aria-label')===`Browse ${expected}`);
     const c=window.__cadMeshCost;
     const key=window.__cadModelPlacement?.modelKey;
-    const lod=window.__cadViewportLod?.();
     const entries=window.__cadSceneSync?.entries||[],scene=entries[entries.length-1];
     return browse && c && c.final===true && key && key!==previousModelKey &&
-      c.loadedComponents===c.totalComponents && scene?.records===c.occurrenceCount && scene.atMs>=Math.floor(c.at) &&
-      (minimumLevel===0 || (lod?.minimumLevel===minimumLevel && lod.belowMinimum===0 && !lod.busy && !lod.pendingEvaluation));
-  },{expected:file,previousModelKey,minimumLevel},{timeout:120000});
+      c.loadedComponents===c.totalComponents && scene?.records===c.occurrenceCount && scene.atMs>=Math.floor(c.at);
+  },{expected:file,previousModelKey},{timeout:120000});
   const finalPublicationObservedAt=performance.now();
   process.stderr.write(`complete ${file}\n`);
   await page.waitForTimeout(900);
@@ -127,7 +122,6 @@ async function collect(label,forceGc=true){
     label,
     file:[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')?.startsWith('Browse '))?.getAttribute('aria-label')?.slice(7)||'',
     probe:window.__cadRenderMemoryProbe?.()||null,
-    lod:window.__cadViewportLod?.()||null,
     workers:window.__cadWorkerProbe?{...window.__cadWorkerProbe}:null,
     gpu:{...window.__cycleGpu},
     heap:performance.memory?{used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize}:null,
@@ -242,15 +236,13 @@ if(editFixture){
     const variant=i%2===0;
     const started=performance.now();
     publishEditBytes(variant?editFixture.replacement:editFixture.original);
-    await page.waitForFunction(({previous,minimumLevel})=>{
+    await page.waitForFunction(({previous})=>{
       const cost=window.__cadMeshCost;
       const entries=window.__cadSceneSync?.entries || [];
       const scene=entries[entries.length-1];
-      const lod=window.__cadViewportLod?.();
       return cost?.final===true && cost.meshRevision && cost.meshRevision!==previous &&
-        cost.loadedComponents===cost.totalComponents && scene?.records===cost.occurrenceCount && scene.atMs>=Math.floor(cost.at) &&
-        (minimumLevel===0 || (lod?.belowMinimum===0 && !lod.busy && !lod.pendingEvaluation));
-    },{previous:previousRevision,minimumLevel},{timeout:30000});
+        cost.loadedComponents===cost.totalComponents && scene?.records===cost.occurrenceCount && scene.atMs>=Math.floor(cost.at);
+    },{previous:previousRevision},{timeout:30000});
     const readyAt=performance.now();
     process.stderr.write(`complete edit ${i+1}\n`);
     await page.waitForTimeout(900);
@@ -297,7 +289,6 @@ result.repeatedPlateau={
 const returned=repeated.filter(s=>s.label.startsWith('cycle-'));
 result.assertions.gpuPlateau=returned.length===3 && new Set(returned.map(s=>s.gpu.liveBytes)).size===1 && new Set(returned.map(s=>s.gpu.liveBufferCount)).size===1;
 result.assertions.workersReclaimed=snapshots.every(s=>(s.probe?.memoryPolicy?.retainedByCategory?.workerResidentEstimated || 0)===0);
-if(minimumLevel>0)result.assertions.minimumDetail=snapshots.every(s=>s.lod?.minimumLevel===minimumLevel && s.lod.belowMinimum===0);
 if(animation){
   result.assertions.animationFrames=animation.frameIntervalsMs.samples>10 && animation.draws>10;
   result.assertions.animationGpuPlateau=animation.before.gpu.liveBytes===animation.after.gpu.liveBytes && animation.before.gpu.liveBufferCount===animation.after.gpu.liveBufferCount;
@@ -312,7 +303,7 @@ if(edits.length){
   result.assertions.editWorkersReclaimed=edits.every(edit=>(edit.snapshot.probe?.memoryPolicy?.retainedByCategory?.workerResidentEstimated||0)===0);
   result.editPlateau={kind:'saved STEP byte replacement in the same tab; source execution excluded',target:editFixture.target,variant:editFixture.variant,fixtureIdentity:edits.map(edit=>edit.variant?'variant':'original'),heapUsed:edits.map(edit=>edit.snapshot.heap?.used),ownedBytes:edits.map(edit=>edit.snapshot.probe?.memoryPolicy?.estimatedOwnedBytes),gpuBytes:edits.map(edit=>edit.snapshot.gpu.liveBytes),gpuBufferCounts:edits.map(edit=>edit.snapshot.gpu.liveBufferCount)};
 }
-result.environment={node:process.version,platform:process.platform,arch:process.arch,cpu:os.cpus()[0]?.model,totalMemoryBytes:os.totalmem(),revision,runtimeChangesAtStart:runtimeChanges,runtimeChangesAtEnd:git('status','--porcelain','--','packages/core/src','packages/ui/src','apps/web/src','packages/cadgen/src/cadgen'),url:base,file:repeatedFile,other:otherFile,browserCache:'fresh profile initially; same profile for switches',tessellationCache:'preexisting server cache; neither cleared nor controlled by this harness',plateauInteraction:'initial selection preserved across tab switches; pointer parked outside viewport content',viewport:{width:1400,height:900},angle:'metal',lod:'default',minimumLevel};
+result.environment={node:process.version,platform:process.platform,arch:process.arch,cpu:os.cpus()[0]?.model,totalMemoryBytes:os.totalmem(),revision,runtimeChangesAtStart:runtimeChanges,runtimeChangesAtEnd:git('status','--porcelain','--','packages/core/src','packages/ui/src','apps/web/src','packages/cadgen/src/cadgen'),url:base,file:repeatedFile,other:otherFile,browserCache:'fresh profile initially; same profile for switches',tessellationCache:'preexisting server cache; neither cleared nor controlled by this harness',plateauInteraction:'initial selection preserved across tab switches; pointer parked outside viewport content',viewport:{width:1400,height:900},angle:'metal'};
 fs.mkdirSync(path.dirname(path.resolve(args.out)),{recursive:true});
 fs.writeFileSync(args.out,JSON.stringify(result,null,2)+'\n');
 if (!Object.values(result.assertions).every(Boolean)) process.exitCode=1;

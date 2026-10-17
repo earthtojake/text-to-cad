@@ -129,17 +129,15 @@ test("model runtime helpers build and sync STEP clip planes", () => {
   runtime.facePickGroup.add(overlay);
 
   const directPlane = buildStepClipPlane(THREE, {
-    enabled: true,
     axis: "x",
-    offsets: { x: 0.5 }
+    at: 5
   }, runtime.modelBounds, runtime.modelGroup.position);
   assertNear(directPlane.normal.x, -1, "default section exposes the opposite side");
   assertNear(directPlane.constant, 7, "direct plane constant");
 
   syncRuntimeStepClipPlane(runtime, {
-    enabled: true,
     axis: "x",
-    offsets: { x: 0.5 }
+    at: 5
   });
 
   assert.equal(runtime.renderer.localClippingEnabled, true);
@@ -163,7 +161,7 @@ test("model runtime helpers build and sync STEP clip planes", () => {
   syncRuntimeStepClipPlane(runtime, { enabled: false });
   assert.equal(material.clippingPlanes, "untouched");
   // A section switched on again is applied, and switching it off clears once more.
-  syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", offsets: { x: 0.5 } });
+  syncRuntimeStepClipPlane(runtime, { axis: "x", at: 5 });
   assert.equal(material.clippingPlanes.length, 1);
   syncRuntimeStepClipPlane(runtime, { enabled: false });
   assert.equal(material.clippingPlanes, null);
@@ -201,9 +199,9 @@ test("clip-only changes update live instance materials without reconciling membe
   };
   group.position.x = 2;
   try {
-    for (const offset of [0.25, 0.75]) {
-      syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", offsets: { x: offset } });
-      assertNear(drawMaterial.clippingPlanes[0].constant, 2 + 10 * offset);
+    for (const at of [2.5, 7.5]) {
+      syncRuntimeStepClipPlane(runtime, { axis: "x", at });
+      assertNear(drawMaterial.clippingPlanes[0].constant, 2 + at);
       assert.equal(drawMaterial.clippingPlanes, records[0].material.clippingPlanes);
       assert.equal(directMaterial.clippingPlanes, drawMaterial.clippingPlanes);
       assert.equal(disposedMaterial.clippingPlanes, null);
@@ -279,11 +277,11 @@ test("stable clip state preserves userData while live planes and shader transiti
 
 test("opening Clip at a neutral boundary does not activate shader clipping", () => {
   const bounds = { min: [0,0,0], max: [10,10,10] };
-  assert.equal(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 1 } }, bounds), null);
-  assert.equal(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0 }, invert: true }, bounds), null);
-  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 1 }, invert: true }, bounds));
-  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0 } }, bounds));
-  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0.5 } }, bounds));
+  assert.equal(buildStepClipPlane(THREE, { at: 10 }, bounds), null);
+  assert.equal(buildStepClipPlane(THREE, { at: 0, invert: true }, bounds), null);
+  assert.ok(buildStepClipPlane(THREE, { at: 10, invert: true }, bounds));
+  assert.ok(buildStepClipPlane(THREE, { at: 0 }, bounds));
+  assert.ok(buildStepClipPlane(THREE, {}, bounds));
 });
 
 test("the ground is sized from the bounds it is given, so a viewer can hand it the REST pose", () => {
@@ -305,14 +303,17 @@ test("clip coordinates span authored bounds even when the posed envelope changes
     modelGroup: new THREE.Group(), displayRecords: [] };
   runtime.modelGroup.position.set(7, 11, 13);
   for (const [index, axis] of ['x', 'y', 'z'].entries()) {
-    for (const offset of [0, 0.25, 0.5, 0.75, 1]) {
+    const placements = [0, 0.25, 0.5, 0.75, 1].map(share => rest.min[index] + share * (rest.max[index] - rest.min[index]));
+    for (const at of [...placements, undefined]) {
       for (const invert of [false, true]) {
-        syncRuntimeStepClipPlane(runtime, { enabled: true, axis, offset, invert });
-        if ((!invert && offset === 1) || (invert && offset === 0)) {
+        syncRuntimeStepClipPlane(runtime, { axis, invert, ...(at === undefined ? {} : { at }) });
+        if ((!invert && at === rest.max[index]) || (invert && at === rest.min[index])) {
           assert.equal(runtime.activeClipPlane, null);
         } else {
           const point = runtime.modelGroup.position.clone();
-          point.setComponent(index, point.getComponent(index) + rest.min[index] + offset * (rest.max[index] - rest.min[index]));
+          // No coordinate: the middle of the model at rest, never of its posed envelope.
+          const position = at ?? (rest.min[index] + rest.max[index]) / 2;
+          point.setComponent(index, point.getComponent(index) + position);
           assertNear(runtime.activeClipPlane.distanceToPoint(point), 0, 'displayed coordinate is the plane');
         }
       }

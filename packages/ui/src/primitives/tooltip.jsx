@@ -68,14 +68,20 @@ function trackFocusNavigation(document) {
   document.addEventListener("pointerdown", () => { focusArrivedByTab = false; }, true);
 }
 
-/** Short, noninteractive hints. Never use a native title alongside this component. */
-/** @typedef {Omit<React.HTMLAttributes<HTMLElement>, "content" | "children"> & { content?: React.ReactNode, children: React.ReactElement, disabled?: boolean, side?: "top" | "right" | "bottom" | "left", overflowOnly?: boolean }} TooltipHintProps */
+/**
+ * Short, noninteractive hints. Never use a native title alongside this component. A disabled or
+ * expanded trigger has none: an expanded one's popup is up. A `disclosure` is the exception — a
+ * trigger that shows and hides content beside it rather than a popup over it (its `aria-expanded`
+ * says which), so it keeps its hint while what it discloses is shown.
+ */
+/** @typedef {Omit<React.HTMLAttributes<HTMLElement>, "content" | "children"> & { content?: React.ReactNode, children: React.ReactElement, disabled?: boolean, side?: "top" | "right" | "bottom" | "left", overflowOnly?: boolean, disclosure?: boolean }} TooltipHintProps */
 const TooltipHint = React.forwardRef(/**
  * @param {TooltipHintProps} props
  * @param {React.ForwardedRef<HTMLElement>} forwardedRef
- */ function TooltipHint({ content, children, disabled = false, side = "bottom", overflowOnly = false, ...props }, forwardedRef) {
+ */ function TooltipHint({ content, children, disabled = false, side = "bottom", overflowOnly = false, disclosure = false, ...props }, forwardedRef) {
   const [open, setOpen] = React.useState(false);
-  const blocked = disabled || !content || children.props.disabled || children.props["aria-expanded"] === true || props["aria-expanded"] === true;
+  const expanded = !disclosure && (children.props["aria-expanded"] === true || props["aria-expanded"] === true);
+  const blocked = disabled || !content || children.props.disabled || expanded;
   React.useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
   const target = React.useRef(null);
   React.useEffect(() => { trackFocusNavigation(target.current?.ownerDocument); }, []);
@@ -89,8 +95,8 @@ const TooltipHint = React.forwardRef(/**
     return node && [node, ...node.querySelectorAll('.truncate')].some(element => element.scrollWidth > element.clientWidth + 1);
   };
   if (!content) return <Slot.Root {...props} ref={forwardedRef}>{children}</Slot.Root>;
-  const unavailable = () => target.current?.matches(':disabled, [aria-disabled="true"], [aria-expanded="true"]')
-    || target.current?.closest('[inert]') || target.current?.querySelector('[aria-expanded="true"], :disabled');
+  const unavailable = () => target.current?.matches(disclosure ? ':disabled, [aria-disabled="true"]' : ':disabled, [aria-disabled="true"], [aria-expanded="true"]')
+    || target.current?.closest('[inert]') || target.current?.querySelector(disclosure ? ':disabled' : '[aria-expanded="true"], :disabled');
   return <TooltipProvider delayDuration={400} skipDelayDuration={0}>
     <Tooltip open={!blocked && open} onOpenChange={next => setOpen(!blocked && next && !unavailable() && (!overflowOnly || isClipped()))} disableHoverableContent>
       <TooltipTrigger asChild {...props} ref={bindTarget}

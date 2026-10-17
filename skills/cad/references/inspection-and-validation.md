@@ -1,22 +1,9 @@
 # Inspecting and checking saved CAD in Python
 
-Use small Python scripts against the saved STEP/STP. `cadgen step inspect`
-and `cadgen.step.inspect` have been removed. Choose the relevant entities,
-measurements and acceptance criteria in the script; there is no replacement
-inspection command or universal validation report.
-
-Put exploratory scripts in the CAD project's ignored `tmp/`, for example
-`tmp/check_clearance.py`; system `/tmp/` is also fine for disposable work.
-Keep reusable design checks in `checks/` (for example `checks/clearance.py`),
-or use the project's existing test location. Commit those checks so they can
-be rerun after a model changes. Create the directory only when needed.
-Keep checks outside `src/` model directories and raw format folders such as
-`STEP/`. Examples below use paths relative to the CAD project root; run from
-there, or anchor input paths explicitly when a script must run elsewhere.
-
-Report what was measured, the units, the threshold and the selected geometry.
-A failed computation is not a passing check, and an untested relationship has
-no verdict. Run the model first when you want to check newly authored geometry.
+Checks are small Python scripts against the saved STEP/STP; there is no
+inspection command. A check reads the last saved document, so it sees a source
+edit only after the model runs. Paths resolve from the working directory and
+expand `~`.
 
 ## Opening and selecting geometry
 
@@ -37,158 +24,129 @@ for face in housing.entities("face"):
     print(face.ref, face.shape().area)
 ```
 
-`read_step` keeps its existing name. `read_scene` replaces the old
-`load_step_scene` helper. Inside a model, the document either reads is a build
-input, as every file a build reads is. Paths expand `~` and resolve relative to the working directory.
-
-- `scene.roots` and `occurrence.children` are tuples. `scene.leaves()` yields
-  geometry occurrences, including repeated copies. A leaf can hold multiple
-  solids; the reader does not infer manufactured parts.
-- `scene.resolve(ref)` returns a selection with `ref`, `kind`,
-  `occurrence_ref`, `shape()` and `entities(kind)`. Kinds for enumeration are
-  `"shape"`, `"face"`, `"edge"`, `"vertex"`. Shape entities (`sN`) are solids,
-  or shells when no solids exist, or the leaf geometry itself.
-- Every `shape()` is caller-owned exact build123d geometry in the document's
-  world coordinates, including ancestor placements. A group produces an
-  unfused compound. Modifying the result cannot change the scene or another
-  selection. Keep the returned shape when making several queries about it.
-- `prototype_id` identifies shared geometry within this scene, allowing a
-  script to avoid repeating a suitable body-local check. It is not a part
-  number or an identity across revisions. Numeric self-intersection tests can
-  behave differently at different placements; state which placements ran.
-- A scene is bound to one document hash. Replacing the file does not change an
-  already opened scene. Reopen it to inspect the new revision. Selector IDs
-  are revision-scoped, not persistent feature names.
-- Opening reuses the canonical BREP cache, decoding prototypes on demand.
-  No display surfaces, tessellation, source discovery or source execution are
-  needed. Cached inventory and occurrence lookup defer the build123d import
-  until native geometry is requested. Keep the scene open: repeated reads
-  still hash the document bytes, and fresh Python processes pay import costs.
-- The scene describes the saved placement. It does not evaluate sidecar
-  kinematics or animation poses.
+- `scene.roots` and `occurrence.children` are tuples; `scene.leaves()` yields the
+  geometry occurrences, repeated copies included. A leaf can hold several solids.
+- `scene.resolve(ref)` returns a selection with `ref`, `kind`, `occurrence_ref`,
+  `shape()` and `entities(kind)`, for kinds `"face"`, `"edge"` and `"vertex"`;
+  each entity carries its own ref, the occurrence's token and the element's name.
+- `shape()` is caller-owned exact geometry in document world coordinates; a group
+  gives an unfused compound. Keep it when making several queries.
+- `prototype_id` names geometry shared within this scene, so a body-local check
+  can run once per prototype. It is not an identity across revisions.
+- A scene is bound to one document hash: reopen it after the file changes, and
+  keep it open rather than reopening (each open re-hashes the document). It shows
+  the saved placement, not sidecar poses or animation.
+- Inside a model, the document either function reads is a build input.
 
 ### Reference syntax
 
 ```text
-#o1.2          occurrence or subassembly
-#o1.2.f7       canonical face 7 on that leaf occurrence
-#housing.e3   canonical edge 3 on the occurrence labelled housing
-#f7           face 7, only when the scene has exactly one leaf
-part.step#o1  a file-prefixed ref matching the opened STEP
+#o:4b1f9e2a7c03                        an occurrence or subassembly, by its token
+#o:4b1f9e2a7c03/f:bracket.make_box1.6  a face of that leaf occurrence, by its name
+#housing/e:bore.cut1.2                 an edge of the occurrence labelled housing
+#f:bracket.make_box1.6                 a face, only when the scene has exactly one leaf
+#o:4b1f9e2a7c03/f:9d2e8c1b5a70         a face named by its geometry (an imported file's)
+part.step#o:4b1f9e2a7c03               a file-prefixed ref matching the opened STEP
 ```
 
-Pass one reference per `resolve()` call. To enumerate a subassembly's faces,
-use `scene.resolve("#group").entities("face")`; a group has no independent
-face ordinals. Enumeration preserves canonical occurrence IDs and never
-merges coincident instances. Face and edge IDs agree with the viewer; vertex
-IDs enumerate native STEP vertices (the viewer currently exposes no vertex
-table).
+An occurrence's token is `o:` and twelve lower-case hexadecimal characters,
+minted from its place in the tree (its parent's token, its name, its placement).
+An element's name is `f:`, `e:` or `v:`, the operation of the model's code that
+made it, and its number among the elements of its kind that operation made:
+`f:bracket.make_box1.6` is the sixth face of the first `make_box` the function
+`bracket` called for that part. The operation is the function, then the build123d
+operation and how many times that function had called it in making the part, or the label of a
+shape the model labelled and made something else of (`f:boss.3`, in `plate + boss`;
+a part placed as it is keeps its own names, its label naming the occurrence). An element
+a later operation split adds its piece's number (`f:bracket.make_box1.6.2`); an
+operation that only trims or moves it does not rename it. Lines are never in a
+name, so moving code renames nothing, and the viewer, the build's warnings and
+`resolve()` all name a face alike. An element no operation of the model's run
+made -- every element of an imported STEP -- is named by its geometry: `f:`,
+`e:` or `v:` and twelve hexadecimal characters, hashed from the element's shape
+within its body (a face's surface class, tight box and normal; an edge's curve
+class, end points and length; a vertex's point). `resolve()` also finds an
+element by that geometric name in a document whose elements are named by
+operations, measuring the body's geometry the first time it is asked. One
+reference per `resolve()` call. A group has no faces of its own:
+`scene.resolve("#group").entities("face")` enumerates its leaves' faces.
 
-Labels use letters, digits, `_` and `:`, and cannot start with a digit or
-collide with numeric reference syntax. Other labels remain accessible through
-numeric IDs. Duplicate labels receive numbered aliases in occurrence order;
-resolving the ambiguous bare label raises and lists candidates. No fuzzy
-matching or choosing the first match.
+Labels use letters, digits, `_` and `:`, and cannot start with a digit; other
+names stay reachable by occurrence token. Duplicate labels get numbered aliases
+in occurrence order (`#wheel_1`, `#wheel_2`), and the bare duplicate label
+raises, listing them.
 
-A copied reference's file prefix is the file's absolute path, with the file's real
-name and extension (in quotes when it holds a space or `#`). `resolve()` reads the
-prefix as a path, with `~` expanded, links followed and a relative one read from the
-working directory, and it must name the opened document.
-A relative prefix that names no file from where you run still matches the end of
-the document's path. A prefix naming a different document is rejected. Do not
-guess between ambiguous files.
+A copied reference's file prefix is the file's absolute path (quoted when it holds
+a space or `#`) and must name the opened document; a relative prefix may match
+the end of the document's path.
+
+### Which code made it
+
+`cadgen store where <file.step> <ref>` answers, for a STEP a model of this
+cadgen wrote, which operation at which line of the model's code made what the
+ref names -- a part's body, a face, an edge or a vertex -- and, for an element,
+which operation last modified it (a cut that trimmed a box's face, a fillet that
+shortened an edge), each as `file:line in function (operation)` with the
+operation's name. The ref is one the viewer copies or `resolve()` takes
+(`#o:…`, `#o:…/f:…`, `#label/e:…`). It reads the build's own account of the
+run, written with the model's record, so it speaks for the file's current bytes
+only: after an edit, run the model, then ask. `--json` returns the answer as
+data; the exit status is 0 when it knows and 1 when it does not (no build of
+this cadgen, other bytes, a body read from a file or built outside build123d's
+constructions), with the reason.
+
+```text
+$ cadgen store where STEP/bracket.step "#bracket/f:bore.make_cylinder1.1"
+document  /work/STEP/bracket.step
+ref       #o:624d1aa32b5a/f:bore.make_cylinder1.1
+model     /work/src/bracket.py::bracket
+face      made by bracket.py:6 in bore (Solid.make_cylinder)   bore.make_cylinder1
+          last modified by bracket.py:6 in bore (cut)   bore.cut1
+```
+
+The bore wall is the cylinder's face, trimmed by the cut that bored it. A face's
+name holds the operation that made it, so the same name answers across the
+builds of a model that leave that operation alone, and a face of a placed child
+model is answered from that child's own build.
 
 ## Measurements
 
-Most measurements already have native build123d interfaces:
-
 ```python
-# p, q: chosen points; u, v, direction, normal: explicit vectors
+# p, q: points; u, v, direction, normal: vectors
 length = (q - p).length
 signed_offset = (q - p).dot(direction.normalized())
 angle_degrees = u.get_angle(v)
 signed_angle_degrees = u.get_signed_angle(v, normal)
-
-# Select the actual geometric feature that defines the dimension.
 center = circular_edge.arc_center
 radius = circular_edge.radius
-diameter = 2 * radius
-length = edge.length
-area = face.area
-volume = solid.volume
 size = shape.bounding_box().size
 ```
 
-A bounding box dimension is an envelope, not a hole diameter or wall
-thickness. A surface centroid is not necessarily a datum. Use analytic
-centers, axes and selected points when those define the requested dimension.
-The default `bounding_box()` searches for tight bounds and can be expensive
-on curved geometry. Use `bounding_box(optimal=False)` for a fast conservative
-envelope when filtering candidate collision pairs, not for a tight dimension.
+The default `bounding_box()` searches for tight bounds and can be slow on curved
+geometry; `bounding_box(optimal=False)` is a fast conservative envelope.
 
 ```python
-from cadgen.geometry import closest_points
+from cadgen.geometry import closest_points, overlap_volume
 
-result = closest_points(a, b)
-print(result.distance, result.point_a, result.point_b)
+result = closest_points(a, b)   # .distance, .point_a, .point_b
+volume = overlap_volume(solid_a, solid_b)
 ```
 
-`closest_points(Shape, Shape) -> ClosestPoints` returns a nonnegative minimum
-set distance and one witness pair in the input frame. Solid overlap, contact
-and containment have distance zero; it does not measure penetration depth.
-Witnesses may be nonunique or internal to a solid. Pass selected faces/shells
-when asking about boundary separation. Minimum distance does not replace
-center spacing, angles, radii, lengths, areas or volume measurements.
+`closest_points` returns the minimum distance and one witness pair; overlap,
+contact and containment all give 0, so it does not measure penetration.
+`overlap_volume` is the exact intersection volume (mm³) of two finite, positively
+oriented solids, 0 for mere contact; pair bodies with
+`scene.resolve("#group").shape().solids()`.
+Kernel failures raise.
 
-## Overlap and clearance checks
-
-`overlap_volume(Solid, Solid) -> float` measures the exact intersection volume
-of two finite, positively oriented solids. It returns zero for mere contact.
-It applies no minimum volume, exclusions, part hierarchy or pass/fail policy.
-Kernel failures raise; inputs remain unchanged. Length units from STEP are mm,
-so overlap volume is mm³. Tolerances in these scripts are design decisions,
-separate from the kernel's numerical precision.
-
-For example, checking every body pair inside a chosen subassembly:
-
-```python
-from itertools import combinations
-from cadgen import read_scene
-from cadgen.geometry import overlap_volume
-
-scene = read_scene("STEP/assembly.step")
-selection = scene.resolve("#housing_assembly")
-bodies = [
-    (entity.ref, solid)
-    for entity in selection.entities("shape")
-    for solid in entity.shape().solids()
-]
-if len(bodies) < 2:
-    raise ValueError("This interference check needs at least two bodies")
-
-max_overlap_mm3 = 0.01  # chosen for this design
-failures = []
-tested = 0
-for (ref_a, a), (ref_b, b) in combinations(bodies, 2):
-    volume = overlap_volume(a, b)
-    tested += 1
-    if volume > max_overlap_mm3:
-        failures.append((ref_a, ref_b, volume))
-print({"tested_pairs": tested, "limit_mm3": max_overlap_mm3,
-       "overlaps_mm3": failures})
-if failures:
-    raise SystemExit(1)
-```
-
-Adapt pair selection to the question: for clearance around a moving carriage,
-compare that carriage against relevant fixed geometry. List intentional
-press fits/excluded pairs explicitly. Do not infer exclusions from assembly
-depth. For large pair sets, retain the shapes and compute conservative bounds
-once per body. Disjoint bounds rule out overlap; intersecting bounds only
-identify candidates for the exact query. For a clearance requirement use
-`closest_points(a, b).distance` and
-compare against the specified minimum. A static check proves only that pose;
-path or motion checks need an explicit sampling or swept-volume strategy.
+Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
+press-fit pin, a bearing in its bore) is named as such, not inferred from where it
+sits in the tree. A part meant to sit on, bolt to or bear against another measures
+`closest_points` distance 0 against it; above 0 is a gap, and the part floats.
+Over many parts, two `bounding_box(optimal=False)` envelopes that do not meet rule
+a pair out, leaving the exact queries for the pairs that remain. Both queries
+measure the saved placement: a part clear at rest can still pass through another
+in a pose or a clip ([reviewing motion](kinematics.md#reviewing-motion)).
 
 ## Geometry diagnostics
 
@@ -202,26 +160,13 @@ free = boundary_edges(shell)              # tuple[Edge, ...]
 crossings = self_intersections(shape)     # tuple[GeometryIssue, ...], expensive
 ```
 
-`GeometryIssue` has `code` and `entities`, containing owned build123d geometry.
-Topology codes are OCCT `BRepCheck_*` statuses; self-intersection codes are
-`BOPAlgo_SelfIntersect`. Failed/inconclusive checks raise `GeometryError`,
-never an empty success result. None of these functions repairs geometry.
-
-`is_sound` is `BRepAlgoAPI_Check`'s verdict: BRepCheck-valid, no
-self-intersections, no too-small edges, an argument type a boolean accepts.
-It is the gate a fuse or cut demands of an operand. Closure, solid count and
-signed volume stay the script's own checks. `is_sound` is `False` for a null
-or empty shape, which the boolean kernel rejects as an argument. A check costs
-kernel time, so gate where a failure is plausible rather than after every
-operation.
-
-Choose checks appropriate to the artifact. For an intended closed solid,
-check topology, free shell edges and each solid's signed volume. A reversed
-solid can pass topology validation but have negative volume; check individual
-solids because aggregate volumes can cancel. Open shells can be valid when
-surfaces are intended. No free edges establishes closure, not full manifold
-validity. Run self-intersection checks explicitly when required and report
-any checks you did not complete.
+A `GeometryIssue` has `code` (an OCCT `BRepCheck_*` or `BOPAlgo_SelfIntersect`
+status) and `entities`. An inconclusive check raises `GeometryError` rather than
+passing; none of these repair geometry. `is_sound` is `BRepAlgoAPI_Check`'s
+verdict, the gate a fuse or cut demands of an operand (`False` for a null or
+empty shape). A reversed solid can pass topology checks with negative volume and
+aggregate volumes can cancel, so signed volume is checked per solid; no free
+edges means closed, not manifold.
 
 ## Mass properties
 
@@ -236,11 +181,6 @@ print(properties.volume, properties.mass, properties.center_of_mass)
 print(properties.inertia)
 ```
 
-`mass_properties(Iterable[tuple[Solid, float]]) -> MassProperties` integrates
-uniform density per solid and sums the supplied bodies, including overlaps.
-Densities must be finite and positive. It does not infer materials or fuse
-bodies. The 3×3 inertia tuple is about the combined center of mass in the input
-coordinate axes. With mm and kg/mm³, outputs are mm³, kg, mm and kg·mm².
-
-Use snapshots for visual review per `snapshot-review.md`. Turn visual concerns
-into explicit geometric checks before claiming they have been resolved.
+`mass_properties` integrates uniform density per solid and sums the bodies,
+overlaps included. The 3×3 inertia is about the combined centre of mass in the
+input axes; with mm and kg/mm³, outputs are mm³, kg, mm and kg·mm².

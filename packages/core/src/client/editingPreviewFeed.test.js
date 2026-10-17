@@ -46,6 +46,17 @@ test("holds one request, carries the returned cursor and coalesces progress", as
   } finally { h.stop(); }
 });
 
+test("an answer reaches the observer whole: the preview revision it names included", async () => {
+  const h = harness();
+  try {
+    const preview = { tree: "t".repeat(64), producer: { producerKey: "kernel" }, parts: { c1: `${"1".repeat(64)}-v1` }, complete: false, annotations: null };
+    answer(h.requests[0], { epoch: "e", revision: 1, state: "building", feedCursor: "epoch:1", preview });
+    await settled();
+    assert.deepEqual(h.updates[0].preview, preview);
+    assert.equal(h.updates[0].state, "building");
+  } finally { h.stop(); }
+});
+
 test("nothing new waits out the second a holding server did not: the feed never spins", async () => {
   const h = harness();
   try {

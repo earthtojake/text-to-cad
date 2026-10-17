@@ -2,13 +2,18 @@
 
     cadgen store info              what is in the store, by kind, and its size against the cap
     cadgen store why <model.py>    why the gate says stale (or current), clause by clause
+    cadgen store where <doc> <ref> which operation at which source line made a part or one of its elements
     cadgen store forget <target>…  drop one model's record or one document's tree entry
     cadgen store gc [--dry-run]    retire old index kinds, mark and sweep unreachable objects
     cadgen store gc --max-size [SIZE]   evict least recently written entries to the cap, then sweep
 
 ``why`` is the debugging surface STORE.md describes: it prints the record, then
 each gate clause's verdict with its evidence, then the tree's links and
-components. Stdlib + the store modules only; it never imports the CAD kernel.
+components. ``where`` is its sibling for provenance (README law 20): the one
+reader of ``index/provenance``, walking path → output entry → model → record and
+provenance entry, with the document's bytes checked against the entry's. Both
+are code-side status commands, outside the format/verb mirror of law 6. Stdlib +
+the store modules only; neither imports the CAD kernel.
 """
 
 from __future__ import annotations
@@ -93,16 +98,20 @@ def _cmd_info(as_json: bool) -> int:
         "model": "records",
         "document": "document entries (bytes -> tree)",
         "output": "output entries (path -> model)",
+        "provenance": "provenance entries (which operation at which line made each part, face and edge)",
+        "result": "results by key (a record and its provenance under the key of everything it was built from)",
         "component": "component entries",
-        "surface": "surface entries",
         "bounds": "bounding boxes and leaf layouts",
-        "mesh": "mesh entries",
+        "part": "part entries (a part's display mesh and selector table)",
         "drawing": "drawing render payloads",
+        "skin": "tube skins (a document's bending tubes, bound)",
+        "robot": "robot entries (a description -> its payload and primitive meshes)",
     }
     for kind, count in payload["index"].items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
     for kind, count in payload["retired"].items():
-        print(f"index/{kind:<10} {count} entries of a kind this cadgen retired; the daemon removes them when idle, or `cadgen store gc`")
+        print(f"index/{kind:<10} {count} entries of a kind this cadgen retired; each goes a week after its last write "
+              "(the daemon when idle, or `cadgen store gc`)")
     for kind in payload["unknown"]:
         print(f"index/{kind:<10} a folder this cadgen does not know; it never touches it")
     if deferred:
@@ -142,8 +151,14 @@ def _cmd_why(target: str, as_json: bool) -> int:
 def _closure_file_label(rel: str, names: dict, own: dict) -> str:
     """``lib/geo.py[plane, cyl_along]`` for a sliced file (its reached names,
     the first six), the bare path for a file tracked whole, ``lib/__init__.py
-    (must stay absent)`` for a file the imports rely on not existing, and
-    ``./ (listing, less part.step)`` for a listed folder, less its own outputs."""
+    (must stay absent)`` for a file the imports rely on not existing,
+    ``./ (listing, less part.step)`` for a listed folder, less its own outputs,
+    and ``SIZE (environment variable)`` for a variable the model reads."""
+    from cadgen.store.closure import environment_name
+
+    variable = environment_name(rel)
+    if variable is not None:
+        return f"{variable} (environment variable)"
     if rel.startswith("!"):
         return f"{rel[1:]} (must stay absent)"
     if rel.endswith("/"):
@@ -155,12 +170,29 @@ def _closure_file_label(rel: str, names: dict, own: dict) -> str:
     return f"{rel}[{shown}]"
 
 
+def _shown(record: dict | None) -> dict[str, dict]:
+    """What each STEP the record names shows, by path, where its verify has not found it
+    to be the result (STORE.md §3): ``{"verified": False}`` while it is pending, and the
+    differences of a file that shows its own content (``differ``)."""
+    from cadgen.store.records import document_entry_for_hash
+
+    shown: dict[str, dict] = {}
+    for path, output in ((record or {}).get("outputs") or {}).items():
+        digest = str((output or {}).get("sha256") or "")
+        entry = document_entry_for_hash(digest) if digest else None
+        if entry is not None and (entry.get("verified") is False or entry.get("differ")):
+            shown[path] = {key: entry[key] for key in ("verified", "differ") if key in entry}
+    return shown
+
+
 def _why_one(model: str, as_json: bool) -> int:
     verdict = stale(model)
     record = read_record(model)
     tree = get_tree(str(record.get("tree"))) if record and record.get("tree") else None
+    shown = _shown(record)
     if as_json:
-        print(json.dumps({"model": str(model), "stale": verdict.stale, "clauses": verdict.clauses, "record": record}, separators=(",", ":")))
+        print(json.dumps({"model": str(model), "stale": verdict.stale, "clauses": verdict.clauses, "record": record,
+                          "documents": shown}, separators=(",", ":")))
         return 0 if not verdict.stale else 1
     print(f"model   {model}")
     print(f"verdict {'STALE' if verdict.stale else 'current'}  ({verdict.reason()})")
@@ -177,7 +209,7 @@ def _why_one(model: str, as_json: bool) -> int:
             print(f"  [{mark}] 3 children ({len(children)})")
             for child in children:
                 cmark = "x" if child.get("stale") else "ok"
-                print(f"        [{cmark}] {child.get('model')}  pinned {str(child.get('pinned'))[:12]}  current {str(child.get('current'))[:12]}  {child.get('why') or ''}")
+                print(f"        [{cmark}] {child.get('model')}  key {str(child.get('recorded'))[:12]}  now {str(child.get('current'))[:12]}  {child.get('why') or ''}")
         elif number == 4:
             print(f"  [{mark}] 4 tree {str(clause.get('tree'))[:12]} {'complete' if not clause.get('stale') else clause.get('why')}")
         elif number == 5:
@@ -186,7 +218,15 @@ def _why_one(model: str, as_json: bool) -> int:
             for output in outputs:
                 omark = "x" if output.get("stale") else "ok"
                 print(f"        [{omark}] {output.get('path')}  {output.get('why') or ''}")
+                document = shown.get(str(output.get("path")))
+                if document is not None and document.get("differ"):
+                    print(f"              shows its own content: {'; '.join(document['differ'])}")
+                elif document is not None:
+                    print("              verify pending")
+        elif number == 6:
+            print(f"  [{mark}] 6 producer {clause.get('why') or 'this cadgen and kernel'}")
     if record:
+        print(f"key     {str(record.get('key'))[:12]}")
         closure = record.get("closure") or {}
         names = closure.get("names") or {}
         own = closure.get("own") or {}
@@ -196,6 +236,27 @@ def _why_one(model: str, as_json: bool) -> int:
         for link in tree.get("links") or []:
             print(f"        link {link.get('name')} -> {str(link.get('tree'))[:12]}")
     return 0 if not verdict.stale else 1
+
+
+def _cmd_where(document: str, ref: str, as_json: bool) -> int:
+    """0 when the store knows which feature made what the ref names, 1 when it
+    does not (no entry, other bytes, a body no feature made), 2 for a ref that
+    cannot be read or names another file."""
+    import dataclasses
+
+    from cadgen.store.provenance import describe, where
+
+    try:
+        answer = where(document, ref)
+    except ValueError as error:
+        print(f"cadgen store where: {error}", file=sys.stderr)
+        return 2
+    if as_json:
+        print(json.dumps(dataclasses.asdict(answer), separators=(",", ":")))
+    else:
+        for line in describe(answer):
+            print(line)
+    return 0 if answer.known else 1
 
 
 def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bool) -> int:
@@ -217,6 +278,7 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
         "removed": report.removed,
         "removedBytes": report.removed_bytes,
         "retired": report.retired,
+        "obsolete": report.obsolete,
         "retiredBytes": report.retired_bytes,
         "bytesBefore": report.bytes_before,
         "bytesAfter": report.bytes_after,
@@ -235,7 +297,9 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
         return 0
     verb = "would remove" if dry_run else "removed"
     for kind, count in sorted(report.retired.items()):
-        print(f"index/{kind} is retired: {verb} {count} entries, then the objects only they named")
+        print(f"index/{kind} is retired: {verb} {count} entries a week old, then the objects only they named")
+    for kind, count in sorted(report.obsolete.items()):
+        print(f"{kind} entries another version of cadgen wrote are obsolete: {verb} {count}, then the objects only they named")
     if max_size is not None:
         if report.cap is None:
             print("no cap (0): nothing is evicted")
@@ -271,6 +335,22 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     why = sub.add_parser("why", help="why the gate says a model is stale (or current)")
     why.add_argument("model", help="a model script, script.py::function for one model of a file holding several, or a generated .step (the store remembers which model wrote it)")
     why.add_argument("--json", action="store_true")
+    where = sub.add_parser(
+        "where",
+        help="which operation at which source line made a part, a face, an edge or a vertex of a generated STEP",
+        description=(
+            "The build's account of its code (provenance): for a part, the feature that made its body; for a "
+            "face, an edge or a vertex, the feature its name says made it and the one that last modified it, "
+            "each as file:line in function (operation), with the features it was given. A feature is one "
+            "kernel construction the model's code called. The ref is one the CAD viewer copies or read_scene "
+            "resolves: #o:<token>, #o:<token>/f:<name>, #label/e:<name>. Answered from the model's "
+            "provenance entry, written with its record; for other bytes, or without an entry, it says it "
+            "does not know."
+        ),
+    )
+    where.add_argument("document", help="a STEP file a model of this cadgen wrote")
+    where.add_argument("ref", help="an occurrence, face, edge or vertex ref in that document")
+    where.add_argument("--json", action="store_true")
     forget = sub.add_parser(
         "forget",
         help="drop one model's record, or one document's tree entry, so the next run or open redoes it",
@@ -288,12 +368,13 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "gc",
         help="retire old index kinds, mark and sweep unreachable objects; with --max-size, evict to a cap first",
         description=(
-            "Removes the index kinds this cadgen no longer defines (index/op) and every object nothing reaches: "
-            "not a record's or a document's tree, not named by a mesh, surface, component, bounds or drawing "
+            "Removes the entries of the index kinds this cadgen no longer defines (index/op, index/surface, "
+            "index/selector, index/mesh) once a week old, and every object nothing reaches: "
+            "not a record's or a document's tree, not named by a part, component, bounds, drawing, skin or robot "
             "entry, and not written or claimed within the grace window. --max-size first evicts those derived "
-            "entries, least recently written first, until the store fits 80%% of the cap (the newest keep a "
-            "fifth of the cap when records and documents leave less room); records, document entries and "
-            "output entries are never evicted. The daemon does the same when idle. A store a newer cadgen "
+            "entries, least recently written first, until the store fits 80% of the cap (the newest keep a "
+            "fifth of the cap when records and documents leave less room); records, document entries, "
+            "output entries and provenance entries are never evicted. The daemon does the same when idle. A store a newer cadgen "
             "wrote to in the last 30 days is left to that cadgen, and nothing is removed."
         ),
     )
@@ -313,6 +394,8 @@ def main(argv: Sequence[str] | None = None, prog: str | None = None) -> int:
         return _cmd_info(bool(args.json))
     if args.command == "why":
         return _cmd_why(args.model, bool(args.json))
+    if args.command == "where":
+        return _cmd_where(args.document, args.ref, bool(args.json))
     if args.command == "forget":
         return _cmd_forget(list(args.targets), bool(args.dry_run), bool(args.json))
     if args.command == "gc":

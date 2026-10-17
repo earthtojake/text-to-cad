@@ -61,14 +61,18 @@ test("part visual helpers normalize focus ids and model-level references", () =>
   const focused = new Set(["part-a"]);
   assert.equal(referenceMatchesFocusedPart({ partId: "part-a" }, focused), true);
   assert.equal(referenceMatchesFocusedPart({ partId: "part-b" }, focused), false);
-  assert.equal(referenceMatchesFocusedPart({ partId: "part-a.child" }, focused), true);
+  // An id is a token and names one part: nothing is matched as a prefix of another id.
+  assert.equal(referenceMatchesFocusedPart({ partId: "part-a.child" }, focused), false);
+  assert.equal(referenceMatchesFocusedPart({ partId: "part-a" }, new Set(["#part-a"])), true);
   assert.equal(referenceMatchesFocusedPart({}, new Set(["__model__"])), true);
   assert.equal(referenceMatchesFocusedPart({ partId: "part-a" }, new Set()), true);
 });
 
-test("part visual state matches focused assembly ids against descendant records", () => {
-  const focusedChild = createRecord("o1.4.1", { baseOpacity: 0.8 });
-  const dimmedSibling = createRecord("o1.5", { baseOpacity: 0.8 });
+test("part visual state focuses the leaf records a subassembly expands to", () => {
+  // Focus arrives as leaf occurrence tokens (the tree expands a subassembly to its leaves);
+  // every other record dims.
+  const focusedChild = createRecord("o:3f2a9c1d7e5b", { baseOpacity: 0.8 });
+  const dimmedSibling = createRecord("o:a1b2c3d4e5f6", { baseOpacity: 0.8 });
 
   applyPartVisualState(THREE, [focusedChild, dimmedSibling], {
     viewerTheme: {
@@ -80,7 +84,7 @@ test("part visual state matches focused assembly ids against descendant records"
     },
     hiddenPartIds: [],
     hoveredPartId: "",
-    focusedPartId: ["o1.4"],
+    focusedPartId: ["o:3f2a9c1d7e5b"],
     selectedPartIds: [],
     showEdges: true
   });

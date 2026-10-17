@@ -67,7 +67,7 @@ function workspace(id: string, store: TabStore) {
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async () => {}, writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
       const attachment = context.parts.find(part => part.kind === 'attachment');
       if (attachment?.kind === 'attachment') { const blob = await attachment.content; captures.push({ file, size: blob.size, type: blob.type, references: context.parts.filter(part => part.kind === 'reference').map(part => part.reference) }); }

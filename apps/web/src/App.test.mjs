@@ -116,7 +116,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/__cad/analytics/activity'), 1);
     // The app menu: Analytics, then Features.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Share usage stats', false], ['Quick edit', true]]);
+      [['Share anonymous usage data', false], ['Quick edit', true]]);
     // Nothing asks (a cadgen command says it once): the viewer has no notice, and the app menu's toggle
     // is the person's answer.
     assert.equal(viewer().notice, undefined);

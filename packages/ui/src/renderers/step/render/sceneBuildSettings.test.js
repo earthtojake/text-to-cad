@@ -69,8 +69,7 @@ test("a mutable PBR edit remains authoritative across a later source reuse", () 
   const editedMaterial = { ...initialMaterial, roughness: 0.78, metalness: 0.64 };
   const scene = buildModel(THREE, source, {
     materialSettings: initialMaterial,
-    materialOverrides: { roughness: 0.2, metalness: 0.1 },
-    parameterSetup: false
+    materialOverrides: { roughness: 0.2, metalness: 0.1 }
   });
   try {
     const record = scene.displayRecords[0];
@@ -101,7 +100,7 @@ test("surface opacity edits remain mutable across source reuse", () => {
   const before = { ...STRUCTURAL_SETTINGS, surfaceSettings: { enabled: true, style: 'shaded', opacity: 0.7 } };
   const after = { ...before, surfaceSettings: { ...before.surfaceSettings, opacity: 0.3 } };
   assert.equal(sceneBuildStructuralKey(before), sceneBuildStructuralKey(after));
-  const scene = buildModel(THREE, source, { ...before, parameterSetup: false });
+  const scene = buildModel(THREE, source, before);
   try {
     const record = scene.displayRecords[0];
     scene.update({ surfaceSettings: after.surfaceSettings });

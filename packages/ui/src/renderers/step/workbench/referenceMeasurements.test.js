@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {referenceMeasurements} from './referenceMeasurements.js';
 const edge=(id,kind,params={},length=null,center=[0,0,0])=>({id,selectorType:'edge',pickData:{curveType:kind,params,length,center}});
-const face=(id,kind,params={},area=null,normal=null)=>({id,selectorType:'face',pickData:{surfaceType:kind,params,area,normal,center:params.origin}});
+const face=(id,kind,params={},normal=null)=>({id,selectorType:'face',pickData:{surfaceType:kind,params,normal}});
 const row=(rows,label)=>rows.find(r=>r[0]===label)?.[1];
 test('circular dimensions use radius and analytic sweep, not a polyline length',()=>{
  const q=referenceMeasurements(edge('a','circle',{radius:5,sweepRadians:Math.PI/2},7.8));
@@ -10,6 +10,12 @@ test('circular dimensions use radius and analytic sweep, not a polyline length',
  assert.equal(row(q.rows,'Arc length'),5*Math.PI/2);
  const circle=referenceMeasurements(edge('a','circle',{radius:5,sweepRadians:2*Math.PI},31.4));
  assert.equal(row(circle.rows,'Circumference'),10*Math.PI);assert.equal(row(circle.rows,'Sweep angle'),undefined);
+});
+test('a face\'s area is cadgen\'s measure of it: its row comes with its number, and not before',()=>{
+ const plane=face('p','plane');
+ for(const faceArea of [null,{state:'pending'},{state:'failed'}]) assert.deepEqual(referenceMeasurements(plane,{faceArea}).rows,[]);
+ const ready=referenceMeasurements(face('c','cylinder',{radius:4}),{faceArea:{state:'ready',area:94.25}});
+ assert.equal(row(ready.rows,'Area'),94.25);assert.equal(ready.area,94.25);assert.equal(row(ready.rows,'Diameter Ø'),8);
 });
 test('legacy circular edges keep radius without inventing a sweep; noncircular surfaces do not get a generic diameter',()=>{
  const q=referenceMeasurements(edge('a','circle',{radius:5},31.4));assert.equal(row(q.rows,'Sweep angle'),undefined);

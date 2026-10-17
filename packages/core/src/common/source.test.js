@@ -1,88 +1,19 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
+import { loadSource as loadSourceInput, packageSourceFromBaseUrl } from "./source.js";
 import {
-  RENDER_TESSELLATION_FLOORS,
-  loadSource as loadSourceInput,
-  normalizeRenderTessellation,
-  tessellationForSnapshotQuality
-} from "./source.js";
-import { renderAssetSourceScope } from "../lib/renderAssetSourceScope.js";
-import {
-  createTessellationCache, tessellationPayloadFacts, validateTessellationProbeRow,
-  createHttpTessellationCacheProvider, encodeTessellationCacheBatch, encodeComponentTessellation,
-  tessellationCacheKey,
-} from "../lib/surf/tessellationCache.js";
+  createTessellationCache, createHttpTessellationCacheProvider, encodeTessellationCacheBatch,
+} from "../lib/parts/tessellationCache.js";
+import { encodeMeshFixture, memoryMeshProvider, meshFixture, partRowFor } from "../lib/parts/__tests__/meshFixtures.js";
 
-function memoryTessellationProvider(requested = []) {
-  const rows = new Map();
-  const bodies = new Map();
-  return {
-    async probeMany(keys) {
-      requested.push(...keys);
-      return keys.map((key) => rows.get(key) || null);
-    },
-    async getProbed(row) { return bodies.get(row.object) || null; },
-    async getManyProbed(probes) { return probes.map((row) => bodies.get(row.object) || null); },
-    async put(key, bytes) {
-      const facts = tessellationPayloadFacts(bytes, { tessellationInput: key });
-      const object = createHash("sha256").update(bytes).digest("hex");
-      rows.set(key, validateTessellationProbeRow({ schemaVersion: 1, object, ...facts }));
-      bodies.set(object, bytes);
-      return true;
-    },
-  };
-}
-
-// Composition coverage for the scoping of render asset caches.
-//
-// loadSource is the only place a resolved render job meets the page-lifetime render asset caches
-// (common/headlessRenderEntry.js is its sole production caller), and the caches it populates live
-// in lib/stepRenderAssetClient.js. These tests drive the real composition — real loadSource, real
-// client, real wiring — with only globalThis.fetch stubbed, so they fail if the scope is not
-// declared, if the assertion is missing from the client the snapshot batch loads through, or if a
-// collision is swallowed on the way out. Unit-level coverage of the assertion itself lives in
-// lib/stepRenderAssetClient.test.js and lib/renderAssetClient.test.js.
-//
-// The stubbed asset body is deliberately not a decodable GLB: these jobs supply meshData, so the
-// property under test is which source owns the cached bytes, not topology decoding (covered in
-// lib/stepRenderAssetClient.test.js). Loading the mesh itself needs the three runtime and is out
-// of scope for a unit test; it reads the same byte cache asserted here.
-
-function renderAssetUrl() {
-  return `/__render_asset/part.glb?v=${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-}
-
-function stepJob({ inputPath, rootPath, glbUrl }) {
-  return {
-    kind: "step",
-    meshData: meshData(),
-    resolved: {
-      kind: "step",
-      ...(inputPath === undefined ? {} : { inputPath }),
-      ...(rootPath === undefined ? {} : { rootPath }),
-      glbUrl
-    }
-  };
-}
-
-function stubAssetFetch(t, url) {
-  const originalFetch = globalThis.fetch;
-  const state = { fetchCount: 0 };
-  globalThis.fetch = async (requestUrl) => {
-    assert.equal(String(requestUrl), url);
-    state.fetchCount += 1;
-    return new Response(new Uint8Array([state.fetchCount]), { status: 200 });
-  };
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-  return state;
+// A host's part store that records every part probed.
+function recordingMeshStore(requested = [], { stored = [] } = {}) {
+  const store = memoryMeshProvider(stored);
+  const probeMany = store.probeMany;
+  store.probeMany = async (keys) => { requested.push(...keys); return probeMany(keys); };
+  return store;
 }
 
 function meshData() {
@@ -101,111 +32,135 @@ function meshData() {
   };
 }
 
-test("snapshot tessellation is explicit, finite and restricted to exact surfaces", async () => {
-  assert.deepEqual(normalizeRenderTessellation(undefined), {});
-  assert.deepEqual(normalizeRenderTessellation({ chordTolerance: .0001, angleTolerance: .025 }),
-    { chordTolerance: .0001, angleTolerance: .025 });
-  for (const value of [0, -1, NaN, Infinity, "0.01"]) {
-    assert.throws(() => normalizeRenderTessellation({ chordTolerance: value }), /positive finite/);
-  }
-  assert.throws(() => normalizeRenderTessellation({ quality: "high" }), /Unknown/);
-  assert.throws(() => normalizeRenderTessellation([]), /must be an object/);
-  // A floor, not a preference: below it the page tessellates until the
-  // renderer dies and the caller only sees a lost driver connection.
-  assert.throws(() => normalizeRenderTessellation({ chordTolerance: 1e-12 }), /at least 0.00001/);
-  assert.throws(() => normalizeRenderTessellation({ angleTolerance: 1e-6 }), /at least 0.005/);
-  assert.deepEqual(normalizeRenderTessellation(RENDER_TESSELLATION_FLOORS), { ...RENDER_TESSELLATION_FLOORS });
-  await assert.rejects(() => loadSource({ meshData: meshData(),
-    quality: { tessellation: { chordTolerance: .001 } } }), /only for STEP/);
-  await assert.rejects(() => loadSource({ kind: "step", meshData: meshData(),
-    quality: { tessellation: { chordTolerance: .001 } } }), /exact-surface STEP package/);
-});
-
-test("snapshot quality selects bounded shared tessellation policy", () => {
-  assert.deepEqual(tessellationForSnapshotQuality({}), {});
-  assert.deepEqual(tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "preview" } } }), {});
-  assert.deepEqual(
-    tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "final" } } }),
-    { chordTolerance: 0.00015, angleTolerance: 0.35 }
-  );
-  assert.deepEqual(tessellationForSnapshotQuality({
-    display: { mode: "render", lighting: { quality: "final" } },
-    quality: { tessellation: { chordTolerance: 0.001 } }
-  }), { chordTolerance: 0.001 });
-  assert.throws(() => tessellationForSnapshotQuality({
-    display: { mode: "render", lighting: { quality: "ultra" } }
-  }), /quality/i);
-});
-
-test("macro tessellation changes the rendered surface and uses its own cache entry", async (t) => {
-  const bytes = fs.readFileSync(new URL("../lib/surf/fixtures/cam_follower_roller.surf", import.meta.url));
-  const oldFetch = globalThis.fetch;
-  let fetches = 0;
-  globalThis.fetch = async () => { fetches += 1; return new Response(bytes); };
-  const requested = [];
-  setTessellationCacheProvider(memoryTessellationProvider(requested));
-  t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
-  const base = { kind: "step", package: {
-    descriptor: { components: { roller: {
-      surfaceInput: "d".repeat(64),
-      surfaceObject: createHash("sha256").update(bytes).digest("hex"),
-    } },
+// The roller as a one-component package, naming its fixture part.
+function rollerPackage(extra = {}, component = {}) {
+  const { part } = meshFixture("cam_follower_roller");
+  return { kind: "step", package: {
+    descriptor: { components: { roller: { part, ...component } },
       occurrences: [{ id: "o1.1", name: "roller", component: "roller" }],
       assembly: { root: { id: "o1", name: "macro", nodeType: "assembly", children: [
         { id: "o1.1", name: "roller", nodeType: "part", children: [] }
       ] } } },
-    componentUrls: { roller: "/macro-fixture/roller.surf" }
+    ...extra,
   } };
-  const coldStages = {};
-  const coarse = await loadSource(base, { stageTimings: coldStages });
-  assert.equal(coldStages.sourceLoad.cacheHitCount, 0);
-  assert.equal(coldStages.sourceLoad.cacheMissCount, 1);
-  for (const stage of ["surfaceReadMs", "tessellateMs", "cacheWriteMs", "meshBuildMs"]) {
-    assert.ok(coldStages.sourceLoad[stage] >= 0, stage);
+}
+
+test("a package's meshes are read from the store; one it lacks is an error, never made by the page", async (t) => {
+  const oldFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async () => { fetches += 1; return new Response(null, { status: 404 }); };
+  const requested = [];
+  const roller = meshFixture("cam_follower_roller");
+  const store = recordingMeshStore(requested, { stored: [roller.bytes] });
+  setTessellationCacheProvider(store);
+  t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
+  const stages = {};
+  const source = await loadSource(rollerPackage(), { stageTimings: stages });
+  assert.ok(source.meshData.indices.length > 0);
+  assert.equal(stages.sourceLoad.cacheHitCount, 1);
+  assert.equal(stages.sourceLoad.cacheMissCount, 0);
+  for (const stage of ["probeMs", "cacheReadMs", "meshBuildMs"]) {
+    assert.ok(stages.sourceLoad[stage] >= 0, stage);
   }
-  // Finer than the tessellator's own defaults (1.5e-3 chord / 0.35 rad) by enough
-  // that the mesh must visibly densify, and no finer. The property under test is
-  // "an explicit macro request re-tessellates and keys its own cache entry", which
-  // 1e-3/0.1 proves exactly as well as the floor does — at 1/10th the work. Asking
-  // for 1e-4/0.025 here built a 1.7M-index mesh and cost ~4.5 s, which was the
-  // whole @text-to-cad/core suite's critical path.
-  const fineJob = { ...base, quality: { tessellation: { chordTolerance: .001, angleTolerance: .1 } } };
-  const fine = await loadSource(fineJob);
-  assert.ok(fine.meshData.indices.length > coarse.meshData.indices.length);
-  assert.notEqual(requested[0], requested[1]);
-  const beforeWarm = fetches;
-  const warm = await loadSource(fineJob);
-  assert.equal(fetches, beforeWarm, "fine cache hit must not fetch or retessellate the source");
-  assert.equal(warm.meshData.indices.length, fine.meshData.indices.length);
+  // It asks the store for the part its component names, and for nothing else.
+  assert.deepEqual(requested, [roller.part]);
+  assert.equal(fetches, 0, "nothing else is read to draw a package");
+  setTessellationCacheProvider(recordingMeshStore());
+  await assert.rejects(loadSource(rollerPackage()), /component roller has no mesh; cadgen meshes every component/);
+});
+
+// A component cadgen could not mesh says why in its tree entry (cadgen.store.view): the page leaves
+// it out on its own, as the viewer's loader does (`componentFailed`), and draws the rest. Only a
+// package none of whose components is left fails, with the first failure.
+test("a component cadgen could not mesh is left out and the rest drawn; with none left the load fails", async (t) => {
+  const requested = [];
+  const roller = meshFixture("cam_follower_roller");
+  setTessellationCacheProvider(recordingMeshStore(requested, { stored: [roller.bytes] }));
+  t.after(() => setTessellationCacheProvider(null));
+  const failure = "MeshProductionError: ValueError: boom";
+  const job = rollerPackage();
+  const { descriptor } = job.package;
+  descriptor.components.peg = { part: `${"1".repeat(64)}-v1`, failure };
+  descriptor.occurrences.push({ id: "o1.2", name: "peg", component: "peg" });
+  descriptor.assembly.root.children.push({ id: "o1.2", name: "peg", nodeType: "part", children: [] });
+  const stages = {};
+  const source = await loadSource(job, { stageTimings: stages });
+  assert.deepEqual(source.meshData.parts.map((part) => part.occurrenceId), ["o1.1"]);
+  assert.deepEqual(requested, [roller.part], "nothing is asked of the store for the part cadgen could not mesh");
+  assert.equal(stages.sourceLoad.componentCount, 1);
+  descriptor.components.roller.failure = failure;
+  await assert.rejects(loadSource(job),
+    /component roller could not be meshed \(MeshProductionError: ValueError: boom\)/);
+});
+
+// A body the store named but did not hand back is read again, alone, before its component is a
+// miss; and one that stays unreadable says so, not that nothing meshed it.
+test("a stored mesh whose batched read fails is read again alone; one that stays unreadable says so", async (t) => {
+  const store = recordingMeshStore([], { stored: [meshFixture("cam_follower_roller").bytes] });
+  const batch = store.getManyProbed;
+  let batches = 0;
+  store.getManyProbed = async (rows) => { batches += 1; return batches === 1 ? null : batch(rows); };
+  setTessellationCacheProvider(store);
+  t.after(() => setTessellationCacheProvider(null));
+  const stages = {};
+  const source = await loadSource(rollerPackage(), { stageTimings: stages });
+  assert.ok(source.meshData.indices.length > 0);
+  assert.equal(stages.sourceLoad.cacheHitCount, 1);
+  assert.deepEqual([batches, store.counts.reads], [1, 1], "the failed batch's body was read once more, alone");
+  store.getManyProbed = async (rows) => rows.map(() => null);
+  store.getProbed = async () => null;
+  await assert.rejects(loadSource(rollerPackage()),
+    /component roller: the store holds its mesh, but it could not be read/);
+});
+
+test("a static package reads each component's own mesh file; a component nothing meshed is an error", async (t) => {
+  const oldFetch = globalThis.fetch;
+  const mesh = meshFixture("cam_follower_roller");
+  const fetched = [];
+  globalThis.fetch = async (url) => {
+    fetched.push(String(url));
+    return String(url).endsWith("/roller.glb")
+      ? new Response(mesh.bytes.slice(), { status: 200 })
+      : new Response(null, { status: 404 });
+  };
+  t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
+  // The docs hero: no part store at all, and each component's tree entry names its mesh file
+  // beside the tree.
+  setTessellationCacheProvider(null);
+  const hero = (component) => packageSourceFromBaseUrl("/hero/", rollerPackage({}, component).package.descriptor);
+  const job = hero({ glb: "components/roller.glb" });
+  assert.deepEqual(job.package.meshUrls, { roller: "/hero/components/roller.glb" });
+  const source = await loadSourceInput(job);
+  assert.ok(source.meshData.indices.length > 0);
+  assert.deepEqual(fetched, ["/hero/components/roller.glb"], "only the mesh file is read");
+  // A file of another part is not this component's mesh.
+  await assert.rejects(loadSource(hero({ glb: "components/roller.glb", part: `${"0".repeat(64)}-v1` })),
+    /is not its part's mesh/);
+  assert.throws(() => hero({}), /component roller declares no glb path/);
+  await assert.rejects(loadSource(rollerPackage()), /cadgen meshes every component before a page draws it/);
 });
 
 const WARM_COMPONENT = {
   positions: new Float32Array([0, 0, 0, 2, 0, 0, 0, 3, 0]),
   normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
-  faceOrds: new Float32Array([1, 1, 1]),
-  indices: new Uint32Array([0, 1, 2]), sideOrds: new Uint32Array([1, 2, 3]),
+  indices: new Uint32Array([0, 1, 2]),
   faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 }], edges: [],
-  bounds: { min: [0, 0, 0], max: [2, 3, 0] }, scale: Math.sqrt(13),
+  bounds: { min: [0, 0, 0], max: [2, 3, 0] },
 };
 
-/** A warm package of `count` cached components, loaded through an HTTP cache provider. */
+/** A warm package of `count` stored parts, loaded through an HTTP cache provider. */
 async function loadWarmPackage(t, count, providerOptions = {}) {
   const component = WARM_COMPONENT;
-  const surfaceObject = "a".repeat(64);
-  const components = {}, componentUrls = {}, rows = {}, bodies = {};
+  const components = {}, records = {}, bodies = {};
   const occurrences = [];
   for (let n = 0; n < count; n += 1) {
-    const cid = `c${n}`, surfaceInput = createHash("sha256").update(cid).digest("hex");
-    const key = tessellationCacheKey(surfaceInput);
-    const body = encodeComponentTessellation(component, {
-      surfaceInput, surfaceObject, partColor: null, edgeClasses: [],
-    });
-    const object = createHash("sha256").update(body).digest("hex");
-    rows[key] = validateTessellationProbeRow({ schemaVersion: 1, object, ...tessellationPayloadFacts(body) });
-    assert.ok(rows[key]);
-    bodies[key] = body;
-    components[cid] = { surfaceInput, surfaceObject };
-    componentUrls[cid] = `/never-fetch/${cid}.surf`;
+    const cid = `c${n}`, part = `${createHash("sha256").update(cid).digest("hex")}-v1`;
+    const body = encodeMeshFixture(component, { part });
+    // A host answers each stored part's record by its key.
+    const { part: _part, ...record } = partRowFor(body);
+    records[part] = record;
+    bodies[part] = body;
+    components[cid] = { part };
     occurrences.push({ id: `o${n}`, component: cid });
   }
   const probes = [], batches = [];
@@ -214,15 +169,15 @@ async function loadWarmPackage(t, count, providerOptions = {}) {
   globalThis.fetch = async (url, options) => {
     const body = JSON.parse(options.body);
     if (String(url).endsWith("/probe")) {
-      probes.push(body.tessellationInputs.length);
-      assert.ok(body.tessellationInputs.length <= 256);
+      probes.push(body.parts.length);
+      assert.ok(body.parts.length <= 256);
       return new Response(JSON.stringify({ entries: Object.fromEntries(
-        body.tessellationInputs.map((key) => [key, rows[key]]),
+        body.parts.map((part) => [part, records[part]]),
       ) }));
     }
-    assert.ok(String(url).endsWith("/batch"), "a warm package never fetches SURF");
+    assert.ok(String(url).endsWith("/batch"), "a warm package reads nothing but the store");
     assert.ok(body.entries.length <= 256);
-    const payload = encodeTessellationCacheBatch(body.entries.map((entry) => bodies[entry.tessellationInput]));
+    const payload = encodeTessellationCacheBatch(body.entries.map((entry) => bodies[entry.part]));
     batches.push({ count: body.entries.length, bytes: payload.byteLength });
     return new Response(payload, { headers: { "content-length": String(payload.byteLength) } });
   };
@@ -233,7 +188,7 @@ async function loadWarmPackage(t, count, providerOptions = {}) {
   const stageTimings = {};
   const source = await loadSource({ kind: "step", package: {
     descriptor: { components, occurrences, assembly: { root: { id: "root", nodeType: "assembly",
-      children: occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } } }, componentUrls,
+      children: occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } } },
   } }, { stageTimings });
   assert.equal(source.meshData.parts.length, count);
   for (const part of source.meshData.parts) {
@@ -264,87 +219,36 @@ test("a warm package's batches stay within the ceiling its cache's transport dec
   assert.ok(batches.every((batch) => batch.bytes <= options.maxBatchBytes));
 });
 
-test("snapshot package appearance composes through the shared source resolver", async (t) => {
-  const bytes = fs.readFileSync(new URL("../lib/surf/fixtures/cam_follower_roller.surf", import.meta.url));
-  const oldFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(bytes);
-  setTessellationCacheProvider(memoryTessellationProvider());
-  t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
+test("a package draws the finish, colour and opacity cadgen composed onto its occurrences", async (t) => {
+  const { part, bytes } = meshFixture("cam_follower_roller");
+  setTessellationCacheProvider(memoryMeshProvider([bytes]));
+  t.after(() => { setTessellationCacheProvider(null); });
+  // The descriptor as cadgen serves it for display (`source_sidecar.apply_appearance`): the
+  // assigned occurrence already carries what its material resolves to.
   const descriptor = {
     kind: "assembly-package",
-    components: { "appearance-cid": {
-      surfaceInput: "e".repeat(64),
-      surfaceObject: createHash("sha256").update(bytes).digest("hex"),
-    } },
-    occurrences: [{ id: "o1.1", name: "roller", component: "appearance-cid" }],
+    components: { "appearance-cid": { part } },
+    occurrences: [{
+      id: "o1.1", name: "roller", component: "appearance-cid",
+      materialId: "polished", materialName: "Polished",
+      material: { roughness: 0.15, metalness: 0.03, clearcoat: 0.8, clearcoatRoughness: 0.26, opacity: 0.5 },
+      baseColor: "#336699", opacity: 0.5
+    }],
     assembly: { root: { id: "o1", name: "appearance", nodeType: "assembly", children: [
       { id: "o1.1", name: "roller", nodeType: "part", children: [] }
     ] } }
   };
-  const source = await loadSource({
-    kind: "step",
-    documentHash: "c".repeat(64),
-    sourceSidecar: {
-      schemaVersion: 9,
-      documentHash: "c".repeat(64),
-      appearance: {
-        materials: { polished: { name: "Polished", clearcoat: 0.8, roughness: 0.15 } },
-        assignments: { "o1.1": "polished" }
-      }
-    },
-    package: {
-      descriptor,
-      componentUrls: { "appearance-cid": "/appearance/roller.surf" }
-    }
-  });
-  assert.deepEqual(source.meshData.parts[0].material, {
-    roughness: 0.15, metalness: 0.03, clearcoat: 0.8, clearcoatRoughness: 0.26, opacity: 1
-  });
-  assert.equal(source.meshData.parts[0].materialId, "polished");
-  assert.equal(source.meshData.parts[0].materialName, "Polished");
-  assert.equal(descriptor.occurrences[0].material, undefined, "stored package descriptor stays immutable");
+  const source = await loadSource({ kind: "step", package: { descriptor } });
+  const [occurrence] = source.meshData.parts;
+  assert.deepEqual(occurrence.material, descriptor.occurrences[0].material);
+  assert.equal(occurrence.materialId, "polished");
+  assert.equal(occurrence.materialName, "Polished");
+  assert.equal(occurrence.color, "#336699");
+  assert.equal(occurrence.opacity, 0.5, "the opacity is the one cadgen folded, not multiplied again here");
 });
 
-async function withTempModule(callback) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "render-source-test-"));
-  try {
-    const modulePath = path.join(root, "part.step.mjs");
-    fs.writeFileSync(modulePath, `
-      export default {
-        manifest: {
-          schemaVersion: 1,
-          parameters: {
-            drive: { type: "number", min: 0, max: 360, default: 0 }
-          }
-        }
-      };
-    `);
-    return await callback(pathToFileURL(modulePath).href);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-}
-
-test("loadSource rejects STEP parameter options for non-STEP sources", async () => {
-  await assert.rejects(
-    () => loadSource({
-      meshData: meshData(),
-      kinematics: { drive: 90 }
-    }),
-    /kinematics is supported only for STEP\/STP sources/
-  );
-  await assert.rejects(
-    () => loadSource({
-      meshData: meshData(),
-      stepParameterUrl: "file:///tmp/part.step.mjs"
-    }),
-    /stepParameterUrl is supported only for STEP\/STP sources/
-  );
-});
-
-// `--kinematics` takes a declared pose NAME as well as {dof: value} JSON. The
-// CLI cannot tell one from the other — the declared names live in the model's
-// kinematics block — so a name arrives as a bare string and is resolved here.
+// A snapshot job carries what cadgen resolved: the articulation and the control vector it
+// validated at the door (a pose NAME is resolved there too). The page plays, it checks nothing.
 let tessellationCache = createTessellationCache();
 function setTessellationCacheProvider(provider) {
   tessellationCache.dispose();
@@ -352,273 +256,70 @@ function setTessellationCacheProvider(provider) {
 }
 const loadSource = (input, options = {}) => loadSourceInput(input, { tessellationCache, ...options });
 
-const HINGE_SIDECAR = {
-  schemaVersion: 9,
-  documentHash: "a".repeat(64),
-  kinematics: {
-    mates: [
-      {
-        name: "swing",
-        kind: "revolute",
-        parent: "#base",
-        child: "#flap",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] },
-        limits: { value: [0, 120] }
-      }
-    ],
-    poses: { open: { swing: 90 }, ajar: { swing: 15 } }
-  }
+const HINGE_ARTICULATION = {
+  schemaVersion: 1,
+  controls: [{ id: "swing", label: "swing", unit: "deg", min: 0, max: 120, default: 0 }],
+  joints: [{ id: "swing", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1],
+    turn: { bias: 0, terms: [["swing", 1]] } }],
+  carries: { swing: ["flap"] },
+  handles: [{ id: "swing", joint: "swing", dof: "turn", control: "swing", weight: 1, label: "swing", unit: "deg", min: 0, max: 120 }],
+  poses: { open: { swing: 90 }, ajar: { swing: 15 } },
+  opening: { swing: 0 }
 };
 
-function stubSidecarFetch(t, sidecarUrl, sidecar = HINGE_SIDECAR) {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (requestUrl) => {
-    assert.equal(String(requestUrl), sidecarUrl);
-    return new Response(JSON.stringify(sidecar), {
-      status: 200,
-      headers: { "content-type": "application/json" }
-    });
-  };
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-}
-
-function poseJob(kinematics, sidecarUrl) {
+function poseJob(controls, articulation = HINGE_ARTICULATION) {
   return {
     kind: "step",
     meshData: meshData(),
-    kinematics,
-    resolved: {
-      kind: "step",
-      stepParameterUrl: sidecarUrl,
-      documentHash: HINGE_SIDECAR.documentHash,
-      inputPath: "/models/hinge.step"
-    }
+    resolved: { kind: "step", articulation, controls, inputPath: "/models/hinge.step" }
   };
 }
 
-test("a kinematics pose NAME resolves against the model's declared poses", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  const source = await loadSource(poseJob("open", sidecarUrl));
-
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 90 });
+test("a job's pose is cadgen's articulation at the control vector cadgen validated", async () => {
+  const source = await loadSource(poseJob({ swing: 90 }));
+  assert.equal(source.pose.articulation, HINGE_ARTICULATION);
+  assert.deepEqual(source.pose.values, { swing: 90 });
 });
 
-test("a pose name the model does not declare names the ones it does", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  await assert.rejects(
-    () => loadSource(poseJob("shut", sidecarUrl)),
-    /Unknown kinematics pose: shut\. This model declares: open, ajar/
-  );
+test("a job with an articulation and no controls poses the opening", async () => {
+  const source = await loadSource(poseJob(undefined));
+  assert.deepEqual(source.pose.values, { swing: 0 });
 });
 
-test("pose VALUES still pass straight through", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  const source = await loadSource(poseJob({ swing: 45 }, sidecarUrl));
-
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
+test("control values against a model with no articulation have nothing to drive", async () => {
+  await assert.rejects(() => loadSource(poseJob({ swing: 45 }, null)), /declares no kinematics/);
+  assert.equal((await loadSource(poseJob(undefined, null))).pose, null);
 });
 
-test("refuses a pose name against a model that declares no poses", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl, {
-    schemaVersion: 9,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: { ...HINGE_SIDECAR.kinematics, poses: {} }
-  });
-
-  await assert.rejects(
-    () => loadSource(poseJob("open", sidecarUrl)),
-    /This model declares no poses; pass \{dof: value\} JSON instead/
-  );
-});
-
-test("loadSource refuses a render asset cached for a different job source", async (t) => {
-  const glbUrl = renderAssetUrl();
-  const fetches = stubAssetFetch(t, glbUrl);
-
-  const first = await loadSource(stepJob({
-    inputPath: "/models/first/part.step",
-    rootPath: "/models/first",
-    glbUrl
-  }));
-  assert.equal(first.kind, "step");
-  assert.equal(fetches.fetchCount, 1);
-
-  await assert.rejects(
-    () => loadSource(stepJob({
-      inputPath: "/models/second/part.step",
-      rootPath: "/models/second",
-      glbUrl
-    })),
-    /cached for source \/models\/first\/part\.step but was requested for \/models\/second\/part\.step/
-  );
-  assert.equal(fetches.fetchCount, 1);
-});
-
-test("loadSource refuses a collision between two sources under one render root", async (t) => {
-  // Same directory, so the server would route this URL identically for both jobs: the scope has to
-  // be the source file, not its parent, or a future URL-minting regression inside one directory
-  // stays invisible.
-  const glbUrl = renderAssetUrl();
-  const fetches = stubAssetFetch(t, glbUrl);
-
-  await loadSource(stepJob({ inputPath: "/models/a.step", rootPath: "/models", glbUrl }));
-  await assert.rejects(
-    () => loadSource(stepJob({ inputPath: "/models/b.step", rootPath: "/models", glbUrl })),
-    /refusing to reuse it/
-  );
-  assert.equal(fetches.fetchCount, 1);
-});
-
-test("loadSource shares one render asset fetch across jobs against the same file", async (t) => {
-  const glbUrl = renderAssetUrl();
-  const fetches = stubAssetFetch(t, glbUrl);
-  const job = () => stepJob({
-    inputPath: "/models/only/part.step",
-    rootPath: "/models/only",
-    glbUrl
-  });
-
-  const results = [await loadSource(job()), await loadSource(job()), await loadSource(job())];
-
-  assert.equal(results.length, 3);
-  for (const result of results) {
-    assert.equal(result.kind, "step");
-  }
-  assert.equal(fetches.fetchCount, 1);
-});
-
-test("loadSource still serves single-source callers that pass no resolved job", async (t) => {
-  // The shape documented in packages/core/docs/render-pipeline.md for interactive viewer/docs use,
-  // and the one docs/src/components/hero-step-render.tsx actually calls: no resolved packet, one
-  // source per page. It must keep working unscoped — requiring a source path here would break a
-  // documented public contract and the docs hero renderer.
-  const glbUrl = renderAssetUrl();
-  const fetches = stubAssetFetch(t, glbUrl);
-
+test("loadSource takes an articulation and animation inline for STEP sources", async () => {
+  const animation = { clips: [{ id: "swing", label: "Swing", duration: 4, loop: true, tracks: [] }] };
   const source = await loadSource({
     kind: "step",
     meshData: meshData(),
-    glbUrl,
-    cadPath: "models/part.step"
+    cadPath: "part.step",
+    articulation: HINGE_ARTICULATION,
+    controls: { swing: 90 },
+    sourceAnimation: animation
   });
 
   assert.equal(source.kind, "step");
-  assert.equal(source.glbUrl, glbUrl);
-  assert.equal(renderAssetSourceScope(), "");
-  assert.equal(fetches.fetchCount, 1);
-
-  // Repeating it reuses the cached asset, exactly as before.
-  await loadSource({ kind: "step", meshData: meshData(), glbUrl, cadPath: "models/part.step" });
-  assert.equal(fetches.fetchCount, 1);
+  assert.deepEqual(source.pose.values, { swing: 90 });
+  assert.equal(source.animation, animation);
 });
 
-test("loadSource refuses to fetch a render asset for a resolved job that does not name its source", async (t) => {
-  const glbUrl = renderAssetUrl();
-  const fetches = stubAssetFetch(t, glbUrl);
-
-  await assert.rejects(
-    () => loadSource(stepJob({ rootPath: "/models/first", glbUrl })),
-    /require resolved\.inputPath to scope the render asset cache/
-  );
-  // A blank or non-string source is not a source: it must fail closed rather than coerce into the
-  // same bucket as the interactive viewer's unscoped default.
-  for (const inputPath of ["", "   ", 0, false, {}, ["/models/first/part.step"]]) {
-    await assert.rejects(
-      () => loadSource(stepJob({ inputPath, rootPath: "/models/first", glbUrl })),
-      /require resolved\.inputPath to scope the render asset cache/
-    );
-  }
-  assert.equal(fetches.fetchCount, 0);
-});
-
-test("loadSource leaves no source scope behind", async (t) => {
-  const glbUrl = renderAssetUrl();
-  stubAssetFetch(t, glbUrl);
-  assert.equal(renderAssetSourceScope(), "");
-
-  await loadSource(stepJob({
-    inputPath: "/models/kept/part.step",
-    rootPath: "/models/kept",
-    glbUrl
-  }));
-  assert.equal(renderAssetSourceScope(), "");
-
-  await assert.rejects(() => loadSource(stepJob({ glbUrl })));
-  assert.equal(renderAssetSourceScope(), "");
-});
-
-test("loadSource accepts sidecar kinematics for STEP sources", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    schemaVersion: 9,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: {
-      mates: [{ name: "drive", kind: "revolute", parent: "#base", child: "#rotor",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, limits: { value: [0, 360] } }]
-    }
-  }), { status: 200, headers: { "content-type": "application/json" } });
-  try {
-    const source = await loadSource({
-      kind: "step",
-      meshData: meshData(),
-      cadPath: "part.step",
-      stepParameterUrl: "/__render_asset/pkg/model.step.json",
-      documentHash: HINGE_SIDECAR.documentHash,
-      kinematics: { drive: 90 }
-    });
-
-    assert.equal(source.kind, "step");
-    assert.equal(source.stepParameterSource.renderParameters.values.drive, 90);
-    assert.equal(source.stepParameterSource.cadPath, "part.step");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("render display source loading keeps kinematics and supplied CAD runtimes", async () => {
+test("render display source loading keeps kinematics and a supplied selector runtime", async () => {
   const source = await loadSource({
     kind: "step",
     meshData: meshData(),
     display: { mode: "render" },
     cadPath: "hinge.step",
-    glbUrl: "/unused-topology.glb",
-    sourceSidecar: HINGE_SIDECAR,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: { swing: 45 },
-    selectorRuntime: { stale: true },
-    displayEdgeRuntime: { stale: true }
+    articulation: HINGE_ARTICULATION,
+    controls: { swing: 45 },
+    selectorRuntime: { stale: true }
   });
   assert.equal(source.kind, "step");
   assert.deepEqual(source.selectorRuntime, { stale: true });
-  assert.deepEqual(source.displayEdgeRuntime, { stale: true });
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
-});
-
-test("render-only source loading leaves STEP topology lazy", async (t) => {
-  const originalFetch = globalThis.fetch;
-  let fetches = 0;
-  globalThis.fetch = async () => { fetches += 1; throw new Error("unexpected topology fetch"); };
-  t.after(() => { globalThis.fetch = originalFetch; });
-
-  const source = await loadSource({
-    kind: "step",
-    meshData: meshData(),
-    display: { mode: "render" },
-    glbUrl: "/unused-topology.glb"
-  });
-
-  assert.equal(source.selectorRuntime, null);
-  assert.equal(source.displayEdgeRuntime, null);
-  assert.equal(fetches, 0);
+  assert.deepEqual(source.pose.values, { swing: 45 });
 });
 
 // Every other file family is drawn by its own scene builder, the one its viewer renderer
@@ -634,16 +335,8 @@ test("loadSource composes STEP documents and refuses every other file family by 
     await assert.rejects(() => loadSource(input), /loadSource composes a STEP document; a (STL|GLB|URDF|3MF|SDF|SRDF) is drawn by its own scene builder/,
       JSON.stringify(input));
   }
+  // A STEP is drawn from its package: a URL alone names nothing to draw.
+  await assert.rejects(() => loadSource("/models/part.step"), /requires a STEP document's package/);
   assert.equal(fetches, 0);
 });
 
-test("retired render snapshot field is rejected before loading a source", async (t) => {
-  const originalFetch = globalThis.fetch;
-  let fetches = 0;
-  globalThis.fetch = async () => { fetches += 1; throw new Error("unexpected fetch"); };
-  t.after(() => { globalThis.fetch = originalFetch; });
-  for (const render of [null, false, "dark", { unknown: true }]) {
-    await assert.rejects(() => loadSource({ kind: "step", url: "/never.step", render }), /Unsupported snapshot field: render/);
-  }
-  assert.equal(fetches, 0);
-});

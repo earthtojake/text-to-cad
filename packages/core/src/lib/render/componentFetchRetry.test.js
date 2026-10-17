@@ -4,7 +4,7 @@ import test from "node:test";
 import { createHttpCadResourceProvider } from "../../client/resources.js";
 import { __testing } from "../../common/source.js";
 
-const { fetchComponentGlbBuffer, COMPONENT_FETCH_ATTEMPTS } = __testing;
+const { fetchComponentMeshBuffer, COMPONENT_FETCH_ATTEMPTS } = __testing;
 
 // The retry backoff is real wall time in production and pure waiting in a test:
 // two exhausted sequences used to sleep ~880 ms, most of this file's runtime, and
@@ -43,7 +43,7 @@ test("a component GLB that 404s mid-rebuild is retried on a growing backoff and 
   const delays = fakeClock(t);
   // the package directory is being swapped: two misses, then the asset is back
   const calls = stubFetch(t, [{ status: 404 }, { status: 404 }, { status: 200 }]);
-  const buffer = await fetchComponentGlbBuffer("http://x/c.glb", "cid1", {resources:createHttpCadResourceProvider()});
+  const buffer = await fetchComponentMeshBuffer("http://x/c.glb", "cid1", {resources:createHttpCadResourceProvider()});
   assert.equal(buffer.byteLength, 8);
   assert.equal(calls.length, 3, "should retry until the asset reappears");
   // Each wait is longer than the last: a rebuild that has not landed yet is
@@ -57,9 +57,9 @@ test("a persistent 404 gives up after the attempt budget and explains why", asyn
   fakeClock(t);
   const calls = stubFetch(t, [{ status: 404 }]);
   await assert.rejects(
-    () => fetchComponentGlbBuffer("http://x/c.glb", "cid2", {resources:createHttpCadResourceProvider()}),
+    () => fetchComponentMeshBuffer("http://x/c.glb", "cid2", {resources:createHttpCadResourceProvider()}),
     (error) => {
-      assert.match(error.message, /Failed to load component GLB cid2: HTTP 404/);
+      assert.match(error.message, /Failed to load component mesh cid2: HTTP 404/);
       // the message must name BOTH plausible causes, not just the status
       assert.match(error.message, /rebuild is still in flight|descriptor is stale/);
       return true;
@@ -71,7 +71,7 @@ test("a persistent 404 gives up after the attempt budget and explains why", asyn
 test("a non-404 failure is NOT retried — retrying only delays a real error", async (t) => {
   const delays = fakeClock(t);
   const calls = stubFetch(t, [{ status: 500 }]);
-  await assert.rejects(() => fetchComponentGlbBuffer("http://x/c.glb", "cid3", {resources:createHttpCadResourceProvider()}));
+  await assert.rejects(() => fetchComponentMeshBuffer("http://x/c.glb", "cid3", {resources:createHttpCadResourceProvider()}));
   assert.equal(calls.length, 1, "5xx should fail immediately");
   assert.deepEqual(delays, [], "a 5xx must not even schedule a backoff");
 });

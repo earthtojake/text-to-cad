@@ -17,6 +17,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.tree_ids import leaf_id, node_id, root_id, tokenized
 
 
 _MODULE_CACHE = None
@@ -38,12 +39,13 @@ def tearDownModule():
     _MODULE_CACHE.cleanup()
 
 
-def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, animation_source=None):
+def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, clips=None):
     """Materialize the canonical render artifact for ``step_path``: a SELF-CONTAINED
     view directory (assembly.json + components/) inside the per-folder cache
     (``__cadgen__/models/<step-filename>/assembly.json``) whose content-addressed component
     GLBs live in the tree's own ``components/<hash>.glb`` dir. Returns the view directory
-    path, mirroring ``cadgen.catalog.result_view_dir``."""
+    path, mirroring ``cadgen.catalog.result_view_dir``. ``clips`` (id -> ``cadgen.clip``)
+    are baked into the sidecar as a build bakes them, against the seeded tree."""
     from cadgen.catalog import result_view_dir
     from tests.python.support.store_fixtures import seed_result
 
@@ -52,7 +54,7 @@ def write_package(step_path, *, entry_kind="part", source_kind="step", kinematic
         step_path.parent.mkdir(parents=True, exist_ok=True)
         step_path.write_text(f"ISO-10303-21;\n{step_path.name}\n", encoding="utf-8")
     cid = hashlib.sha256(str(step_path).encode()).hexdigest()[:16]
-    seed_result(step_path, {
+    tree = seed_result(step_path, {
         "kind": "assembly-package",
         "entryKind": entry_kind,
         "rootName": step_path.stem,
@@ -75,14 +77,26 @@ def write_package(step_path, *, entry_kind="part", source_kind="step", kinematic
     sidecar = {}
     if kinematics:
         sidecar["kinematics"] = kinematics
-    if animation_source is not None:
-        sidecar["animation"] = {"language": "javascript", "source": animation_source}
+    if clips is not None:
+        from cadgen._internal.animation_bake import bake_document_animation
+
+        sidecar["animation"] = bake_document_animation(clips, tree)
     if sidecar:
-        # Source declarations share one document-bound schema-9 sidecar.
+        # Source declarations share one document-bound sidecar.
         from cadgen._internal.source_sidecar import write_source_sidecar
 
         write_source_sidecar(step_path, sidecar)
     return pkg_dir
+
+
+# Clips for write_package to bake: they move the one part it seeds, `occ`.
+def _rise(t, m):
+    m.get("#occ").translate((0, 0, t))
+
+
+def _turn(t, m):
+    m.get("#occ").rotate((0, 0, 1), 45 * t)
+
 
 add_repo_path("packages/cadgen/src")
 
@@ -90,6 +104,7 @@ add_repo_path("packages/cadgen/src")
 # `cadgen step snapshot` (cadgen.cli.step_snapshot) is the CAD entrypoint, a
 # GENERATED CLI over cadgen.step.snapshot. The skill shims are gone; these tests
 # drive the shared implementation through that cadgen verb directly.
+import cadgen
 import cadgen.snapshot_cli as snapshot_main
 # The shared implementation the CLI drives: constants, the renderer and the
 # output writers live here, and the CLI module no longer re-exports them.
@@ -101,7 +116,6 @@ from cadgen.snapshot_cli import (
     SnapshotError,
     load_job_from_options,
     resolve_render_job_packet,
-    unrenderable_sdf_geometry,
 )
 from cadgen.snapshot_core import (
     clear_render_output_targets,
@@ -152,19 +166,36 @@ def job_from_argv(argv, entry=None):
     )
 
 
-def _selector_artifact(*occurrence_ids: str) -> SimpleNamespace:
+def _tree(*leaf_paths: str) -> dict:
+    """A tokenised descriptor whose leaves sit at ``leaf_paths`` (``o1.4.10``: the
+    root's fourth child's tenth), interior nodes implied, in the order given. Every node is
+    named after its path (``o1_4``), so a test can find its token by name."""
+    root = {"id": "o1", "name": "o1", "children": []}
+    nodes = {"o1": root}
+    occurrences = []
+    for path in leaf_paths:
+        parts = path.split(".")
+        for depth in range(2, len(parts) + 1):
+            prefix = ".".join(parts[:depth])
+            if prefix not in nodes:
+                node = {"id": prefix, "name": prefix.replace(".", "_"), "children": []}
+                nodes[".".join(parts[:depth - 1])]["children"].append(node)
+                nodes[prefix] = node
+        occurrences.append({"id": path, "name": path.replace(".", "_"), "component": "c", "transform": None})
+    return tokenized({"occurrences": occurrences, "assembly": {"root": root}})[0]
+
+
+def _selector_artifact(descriptor: dict) -> SimpleNamespace:
+    """A resolved STEP artifact over ``descriptor`` (``_tree``): its view directory holds
+    the assembly.json the selector index is composed from, as a real one does. It carries
+    no ``manifest`` of its own: these tests are about the refs, not the document's tree."""
+    view = Path(_MODULE_CACHE.name) / "views" / hashlib.sha256(json.dumps(descriptor, sort_keys=True).encode()).hexdigest()[:16]
+    view.mkdir(parents=True, exist_ok=True)
+    (view / "assembly.json").write_text(json.dumps({"kind": "assembly-package", "entryKind": "assembly", **descriptor}), encoding="utf-8")
     return SimpleNamespace(
-        selector_bundle=SimpleNamespace(
-            manifest={
-                "tables": {
-                    "occurrenceColumns": ["id"],
-                    "shapeColumns": ["id", "occurrenceId"],
-                },
-                "occurrences": [[occurrence_id] for occurrence_id in occurrence_ids],
-                "shapes": [],
-            },
-            buffers={},
-        )
+        kind="assembly",
+        artifact_path=view,
+        selector_bundle=SimpleNamespace(manifest=descriptor, buffers={}),
     )
 
 
@@ -257,8 +288,8 @@ class SnapshotCliTests(unittest.TestCase):
             step.snapshot(
                 Path("models/assembly.step"),
                 Path("tmp/assembly.png"),
-                focus=("#o1.2",),
-                hide=("#o1.3.1",),
+                focus=("#pin",),
+                hide=("#nut",),
             )
 
     def test_display_shortcut_accepts_cad_display_modes(self) -> None:
@@ -306,7 +337,7 @@ class SnapshotCliTests(unittest.TestCase):
         for key, value in (("projection", "orthographic"), ("focalLength", 85)):
             with self.subTest(key=key), self.assertRaisesRegex(SnapshotError, "belongs in display.camera"):
                 self._display_job(json.dumps({key: value}))
-            with self.subTest(key=key), self.assertRaisesRegex(SnapshotError, "belongs in display.camera"):
+            with self.subTest(key=key), self.assertRaisesRegex(SnapshotError, rf"camera has unknown key\(s\): {key}"):
                 job_from_argv(["part.step", "tmp/out.png", "--camera", json.dumps({key: value})])
         job = self._display_job('{"camera":{"projection":"perspective","focalLength":85}}')
         self.assertEqual(job["display"]["camera"], {"projection": "perspective", "focalLength": 85})
@@ -465,22 +496,22 @@ class SnapshotCliTests(unittest.TestCase):
                 "models/assembly.step",
                 "tmp/assembly.png",
                 "--focus",
-                "#o1.2",
+                "#pin",
                 "--focus",
-                "#o1.3",
+                "#o:3f2a9c1d7e5b",
             ]
         )
 
         self.assertEqual(
             job["selection"],
             {
-                "focus": ["#o1.2", "#o1.3"],
+                "focus": ["#pin", "#o:3f2a9c1d7e5b"],
             },
         )
 
     def test_declared_output_paths_are_used_exactly(self) -> None:
-        """Every explicit output path is the path that gets written -- per output,
-        across jobs, in every mode. This used to append a shared UTC timestamp
+        """Every explicit output path is the path that gets written -- per output
+        and across jobs. This used to append a shared UTC timestamp
         before each extension (`iso.png` -> `iso_20260527T163012Z.png`), so the
         command's output never matched its declaration and callers had to parse
         the "saved snapshot:" line to learn where their own file went."""
@@ -492,10 +523,10 @@ class SnapshotCliTests(unittest.TestCase):
             write_package(models / "part.step")
 
             original_timestamp = snapshot_main.snapshot_timestamp
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
                 snapshot_main.snapshot_timestamp = lambda: "20260527T163012Z"
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
 
                 packet = resolve_render_job_packet(
                     {
@@ -509,8 +540,7 @@ class SnapshotCliTests(unittest.TestCase):
                             },
                             {
                                 "input": "models/part.step",
-                                "mode": "section",
-                                "outputs": [{"path": "tmp/section.png"}],
+                                "outputs": [{"path": "tmp/top.png", "camera": "top"}],
                             },
                         ]
                     },
@@ -518,7 +548,7 @@ class SnapshotCliTests(unittest.TestCase):
                 )
             finally:
                 snapshot_main.snapshot_timestamp = original_timestamp
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
             output_paths = [
                 Path(output["path"]).relative_to(root).as_posix()
@@ -526,7 +556,7 @@ class SnapshotCliTests(unittest.TestCase):
                 for output in job["outputs"]
             ]
 
-        self.assertEqual(output_paths, ["tmp/iso.png", "tmp/front.png", "tmp/section.png"])
+        self.assertEqual(output_paths, ["tmp/iso.png", "tmp/front.png", "tmp/top.png"])
 
     def test_a_directory_output_gets_a_generated_name_inside_it(self) -> None:
         """The don't-care case: `--output tmp/` names no file, so one is generated
@@ -542,10 +572,10 @@ class SnapshotCliTests(unittest.TestCase):
             (root / "shots").mkdir()
 
             original_timestamp = snapshot_main.snapshot_timestamp
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
                 snapshot_main.snapshot_timestamp = lambda: "20260527T163012Z"
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 packet = resolve_render_job_packet(
                     {
                         "jobs": [
@@ -564,7 +594,7 @@ class SnapshotCliTests(unittest.TestCase):
                 )
             finally:
                 snapshot_main.snapshot_timestamp = original_timestamp
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
             output_paths = [
                 Path(output["path"]).relative_to(root).as_posix()
@@ -595,16 +625,16 @@ class SnapshotCliTests(unittest.TestCase):
             )
             write_package(root / "models" / "part.step")
             original_timestamp = snapshot_main.snapshot_timestamp
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
                 snapshot_main.snapshot_timestamp = lambda: "20260527T163012Z"
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 packet = resolve_render_job_packet(
                     {"input": "models/part.step", "outputs": [{"path": "tmp/"}]}, cwd=root
                 )
             finally:
                 snapshot_main.snapshot_timestamp = original_timestamp
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
             self.assertEqual(
                 Path(packet["jobs"][0]["outputs"][0]["path"]).name,
                 "part_20260527T163012Z.png",
@@ -625,9 +655,9 @@ class SnapshotCliTests(unittest.TestCase):
                 "ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8"
             )
             write_package(root / "models" / "part.step")
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 packet = resolve_render_job_packet(
                     {
                         "jobs": [
@@ -642,7 +672,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
             names = [Path(job["outputs"][0]["path"]).name for job in packet["jobs"]]
             self.assertEqual(len(set(names)), 3, names)
 
@@ -654,9 +684,9 @@ class SnapshotCliTests(unittest.TestCase):
             (models / "part.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(models / "part.step")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/part.step",
@@ -665,7 +695,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         job = packet["jobs"][0]
         self.assertNotIn("workspaceRoot", job)
@@ -674,23 +704,19 @@ class SnapshotCliTests(unittest.TestCase):
         input_url = urlparse(job["resolved"]["inputUrl"])
         self.assertEqual(input_url.path, "/__render_asset/part.step")
         self.assertRegex(parse_qs(input_url.query)["v"][0], r"^[0-9a-f]{16}$")
-        # The render artifact is a SELF-CONTAINED tree, so the resolved job
-        # carries an assembly.json with per-component asset URLs (no monolithic glbUrl).
-        # Each component URL points into the tree's own components/ dir inside __cadgen__.
+        # The render artifact is the tree: the resolved job inlines its assembly.json, whose
+        # components name their parts, and the page reads each part's display mesh from the
+        # store by that key (no monolithic glbUrl, no URL per component).
         self.assertNotIn("glbUrl", job["resolved"])
         package = job["resolved"]["package"]
+        self.assertEqual(list(package), ["descriptor"])
         self.assertEqual(package["descriptor"]["kind"], "assembly-package")
-        component_urls = package["componentUrls"]
-        self.assertTrue(component_urls)
-        for component_url in component_urls.values():
-            parsed_component_url = urlparse(component_url)
-            self.assertTrue(
-                parsed_component_url.path.startswith(
-                    "/__store_asset/"
-                ),
-                component_url,
-            )
-            self.assertRegex(parse_qs(parsed_component_url.query)["v"][0], r"^[0-9a-f]{16}$")
+        from cadgen.store.parts import probe
+
+        components = package["descriptor"]["components"]
+        self.assertTrue(components)
+        for entry in components.values():
+            self.assertIsNotNone(probe(entry["part"]), entry)
 
     def test_multijob_asset_urls_do_not_collide_across_render_roots(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -704,9 +730,9 @@ class SnapshotCliTests(unittest.TestCase):
                 )
                 write_package(folder / "model.step")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 packet = resolve_render_job_packet(
                     {
                         "jobs": [
@@ -723,7 +749,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         first_resolved = packet["jobs"][0]["resolved"]
         second_resolved = packet["jobs"][1]["resolved"]
@@ -781,9 +807,9 @@ class SnapshotCliTests(unittest.TestCase):
                 calls.append((target, kwargs))
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 resolve_render_job_packet(
                     {
                         "input": "models/part.step",
@@ -792,7 +818,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         self.assertEqual(len(calls), 1)
         target, kwargs = calls[0]
@@ -828,9 +854,9 @@ class SnapshotCliTests(unittest.TestCase):
                     )
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/part.step",
@@ -840,7 +866,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         job = packet["jobs"][0]
         self.assertEqual(
@@ -970,9 +996,9 @@ class SnapshotCliTests(unittest.TestCase):
                 calls.append(kwargs)
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/part.step",
@@ -981,7 +1007,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         self.assertIsNone(calls[0]["debug"])
         job = packet["jobs"][0]
@@ -1002,9 +1028,9 @@ class SnapshotCliTests(unittest.TestCase):
                 calls.append((target, kwargs))
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 with self.assertRaisesRegex(
                     SnapshotError,
                     r"does not render \.dxf.*inputs",
@@ -1018,7 +1044,7 @@ class SnapshotCliTests(unittest.TestCase):
                         kinds=CAD_KINDS,
                     )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         self.assertEqual(calls, [])
 
@@ -1038,9 +1064,9 @@ class SnapshotCliTests(unittest.TestCase):
                 calls.append((target, kwargs))
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
@@ -1049,7 +1075,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         # The STEP artifact pipeline must never be entered for a direct mesh.
         self.assertEqual(calls, [])
@@ -1106,12 +1132,12 @@ class SnapshotCliTests(unittest.TestCase):
         # names the nesting instead of leaving the author to guess it.
         with self.assertRaisesRegex(
             SnapshotError,
-            r'unknown render job key\(s\): hide.*hide nest under the selection object: "selection": \{"hide": \["#o1.2"\]\}',
+            r'unknown render job key\(s\): hide.*hide nest under the selection object: "selection": \{"hide": \["#housing"\]\}',
         ):
             resolve_render_job_packet(
                 {
                     "input": "models/part.step",
-                    "hide": ["#o1.5"],
+                    "hide": ["#nut"],
                     "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                 }
             )
@@ -1140,7 +1166,7 @@ class SnapshotCliTests(unittest.TestCase):
                             {
                                 "path": "tmp/iso.png",
                                 "camera": "iso",
-                                "selection": {"hide": ["#o1.5"]},
+                                "selection": {"hide": ["#nut"]},
                             }
                         ],
                     },
@@ -1172,7 +1198,7 @@ class SnapshotCliTests(unittest.TestCase):
                 resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
-                        "selection": {"focus": ["#o1.2"]},
+                        "selection": {"focus": ["#nut"]},
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
@@ -1207,19 +1233,11 @@ class SnapshotCliTests(unittest.TestCase):
     def test_render_display_rejects_non_view_modes_before_kind_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            for mode in ("section", "list"):
-                with self.subTest(mode=mode), self.assertRaisesRegex(
-                    SnapshotError, "Render display supports only view mode"
-                ):
-                    resolve_render_job_packet(
-                        {
-                            "input": "models/widget.glb",
-                            "mode": mode,
-                            "display": {"mode": "render"},
-                            "outputs": [] if mode == "list" else [{"path": "tmp/iso.png"}],
-                        },
-                        cwd=root,
-                    )
+            with self.assertRaisesRegex(SnapshotError, "Render display supports only view mode"):
+                resolve_render_job_packet(
+                    {"input": "models/widget.glb", "mode": "list", "display": {"mode": "render"}, "outputs": []},
+                    cwd=root,
+                )
 
     def test_non_view_restriction_follows_lighting_not_the_preset_name(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1230,23 +1248,10 @@ class SnapshotCliTests(unittest.TestCase):
             packet = resolve_render_job_packet({**base, "display": {"mode": "render", "lighting": {"enabled": False}}}, cwd=root)
             self.assertEqual("list", packet["jobs"][0]["mode"])
 
-    def test_render_job_rejects_section_mode_for_mesh_input(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            with self.assertRaisesRegex(SnapshotError, "section mode requires STEP topology"):
-                resolve_render_job_packet(
-                    {
-                        "input": "models/widget.glb",
-                        "mode": "section",
-                        "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
-                    },
-                    cwd=root,
-                )
-
     def test_mesh_and_robot_refuse_the_presets_made_of_cad_edges_and_keep_surface_styles(self) -> None:
         # Hidden line, X-ray and Wireframe are drawn from CAD edges, which only a STEP model
         # has. The surface STYLES are not: a mesh can still be drawn flat or unlit.
-        for filename, data in (("widget.glb", b"glTF"), ("arm.urdf", b"<robot name='arm'/>")):
+        for filename, data in (("widget.glb", b"glTF"), ("arm.urdf", self.JOINTED_URDF)):
             with tempfile.TemporaryDirectory() as temporary_directory:
                 root = self._mesh_job_env(temporary_directory, filename, data)
                 base = {"input": f"models/{filename}", "outputs": [{"path": "tmp/iso.png", "camera": "iso"}]}
@@ -1336,9 +1341,9 @@ class SnapshotCliTests(unittest.TestCase):
                 calls.append(kwargs)
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
@@ -1347,7 +1352,7 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         # Mesh inputs skip the STEP artifact pipeline entirely.
         self.assertEqual(calls, [])
@@ -1392,9 +1397,9 @@ class SnapshotCliTests(unittest.TestCase):
                            "limits": {"value": [0, 5]}}],
             })
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
                 with self.assertRaisesRegex(SnapshotError, "[Uu]nknown"):
                     resolve_render_job_packet(
                         {
@@ -1405,7 +1410,7 @@ class SnapshotCliTests(unittest.TestCase):
                         cwd=root,
                     )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
     def test_input_kind_detects_robot_descriptions(self) -> None:
         self.assertEqual(snapshot_main.input_kind(Path("robots/arm.urdf")), "urdf")
@@ -1414,37 +1419,44 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_render_job_resolves_robot_description_without_step_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
+            root = self._mesh_job_env(temporary_directory, "arm.urdf", self.JOINTED_URDF)
             calls = []
 
             def fake_ensure(target, **kwargs):
                 calls.append(kwargs)
                 return None
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 packet = resolve_render_job_packet(
                     {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]},
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
-        # A robot assembles in the browser from its own description; no STEP pipeline.
+        # A robot is resolved by cadgen from its own description; no STEP pipeline.
         self.assertEqual(calls, [])
         job = packet["jobs"][0]
         resolved = job["resolved"]
         self.assertEqual(resolved["kind"], "urdf")
         self.assertTrue(urlparse(str(resolved["inputUrl"])).path.endswith("arm.urdf"))
         self.assertEqual(resolved["inputUrl"], resolved["url"])
+        # The page plays what cadgen resolved: the articulation, and every visual's mesh by a
+        # URL the snapshot host answers (a primitive by its store object).
+        robot = resolved["robot"]
+        self.assertEqual([control["id"] for control in robot["articulation"]["controls"]], ["shoulder_pan"])
+        self.assertEqual([visual["mesh"]["format"] for visual in robot["visuals"]], ["glb", "glb"])
+        self.assertTrue(all(visual["mesh"]["url"].startswith("/__robot_mesh/") for visual in robot["visuals"]))
+        self.assertEqual(resolved["controls"], {"shoulder_pan": 0.0})
         # Robots are authored in metres; the CAD profile would frame one for a workpiece a
         # thousand times its size.
         self.assertEqual(job["scale"], "urdf")
 
     def test_render_job_poses_a_robot_with_joint_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
+            root = self._mesh_job_env(temporary_directory, "arm.urdf", self.TWO_JOINT_URDF)
             packet = resolve_render_job_packet(
                 {
                     "input": "models/arm.urdf",
@@ -1454,7 +1466,8 @@ class SnapshotCliTests(unittest.TestCase):
                 cwd=root,
             )
             resolved = packet["jobs"][0]["resolved"]
-            self.assertEqual(resolved["jointValues"], {"shoulder_pan": 55, "elbow_flex": -20})
+            # The full control vector the request means, validated at the door.
+            self.assertEqual(resolved["controls"], {"shoulder_pan": 55.0, "elbow_flex": -20.0})
 
             base = {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]}
             with self.assertRaisesRegex(SnapshotError, "jointValues must be an object"):
@@ -1475,6 +1488,19 @@ class SnapshotCliTests(unittest.TestCase):
   </joint>
 </robot>
 """
+    TWO_JOINT_URDF = b"""<?xml version="1.0"?>
+<robot name="arm">
+  <link name="base_link"/><link name="upper"/><link name="fore"/>
+  <joint name="shoulder_pan" type="revolute">
+    <parent link="base_link"/><child link="upper"/>
+    <axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+  <joint name="elbow_flex" type="revolute">
+    <parent link="upper"/><child link="fore"/>
+    <axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+</robot>
+"""
 
     def test_render_job_refuses_a_joint_the_robot_does_not_declare(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1483,7 +1509,7 @@ class SnapshotCliTests(unittest.TestCase):
 
             # A declared joint still poses the robot.
             packet = resolve_render_job_packet({**base, "jointValues": {"shoulder_pan": 30}}, cwd=root)
-            self.assertEqual(packet["jobs"][0]["resolved"]["jointValues"], {"shoulder_pan": 30})
+            self.assertEqual(packet["jobs"][0]["resolved"]["controls"], {"shoulder_pan": 30.0})
 
             with self.assertRaisesRegex(SnapshotError, r"Unknown joint\(s\): shoulder_panx"):
                 resolve_render_job_packet({**base, "jointValues": {"shoulder_panx": 30}}, cwd=root)
@@ -1491,10 +1517,9 @@ class SnapshotCliTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, "This URDF declares: shoulder_pan"):
                 resolve_render_job_packet({**base, "jointValues": {"Shoulder_Pan": 30}}, cwd=root)
 
-    # A capsule, plane, ellipsoid, heightmap or polyline has no mesh in the renderer, so a
-    # VISUAL built from one renders as EMPTY SPACE at exit 0. The browser parser refuses them
-    # (parseSdf.test.js); the door answers FIRST so the CLI fails before a browser ever
-    # starts, and says the same thing. Collisions are never drawn and are never refused.
+    # A plane, ellipsoid, heightmap or polyline has no mesh cadgen makes, so a VISUAL built
+    # from one is refused by cadgen as it reads the description (cadgen.robot_payload), before
+    # a browser ever starts. Collisions are never drawn and are never refused.
     def _sdf(self, body: str) -> bytes:
         return (
             "<?xml version='1.0'?>\n<sdf version='1.9'><model name='rig'>"
@@ -1509,12 +1534,12 @@ class SnapshotCliTests(unittest.TestCase):
     )
 
     def test_render_job_refuses_sdf_geometry_the_renderer_cannot_draw(self) -> None:
-        for shape, xml in (
-            ("capsule", "<capsule><radius>1</radius><length>2</length></capsule>"),
-            ("plane", "<plane><size>10 10</size></plane>"),
-            ("ellipsoid", "<ellipsoid><radii>1 2 3</radii></ellipsoid>"),
-            ("heightmap", "<heightmap><uri>h.png</uri></heightmap>"),
-            ("polyline", "<polyline><height>1</height></polyline>"),
+        # A plane is valid SDF cadgen has no mesh for; the rest `cadgen sdf validate` does not know.
+        for shape, xml, pattern in (
+            ("plane", "<plane><size>10 10</size></plane>", r"link 'ground' visual 1 uses <plane> geometry, which the viewer cannot draw"),
+            ("ellipsoid", "<ellipsoid><radii>1 2 3</radii></ellipsoid>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
+            ("heightmap", "<heightmap><uri>h.png</uri></heightmap>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
+            ("polyline", "<polyline><height>1</height></polyline>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
         ):
             with self.subTest(shape=shape), tempfile.TemporaryDirectory() as temporary_directory:
                 root = self._mesh_job_env(
@@ -1525,7 +1550,7 @@ class SnapshotCliTests(unittest.TestCase):
                         + f"<link name='ground'><visual name='g'><geometry>{xml}</geometry></visual></link>"
                     ),
                 )
-                with self.assertRaisesRegex(SnapshotError, rf"link ground visual uses <{shape}>"):
+                with self.assertRaisesRegex(SnapshotError, pattern):
                     resolve_render_job_packet(
                         {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
                         cwd=root,
@@ -1538,9 +1563,10 @@ class SnapshotCliTests(unittest.TestCase):
                 "rig.sdf",
                 self._sdf(
                     self.DRAWABLE_LINK
-                    + "<link name='dome'><visual name='v'>"
-                    "<geometry><ellipsoid><radii>1 2 3</radii></ellipsoid></geometry></visual></link>"
-                    + "<link name='ghost'><visual name='v'></visual></link>"
+                    + "<link name='ground'><visual name='v'>"
+                    "<geometry><plane><size>10 10</size></plane></geometry></visual></link>"
+                    + "<link name='wall'><visual name='v'>"
+                    "<geometry><plane><size>10 10</size></plane></geometry></visual></link>"
                 ),
             )
             with self.assertRaises(SnapshotError) as caught:
@@ -1549,9 +1575,9 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             message = str(caught.exception)
-            self.assertIn("link dome visual uses <ellipsoid>", message)
-            self.assertIn("link ghost visual has no <geometry>", message)
-            self.assertIn("Supported: box, cylinder, mesh, sphere", message)
+            self.assertIn("link 'ground' visual 1 uses <plane>", message)
+            self.assertIn("link 'wall' visual 1 uses <plane>", message)
+            self.assertIn("Supported: box, capsule, cylinder, sphere, mesh", message)
 
     def test_render_job_renders_a_world_whose_collision_geometry_it_cannot_draw(self) -> None:
         # Collision geometry is never drawn, so an undrawable one costs the picture nothing
@@ -1579,11 +1605,10 @@ class SnapshotCliTests(unittest.TestCase):
                 cwd=root,
             )
             self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
-            self.assertEqual(unrenderable_sdf_geometry(root / "models" / "world.sdf"), [])
 
     def test_render_job_accepts_sdf_built_only_from_drawable_shapes(self) -> None:
-        # The refusal may only fire on what it understands: a description made of shapes the
-        # renderer draws still resolves, and one this cannot parse is left to the renderer.
+        # A description made of the shapes cadgen meshes resolves, each visual a store object;
+        # one that is not SDF at all is refused by cadgen's reader, never left to a browser.
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(
                 temporary_directory,
@@ -1595,43 +1620,47 @@ class SnapshotCliTests(unittest.TestCase):
                     "</geometry></visual></link>"
                     + "<link name='lamp'><visual name='v'><geometry>"
                     "<sphere><radius>1</radius></sphere></geometry></visual></link>"
+                    + "<link name='pill'><visual name='v'><geometry>"
+                    "<capsule><radius>1</radius><length>2</length></capsule></geometry></visual></link>"
                 ),
             )
             packet = resolve_render_job_packet(
                 {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
                 cwd=root,
             )
-            self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
+            resolved = packet["jobs"][0]["resolved"]
+            self.assertEqual(resolved["kind"], "sdf")
+            self.assertEqual([visual["label"] for visual in resolved["robot"]["visuals"]], ["box", "cylinder", "sphere", "capsule"])
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "rig.sdf", b"not xml at all")
-            packet = resolve_render_job_packet(
-                {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
-                cwd=root,
-            )
-            self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
+            with self.assertRaisesRegex(SnapshotError, "could not be parsed as SDF XML"):
+                resolve_render_job_packet(
+                    {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
+                    cwd=root,
+                )
 
-    def test_render_job_still_poses_a_robot_whose_joints_cannot_be_read(self) -> None:
-        # The check may only REFUSE a name it is sure about. A description this cannot parse
-        # renders exactly as before rather than becoming stricter than the renderer.
+    def test_render_job_refuses_a_robot_its_validator_refuses(self) -> None:
+        # One door validates: what `cadgen urdf validate` calls an error never reaches a browser,
+        # and a pose over it is not range-checked against joints that cannot be read.
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
-            packet = resolve_render_job_packet(
-                {
-                    "input": "models/arm.urdf",
-                    "jointValues": {"anything": 12},
-                    "outputs": [{"path": "tmp/iso.png"}],
-                },
-                cwd=root,
-            )
-            self.assertEqual(packet["jobs"][0]["resolved"]["jointValues"], {"anything": 12})
+            with self.assertRaisesRegex(SnapshotError, "must define at least one link"):
+                resolve_render_job_packet(
+                    {
+                        "input": "models/arm.urdf",
+                        "jointValues": {"anything": 12},
+                        "outputs": [{"path": "tmp/iso.png"}],
+                    },
+                    cwd=root,
+                )
 
     def test_render_job_rejects_step_only_options_for_robot_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
             base = {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]}
             with self.assertRaisesRegex(SnapshotError, "selection focus/hide require STEP topology"):
-                resolve_render_job_packet({**base, "selection": {"focus": ["#o1"]}}, cwd=root)
+                resolve_render_job_packet({**base, "selection": {"focus": ["#frame"]}}, cwd=root)
             # A robot IS parametric, just not by STEP sidecar — the error says which key to use.
             with self.assertRaisesRegex(SnapshotError, "pose a URDF robot with jointValues"):
                 resolve_render_job_packet({**base, "kinematics": {"width": 5}}, cwd=root)
@@ -1639,8 +1668,6 @@ class SnapshotCliTests(unittest.TestCase):
                 resolve_render_job_packet(
                     {**base, "display": {"exploded": {"enabled": True, "amount": 1}}}, cwd=root
                 )
-            with self.assertRaisesRegex(SnapshotError, "section mode requires STEP topology"):
-                resolve_render_job_packet({**base, "mode": "section"}, cwd=root)
 
     def test_render_job_missing_mesh_file_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1666,24 +1693,25 @@ class SnapshotCliTests(unittest.TestCase):
             step_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(step_path, entry_kind="assembly")
             calls = []
+            tree = _tree("o1.2")
 
             def fake_ensure(target, **kwargs):
                 calls.append((target, kwargs))
-                return _selector_artifact("o1", "o1.2")
+                return _selector_artifact(tree)
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = fake_ensure
+                snapshot_main.ensure_step_artifact = fake_ensure
                 resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
-                        "selection": {"focus": ["#o1.2"]},
+                        "selection": {"focus": [f"#{leaf_id(tree, 'o1_2')}"]},
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         self.assertEqual(len(calls), 1)
         target, kwargs = calls[0]
@@ -1698,29 +1726,27 @@ class SnapshotCliTests(unittest.TestCase):
             (models / "assembly.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(models / "assembly.step", entry_kind="assembly")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            tree = _tree("o1.2", "o1.3")
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: _selector_artifact(
-                    "o1",
-                    "o1.2",
-                    "o1.2.1",
-                    "o1.3",
-                )
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: _selector_artifact(tree)
+                # Refs come as tokens or labels, with or without the leading hash; the job
+                # carries the tokens.
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
                         "selection": {
-                            "focus": ["#o1.2", "#o1.3"],
+                            "focus": [f"#{leaf_id(tree, 'o1_2')}", "o1_3"],
                         },
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         selection = packet["jobs"][0]["selection"]
-        self.assertEqual(selection["focus"], ["o1.2", "o1.3"])
+        self.assertEqual(selection["focus"], [leaf_id(tree, "o1_2"), leaf_id(tree, "o1_3")])
 
     def test_render_job_normalizes_hide_selector_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1730,34 +1756,33 @@ class SnapshotCliTests(unittest.TestCase):
             (models / "assembly.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(models / "assembly.step", entry_kind="assembly")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            tree = _tree("o1.2.1", "o1.3")
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: _selector_artifact(
-                    "o1",
-                    "o1.2",
-                    "o1.2.1",
-                    "o1.3",
-                )
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: _selector_artifact(tree)
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
-                        "selection": {"hide": ["#o1.2.1"]},
+                        "selection": {"hide": [f"#{leaf_id(tree, 'o1_2_1')}"]},
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
         selection = packet["jobs"][0]["selection"]
-        self.assertEqual(selection["hide"], ["o1.2.1"])
+        self.assertEqual(selection["hide"], [leaf_id(tree, "o1_2_1")])
+
+    # A root of two groups: `o1_1` of two parts, `o1_4` of three.
+    GROUPED = _tree("o1.1.1", "o1.1.2", "o1.4.1", "o1.4.2", "o1.4.10")
 
     def _group_selection(self, selection: dict) -> dict:
-        """Resolve `selection` against a LEAF-ONLY occurrence index.
+        """Resolve `selection` against the GROUPED tree's index, whose rows are its leaves.
 
         That is what a real assembly package produces: only the instance tree's leaves own
         geometry, so only leaves become selector-index rows (cadgen.assembly_lookup). The
-        subassembly nodes `o1` and `o1.4` are carried by the ids alone.
+        subassembly nodes are carried by the tree, each ref a token.
         """
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory).resolve()
@@ -1766,15 +1791,9 @@ class SnapshotCliTests(unittest.TestCase):
             (models / "assembly.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(models / "assembly.step", entry_kind="assembly")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: _selector_artifact(
-                    "o1.1.1",
-                    "o1.1.2",
-                    "o1.4.1",
-                    "o1.4.2",
-                    "o1.4.10",
-                )
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: _selector_artifact(self.GROUPED)
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
@@ -1784,41 +1803,44 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
         return packet["jobs"][0]["selection"]
+
+    def _ids(self, *names: str) -> list[str]:
+        return [node_id(self.GROUPED, name) for name in names]
 
     def test_focus_expands_a_group_ref_to_its_subtree(self) -> None:
         """A subassembly ref covers every rendered part under it.
 
-        `#o1.4` names an instance-tree NODE, which kinematics mates address and pose
-        without complaint; it carried no selector-index row of its own and so was refused
-        as "unknown", by an error that claimed to support subassemblies. Ordered by
-        numeric path, so o1.4.10 follows o1.4.2 rather than o1.4.1.
+        The group's token names an instance-tree NODE, which kinematics mates address and
+        pose without complaint; it carried no selector-index row of its own and so was
+        refused as "unknown", by an error that claimed to support subassemblies. The leaves
+        come in tree order, the tenth child after the second.
         """
-        selection = self._group_selection({"focus": ["#o1.4"]})
-        self.assertEqual(selection["focus"], ["o1.4.1", "o1.4.2", "o1.4.10"])
+        selection = self._group_selection({"focus": [f"#{node_id(self.GROUPED, 'o1_4')}"]})
+        self.assertEqual(selection["focus"], self._ids("o1_4_1", "o1_4_2", "o1_4_10"))
 
     def test_hide_expands_a_group_ref_the_same_way(self) -> None:
-        selection = self._group_selection({"hide": ["#o1.4"]})
-        self.assertEqual(selection["hide"], ["o1.4.1", "o1.4.2", "o1.4.10"])
+        selection = self._group_selection({"hide": [f"#{node_id(self.GROUPED, 'o1_4')}"]})
+        self.assertEqual(selection["hide"], self._ids("o1_4_1", "o1_4_2", "o1_4_10"))
 
     def test_the_root_group_covers_the_whole_model(self) -> None:
-        selection = self._group_selection({"focus": ["#o1"]})
-        self.assertEqual(
-            selection["focus"], ["o1.1.1", "o1.1.2", "o1.4.1", "o1.4.2", "o1.4.10"]
-        )
+        selection = self._group_selection({"focus": [f"#{root_id(self.GROUPED)}"]})
+        self.assertEqual(selection["focus"], self._ids("o1_1_1", "o1_1_2", "o1_4_1", "o1_4_2", "o1_4_10"))
 
     def test_a_group_and_one_of_its_parts_do_not_duplicate(self) -> None:
-        selection = self._group_selection({"focus": ["#o1.4", "#o1.4.2"]})
-        self.assertEqual(selection["focus"], ["o1.4.1", "o1.4.2", "o1.4.10"])
+        selection = self._group_selection({"focus": [f"#{node_id(self.GROUPED, 'o1_4')}", "#o1_4_2"]})
+        self.assertEqual(selection["focus"], self._ids("o1_4_1", "o1_4_2", "o1_4_10"))
 
     def test_an_unknown_group_ref_names_what_does_exist(self) -> None:
         """Expansion must not turn every typo into a silent no-op: a ref with nothing
-        under it still fails, and the error walks up to the deepest node that IS there."""
-        with self.assertRaisesRegex(SnapshotError, r"o1\.9.*o1 does exist, and holds: o1\.1, o1\.4"):
-            self._group_selection({"focus": ["#o1.9"]})
-        with self.assertRaisesRegex(SnapshotError, r"o1\.4\.99.*o1\.4 does exist, and holds: "):
-            self._group_selection({"focus": ["#o1.4.99"]})
+        under it still fails, and the error names the root's children, the parts and
+        subassemblies a person would pick next (a token carries no position to walk up)."""
+        group, leaf = self._ids("o1_1", "o1_4")
+        with self.assertRaisesRegex(SnapshotError, rf"o:999999999999; the document holds: #{group} o1_1, #{leaf} o1_4"):
+            self._group_selection({"focus": ["#o:" + "9" * 12]})
+        with self.assertRaisesRegex(SnapshotError, "unknown part label 'o1_9'"):
+            self._group_selection({"focus": ["#o1_9"]})
 
     def test_render_job_rejects_face_focus_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1826,22 +1848,22 @@ class SnapshotCliTests(unittest.TestCase):
             models = root / "models"
             models.mkdir()
             (models / "assembly.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
-            (models / ".assembly.step.glb").write_bytes(b"glb")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            tree = _tree("o1.2")
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: _selector_artifact("o1", "o1.2")
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: _selector_artifact(tree)
                 with self.assertRaisesRegex(SnapshotError, "part/subassembly occurrence refs"):
                     resolve_render_job_packet(
                         {
                             "input": "models/assembly.step",
-                            "selection": {"focus": ["#o1.2.f1"]},
+                            "selection": {"focus": [f"#{leaf_id(tree, 'o1_2')}/f:9d2e8c1b5a70"]},
                             "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                         },
                         cwd=root,
                     )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
     def test_render_job_rejects_mixed_focus_and_hide_selection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1849,29 +1871,25 @@ class SnapshotCliTests(unittest.TestCase):
             models = root / "models"
             models.mkdir()
             (models / "assembly.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
-            (models / ".assembly.step.glb").write_bytes(b"glb")
 
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            tree = _tree("o1.2", "o1.3")
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: _selector_artifact(
-                    "o1",
-                    "o1.2",
-                    "o1.3",
-                )
+                snapshot_main.ensure_step_artifact = lambda *args, **kwargs: _selector_artifact(tree)
                 with self.assertRaisesRegex(SnapshotError, "selection.focus and selection.hide cannot be used"):
                     resolve_render_job_packet(
                         {
                             "input": "models/assembly.step",
                             "selection": {
-                                "focus": ["#o1.2"],
-                                "hide": ["#o1.3"],
+                                "focus": ["#o1_2"],
+                                "hide": ["#o1_3"],
                             },
                             "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                         },
                         cwd=root,
                     )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
     def test_snapshot_root_flags_and_job_fields_are_removed(self) -> None:
         for flag, value in (("--workspace-root", "/tmp"), ("--root-dir", "models")):
@@ -2122,10 +2140,10 @@ class JobOutputResolutionTests(unittest.TestCase):
             models.mkdir(parents=True)
             (models / "part.step").write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
             write_package(models / "part.step")
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             original_timestamp = snapshot_main.snapshot_timestamp
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *a, **k: None
+                snapshot_main.ensure_step_artifact = lambda *a, **k: None
                 snapshot_main.snapshot_timestamp = lambda: "20260527T163012Z"
                 packet = resolve_render_job_packet(
                     {"input": "models/part.step", "outputs": outputs},
@@ -2133,7 +2151,7 @@ class JobOutputResolutionTests(unittest.TestCase):
                 )
                 return packet, root
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
                 snapshot_main.snapshot_timestamp = original_timestamp
 
     def test_render_job_output_path_string_is_accepted(self):
@@ -2163,9 +2181,9 @@ class JobDisplayResolutionTests(unittest.TestCase):
                 (models / "stage.display.json").write_text(
                     json.dumps(display_body), encoding="utf-8"
                 )
-            original_ensure = snapshot_main.ensure_step_topology_artifact
+            original_ensure = snapshot_main.ensure_step_artifact
             try:
-                snapshot_main.ensure_step_topology_artifact = lambda *a, **k: None
+                snapshot_main.ensure_step_artifact = lambda *a, **k: None
                 return resolve_render_job_packet(
                     {
                         "input": "models/part.step",
@@ -2175,7 +2193,7 @@ class JobDisplayResolutionTests(unittest.TestCase):
                     cwd=root,
                 )
             finally:
-                snapshot_main.ensure_step_topology_artifact = original_ensure
+                snapshot_main.ensure_step_artifact = original_ensure
 
     def test_job_display_mode_string_is_resolved(self):
         packet = self._packet_for("wireframe")
@@ -2202,11 +2220,10 @@ class JobDisplayResolutionTests(unittest.TestCase):
 class StepPoseParameterTests(unittest.TestCase):
     """The job's `kinematics` key drives the model's declarative kinematics
     block — the ONE parameter transport, spelled the same as the flag and the
-    sidecar section. The retired spellings (`stepParameters`, --params-path,
-    stepParametersPath, descriptor paramsPath) are hard teaching errors."""
+    sidecar section. Any other key is an unknown key of the closed job schema."""
 
     POSE = {
-        "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#ram",
+        "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#occ",
                    "axis": {"origin": [0, 0, 0], "dir": [0, 0, 1]},
                    "limits": {"value": [0, 1]}}],
     }
@@ -2235,12 +2252,19 @@ class StepPoseParameterTests(unittest.TestCase):
 
     def _resolve(self, job):
         # The artifact build is out of scope here: these are input-shape rules.
-        original = snapshot_main.ensure_step_topology_artifact
+        original = snapshot_main.ensure_step_artifact
         try:
-            snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+            snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
             return resolve_render_job_packet(job, cwd=self.root)
         finally:
-            snapshot_main.ensure_step_topology_artifact = original
+            snapshot_main.ensure_step_artifact = original
+
+    def _leaf(self, name: str) -> str:
+        """The token of the one occurrence `write_package` seeded for the document."""
+        from cadgen.catalog import result_tree_for
+        from cadgen.store.trees import flatten
+
+        return str(flatten(result_tree_for(self.models / name))["occurrences"][0]["id"])
 
     def test_pose_values_and_pose_names_both_reach_the_job(self) -> None:
         """`--kinematics` takes either spelling, told apart by SHAPE.
@@ -2256,31 +2280,50 @@ class StepPoseParameterTests(unittest.TestCase):
         named = job_from_argv(["models/part.step", "tmp/o.png", "--kinematics", "open"])
         self.assertEqual("open", named["kinematics"])
 
-    def test_pose_parameters_resolve_the_sidecar_url(self) -> None:
+    def test_pose_values_resolve_to_the_articulation_and_the_control_vector(self) -> None:
         self._step()
         packet = self._resolve(self._job(kinematics={"stroke": 1}))
         resolved = packet["jobs"][0]["resolved"]
-        self.assertIn(".step.json", str(resolved["stepParameterUrl"]))
-        self.assertEqual(resolved["sourceSidecar"]["schemaVersion"], 9)
-        self.assertNotIn("stepParameterPath", resolved)
+        # The page plays cadgen's articulation at the vector cadgen validated: every control,
+        # the named ones at their values. Nothing of the sidecar reaches the page.
+        self.assertEqual([control["id"] for control in resolved["articulation"]["controls"]], ["stroke"])
+        self.assertEqual(resolved["articulation"]["carries"], {"stroke": [self._leaf("part.step")]})
+        self.assertEqual(resolved["controls"], {"stroke": 1.0})
+        for absent in ("sourceSidecar", "stepParameterUrl", "stepParameterPath"):
+            self.assertNotIn(absent, resolved)
 
-    def test_saved_appearance_is_inlined_for_the_shared_source_resolver(self) -> None:
+    def test_a_pose_name_resolves_to_its_control_vector(self) -> None:
+        step_path = self.models / "named.step"
+        step_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+        write_package(step_path, kinematics={**self.POSE, "poses": {"out": {"stroke": 0.75}}})
+        resolved = self._resolve(self._job(name="named.step", kinematics="out"))["jobs"][0]["resolved"]
+        self.assertEqual(resolved["controls"], {"stroke": 0.75})
+        self.assertEqual(self._resolve(self._job(name="named.step"))["jobs"][0]["resolved"]["controls"], {"stroke": 0.0})
+
+    def test_saved_appearance_is_composed_into_the_descriptor_the_page_draws(self) -> None:
         from cadgen._internal.source_sidecar import write_source_sidecar
+        from cadgen.catalog import result_tree_for
+        from cadgen.store.trees import flatten
 
         step_path = self._step(pose=False)
         appearance = {
             "materials": {
-                "finish": {"name": "Machined finish", "roughness": 0.2, "metalness": 0.7},
+                "finish": {"name": "Machined finish", "roughness": 0.2, "metalness": 0.7, "opacity": 0.5},
             },
-            "assignments": {"o1.1": "finish"},
+            "assignments": {self._leaf("part.step"): "finish"},
         }
         write_source_sidecar(step_path, {"appearance": appearance})
 
         resolved = self._resolve(self._job())["jobs"][0]["resolved"]
-        self.assertEqual(resolved["sourceSidecar"]["appearance"], appearance)
-        self.assertNotIn("stepParameterUrl", resolved)
-        self.assertNotIn("material", resolved["package"]["descriptor"]["occurrences"][0],
-                         "snapshot resolution must not mutate the stored tree descriptor")
+        occurrence = resolved["package"]["descriptor"]["occurrences"][0]
+        self.assertEqual(occurrence["materialId"], "finish")
+        self.assertEqual(occurrence["materialName"], "Machined finish")
+        self.assertEqual(occurrence["material"]["roughness"], 0.2)
+        self.assertEqual(occurrence["opacity"], 0.5, "the opacity the page draws is cadgen's product")
+        for absent in ("sourceSidecar", "stepParameterUrl", "articulation", "controls"):
+            self.assertNotIn(absent, resolved)
+        self.assertNotIn("material", flatten(result_tree_for(step_path))["occurrences"][0],
+                         "snapshot resolution must not mutate the stored tree")
 
     def test_document_replacement_after_selection_cannot_mix_tree_and_hash(self) -> None:
         step_path = self._step(pose=False)
@@ -2310,7 +2353,7 @@ class StepPoseParameterTests(unittest.TestCase):
             selector_bundle=None,
         )
         with mock.patch.object(
-            snapshot_main, "ensure_step_topology_artifact", lambda *args, **kwargs: artifact
+            snapshot_main, "ensure_step_artifact", lambda *args, **kwargs: artifact
         ):
             with self.assertRaisesRegex(SnapshotError, "changed while its topology"):
                 resolve_render_job_packet(self._job(), cwd=self.root)
@@ -2324,15 +2367,18 @@ class StepPoseParameterTests(unittest.TestCase):
         with self.assertRaisesRegex(SidecarBindingError, "documentHash .* does not match"):
             self._resolve(self._job(kinematics={"stroke": 1}))
 
-    def test_animation_never_gates_the_parameter_url(self) -> None:
-        # Animation is independent of kinematics: an embedded animation without
-        # kinematics still gives pose values nothing to drive.
+    def test_animation_never_gates_the_pose(self) -> None:
+        # Animation is independent of kinematics: baked keyframes without
+        # kinematics still give pose values nothing to drive, and ride the job on their own.
         step_path = self._step(pose=False)
-        write_package(step_path, animation_source="export const clips = {};")
+        write_package(step_path, clips={"demo": cadgen.clip(_rise, duration=1)})
         with self.assertRaisesRegex(SnapshotError, "declares no kinematics"):
             self._resolve(self._job(kinematics={"stroke": 1}))
+        resolved = self._resolve(self._job())["jobs"][0]["resolved"]
+        self.assertEqual([clip["id"] for clip in resolved["animation"]["clips"]], ["demo"])
+        self.assertNotIn("articulation", resolved)
 
-    def test_parameters_without_kinematics_teach_the_migration(self) -> None:
+    def test_pose_values_on_a_model_without_kinematics_are_refused(self) -> None:
         self._step(pose=False)
         with self.assertRaisesRegex(SnapshotError, "declares no kinematics"):
             self._resolve(self._job(kinematics={"stroke": 1}))
@@ -2354,17 +2400,15 @@ class StepPoseParameterTests(unittest.TestCase):
 class StepAnimationFrameTests(unittest.TestCase):
     """The job's `animation` key freezes ONE frame of ONE clip: `{"clip": name,
     "time": seconds}`, spelled the same as the flag (`--animation CLIP --time
-    SECONDS`). The clips come from animation.source in the document-bound
-    schema-9 sidecar. It is layered over `kinematics`
+    SECONDS`). The clips are the keyframes baked into the document-bound
+    sidecar. It is layered over `kinematics`
     the way the viewer layers its Animation tab over the Pose tab — the two
     travel independently and meet only in the renderer's effect records."""
 
-    CLIPS = (
-        "export const clips = {\n"
-        "  demo: { label: 'Demo', duration: 8, update(t, m) { m.get('ram').translate([0, 0, t]); } },\n"
-        "  spin: { duration: 2, update(t, m) { m.get('ram').rotate([0, 0, 1], 45 * t); } },\n"
-        "};\n"
-    )
+    CLIPS = {
+        "demo": cadgen.clip(_rise, duration=8, label="Demo"),
+        "spin": cadgen.clip(_turn, duration=2),
+    }
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -2377,7 +2421,7 @@ class StepAnimationFrameTests(unittest.TestCase):
     def _step(self, name="part.step", *, clips=CLIPS, kinematics=None):
         step_path = self.models / name
         step_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
-        write_package(step_path, kinematics=kinematics, animation_source=clips)
+        write_package(step_path, kinematics=kinematics, clips=clips)
         return step_path
 
     def _job(self, **overrides):
@@ -2389,12 +2433,12 @@ class StepAnimationFrameTests(unittest.TestCase):
         return job
 
     def _resolve(self, job):
-        original = snapshot_main.ensure_step_topology_artifact
+        original = snapshot_main.ensure_step_artifact
         try:
-            snapshot_main.ensure_step_topology_artifact = lambda *args, **kwargs: None
+            snapshot_main.ensure_step_artifact = lambda *args, **kwargs: None
             return resolve_render_job_packet(job, cwd=self.root)
         finally:
-            snapshot_main.ensure_step_topology_artifact = original
+            snapshot_main.ensure_step_artifact = original
 
     def test_the_flag_pair_becomes_one_job_field(self) -> None:
         """`--animation CLIP --time SECONDS` is ONE request on the job, and the
@@ -2464,14 +2508,20 @@ class StepAnimationFrameTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, r"render job animation has unknown key\(s\): loop"):
             self._resolve(self._job(animation={"clip": "demo", "loop": False}))
 
-    def test_a_declared_clip_resolves_embedded_animation_and_normalizes_the_request(self) -> None:
-        # An animation-only model needs only its document-bound sidecar source.
-        self._step()
+    def test_a_declared_clip_resolves_the_baked_keyframes_and_normalizes_the_request(self) -> None:
+        # An animation-only model needs only its document-bound sidecar.
+        from cadgen._internal.source_sidecar import read_source_sidecar
+
+        step_path = self._step()
         packet = self._resolve(self._job(animation={"clip": "demo", "time": 2}))
         resolved_job = packet["jobs"][0]
         resolved = resolved_job["resolved"]
-        self.assertEqual(self.CLIPS, resolved["sourceSidecar"]["animation"]["source"])
-        self.assertNotIn("stepParameterUrl", resolved)
+        # The baked clip the frame plays rides the job as cadgen read it, alone (the model
+        # declares "demo" and "spin"); the frame request stays the job's own.
+        section = read_source_sidecar(step_path)["animation"]
+        self.assertEqual(["demo", "spin"], [clip["id"] for clip in section["clips"]])
+        self.assertEqual({**section, "clips": section["clips"][:1]}, resolved["animation"])
+        self.assertNotIn("articulation", resolved)
         self.assertEqual({"clip": "demo", "time": 2.0}, resolved_job["animation"])
 
     def test_an_unknown_clip_is_refused_with_the_declared_clips(self) -> None:
@@ -2483,32 +2533,17 @@ class StepAnimationFrameTests(unittest.TestCase):
         ):
             self._resolve(self._job(animation={"clip": "orbit"}))
 
-    def test_a_module_that_declares_no_clips_says_so(self) -> None:
-        self._step(clips="export const clips = {};")
-        with self.assertRaisesRegex(
-            SnapshotError, r"Unknown animation clip: demo\. This model declares no animation clips"
-        ):
-            self._resolve(self._job(animation={"clip": "demo"}))
-
-    def test_embedded_source_built_indirectly_defers_the_name_check_to_the_runtime(self) -> None:
-        # The CLI reads the literal the contract requires; a module that assembles
-        # its clips some other way is not refused on a guess — the runtime, with
-        # the compiled clips in hand, is the authority that names the set.
-        self._step(clips="const build = () => ({ demo: { update() {} } });\nexport const clips = build();")
-        packet = self._resolve(self._job(animation={"clip": "anything"}))
-        self.assertEqual({"clip": "anything", "time": 0.0}, packet["jobs"][0]["animation"])
-
-    def test_a_document_without_embedded_animation_has_no_frame_to_render(self) -> None:
+    def test_a_document_without_animation_has_no_frame_to_render(self) -> None:
         self._step(clips=None)
-        with self.assertRaisesRegex(SnapshotError, "has no animation in its sidecar") as caught:
+        with self.assertRaises(SnapshotError) as caught:
             self._resolve(self._job(animation={"clip": "demo"}))
-        self.assertIn("part.step", str(caught.exception))
+        self.assertIn("part.step has no animation in its sidecar. Declare animation= on @step.", str(caught.exception))
 
     def test_a_frame_is_layered_over_kinematics_not_instead_of_it(self) -> None:
         """Both fields travel through Render; each evaluator reads its own
         declaration from the same document-bound sidecar."""
         pose = {
-            "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#ram",
+            "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#occ",
                        "axis": {"origin": [0, 0, 0], "dir": [0, 0, 1]},
                        "limits": {"value": [0, 1]}}],
         }
@@ -2521,12 +2556,14 @@ class StepAnimationFrameTests(unittest.TestCase):
         resolved_job = packet["jobs"][0]
         self.assertEqual({"stroke": 1}, resolved_job["kinematics"])
         self.assertEqual({"clip": "spin", "time": 0.5}, resolved_job["animation"])
-        self.assertIn(".step.json", str(resolved_job["resolved"]["stepParameterUrl"]))
+        self.assertEqual({"stroke": 1.0}, resolved_job["resolved"]["controls"])
+        self.assertEqual(["spin"], [clip["id"] for clip in resolved_job["resolved"]["animation"]["clips"]]
+                         if len(resolved_job["resolved"]["animation"]["clips"]) == 1 else ["spin"])
 
     def test_a_frame_supports_only_view_mode(self) -> None:
         self._step()
         with self.assertRaisesRegex(SnapshotError, "animation frame supports only view mode"):
-            self._resolve(self._job(mode="section", animation={"clip": "demo"}))
+            self._resolve(self._job(mode="list", animation={"clip": "demo"}))
 
     def test_a_frame_requires_a_step_model(self) -> None:
         (self.models / "part.stl").write_bytes(b"solid part\nendsolid part\n")

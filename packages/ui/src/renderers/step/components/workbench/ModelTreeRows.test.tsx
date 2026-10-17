@@ -21,8 +21,6 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); Element.prototype.scrollInto
 const leaves = Array.from({ length: 12 }, (_, i) => ({ id: `o${i}`, nodeType: 'part', displayName: `Part ${i}`, leafPartIds: [`o${i}`], children: [] }));
 const group = { id: 'group', nodeType: 'assembly', displayName: 'Subassembly', leafPartIds: ['o0', 'o1'], children: leaves.slice(0, 2) };
 const root = { id: '__step_model__', nodeType: 'assembly', displayName: 'Document', leafPartIds: leaves.map(n => n.id), children: [group, ...leaves.slice(2)] };
-// Different parts, each its own component: one component placed many times would fold into one row.
-const descriptor = { components: Object.fromEntries(leaves.map(n => [`c${n.id}`, {}])), occurrences: leaves.map(n => ({ id: n.id, component: `c${n.id}`, name: n.displayName })) };
 const source = { list: async () => [{ path: '/models/part.step', name: 'part.step', kind: 'file' }],
   search: async () => ({ paths: ['/models/part.step'], truncated: false }) };
 
@@ -30,7 +28,7 @@ function Trees({ expanded = [] as string[] }) {
   const [selected, setSelected] = useState<string[]>([]);
   return <>
     <section data-testid="files"><FolderExplorer source={source} file="/models/part.step" onOpen={() => {}} /></section>
-    <section data-testid="model"><ModelingTree active disabled={false} modeling={{ descriptor, results: {}, error: '', retryFailed() {} }} stepRoot={root}
+    <section data-testid="model"><ModelingTree active disabled={false} stepRoot={root}
       selectedPartIds={selected} partControls={{ isAssemblyView: true, expandedTreeNodeIds: expanded, onToggleTreeNode() {}, hiddenPartIds: [],
         onSelectTreeNode: (id: string) => setSelected([id]), onTogglePartVisibility() {}, onFocusTreeNode() {} }} /></section>
   </>;
@@ -62,8 +60,8 @@ it('the file explorer and the model tree share one row primitive and one horizon
   expect(fileRow.className).toMatch(/(^|\s)text-xs(\s|$)/);
   expect(modelRow.className).toMatch(/(^|\s)text-tiny(\s|$)/);
   for (const row of [fileRow, modelRow]) expect(row.className).toMatch(/(^|\s)font-normal(\s|$)/);
-  // The disclosure column: 16px wide, a row tall.
-  expect(within(model).getByRole('button', { name: 'Expand Subassembly' }).className.split(/\s+/)).toEqual(expect.arrayContaining(['w-4', 'h-6']));
+  // The glyph column, the explorer's: 12px wide, a row tall.
+  expect(within(model).getByRole('button', { name: 'Expand Subassembly' }).className.split(/\s+/)).toEqual(expect.arrayContaining(['w-3', 'h-6']));
   // One inset: 4px on the list (the explorer's `p-1`, the tree's `px-1`), nothing between the list
   // and a row, and the row spans the list.
   expect(insetOf(fileRow, fileRow.closest('[data-slot="scroll-area-viewport"]') as HTMLElement)).toEqual({ list: ['p-1'], between: [], box: ['w-full'] });
@@ -114,10 +112,11 @@ it("a level of the model tree is the explorer's compact step, its rows hung from
   const model = screen.getByTestId('model');
   const row = (name: string) => within(model).getByRole('button', { name: `Select ${name}` }).parentElement as HTMLElement;
   const guides = (element: HTMLElement) => [...element.querySelectorAll<HTMLElement>('[data-tree-guide]')].map(line => line.style.left);
-  // The subassembly at the tree's edge; its parts one 10px level in, each under the subassembly's
-  // line, drawn in the middle of its 16px disclosure column.
-  expect([row('Subassembly').style.paddingLeft, guides(row('Subassembly'))]).toEqual(['0px', []]);
-  expect([row('Part 0').style.paddingLeft, guides(row('Part 0'))]).toEqual(['10px', ['7.5px']]);
+  // The subassembly 5px in from the tree's edge, as far as a row's action icons sit from its right
+  // end; its parts one 10px level further, each under the subassembly's line, drawn in the middle of
+  // its 12px glyph column.
+  expect([row('Subassembly').style.paddingLeft, guides(row('Subassembly'))]).toEqual(['5px', []]);
+  expect([row('Part 0').style.paddingLeft, guides(row('Part 0'))]).toEqual(['15px', ['10.5px']]);
   // The parts beside it, at the edge too, hang from nothing.
   expect(guides(row('Part 2'))).toEqual([]);
 });

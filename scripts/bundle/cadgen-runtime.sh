@@ -3,17 +3,15 @@ set -euo pipefail
 
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
 #
-# cadgen executes five things it does not write in Python: Node builders (the mesh
-# exports are baked by a JS child), a headless browser bundle (the snapshot
-# CLI drives it in a page), the CAD Viewer's built client (`cadgen viewer` serves
-# it), the one-file CAD app an agent host renders (`cadgen mcp` serves it), and the
-# native file tracer every build loads to see what it reads. cadgen resolves them
-# inside the distribution, so there is one copy and one builder of that copy: this
-# script. scripts/bundle/bundle.sh is the entry point that calls it (after stamping
-# derived version metadata); call this directly only when debugging one stage.
+# cadgen executes four things it does not write in Python: a headless browser bundle
+# (the snapshot CLI drives it in a page), the CAD Viewer's built client (`cadgen
+# viewer` serves it), the one-file CAD app an agent host renders (`cadgen mcp` serves
+# it), and the native file tracer every build loads to see what it reads. cadgen
+# resolves them inside the distribution, so there is one copy and one builder of that
+# copy: this script. scripts/bundle/bundle.sh is the entry point that calls it (after
+# stamping derived version metadata); call this directly only when debugging one stage.
 #
 # Stages (default: all of them):
-#   --node      esbuilt builders          -> _runtime/node
 #   --browser   snapshot browser bundle   -> _runtime/browser
 #   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
 #   --mcp       CAD app page (vite)       -> _runtime/mcp
@@ -31,19 +29,16 @@ set -euo pipefail
 # `--check` skips the viewer and mcp stages because they are the expensive ones (vite
 # builds of apps/web and apps/mcp, which need those apps' node_modules) and because a
 # checkout serves their dist directories directly -- cadgen prefers them, so nothing in a
-# checkout reads _runtime/viewer or _runtime/mcp. `--print-outputs` lists the three
+# checkout reads _runtime/viewer or _runtime/mcp. `--print-outputs` lists the two
 # directories a bundle always produces.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUNDLE_REPO_ROOT="$REPO_ROOT"
-# shellcheck source=lib/node_builders.sh
-source "$SCRIPT_DIR/lib/node_builders.sh"
 # shellcheck source=lib/snapshot_runtime.sh
 source "$SCRIPT_DIR/lib/snapshot_runtime.sh"
 
 RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
-NODE_DIR="$RUNTIME_DIR/node"
 BROWSER_DIR="$RUNTIME_DIR/browser"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
 NATIVE_DIR="$RUNTIME_DIR/native"
@@ -58,7 +53,6 @@ SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen
 # What each stage owes, checked after a --check build. A stage that emits nothing, or
 # emits one file and silently drops another, is the failure this catches before a wheel
 # carries the hole to a user.
-NODE_OUTPUTS=(mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
 BROWSER_OUTPUTS=(snapshot-render.js render.html THIRD_PARTY_LICENSES.txt)
 # One tracer per platform cadgen's CAD kernel ships for, all in the one wheel: the
 # zig target, then the file cadgen._internal.filetrace loads on that platform. glibc
@@ -73,14 +67,9 @@ NATIVE_TARGETS=(
 NATIVE_OUTPUTS=()
 for target in "${NATIVE_TARGETS[@]}"; do NATIVE_OUTPUTS+=("${target#* }"); done
 
-BUILDER_ENTRIES=(
-  "$REPO_ROOT/packages/core/bin/mesh-export.mjs"
-)
-
 MODE="write"
 CLEAN=0
 PRINT_OUTPUTS=0
-STAGE_NODE=0
 STAGE_BROWSER=0
 STAGE_VIEWER=0
 STAGE_MCP=0
@@ -97,7 +86,6 @@ Builds cadgen's packaged runtime assets into packages/cadgen/src/cadgen/_runtime
 None of it is committed; the wheel is where it ships.
 
 Stages (default: all):
-  --node      esbuilt Node builders     -> _runtime/node
   --browser   snapshot browser bundle   -> _runtime/browser
   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
   --mcp       CAD app page (vite)       -> _runtime/mcp
@@ -118,7 +106,6 @@ while [ "$#" -gt 0 ]; do
     --check) MODE="check" ;;
     --clean) CLEAN=1 ;;
     --print-outputs) PRINT_OUTPUTS=1 ;;
-    --node) STAGE_NODE=1; ANY_STAGE=1 ;;
     --browser) STAGE_BROWSER=1; ANY_STAGE=1 ;;
     --viewer) STAGE_VIEWER=1; ANY_STAGE=1 ;;
     --mcp) STAGE_MCP=1; ANY_STAGE=1 ;;
@@ -131,12 +118,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$ANY_STAGE" -eq 0 ]; then
-  STAGE_NODE=1; STAGE_BROWSER=1; STAGE_VIEWER=1; STAGE_MCP=1; STAGE_NATIVE=1
+  STAGE_BROWSER=1; STAGE_VIEWER=1; STAGE_MCP=1; STAGE_NATIVE=1
 fi
 
 if [ "$PRINT_OUTPUTS" -eq 1 ]; then
   printf '%s\n' \
-    "${NODE_DIR#"$REPO_ROOT"/}" \
     "${BROWSER_DIR#"$REPO_ROOT"/}" \
     "${NATIVE_DIR#"$REPO_ROOT"/}"
   exit 0
@@ -310,19 +296,19 @@ build_native_tracer() {
 }
 
 build_stage_packages() {
-  # Node and browser runtime stages consume only @text-to-cad/core and must remain
+  # The browser runtime stage consumes only @text-to-cad/core and must remain
   # runnable in Python/core CI jobs that install that workspace alone. The
   # Viewer and the CAD app are the stages that also need @text-to-cad/ui.
   if { [ "$STAGE_VIEWER" -eq 1 ] || [ "$STAGE_MCP" -eq 1 ]; } && [ "$MODE" != "check" ]; then
     npm --prefix "$REPO_ROOT" run build:packages
-  elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then
+  elif [ "$STAGE_BROWSER" -eq 1 ]; then
     npm --prefix "$REPO_ROOT" run build -w @text-to-cad/core
   fi
 }
 
 # --- third-party notices --------------------------------------------------------------
-# The builders and the browser bundle inline three and meshoptimizer, and the browser
-# bundle three-mesh-bvh too: the robot scene it shares with the viewer picks through it.
+# The browser bundle inlines three and meshoptimizer, and three-mesh-bvh too: the robot
+# scene it shares with the viewer picks through it.
 # Shipping them inside a wheel is redistribution, and all of them are MIT: the licence text
 # has to travel with the copy. esbuild keeps the per-file banners (--legal-comments=eof);
 # this is the human-readable summary beside them. A stage passes one line per package it
@@ -369,12 +355,6 @@ EOF
 
 build_all() {
   local root="$1"
-  if [ "$STAGE_NODE" -eq 1 ]; then
-    ensure_node_builder_deps
-    bundle_node_builders "$root/node" "${BUILDER_ENTRIES[@]}"
-    write_third_party_notices "$root/node"
-    echo "Bundled ${root#"$REPO_ROOT"/}/node"
-  fi
   if [ "$STAGE_BROWSER" -eq 1 ]; then
     ensure_snapshot_runtime_deps "$SNAPSHOT_BUILD_DEPS_DIR" 1
     build_snapshot_runtime "$root/browser" "$SNAPSHOT_BUILD_DEPS_DIR"
@@ -417,9 +397,6 @@ if [ "$MODE" = "check" ]; then
       echo "packages/cadgen/src/cadgen/_runtime/$stage built ($# files)."
     fi
   }
-  if [ "$STAGE_NODE" -eq 1 ]; then
-    check_stage_outputs node "${NODE_OUTPUTS[@]}"
-  fi
   if [ "$STAGE_BROWSER" -eq 1 ]; then
     check_stage_outputs browser "${BROWSER_OUTPUTS[@]}"
   fi

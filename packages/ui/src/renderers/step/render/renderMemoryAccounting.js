@@ -7,8 +7,20 @@ import { renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { cadEdgeInstanceSets } from "@text-to-cad/core/common/cadEdgeInstances.js";
 import { builtGeometryBvhBytes } from "@text-to-cad/core/lib/viewer/raycastBvh.js";
 import { MESH_DATA_ARRAY_FIELDS } from "@text-to-cad/core/lib/render/meshTransfer.js";
-import { lodStagingBuffers, syncSelectorCacheAccounting } from "./lodStagingMemory.js";
 import { viewerMemoryPolicy } from "./viewerMemoryPolicy.js";
+
+const selectorCacheCharges = new WeakMap();
+
+// Cache refreshes must not erase the renderer's separately measured picking
+// arrays. A full scene measurement supplies derivedBytes; cache-only updates
+// replace just the cache portion of that same ledger category.
+export function syncSelectorCacheAccounting(policy, cacheBytes, derivedBytes = null) {
+  const current = policy.snapshot().retainedByCategory.selectors || 0;
+  const derived = derivedBytes === null ? Math.max(0, current - (selectorCacheCharges.get(policy) || 0)) : derivedBytes;
+  const selectorCacheCharge = Math.max(0, Number(cacheBytes) || 0);
+  selectorCacheCharges.set(policy, selectorCacheCharge);
+  policy.setRetained("selectors", derived + selectorCacheCharge);
+}
 
 function retainBackingBytes(value, seen) {
   const buffer = ArrayBuffer.isView(value) ? value.buffer : value instanceof ArrayBuffer ? value : null;
@@ -157,7 +169,7 @@ export function renderMemoryAccounting(runtime) {
     for (const [group, kind] of [[runtime.modelGroup, "surface"], [runtime.edgesGroup, "edge"], [runtime.stageGroup, "surface"]]) {
       group?.traverse?.(object => { visit(object, kind); countFaceIds(object); });
     }
-    for (const part of (runtime.cadScene?.meshData || runtime.retiringCadSource)?.parts || []) {
+    for (const part of runtime.cadScene?.meshData?.parts || []) {
       if (part.sourceMesh && !seenSourceMeshes.has(part.sourceMesh)) {
         seenSourceMeshes.add(part.sourceMesh);
         displayCpuBytes += retainMeshBackingBytes(part.sourceMesh, seenArrayBuffers);
@@ -241,9 +253,9 @@ export function renderMemoryAccounting(runtime) {
       visitPick(root);
     }
   }
-  // Tube deformation retains a refined rest mesh/mapping beside the posed
-  // display geometry. Count typed arrays reachable from its private state that
-  // were not already attributed to a visible geometry.
+  // A bent tube retains its skin (cadgen's bound mesh, its joints and its edge
+  // lines) beside the posed display geometry. Count typed arrays reachable from
+  // its private state that were not already attributed to a visible geometry.
   const seenDeformationObjects = new Set();
   const visitDeformation = (value) => {
     if (!value || typeof value !== "object" || seenDeformationObjects.has(value)) return;
@@ -266,7 +278,7 @@ export function renderMemoryAccounting(runtime) {
     }
     for (const child of Object.values(value)) visitDeformation(child);
   };
-  for (const record of records) visitDeformation(record?.tubeDeformationState);
+  for (const record of records) visitDeformation(record?.tubeSkinState);
   totals.geometries = seenGeometries.size;
   totals.buffers = seenBuffers.size;
   totals.materials = seenMaterials.size;
@@ -275,14 +287,14 @@ export function renderMemoryAccounting(runtime) {
   // The full backing of each excluded view has already been charged above.
   // GPU mirrors contain the uploaded views; CPU references retain the entire
   // allocation, even when some packed sections never reach a GPU attribute.
-  const additionalAssetCaches = renderAssetCacheStatsWithPackages({ excludeBuffers: lodStagingBuffers(seenArrayBuffers) });
+  const additionalAssetCaches = renderAssetCacheStatsWithPackages({ excludeBuffers: seenArrayBuffers });
   viewerMemoryPolicy.setRetained("displayCpu", displayCpuBytes);
   viewerMemoryPolicy.setRetained("gpuEstimated", gpuEstimatedBytes);
   viewerMemoryPolicy.setRetained("bvh", totals.bvhBytes);
   viewerMemoryPolicy.setRetained("deformation", totals.deformationBytes);
   syncSelectorCacheAccounting(viewerMemoryPolicy, Number(additionalAssetCaches.selector?.typedBytes) || 0, selectorCpuBytes);
   viewerMemoryPolicy.setRetained("assetCaches", Object.entries(additionalAssetCaches).reduce(
-    (sum, [name, stats]) => name === "surfLeash" || name === "selector"
+    (sum, [name, stats]) => name === "partLeash" || name === "selector"
       ? sum
       : sum + (Number(stats?.typedBytes) || 0) + (Number(stats?.metadataBytes) || 0),
     0

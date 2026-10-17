@@ -41,6 +41,6 @@ mates' limits and the pose presets are DELTAS from that stance, which is why
 `cadgen step snapshot STEP/lyra.step tmp/zero.png --kinematics zero` shows a
 flat open hand rather than a doubly-bent one.
 
-Animation (`ANIMATION_JS` in `lyra.py`): `poseTour`, `graspLoop`, `pinchLoop`, `rippleLoop`,
-`countLoop` — per-frame chain FK, applied as a rigid delta against the baked
-pose.
+Animation (the `ANIMATION` clips in `lyra.py`, baked to keyframes at build):
+`poseTour`, `graspLoop`, `pinchLoop`, `rippleLoop`, `countLoop` — chain FK at
+every sample, applied as a rigid delta against the baked pose.

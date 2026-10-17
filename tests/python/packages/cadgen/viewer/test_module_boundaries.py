@@ -81,6 +81,8 @@ class NoKernelInTheServer(unittest.TestCase):
             "import cadgen.viewer.main, cadgen.viewer.compiles\n"
             "import cadgen.viewer.http_app, cadgen.viewer.cadgen_ops, cadgen.viewer.scanner\n"
             "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.folders\n"
+            # The routes that read the store's parts: records, display meshes, selector tables.
+            "import cadgen.viewer.parts, cadgen.viewer.store_paths\n"
             "loaded = sorted(m for m in sys.modules if m.split('.')[0] in "
             f"{sorted(KERNEL_ROOTS)!r})\n"
             "print(loaded)\n"

@@ -72,11 +72,11 @@ class ProgressFeed(unittest.TestCase):
         return self.ops.artifact_status(str(self.document))
 
     def test_a_cli_build_started_outside_the_viewer_shows_as_compiling_with_its_phase(self):
-        self.jobs = [job(self.script, [str(self.document)], "building", phase="Meshing components", detail="finger linkage", done=3, total=9)]
+        self.jobs = [job(self.script, [str(self.document)], "building", phase="Storing parts", detail="finger linkage", done=3, total=9)]
         status = self.status()
         self.assertEqual("compiling", status["state"])
         self.assertEqual("job-1", status["runId"])
-        self.assertEqual(("Meshing components", 3, 9, True), (status["progress"]["phase"], status["progress"]["done"], status["progress"]["total"], status["progress"]["determinate"]))
+        self.assertEqual(("Storing parts", 3, 9, True), (status["progress"]["phase"], status["progress"]["done"], status["progress"]["total"], status["progress"]["determinate"]))
         self.assertEqual("finger linkage", status["progress"]["detail"])
 
     def test_a_parents_child_build_is_matched_by_the_childs_output_path(self):

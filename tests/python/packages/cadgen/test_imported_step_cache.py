@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -120,7 +121,8 @@ class ImportedStepCacheTests(unittest.TestCase):
         return json.loads(completed.stdout)
 
     def test_fresh_process_hit_skips_text_parse_and_preserves_the_authored_pair(self) -> None:
-        from cadgen.store.index import entry_path, model_key
+        from cadgen.store.index import entry_path
+        from cadgen.store.records import record_key
 
         self._write_fixture()
         self.sidecar_path.write_bytes(b'{"authored":true}\n')
@@ -133,7 +135,7 @@ class ImportedStepCacheTests(unittest.TestCase):
         self.assertGreaterEqual(sum(cold["faceColorCounts"]), 2)
 
         # Artifact lookup is independent of the path-keyed producer record.
-        entry_path("model", model_key(self.step_path)).unlink()
+        entry_path("model", record_key(self.step_path)).unlink()
         warm = self._read_fresh_process(forbid_text=True)
         self.assertEqual(warm, cold)
         self.assertEqual((self.step_path.read_bytes(), self.sidecar_path.read_bytes()), authored_before)
@@ -141,6 +143,31 @@ class ImportedStepCacheTests(unittest.TestCase):
             sorted(path.name for path in self.root.glob("*.step*")),
             ["vendor.step", "vendor.step.json"],
         )
+
+    def test_two_document_schemas_sharing_a_store_each_compile_a_document_once(self) -> None:
+        """Two cadgens whose document schemas differ (a plugin pinned to one release,
+        a checkout on the next) share the store: each parses a document once and then
+        finds its own entry, however they alternate, and never rewrites the other's."""
+        from cadgen._internal import step_scene_package as package
+        from cadgen.step_artifact_cli import build_step_artifact
+        from cadgen.store.records import DOCUMENT_SCHEMA_VERSION
+
+        self._write_fixture()
+        other = mock.patch("cadgen.store.records.DOCUMENT_SCHEMA_VERSION", DOCUMENT_SCHEMA_VERSION - 1)
+        entries = self.store / "index" / "document"
+        parses = mock.patch.object(package, "_load_step_scene_text", side_effect=package._load_step_scene_text)
+        with parses as parse:
+            for turn in ("other", "this", "other", "this"):
+                with self.subTest(turn=turn), (other if turn == "other" else contextlib.nullcontext()):
+                    before = {path.name: path.read_bytes() for path in entries.iterdir()} if entries.is_dir() else {}
+                    payload = build_step_artifact(repo_root=self.root, step=self.step_path)
+                    after = {path.name: path.read_bytes() for path in entries.iterdir()}
+                if len(before) == 2:
+                    self.assertTrue(payload.get("skipped"), "compiled again after the other schema's compile")
+                    self.assertEqual(after, before, "an entry was rewritten")
+        self.assertEqual(parse.call_count, 2)
+        digest = hashlib.sha256(self.step_path.read_bytes()).hexdigest()
+        self.assertEqual({f"{digest}-v{DOCUMENT_SCHEMA_VERSION - 1}", f"{digest}-v{DOCUMENT_SCHEMA_VERSION}"}, set(after))
 
     def test_an_incomplete_tree_is_recompiled_and_healed(self) -> None:
         from cadgen.store.objects import object_path

@@ -102,8 +102,8 @@ export interface RendererViewProps {
   source: FileSource;
   /**
    * The navbar's box for the renderer's own view controls, last at its right end (the CAD
-   * viewer's Display and Preview, for a 3D view); null where no navbar is drawn, as while the
-   * renderer shows its file fullscreen.
+   * viewer's for a 3D view: a STEP's Select modes, then Display and Preview); null where no
+   * navbar is drawn, as while the renderer shows its file fullscreen.
    */
   navbarSlot: HTMLElement | null;
   /**

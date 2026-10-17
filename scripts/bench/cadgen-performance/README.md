@@ -1,8 +1,8 @@
 # Performance benchmarks
 
-Manual commands for four distinct measurements: the edits an agent makes,
-end to end; warm model execution in one interpreter; adaptive viewer loading;
-and viewer lifecycle costs.
+Manual commands for three distinct measurements: the edits an agent makes,
+end to end; warm model execution in one interpreter; and viewer loading and
+lifecycle costs.
 
 Run from the repository root after installing the development dependencies in
 `CONTRIBUTING.md`. Use a disposable model copy and a dedicated store. Run only
@@ -25,9 +25,12 @@ starts the daemon. Then, from a current baseline, each iteration runs `noop`;
 a leaf part, so the leaf and its parents rebuild) and `revert-leaf`; `parent`
 (a parent-only edit, such as a placement literal) and `revert-parent`; and
 `label` (a label-only edit) and `revert-label`. Each `--*-to` value is used by
-one iteration, so every edit is new to the store and every revert returns to
-sources it has built. Point it at a disposable copy of a project: it edits the
-sources and restores them in `finally`.
+one iteration, so every edit is new to the store and is built, and every revert
+returns to sources it has built, which cadgen 0.8.0 restores: outcome
+`current`, nothing built, the STEP files written back to the baseline's bytes
+(`changedSteps` lists them). A run that does otherwise is reported as a problem
+and left out of the medians. Point it at a disposable copy of a project: it
+edits the sources and restores them in `finally`.
 
 ```sh
 ./.venv/bin/python scripts/bench/cadgen-performance/agent_edits.py \
@@ -89,21 +92,6 @@ Follow `CONTRIBUTING.md` to build and start it. The commands open their own
 Chromium instance and leave the server running. They currently target macOS
 with Metal; process-memory probes use `ps`. Install Playwright in the viewer's
 development dependencies, or point `PLAYWRIGHT_FROM` at its installed package.
-
-`adaptive.mjs` measures default LOD loading, completed component publication,
-orbit cadence and memory bounds. Supply the expected component and occurrence
-counts; record whether the caller-owned display cache is cold or warm.
-
-```sh
-node scripts/bench/viewer-memory/adaptive.mjs \
-  --url http://127.0.0.1:3245 --file assembly.step \
-  --components 9 --occurrences 9 --cache-state 'warm display cache' \
-  --out tmp/cadgen-performance/adaptive.json
-```
-
-The default limit is 180 seconds and 2 GiB of renderer memory. `--resize-to
-1600x900` also checks viewport-driven reevaluation. Screenshots and failure
-reports are written beside the report after grading.
 
 `lifecycle.mjs` measures repeated same-tab switching, topology demand, selection,
 orbiting, and buffer/worker release. Both files must be in the viewer catalog;

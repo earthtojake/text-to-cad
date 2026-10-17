@@ -16,9 +16,10 @@ opting out of it, and creates the same private endpoint itself when a file is ru
 directly (``python -m unittest tests/...``) so a direct run can never reach -- or
 retire -- the developer's own daemon.
 
-Workers receive only the forwarded environment (cache dir, PYTHONPATH, ffmpeg, memo):
-a per-run override such as ``CADGEN_NODE`` is invisible to a warm worker, so a test
-that varies one of those per run must stay cold.
+A job runs in its caller's environment, less the names the daemon's machinery keeps
+for itself (``cadgen.daemon.client.INTERNAL_ENV_VARS``), so a per-run override reaches a
+warm worker as it reaches a cold run. A warm run that silently fell back to cold would
+pass any assertion about its output: :func:`served` says whether the daemon did the job.
 """
 
 from __future__ import annotations
@@ -28,7 +29,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT
@@ -97,28 +97,46 @@ def warm_entries() -> dict[str, str]:
     return entries
 
 
-def warm_env(base: dict | None = None, **overrides: str) -> dict:
-    """``base`` (default ``os.environ``) with model runs routed through the warm daemon.
-
-    The caller's own keys win, so a test can still pin ``CADGEN_JOBS`` or a store root.
-    """
-    environment = dict(os.environ if base is None else base)
-    environment.update(warm_entries())
-    # A worker sets this on the children it spawns; inheriting it would send the
-    # subprocess straight back to the inline path this helper exists to avoid.
-    environment.pop("CADGEN_DAEMON_CHILD", None)
-    environment.update(overrides)
-    return environment
-
-
-def warm_environ(testcase: unittest.TestCase, **overrides: str) -> None:
-    """Put :func:`warm_env` on ``os.environ`` for the duration of ``testcase``.
-
-    For tests that build IN PROCESS through cadgen's own API and would otherwise read
-    ``CADGEN_DAEMON=0`` off the environment.
-    """
+def served(marker: str) -> bool:
+    """Whether this module's warm daemon finished a job whose command names ``marker``
+    (a test's own project folder): its log's completed-job line, ``run [...] -> exit``."""
     from unittest import mock
 
-    patch = mock.patch.dict(os.environ, warm_env(**overrides))
-    patch.start()
-    testcase.addCleanup(patch.stop)
+    from cadgen.daemon import client
+
+    entries = warm_entries()
+    address = entries.get("CADGEN_DAEMON_SOCKET") or os.environ["CADGEN_DAEMON_SOCKET"]
+    state = entries.get("CADGEN_DAEMON_STATE_DIR") or os.environ.get("CADGEN_DAEMON_STATE_DIR")
+    with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": state} if state else {}):
+        log = client.log_path(address)
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return any("-> exit" in line and marker in line for line in text.splitlines())
+
+
+def verified(store: Path) -> None:
+    """Wait for the verify of every STEP a daemon build saved into ``store``.
+
+    A daemon build returns once its STEP is saved, and the file's verify goes on in the
+    daemon -- the module's private one, warm or not: a test that does not opt out
+    (``CADGEN_DAEMON=0``) builds through it -- reading the file and writing its document
+    entry into ``store`` when it answers (STORE.md §3, *Exports*). A test that removes
+    the store, or a workspace a build saved into, waits for those first, as a door does,
+    by joining the verify of each entry still pending
+    (``cadgen.store.exports.confirm_document``); ``IsolatedCadRoots`` does so for every
+    test that uses it. Nothing pending costs an index read per saved STEP."""
+    import json
+    from unittest import mock
+
+    from cadgen.store.exports import confirm_document
+    from cadgen.store.paths import index_dir
+
+    with mock.patch.dict(os.environ, {**warm_entries(), "CADGEN_CACHE_DIR": str(store)}):
+        records = index_dir("model")
+        for path in sorted(records.iterdir()) if records.is_dir() else ():
+            record = json.loads(path.read_text(encoding="utf-8"))
+            for document, output in (record.get("outputs") or {}).items():
+                if Path(document).suffix.lower() in (".step", ".stp") and output.get("sha256") and record.get("tree"):
+                    confirm_document(Path(document), output["sha256"], record["tree"])

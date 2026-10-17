@@ -40,7 +40,7 @@ and 10px metadata (see [settings UI](docs/settings-ui.md)). Document headings
 and code retain their content styles.
 Dropdown, select-popup and context-menu primitives default to the same 11px
 compact text (`text-tiny`, 16px line height), including checkbox/radio items
-and submenus. Menu shortcuts use 10px metadata. These defaults belong to the
+and submenus. These defaults belong to the
 primitives, including desktop's app-level equivalents; consumers do not add
 per-menu font-size overrides. Portals set their own compact text size rather
 than inheriting the trigger or host body's size.
@@ -85,7 +85,7 @@ src/
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    step/           STEP: Features tree, Position, routines, feature recognition
+    step/           STEP: Features tree, Position, routines
     robot/          URDF, SRDF and SDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
@@ -134,7 +134,7 @@ const renderers = [createStepRenderer({ client, preferences }), createDxfRendere
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`, `/renderers/step`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Share usage stats row and its state), `/features` (the app menu's feature rows: `useFeatures`), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Share anonymous usage data row and its state), `/features` (the app menu's feature rows: `useFeatures`), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
 `joinPath`) and `/links` (the navbar's link defaults) are pure modules, with no React, for a
@@ -193,9 +193,6 @@ bounded cache. They retain exact decoded component buffers and copy structural
 metadata for each mount; scene objects, controls and pending work are not cached.
 Reuse is scoped to workspace, resource-provider generation and file revision. See
 [CAD resource lifetime](docs/cad-renderer.md) for cache bounds and invalidation.
-The Features tree can reuse those accepted component identities for completed
-recognition metadata after the runtime descriptor also matches, avoiding surface
-requests on a warm reopen without retaining another copy of the geometry.
 
 The host owns where state lives; the package owns what it is. Everything the
 viewer keeps is one tab record (`@text-to-cad/ui/tab-store`: the tab's settings and
@@ -239,43 +236,45 @@ may rely on.
 
 ## CAD document updates
 
-The STEP renderer consumes the artifact, its schema-9 `.step.json`
-sidecar and immutable store views. Embedded animation, authored appearance and
-kinematics travel in the sidecar; an adjacent `.step.js` is a retired input.
+The STEP renderer consumes the artifact, its schema-10 `.step.json`
+sidecar and immutable store views. Animation keyframes, authored appearance and
+kinematics travel in the sidecar, the one file read beside the document.
 The scene uses progressive component loading and demand-driven exact surfaces.
-The Model tree shares the explorer's row and filter primitives. Its visible expansion
-controls viewport selection, exact topology and optional feature recognition;
-collapsed parts do not trigger whole-assembly analysis, and neither does its
-filter, which searches names without expanding anything. Contextual measurements
-remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-panels)
-for selection, isolation, demand and cache ownership.
-
-Feature detection stays client-side in this renderer, separate from cadgen
-compilation, Python inspection and reference syntax. Both apps reuse its worker
-and versioned, bounded memory cache; it adds no persistent store. Read
-[feature detection](docs/feature-detection.md) before changing inference rules,
-cache identity, cancellation or recognition limits.
+The Model tree shares the explorer's row and filter primitives. Its rows are the
+STEP's assemblies and parts, a part a leaf whose faces and edges the viewport picks;
+its expansion controls viewport selection and exact topology, and its filter searches
+names without expanding anything. Contextual measurements remain available in Render
+too. See [the model tree](docs/cad-renderer.md#step-panels) for selection, isolation
+and demand.
 
 A CAD file's controls are `ToolPanel`s in the tool stack, shown by the tool they
-belong to. Select shows Features (a robot's Links) and, with a selection, the Reference; Position shows Position; Display and Draw show
-their own panels; kept effects (Explode, Clip, Measure's results) follow. A panel
-whose tool is not up stays mounted, hidden, so a tree keeps its scroll and expansion;
-only what is on screen does background work. The tree's X closes it alone (Select stays
-the tool, marked) until a press on Select brings it back; it starts closed for a single
-part and on a phone, open for an assembly, until a person chooses.
-The tree, the Reference and Position are each sized by their own bottom-right grip, Quick
-Edit's. SDF metadata is a Select panel
+belong to. Select shows Features (an assembly's tree; a part file has none) or a robot's
+Links and, with a selection, the Reference; its modes are a menu at the navbar's right end,
+before Display. Position shows Position; Display and Draw show their own panels; kept
+effects (Explode, Clip, Measure's results) follow. A panel whose tool is not up stays
+mounted, hidden, so a tree keeps its scroll and expansion; only what is on screen does
+background work. Features has no X: an assembly shows it whenever Select is up, on a phone
+too. Links' X closes it alone (Select stays the tool, marked) until a press on Select brings
+it back; it starts closed on a phone, until a person chooses. The tree, the Reference and
+Position each open as tall as their content needs, up to the whole stack, and are each sized
+by their own bottom-right grip, Quick Edit's. The toggle at the strip's right end hides the
+strip and every panel, sliding them out to the left, and shows them again; they start hidden
+on a phone, until a person chooses. SDF metadata is a Select panel
 too. Links is the description's link tree, with the Model tree's rows, filter
 and Reference panel; see [robot links](docs/cad-renderer.md#robot-links).
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
 and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right, the
-bottom-left cube, and a 3D view's controls, which it draws at the navbar's right end:
-Display (its settings, a dropdown that opens down), then Preview. Preview is the shell's own
+bottom-left cube, and a 3D view's controls, which it draws at the navbar's right end: the
+renderer's own (`navbarControls`: a STEP's Select modes), then Display (its settings, a
+dropdown that opens down), then Preview. Preview is the shell's own
 mode, where routines play and the model orbits, and takes the whole page, the navbar with
 it; its own controls sit at the view's top-right, on the navbar's geometry — Orbit, then
 Display where it sat in the navbar, then Exit preview where Preview sat — and its playbar
-holds the routines at its left end and their settings at its right. Keep app-specific
+holds the routines at its left end and their settings at its right. Preview and the tools
+view are two states: preview starts from the model as authored and leaves the tools view's
+state untouched, and leaving it throws preview's away and gives the tools view back exactly
+as it was ([preview](docs/settings-ui.md#camera-animation-and-preview)). Keep app-specific
 effects in the [host contract](docs/viewer-host.md), not in renderer components.
 
 One per-file settings store serves controls, live commands and persistence.
@@ -287,17 +286,18 @@ was left at, and opening a file — again after leaving it, too — fits it.
 
 Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
-[progressive detail](docs/lod.md).
+[progressive loading](docs/loading.md).
 
 The navbar leads with the C logo, which opens the app's menu: Back to files where the host
-has a home, the person's settings (Share usage stats, Quick edit), Send feedback
+has a home, the person's settings (Share anonymous usage data, Quick edit), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
 app's views), Back and Forward follow, disabled where they have nowhere to go. It names the
 file — the name opens the explorer — and offers its ⋯ menu (Copy path, Reveal). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds: the host's update button, a dismissed alert's icon, the host's Full size
-and, last, a 3D view's Display and Preview.
+and, last, a 3D view's controls: a STEP's Select modes while Select is the tool, then
+Display and Preview.
 With no file a view shows the host's home, the model library: the models opened before,
 pinned first, with their pictures, and Open where the host has a file chooser, under its
 wordmark and GitHub, Discord and X. A file that
@@ -310,4 +310,5 @@ icon, the first of the navbar's right-hand controls after the update button whil
 away, brings it back.
 Retry reloads only the selected renderer; Report Issue, where the host has a tracker, opens a
 new issue titled "Issue: ", labelled `bug`, filled in from the card, with the file's name and
-no path of the machine.
+no path of the machine. The card's Details have a copy icon at their top-right corner, which
+copies all of them through the host's clipboard.

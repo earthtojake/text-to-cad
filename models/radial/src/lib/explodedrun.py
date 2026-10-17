@@ -1,8 +1,8 @@
 """The `exploded-running` clip: the engine RUNS while it hangs partly exploded.
 
-Layout only. lib/animgen.py bakes it into the clip, lib/animcheck.py checks the
-clip against kin.py composed with these offsets, and `python -m lib.gate --clip
-exploded-running` checks its interference with the viewer's own runtime.
+Layout only. The clip (lib/clips.py) reads it as the engine builds,
+lib/animcheck.py checks the clip against kin.py composed with these offsets, and
+`python -m lib.gate --clip exploded-running` checks its interference.
 
 Every visible leaf gets its running motion from kin.py EXACTLY as in `running`
 (pose(theta) o pose(0)^-1, spring tube deformation), then ONE constant

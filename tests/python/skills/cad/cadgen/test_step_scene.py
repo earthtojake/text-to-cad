@@ -15,19 +15,30 @@ from cadgen._internal import step_scene_mesh
 from cadgen._internal.step_scene import (
     LoadedStepScene,
     OccurrenceNode,
-    adaptive_mesh_resolution_for_scene,
     load_step_scene,
     scene_occurrence_shape,
 )
-from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
+from cadgen._internal.step_scene_mesh import (
+    adaptive_mesh_resolution_from_hints,
+    prototype_topology,
+    scene_leaf_occurrences,
+    topology_hints,
+)
 from tests.python.support.tmp_root import temporary_directory
 
 
 # The adaptive resolver returns a PROFILE and the hints behind it, and nothing
 # else: the deflection numbers it used to carry reached no tessellator and are
-# gone. The profile is load-bearing because
-# generation_spec._edge_visibility_classes_for_resolution turns it into the
-# edge classes a tree renders, so these tests assert profiles and hints.
+# gone. The profile is load-bearing because step_scene_mesh.edge_visibility_classes
+# turns it into the edge classes a tree renders, so these tests assert profiles
+# and hints. A build classifies the topology it walks (store.build); here a
+# scene stands in for a walk: each prototype's facts and each leaf's placement.
+
+
+def resolution_of(scene):
+    return adaptive_mesh_resolution_from_hints(topology_hints(
+        {key: prototype_topology(shape) for key, shape in scene.prototype_shapes.items()},
+        [(node.prototype_key, node.transform) for node in scene_leaf_occurrences(scene)]))
 
 
 class StepSceneSelectorArtifactTests(unittest.TestCase):
@@ -61,7 +72,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
     def test_package_roundtrip_restores_locations_and_face_colors(self) -> None:
         # scene -> compound -> package -> scene: placements and per-face colors
-        # survive (colors ride the component .surf, keyed by face ordinal).
+        # survive (colors ride the component's intrinsic recipe, keyed by face ordinal).
         with temporary_directory(prefix="cad-step-scene-package-rt-") as temp_dir:
             temp_root = Path(temp_dir)
             shape = build123d.Box(1, 1, 1).wrapped
@@ -112,11 +123,10 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
                     compound,
                     package_dir=package_dir,
                     root_name="synthetic",
-                    provenance={"stepHash": step_hash, "sourceKind": "step"},
                 )
             write_record(
                 step_path,
-                {"sourceKind": "step", "entryKind": "assembly", "tree": built["tree"], "closure": {"hash": step_hash, "files": [], "static": True}, "children": [], "outputs": {}, "stepHash": step_hash},
+                {"sourceKind": "step", "entryKind": "assembly", "tree": built["tree"], "closure": {"hash": step_hash, "files": [], "static": True}, "children": [], "outputs": {}},
             )
 
             from cadgen.store.records import note_document_tree
@@ -145,7 +155,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             build123d.export_step(build123d.Box(10, 8, 4), step_path)
             scene = load_step_scene(step_path)
 
-            resolution = adaptive_mesh_resolution_for_scene(scene)
+            resolution = resolution_of(scene)
 
             self.assertEqual("extra-fine", resolution.profile)
             self.assertEqual(1, resolution.hints["leafOccurrenceCount"])
@@ -159,7 +169,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             build123d.export_step(build123d.Box(2600, 1300, 1300), step_path)
             scene = load_step_scene(step_path)
 
-            resolution = adaptive_mesh_resolution_for_scene(scene)
+            resolution = resolution_of(scene)
 
             diagonal = float(resolution.hints["bboxDiag"])
             self.assertGreater(diagonal, 1500.0)
@@ -200,7 +210,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             prototype_shapes={1: box_shape},
         )
 
-        resolution = adaptive_mesh_resolution_for_scene(scene)
+        resolution = resolution_of(scene)
 
         self.assertGreaterEqual(resolution.hints["occurrenceFaceCount"], 8000)
         diagonal = resolution.hints["bboxDiag"]
@@ -218,7 +228,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             build123d.export_step(build123d.Box(200, 120, 80), step_path)
             scene = load_step_scene(step_path)
 
-            resolution = adaptive_mesh_resolution_for_scene(scene)
+            resolution = resolution_of(scene)
 
             self.assertEqual(
                 resolution.hints["complexityScore"],
@@ -248,86 +258,65 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             prototype_shapes={1: box_shape},
         )
 
-        resolution = adaptive_mesh_resolution_for_scene(scene)
+        resolution = resolution_of(scene)
 
         self.assertEqual("medium", resolution.profile)
         self.assertEqual(100, resolution.hints["leafOccurrenceCount"])
 
     def test_adaptive_mesh_resolution_keeps_many_low_curvature_occurrences_balanced(self) -> None:
-        with mock.patch.object(
-            step_scene_mesh,
-            "_scene_mesh_resolution_hints",
-            return_value={
-                "bboxDiag": 190.0,
-                "prototypeFaceCount": 420,
-                "prototypeEdgeCount": 860,
-                "prototypeCurvedFaceCount": 30,
-                "prototypeCurvedEdgeCount": 70,
-                "occurrenceFaceCount": 2957,
-                "occurrenceEdgeCount": 6012,
-                "occurrenceCurvedFaceCount": 80,
-                "occurrenceCurvedEdgeCount": 120,
-                "leafOccurrenceCount": 481,
-                "complexityScore": 18083.7,
-                "effectiveComplexityScore": 18083.7,
-                "curvaturePressureScore": 280.0,
-            },
-        ):
-            resolution = adaptive_mesh_resolution_for_scene(
-                LoadedStepScene(step_path=Path("repeated-low-curvature.step"), roots=[], prototype_shapes={})
-            )
+        resolution = adaptive_mesh_resolution_from_hints({
+            "bboxDiag": 190.0,
+            "prototypeFaceCount": 420,
+            "prototypeEdgeCount": 860,
+            "prototypeCurvedFaceCount": 30,
+            "prototypeCurvedEdgeCount": 70,
+            "occurrenceFaceCount": 2957,
+            "occurrenceEdgeCount": 6012,
+            "occurrenceCurvedFaceCount": 80,
+            "occurrenceCurvedEdgeCount": 120,
+            "leafOccurrenceCount": 481,
+            "complexityScore": 18083.7,
+            "effectiveComplexityScore": 18083.7,
+            "curvaturePressureScore": 280.0,
+        })
 
         self.assertEqual("balanced-assembly", resolution.profile)
 
     def test_adaptive_mesh_resolution_uses_large_topology_profile_for_extreme_imports(self) -> None:
-        with mock.patch.object(
-            step_scene_mesh,
-            "_scene_mesh_resolution_hints",
-            return_value={
-                "bboxDiag": None,
-                "prototypeFaceCount": 12000,
-                "prototypeEdgeCount": 30000,
-                "prototypeCurvedFaceCount": 4000,
-                "prototypeCurvedEdgeCount": 12000,
-                "occurrenceFaceCount": 23000,
-                "occurrenceEdgeCount": 59000,
-                "occurrenceCurvedFaceCount": 8000,
-                "occurrenceCurvedEdgeCount": 24000,
-                "leafOccurrenceCount": 120,
-                "complexityScore": 60000.0,
-                "effectiveComplexityScore": 60000.0,
-                "curvaturePressureScore": 38000.0,
-            },
-        ):
-            resolution = adaptive_mesh_resolution_for_scene(
-                LoadedStepScene(step_path=Path("huge.step"), roots=[], prototype_shapes={})
-            )
+        resolution = adaptive_mesh_resolution_from_hints({
+            "bboxDiag": None,
+            "prototypeFaceCount": 12000,
+            "prototypeEdgeCount": 30000,
+            "prototypeCurvedFaceCount": 4000,
+            "prototypeCurvedEdgeCount": 12000,
+            "occurrenceFaceCount": 23000,
+            "occurrenceEdgeCount": 59000,
+            "occurrenceCurvedFaceCount": 8000,
+            "occurrenceCurvedEdgeCount": 24000,
+            "leafOccurrenceCount": 120,
+            "complexityScore": 60000.0,
+            "effectiveComplexityScore": 60000.0,
+            "curvaturePressureScore": 38000.0,
+        })
 
         self.assertEqual("large-topology", resolution.profile)
 
     def test_adaptive_mesh_resolution_uses_curvature_pressure_before_raw_counts_explode(self) -> None:
-        with mock.patch.object(
-            step_scene_mesh,
-            "_scene_mesh_resolution_hints",
-            return_value={
-                "bboxDiag": 120.0,
-                "prototypeFaceCount": 700,
-                "prototypeEdgeCount": 1600,
-                "prototypeCurvedFaceCount": 550,
-                "prototypeCurvedEdgeCount": 1500,
-                "occurrenceFaceCount": 700,
-                "occurrenceEdgeCount": 1600,
-                "occurrenceCurvedFaceCount": 550,
-                "occurrenceCurvedEdgeCount": 1500,
-                "leafOccurrenceCount": 8,
-                "complexityScore": 2100.0,
-                "effectiveComplexityScore": 2100.0,
-                "curvaturePressureScore": 3600.0,
-            },
-        ):
-            resolution = adaptive_mesh_resolution_for_scene(
-                LoadedStepScene(step_path=Path("curvy.step"), roots=[], prototype_shapes={})
-            )
+        resolution = adaptive_mesh_resolution_from_hints({
+            "bboxDiag": 120.0,
+            "prototypeFaceCount": 700,
+            "prototypeEdgeCount": 1600,
+            "prototypeCurvedFaceCount": 550,
+            "prototypeCurvedEdgeCount": 1500,
+            "occurrenceFaceCount": 700,
+            "occurrenceEdgeCount": 1600,
+            "occurrenceCurvedFaceCount": 550,
+            "occurrenceCurvedEdgeCount": 1500,
+            "leafOccurrenceCount": 8,
+            "complexityScore": 2100.0,
+            "effectiveComplexityScore": 2100.0,
+            "curvaturePressureScore": 3600.0,
+        })
 
         self.assertEqual("medium", resolution.profile)
 

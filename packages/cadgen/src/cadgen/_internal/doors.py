@@ -3,8 +3,8 @@
 DOCUMENTS-ONLY CLI INPUTS (README law 7). A model script is a PROGRAM:
 ``python model.py`` is the one source door, and running it writes the document,
 its sidecar and its declared exports. Every command therefore takes the
-DOCUMENT — a ``.step``/``.stp``/``.stl``/``.dxf`` file — and refuses a ``.py``
-by naming the run.
+DOCUMENT — a ``.step``/``.stp``/``.stl``/``.dxf`` file — and refuses any other
+suffix by naming what it takes.
 
 A door asks ONE question of a document (:func:`document_tree`, STORE.md §9):
 does the store have a tree for this file's bytes? Yes → use it. No → a compile
@@ -25,22 +25,16 @@ from pathlib import Path
 __all__ = [
     "STEP_SUFFIXES",
     "CompileFailed",
-    "ScriptTargetError",
     "display_path",
     "document_target",
     "document_tree",
     "document_snapshot",
-    "script_target_message",
 ]
 
 
 #: What a STEP document is called on disk. THE definition: every module that
 #: asks "is this a STEP document?" imports this one.
 STEP_SUFFIXES = (".step", ".stp")
-
-
-class ScriptTargetError(ValueError):
-    """A CLI door was handed a model script instead of a document."""
 
 
 class CompileFailed(RuntimeError):
@@ -54,17 +48,27 @@ class CompileFailed(RuntimeError):
 def document_snapshot(document: Path) -> tuple[str, str]:
     """The tree for THIS document's bytes — a door's one question (STORE.md §9).
 
-    Yes, the store has one — ``index/document/<sha256(bytes)>`` → tree (STORE.md
-    §2, the law: artifact → artifact; no record is opened) → it is used. Source
+    Yes, the store has one — ``index/document/<sha256(bytes)>-v<schema>`` → tree (STORE.md
+    §2, the law: artifact → artifact; no record is opened) → it is used, once the
+    verify of an export's pending entry has answered (``store.exports.confirm_document``). Source
     changes are the model's record's business, never the door's: a document is
-    never refused and no body ever runs here. No → a **compile job** in the pool
-    builds a tree from the file's bytes, exactly as for an imported STEP,
-    whether or not the file has a script, and the lookup is repeated.
+    never refused and no body ever runs here. No, or a pending entry whose verify could
+    not answer → a **compile job** in the pool builds a tree from the file's bytes,
+    exactly as for an imported STEP, whether or not the file has a script, and the
+    lookup is repeated.
     """
     from cadgen.catalog import result_snapshot_for
 
     document = Path(document).expanduser().resolve()
     snapshot = result_snapshot_for(document)
+    if snapshot:
+        # An export's entry is pending until its verify answers: confirmed first
+        # (store/exports.py), it names what the file shows; one no verify can settle is
+        # compiled, as for a miss.
+        from cadgen.store.exports import confirm_document
+
+        tree = confirm_document(document, *snapshot)
+        snapshot = (snapshot[0], tree) if tree else None
     if snapshot:
         return snapshot
     from cadgen.daemon.executors import submit_compile
@@ -94,27 +98,15 @@ def display_path(path: Path | str) -> str:
         return str(path)
 
 
-
-def script_target_message(script: Path | str) -> str:
-    """The one teaching error at every door that used to accept a ``.py``."""
-    return (
-        f"a model script is a program — run it: python {display_path(Path(script))} "
-        "(building writes the document, sidecar, and declared exports); "
-        "this command takes the document"
-    )
-
-
 def document_target(target: Path | str, *, suffixes: tuple[str, ...]) -> Path:
-    """Resolve TARGET as a document, or raise the teaching error.
+    """Resolve TARGET as a document, or say what this door takes.
 
     ``suffixes`` is the door's own accepted set (``.step``/``.stp`` for STEP,
-    ``.stl`` for the STL door, ...). A ``.py`` is refused by naming the run; any
-    other suffix is refused by naming what the door takes.
+    ``.stl`` for the STL door, ...); any other suffix is refused with the ones
+    it takes.
     """
     path = Path(target).expanduser()
     suffix = path.suffix.lower()
-    if suffix == ".py":
-        raise ScriptTargetError(script_target_message(path))
     if suffix not in suffixes:
         accepted = "/".join(suffixes)
         raise ValueError(f"this command takes a {accepted} document: {target}")

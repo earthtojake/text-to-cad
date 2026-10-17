@@ -37,21 +37,21 @@ interpenetrates.
     references.
   - `src/lib/` — shared code. `chain.py` is the kinematic chain/pose/limit
     spec (stdlib-only FK included) shared by the CAD assembly, the authored
-    URDF/SRDF, and the animation module; `common.py` holds the palette and
+    URDF/SRDF, and the animation clips; `common.py` holds the palette and
     the verified `revolute_attach()` joint math; `palm.py` / `digits.py`
     build the parts; `clearance.py` is the stdlib capsule-collision
     self-check (run `python -m lib.clearance` from `src/` after editing
     poses or animation key orders — it sweeps every named pose and every
     blend path).
-  - `ANIMATION_JS` in `src/lyra.py` — animation clips embedded in model
-    metadata at build time. Clips: `poseTour` (a finger-ripple wave,
-    then relaxed -> precision pinch -> OK sign -> point -> tripod pinch ->
-    fist; key order chosen so every blend is collision-free), `graspLoop`
-    (power grasp), `pinchLoop` (pinch with pad double-tap), `rippleLoop`
-    (traveling finger curl wave), `countLoop` (count to five from a fist;
-    the thumb lifts to a hover before any finger extends). Each clip
-    recomputes chain FK per frame and applies the rigid delta against the
-    baked pose.
+  - `ANIMATION` in `src/lyra.py` — the animation clips, baked to keyframes
+    in the model's sidecar at build time. Clips: `poseTour` (a
+    finger-ripple wave, then relaxed -> precision pinch -> OK sign -> point
+    -> tripod pinch -> fist; key order chosen so every blend is
+    collision-free), `graspLoop` (power grasp), `pinchLoop` (pinch with pad
+    double-tap), `rippleLoop` (traveling finger curl wave), `countLoop`
+    (count to five from a fist; the thumb lifts to a hover before any
+    finger extends). Each clip runs chain FK at every sample and applies
+    the rigid delta against the baked pose.
 - `STEP/`, `3MF/`, `tmp/` — GENERATED, and not committed: a fresh clone
   regenerates them by running the scripts. `lyra.urdf` references
   `3MF/<link>.3mf`, so build the link models before loading the URDF.

@@ -7,9 +7,9 @@ test("importing the viewer's memory ledger writes nothing onto the page", async 
   const page = {};
   globalThis.window = page;
   try {
-    const { viewerMemoryPolicy, viewerMemoryPolicySnapshot } = await import("./step/render/viewerMemoryPolicy.js");
+    const { viewerMemoryPolicy } = await import("./step/render/viewerMemoryPolicy.js");
     assert.deepEqual(Object.keys(page), []);
-    assert.deepEqual(viewerMemoryPolicySnapshot(), viewerMemoryPolicy.snapshot());
+    assert.equal(viewerMemoryPolicy.snapshot().reservationCount, 0);
   } finally {
     delete globalThis.window;
   }

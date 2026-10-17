@@ -40,7 +40,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 7,
      "surface": "file",
      "version": "<version>"
     }
@@ -60,7 +60,7 @@
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 7,
      "recents": [],
      "surface": "sidebar",
      "version": "<version>"
@@ -81,7 +81,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 7,
      "surface": "agent",
      "version": "<version>"
     }
@@ -121,7 +121,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 7,
      "surface": "tab",
      "version": "<version>"
     }

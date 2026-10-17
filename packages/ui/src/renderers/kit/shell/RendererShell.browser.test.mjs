@@ -713,3 +713,27 @@ test('a renderer says more about its load than a download: finding the file, edi
   await quickEdit.waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
 });
+
+test('an alert the model survives is drawn over the tools, where it meets the parts tree', async (t) => {
+  const origin = await serve(t);
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`${origin}/?file=panel.harness`);
+  const pane = page.getByTestId('one');
+  const tree = pane.getByRole('region', { name: 'Harness tree', exact: true });
+  await tree.waitFor();
+  // The tree as wide and tall as it goes, as a model's long part names take it.
+  await pane.getByRole('separator', { name: 'Resize harness tree', exact: true }).press('End');
+  // A failed update keeps the model, and with it the tools: the card stands over both.
+  await pane.locator('[data-harness-stage="failed"]').click();
+  const card = pane.getByRole('alert');
+  await card.waitFor();
+  const [over, under] = [await card.boundingBox(), await tree.boundingBox()];
+  const meet = { x0: Math.max(over.x, under.x), x1: Math.min(over.x + over.width, under.x + under.width),
+    y0: Math.max(over.y, under.y), y1: Math.min(over.y + over.height, under.y + under.height) };
+  assert.ok(meet.x1 > meet.x0 + 8 && meet.y1 > meet.y0 + 8, `the card meets the tree here: ${JSON.stringify({ over, under })}`);
+  const drawn = await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[role="alert"]')),
+    { x: (meet.x0 + meet.x1) / 2, y: (meet.y0 + meet.y1) / 2 });
+  assert.ok(drawn, 'where they meet, the card is drawn, not the tree');
+  assert.deepEqual(errors, []);
+});

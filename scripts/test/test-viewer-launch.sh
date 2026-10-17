@@ -107,7 +107,6 @@ fi
 echo "    interpreter: $PYTHON"
 # Cold: a smoke test spawns no build daemon.
 export CADGEN_DAEMON=0
-unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_ROOT_ID
 # Isolated store: content keying would otherwise resolve the fixture against
 # the developer's real cache and skip the import this smoke test exists to run.
 export CADGEN_CACHE_DIR="$(mktemp -d)"
@@ -200,13 +199,12 @@ if ! printf '%s' "$reuse_json" | grep -q "\"port\":$PORT"; then
 fi
 
 # End-to-end display FROM THE BUNDLE: a raw STEP, named by its absolute path, goes
-# not-compiled -> POST (cadgen's compile entry point, a job in the pool)
-# -> compiled geometry -> a real browser load that derives and fetches its
-# display surface. Its small STEP fixture belongs to this test rather than the
-# repository's shared model workspace. Geometry completion and display readiness
-# are separate contracts: the artifact endpoint must stay "compiled" after the
-# geometry tree lands, while
-# the bundled client drives missing SURF work through /__cad/surfaces.
+# not-compiled -> POST (cadgen's compile entry point, a job in the pool, which
+# derives the parts' display data before it reports done) -> compiled geometry ->
+# a real browser load that reads its parts' stored meshes. Its small STEP
+# fixture belongs to this test rather than the repository's shared model
+# workspace. The bundled client finds the stored display data with the part
+# store's probe and reads it: the view derives nothing.
 FIXTURE="$REPO_ROOT/tests/fixtures/cad/import-smoke.step"
 if ! head -1 "$FIXTURE" | grep -q "ISO-10303-21"; then
   echo "FAIL: import fixture is not STEP text: $FIXTURE" >&2
@@ -262,22 +260,23 @@ if ! printf '%s' "$catalog_json" | grep -q '"url":"/__cad/store?file='; then
 fi
 
 # Loading the page is load-bearing. Merely accepting the new compiled state
-# would let this smoke pass with a dead display path: a cold isolated store has
-# no SURF or TESS entries, so the bundled client must request exact surface
-# derivation, fetch the pinned SURF bytes, tessellate them, and clear its loading
+# would let this smoke pass with a dead display path: the compile derived every
+# part's display data, so the bundled client must find it in the store, read the
+# stored meshes, ask cadgen to derive nothing, draw them, and clear its loading
 # overlay. CI installs Playwright's Chromium with requirements-dev.txt.
 "$PYTHON" - "http://$HOST:$PORT/?file=$smoke_ref" "$(cat "$REPO_ROOT/VERSION")" <<'PY'
 import sys
 import time
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
 url = sys.argv[1]
 responses = []
 page_errors = []
-surface_payload = None
-surface_fetches = set()
+probed = False
+mesh_reads = 0
+part_pending = False
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -302,42 +301,41 @@ with sync_playwright() as playwright:
             current = responses[seen:]
             seen = len(responses)
             for response in current:
-                request = response.request
                 parsed = urlparse(response.url)
-                if parsed.path == "/__cad/surfaces" and request.method == "POST" and response.ok:
+                if not response.ok:
+                    continue
+                if parsed.path == "/__tess_cache/probe":
+                    probed = True
+                elif parsed.path.startswith("/__tess_cache/"):
+                    mesh_reads += 1
+                elif parsed.path == "/__cad/parts" and response.request.method == "POST":
+                    # A part the store lacked: its row is pending while cadgen derives it.
                     payload = response.json()
                     components = payload.get("components") if isinstance(payload, dict) else None
-                    if components and all(row.get("state") == "ready" for row in components.values()):
-                        surface_payload = payload
-                elif parsed.path == "/__cad/store" and response.ok:
-                    query = parse_qs(parsed.query)
-                    if query.get("tree") and query.get("surfaceInput") and query.get("object"):
-                        surface_fetches.add(response.url)
+                    part_pending = part_pending or any(
+                        row.get("state") == "pending" for row in (components or {}).values())
 
             overlay_gone = page.locator(".cad-loading-overlay").count() == 0
-            if surface_payload and surface_fetches and overlay_gone:
+            if probed and mesh_reads and overlay_gone:
                 break
 
         if page_errors:
             raise RuntimeError("browser page error: " + " | ".join(page_errors))
-        if not surface_payload:
-            raise RuntimeError("bundled client did not complete a cold /__cad/surfaces request")
-        rows = surface_payload["components"]
-        missing = [
-            cid for cid, row in rows.items()
-            if not any(fetch.endswith(row["url"]) for fetch in surface_fetches)
-        ]
-        if missing:
-            raise RuntimeError("bundled client did not fetch pinned SURF bytes for: " + ", ".join(missing))
+        if not probed:
+            raise RuntimeError("bundled client did not look for the parts in the store")
+        if part_pending:
+            raise RuntimeError("the view derived display data the compile should have derived")
+        if not mesh_reads:
+            raise RuntimeError("bundled client read no stored display mesh")
         if page.locator(".cad-loading-overlay").count():
-            raise RuntimeError("bundled client did not finish tessellating the display surface")
+            raise RuntimeError("bundled client did not finish drawing the display surface")
         canvases = page.locator("canvas")
         if not canvases.count() or not any(canvases.nth(index).is_visible() for index in range(canvases.count())):
-            raise RuntimeError("bundled client completed surface work without a visible canvas")
+            raise RuntimeError("bundled client read the stored meshes without a visible canvas")
         alerts = [text.strip() for text in page.locator('[role="alert"]').all_text_contents() if text.strip()]
         if alerts:
             raise RuntimeError("bundled client reported an alert: " + " | ".join(alerts))
-        print(f"    bundled client displayed {len(rows)} cold-derived surface component(s)")
+        print(f"    bundled client drew the stored meshes the compile derived ({mesh_reads} read)")
     finally:
         browser.close()
 PY

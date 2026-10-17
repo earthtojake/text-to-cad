@@ -6,7 +6,7 @@ import ToolModeMenu from "../../../kit/tools/ToolModeMenu.jsx";
 // The two tools that pick in modes share one set of drawings. Each mode has ONE glyph, drawn on
 // the 24-unit grid: a cube whole and bold for Parts; faint, with the element a pick takes drawn
 // solid, for Faces (its top face filled) and Edges (its front edge heavy); a dot in a ring for
-// Points. The mode menu in the tool's panel shows it at full size — All shows the tool's own
+// Points. The tool's mode menu shows it at full size — All shows the tool's own
 // glyph, Select's pointer or Measure's ruler. The strip's button shows the tool's glyph with the mode's glyph shrunk to a
 // badge in its top-right corner (none for All); the tool's glyph steps down to the bottom-left to
 // make room, and the badge is cut out of it, so the two never touch at the strip's 14px.
@@ -32,7 +32,7 @@ const SVG = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", stroke
 const BADGE_SCALE = 0.44, BADGE_CENTRE = [18.5, 5.5];
 const BADGE_TRANSFORM = `translate(${BADGE_CENTRE[0] - 12 * BADGE_SCALE} ${BADGE_CENTRE[1] - 12 * BADGE_SCALE}) scale(${BADGE_SCALE})`;
 
-/** A mode's own glyph at full size, for the mode menu in the tool's panel: `mode` "all" is the tool's glyph (`tool`). */
+/** A mode's own glyph at full size, for the tool's mode menu: `mode` "all" is the tool's glyph (`tool`). */
 function ModeGlyph({ tool, mode, ...props }) {
   const glyph = MODE_GLYPHS[mode];
   return <svg {...SVG} data-mode-glyph={glyph ? mode : tool} {...props}>{glyph ? glyph(1) : TOOL_GLYPHS[tool]}</svg>;
@@ -81,12 +81,12 @@ export function MeasureModeMenu({ mode, onModeChange, disabled = false }) {
 }
 
 /**
- * Select's mode, in the Features panel's filter row beside its fold chevron: a button showing
- * the mode in hand, whose dropdown lists the four exclusive modes (Parts only in an assembly),
- * then the connected-selection options that do something under the mode in hand, as checkboxes
- * — both under All, Group faces under Faces, Group edges under Edges, none under Parts. An option
- * that does nothing is not shown, and keeps its choice for when it does; ticking one leaves the
- * menu open. Select has no menu on the strip.
+ * Select's mode, at the navbar's right end immediately before Display, while Select is the tool
+ * (`RendererShell.jsx`'s `navbarControls`): a button showing the mode in hand, whose dropdown lists
+ * the four exclusive modes (Parts only in an assembly), then the connected-selection options that
+ * do something under the mode in hand, as checkboxes — both under All, Group faces under Faces,
+ * Group edges under Edges, none under Parts. An option that does nothing is not shown, and keeps
+ * its choice for when it does; ticking one leaves the menu open. Select has no menu on the strip.
  *
  * @param {{ mode: string, onModeChange(mode: string): void, assembly: boolean,
  *   connected: { edgeChain: boolean, tangentFaces: boolean },
@@ -96,7 +96,7 @@ export function SelectModeMenu({ mode, onModeChange, assembly, connected, onConn
   const modes = SELECT_MODES.filter(item => assembly || !item.assemblyOnly);
   const value = known(modes, mode);
   const options = CONNECTED_SELECTION.filter(option => connectedSelectionApplies(option.id, value));
-  return <ToolModeMenu label="Select mode" modes={modeItems('select', modes)} value={value} onChange={onModeChange} disabled={disabled}>
+  return <ToolModeMenu label="Select mode" modes={modeItems('select', modes)} value={value} onChange={onModeChange} disabled={disabled} navbar>
     {options.length ? options.map(option => <DropdownMenuCheckboxItem key={option.id} checked={connected[option.id] === true}
       onSelect={event => event.preventDefault()} onCheckedChange={checked => onConnectedChange(option.id, checked === true)}>
       {option.label}

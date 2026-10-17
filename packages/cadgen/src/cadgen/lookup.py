@@ -1,17 +1,21 @@
+"""The selector index: every row a ref can resolve to, keyed by the ref that names it.
+
+An occurrence row is keyed by its token (``o:…``); a face, edge or vertex row by
+``<occurrence token>/<element name>``, the one composition rule
+(``cad_ref_syntax.element_ref``). The rows come from the tree and the parts'
+selector tables (``assembly_lookup``); nothing here mints a name. A ref is resolved
+against the index by the one resolver (``cadgen.refs``), over :func:`index_space`.
+"""
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from cadgen import cad_ref_syntax as syntax
 
 
-def table_rows(manifest: dict[str, Any], table_name: str, columns_name: str) -> list[dict[str, Any]]:
-    """Materialize one manifest table into dicts keyed by its declared column names.
-
-    Single home for this shape walk (analysis.py reuses it); it was duplicated
-    byte-for-byte between the two modules until the drift was flagged in review."""
+def _table_rows(manifest: dict[str, Any], table_name: str, columns_name: str) -> list[dict[str, Any]]:
+    """Materialize one manifest table into dicts keyed by its declared column names."""
     columns = manifest.get("tables", {}).get(columns_name)
     rows = manifest.get(table_name)
     if not isinstance(columns, list) or not isinstance(rows, list):
@@ -24,277 +28,119 @@ def table_rows(manifest: dict[str, Any], table_name: str, columns_name: str) -> 
     return materialized
 
 
-_table_rows = table_rows
-
-
-def _buffer_rows(buffers: Mapping[str, Any] | None, view_name: object) -> list[int]:
-    if not isinstance(view_name, str) or buffers is None:
-        return []
-    values = buffers.get(view_name)
-    if values is None:
-        return []
-    try:
-        return [int(value) for value in values]
-    except (TypeError, ValueError):
-        return []
-
-
-def _relations(manifest: dict[str, Any], buffers: Mapping[str, Any] | None = None) -> dict[str, list[int]]:
-    relations = manifest.get("relations")
-    if not isinstance(relations, dict):
-        return {"faceEdgeRows": [], "edgeFaceRows": [], "edgeVertexRows": [], "vertexEdgeRows": []}
-
-    def rows(name: str) -> list[int]:
-        inline = relations.get(name)
-        if isinstance(inline, list):
-            try:
-                return [int(value) for value in inline]
-            except (TypeError, ValueError):
-                return []
-        return _buffer_rows(buffers, relations.get(f"{name}View"))
-
-    return {
-        "faceEdgeRows": rows("faceEdgeRows"),
-        "edgeFaceRows": rows("edgeFaceRows"),
-        "edgeVertexRows": rows("edgeVertexRows"),
-        "vertexEdgeRows": rows("vertexEdgeRows"),
-    }
-
-
 @dataclass(frozen=True)
 class SelectorIndex:
-    manifest: dict[str, Any]
     occurrences: list[dict[str, Any]]
     shapes: list[dict[str, Any]]
     faces: list[dict[str, Any]]
     edges: list[dict[str, Any]]
     vertices: list[dict[str, Any]]
-    relations: dict[str, list[int]]
     occurrence_by_id: dict[str, dict[str, Any]]
-    shape_by_id: dict[str, dict[str, Any]]
     face_by_id: dict[str, dict[str, Any]]
     edge_by_id: dict[str, dict[str, Any]]
     vertex_by_id: dict[str, dict[str, Any]]
-    single_occurrence_id: str
-    leaf_occurrence_ids: tuple[str, ...]
-    # Label aliases for this index's occurrences, filled in by
-    # cadgen.label_refs.attach_label_aliases once the row set is final. Empty until then, and
-    # empty forever for inputs whose parts carry no usable labels -- those stay reachable by
-    # their numeric ids, exactly as before labels existed.
-    label_aliases: dict[str, Any] = field(default_factory=dict)
-    # The instance tree's INTERIOR nodes -- subassemblies -- keyed by occurrence id, as
-    # the assembly.json records them (name, nodeType, and a transform where one is
-    # written). Rows above are leaves, because only a leaf owns geometry; this is the
-    # rest of the tree, and it is what lets a command answer a group ref with the node's
-    # own identity instead of an anonymous id. Filled in by
+    # The instance tree's INTERIOR nodes -- subassemblies -- keyed by token, as the tree
+    # records them (name, nodeType, child count). Rows above are leaves, because only a leaf
+    # owns geometry; this is the rest of the tree, and it is what lets a command answer a group
+    # ref with the node's own identity instead of an anonymous id. Filled in by
     # cadgen.assembly_lookup.merge_assembly_occurrences; empty for part entries, which
     # have no interior nodes to describe.
     group_nodes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Every tree node's leaf occurrences (a leaf's: itself), by token: a group ref's members.
+    # A token holds no hierarchy, so the tree is the one source of it (``occurrence_groups``).
+    members: dict[str, list[str]] = field(default_factory=dict)
+    # Every name of the tree's nodes, groups and leaves alike, with the nodes it names in
+    # tree order (``refs.descriptor_nodes``): what a ``#name`` resolves in.
+    names: dict[str, list[str]] = field(default_factory=dict)
+    # The components the element rows were composed from, as a tree lists them, by cid:
+    # what a ref by geometry is matched against (``index_space``).
+    components: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-def build_selector_index(manifest: dict[str, Any], *, buffers: Mapping[str, Any] | None = None) -> SelectorIndex:
+def build_selector_index(manifest: dict[str, Any]) -> SelectorIndex:
+    """An index over one table's rows: an occurrence row keyed by its ``id``, each element
+    row by ``id`` where the table carries one (a composed index's do; a component's own
+    table carries element names alone, which :mod:`cadgen.assembly_lookup` composes with the
+    occurrence that places it)."""
     occurrences = _table_rows(manifest, "occurrences", "occurrenceColumns")
     shapes = _table_rows(manifest, "shapes", "shapeColumns")
     faces = _table_rows(manifest, "faces", "faceColumns")
     edges = _table_rows(manifest, "edges", "edgeColumns")
     vertices = _table_rows(manifest, "vertices", "vertexColumns")
-    relations = _relations(manifest, buffers=buffers)
 
-    occurrence_by_id = {str(row.get("id")): row for row in occurrences if row.get("id")}
-    shape_by_id = {str(row.get("id")): row for row in shapes if row.get("id")}
-    face_by_id = {str(row.get("id")): row for row in faces if row.get("id")}
-    edge_by_id = {str(row.get("id")): row for row in edges if row.get("id")}
-    vertex_by_id = {str(row.get("id")): row for row in vertices if row.get("id")}
-
-    leaf_occurrence_ids = tuple(
-        sorted(
-            {
-                str(row.get("occurrenceId"))
-                for row in shapes
-                if isinstance(row.get("occurrenceId"), str) and row.get("occurrenceId")
-            }
-        )
-    )
-    single_occurrence_id = leaf_occurrence_ids[0] if len(leaf_occurrence_ids) == 1 else ""
+    def by_id(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {str(row["id"]): row for row in rows if row.get("id")}
 
     return SelectorIndex(
-        manifest=manifest,
         occurrences=occurrences,
         shapes=shapes,
         faces=faces,
         edges=edges,
         vertices=vertices,
-        relations=relations,
-        occurrence_by_id=occurrence_by_id,
-        shape_by_id=shape_by_id,
-        face_by_id=face_by_id,
-        edge_by_id=edge_by_id,
-        vertex_by_id=vertex_by_id,
-        single_occurrence_id=single_occurrence_id,
-        leaf_occurrence_ids=leaf_occurrence_ids,
+        occurrence_by_id=by_id(occurrences),
+        face_by_id=by_id(faces),
+        edge_by_id=by_id(edges),
+        vertex_by_id=by_id(vertices),
     )
 
 
-def entry_summary(index: SelectorIndex) -> dict[str, Any]:
-    stats = index.manifest.get("stats") if isinstance(index.manifest.get("stats"), dict) else {}
-    bbox = index.manifest.get("bbox") if isinstance(index.manifest.get("bbox"), dict) else None
-    return {
-        "kind": "part",
-        "occurrenceCount": int(stats.get("occurrenceCount") or len(index.occurrences)),
-        "leafOccurrenceCount": int(stats.get("leafOccurrenceCount") or len(index.leaf_occurrence_ids)),
-        "shapeCount": int(stats.get("shapeCount") or len(index.shapes)),
-        "faceCount": int(stats.get("faceCount") or len(index.faces)),
-        "edgeCount": int(stats.get("edgeCount") or len(index.edges)),
-        "vertexCount": int(stats.get("vertexCount") or len(index.vertices)),
-        "bounds": bbox,
-    }
+def index_space(index: SelectorIndex, *, document: str | None = None):
+    """The refs space (``cadgen.refs.Space``) of a selector index: its tree's nodes and
+    their names, and each leaf's elements as its rows name them, matched by geometry
+    against the component that leaf places when a ref by geometric token names none of
+    them."""
+    from cadgen.cad_ref_syntax import OCCURRENCE_SELECTOR_RE
+    from cadgen.refs import Space
+
+    members = {token: list(leaves) for token, leaves in index.members.items()}
+    # A leaf occurrence's row, or any element row, names a leaf.
+    for row in [*index.occurrences, *index.faces, *index.edges, *index.vertices]:
+        token = str(row.get("occurrenceId") or row.get("id") or "").split("/", 1)[0]
+        if OCCURRENCE_SELECTOR_RE.match(token):
+            members.setdefault(token, [token])
+    rows: dict[tuple[str, str], dict[int, dict[str, Any]]] = {}
+
+    def by_ordinal(token: str, kind: str) -> dict[int, dict[str, Any]]:
+        if not rows:
+            for row_kind, table in (("face", index.faces), ("edge", index.edges), ("vertex", index.vertices)):
+                for row in table:
+                    owner = str(row.get("occurrenceId") or "")
+                    if owner and isinstance(row.get("ordinal"), int):
+                        rows.setdefault((owner, row_kind), {})[row["ordinal"]] = row
+        return rows.get((token, kind), {})
+
+    def elements(token: str, kind: str) -> list[str | None]:
+        found = by_ordinal(token, kind)
+        return [str(found[ordinal].get("name") or "") or None if ordinal in found else None
+                for ordinal in range(1, max(found, default=0) + 1)]
+
+    def tokens(token: str, kind: str) -> list[str]:
+        row = index.occurrence_by_id.get(token) or {}
+        entry = index.components.get(str(row.get("component") or ""))
+        if entry is None:
+            return []
+        from cadgen.store.parts import element_tokens
+
+        return element_tokens(entry)[{"face": "faces", "edge": "edges", "vertex": "vertices"}[kind]]
+
+    return Space(members, index.names, elements=elements, tokens=tokens, document=document)
 
 
-def label_resolution_error(raw_selector: str, index: SelectorIndex) -> str | None:
-    """Why a LABEL selector does not resolve here, in the resolver's own words, or None.
+def find(ref: str, index: SelectorIndex) -> tuple[str, dict[str, Any] | None]:
+    """What ``ref`` names in ``index``, resolved by the one resolver (``cadgen.refs``): its
+    kind (``occurrence``, ``face``, ``edge`` or ``vertex``) and its row, None for a group,
+    which has none. ``ValueError`` says why it names nothing there."""
+    from cadgen.refs import resolve
 
-    ``canonicalize_selector`` answers "what does this name" and says None for a label it
-    cannot place; this answers "why not". The resolver already computed the useful part --
-    the numbered candidates of a duplicate (``#cast_rim_1 (o1.7.2), ...``), or that the
-    label is unknown and ``snapshot --mode list`` shows the names -- and ``snapshot``
-    prints it. Every error path that would otherwise say "did not resolve" asks here so
-    ``inspect`` says the same thing. None for a numeric or opaque selector, and for a
-    label that resolves.
-    """
-    parsed = syntax.parse_selector(raw_selector)
-    if parsed is None or not parsed.label:
-        return None
-    from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
-
-    try:
-        resolve_label_selectors([raw_selector], getattr(index, "label_aliases", None))
-    except LabelResolutionError as error:
-        return str(error)
-    return None
-
-
-def canonicalize_selector(raw_selector: str, index: SelectorIndex) -> str | None:
-    parsed = syntax.parse_selector(raw_selector)
-    if parsed is None:
-        return None
-    if parsed.label:
-        # A label names an occurrence; turn it into one before the numeric logic below runs, so
-        # every caller downstream sees the same canonical form it always has. A label that
-        # does not resolve is None here like any other miss; the reason is
-        # `label_resolution_error`'s to give, where the error message is built.
-        from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
-
-        try:
-            resolved = resolve_label_selectors([raw_selector], getattr(index, "label_aliases", None))
-        except LabelResolutionError:
-            return None
-        parsed = syntax.parse_selector(resolved[0]) if resolved else None
-        if parsed is None:
-            return None
-    if parsed.selector_type == "opaque":
-        return parsed.canonical
-    if parsed.occurrence_id:
-        return parsed.canonical
-    if not index.single_occurrence_id:
-        return None
-    if parsed.selector_type == "shape":
-        return f"{index.single_occurrence_id}.s{parsed.ordinal}"
-    if parsed.selector_type == "face":
-        return f"{index.single_occurrence_id}.f{parsed.ordinal}"
-    if parsed.selector_type == "edge":
-        return f"{index.single_occurrence_id}.e{parsed.ordinal}"
-    if parsed.selector_type == "vertex":
-        return f"{index.single_occurrence_id}.v{parsed.ordinal}"
-    return parsed.canonical
-
-
-def display_selector(selector: str, index: SelectorIndex) -> str:
-    if not selector or not index.single_occurrence_id:
-        return selector
-    prefix = f"{index.single_occurrence_id}."
-    if selector.startswith(prefix):
-        tail = selector[len(prefix) :]
-        if tail.startswith(("s", "f", "e", "v")):
-            return tail
-    return selector
-
-
-def lookup_selector(selector: str, index: SelectorIndex) -> tuple[str, dict[str, Any]] | None:
-    normalized = canonicalize_selector(selector, index)
-    if not normalized:
-        return None
-    if normalized in index.occurrence_by_id:
-        return "occurrence", index.occurrence_by_id[normalized]
-    if normalized in index.shape_by_id:
-        return "shape", index.shape_by_id[normalized]
-    if normalized in index.face_by_id:
-        return "face", index.face_by_id[normalized]
-    if normalized in index.edge_by_id:
-        return "edge", index.edge_by_id[normalized]
-    if normalized in index.vertex_by_id:
-        return "vertex", index.vertex_by_id[normalized]
-    return None
-
-
-def face_adjacent_edge_selectors(face_row: dict[str, Any], index: SelectorIndex) -> list[str]:
-    start = int(face_row.get("edgeStart") or 0)
-    count = int(face_row.get("edgeCount") or 0)
-    selectors: list[str] = []
-    for edge_row_index in index.relations.get("faceEdgeRows", [])[start : start + count]:
-        if 0 <= int(edge_row_index) < len(index.edges):
-            selectors.append(str(index.edges[int(edge_row_index)].get("id")))
-    return selectors
-
-
-def edge_adjacent_face_selectors(edge_row: dict[str, Any], index: SelectorIndex) -> list[str]:
-    start = int(edge_row.get("faceStart") or 0)
-    count = int(edge_row.get("faceCount") or 0)
-    selectors: list[str] = []
-    for face_row_index in index.relations.get("edgeFaceRows", [])[start : start + count]:
-        if 0 <= int(face_row_index) < len(index.faces):
-            selectors.append(str(index.faces[int(face_row_index)].get("id")))
-    return selectors
-
-
-def edge_adjacent_vertex_selectors(edge_row: dict[str, Any], index: SelectorIndex) -> list[str]:
-    start = int(edge_row.get("vertexStart") or 0)
-    count = int(edge_row.get("vertexCount") or 0)
-    selectors: list[str] = []
-    for vertex_row_index in index.relations.get("edgeVertexRows", [])[start : start + count]:
-        if 0 <= int(vertex_row_index) < len(index.vertices):
-            selectors.append(str(index.vertices[int(vertex_row_index)].get("id")))
-    return selectors
-
-
-def vertex_adjacent_edge_selectors(vertex_row: dict[str, Any], index: SelectorIndex) -> list[str]:
-    start = int(vertex_row.get("edgeStart") or 0)
-    count = int(vertex_row.get("edgeCount") or 0)
-    selectors: list[str] = []
-    for edge_row_index in index.relations.get("vertexEdgeRows", [])[start : start + count]:
-        if 0 <= int(edge_row_index) < len(index.edges):
-            selectors.append(str(index.edges[int(edge_row_index)].get("id")))
-    return selectors
-
-
-def vertex_adjacent_face_selectors(vertex_row: dict[str, Any], index: SelectorIndex) -> list[str]:
-    selectors: list[str] = []
-    seen: set[str] = set()
-    for edge_selector in vertex_adjacent_edge_selectors(vertex_row, index):
-        edge_row = index.edge_by_id.get(edge_selector)
-        if edge_row is None:
-            continue
-        for face_selector in edge_adjacent_face_selectors(edge_row, index):
-            if face_selector not in seen:
-                seen.add(face_selector)
-                selectors.append(face_selector)
-    return selectors
-
-
-def topology_payload(index: SelectorIndex) -> dict[str, list[str]]:
-    return {
-        "occurrences": [display_selector(str(row.get("id")), index) for row in index.occurrences if row.get("id")],
-        "shapes": [display_selector(str(row.get("id")), index) for row in index.shapes if row.get("id")],
-        "faces": [display_selector(str(row.get("id")), index) for row in index.faces if row.get("id")],
-        "edges": [display_selector(str(row.get("id")), index) for row in index.edges if row.get("id")],
-        "vertices": [display_selector(str(row.get("id")), index) for row in index.vertices if row.get("id")],
-    }
+    found = resolve(ref, index_space(index))
+    if found.kind == "occurrence":
+        return found.kind, index.occurrence_by_id.get(found.occurrence)
+    named = getattr(index, f"{found.kind}_by_id").get(syntax.element_ref(found.occurrence, found.element or ""))
+    if named is not None and named.get("ordinal") == found.ordinal:
+        return found.kind, named
+    table = getattr(index, {"face": "faces", "edge": "edges", "vertex": "vertices"}[found.kind])
+    row = next((row for row in table if row.get("occurrenceId") == found.occurrence
+                and row.get("ordinal") == found.ordinal), None)
+    if row is None:
+        raise ValueError(f"{ref!r} names {found.kind} {found.ordinal} of #{found.occurrence}, which has no row here")
+    return found.kind, row

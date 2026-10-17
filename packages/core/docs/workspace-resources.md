@@ -6,15 +6,16 @@ service per workspace and lends it to every mounted CAD view. The HTTP adapter,
 cache and worker-session lifetimes. Disposing a view releases its render session;
 disposing the service aborts its resources and sessions.
 
-Surface resolution and editing-preview observation belong to the service.
+Part resolution and editing-preview observation belong to the service.
 The HTTP implementation owns request encoding, bounded polling, subscriber
 cancellation, replacement views and immutable store URL validation. A pending
 derivation is asked after again at 80 ms, doubling to 640 ms, then at a tenth of
 the wait so far, at most every 5 s: a derivation stuck behind a daemon that cannot
-start a worker is not asked many times a second until it fails. A surface
-binding keeps its tree/view, surface input and concrete object identities;
-a mismatched view, input, object or URL fails before publication. UI consumes
-the resulting tickets and never supplies a same-origin transport fallback.
+start a worker is not asked many times a second until it fails. A part
+request keeps its tree, view and each component's part; an answer for another
+view or part, or a ready row without a valid part record, fails before
+publication. UI consumes the resulting tickets and never supplies a same-origin
+transport fallback.
 
 `service.resources` owns JSON, text, binary and size reads, dependency resolution
 and worker tickets. Pass it as `{ resources }` to render loaders, peeks, sidecar
@@ -30,26 +31,24 @@ Configured headers stay on the provider origin; external nested references do
 not inherit them. Custom fetch implementations remain host-owned. A provider with a custom fetch reads bounded
 bytes on its owning thread and transfers an owned ArrayBuffer to the worker.
 The worker never receives a service function or detaches an admitted cache
-buffer. SURF byte tickets are acquired only after reserving a worker slot, so
-queued components cannot accumulate eagerly transferred buffers. Recognition reads are limited to 16 MiB. SURF display-cache hits inspect
-the cached header before requesting a resource ticket, preserving zero-SURF-read
-warm rendering. A miss with no SURF URL yet (a part that opened warm, before its
-surface is resolved) fails as not ready and requests no ticket; the caller resolves
-the surface and asks again. Aborting a worker request retains the existing scheduler and
-owner rules in [resource ownership](resource-ownership.md).
+buffer. Selector-table tickets are acquired only after reserving a worker slot, so
+queued components cannot accumulate eagerly transferred buffers. Drawing a part
+reads its display mesh alone, from the part store on the owning thread, and
+requests no ticket. Aborting a worker request retains the existing scheduler and owner rules in
+[resource ownership](resource-ownership.md).
 
 Each service wraps its provider in an opaque cache generation. URL-addressed
-JSON, text, mesh and descriptor caches include this scope; completed package and
-recognition caches do too. A fresh server-metadata read that observes a changed
+JSON, text, mesh and descriptor caches include this scope; the completed package
+cache does too. A fresh server-metadata read that observes a changed
 identity token retires the generation and aborts its pending reads.
 The provider exposes that generation signal on the main thread. Worker clients
-and recognition subscribe before acquiring tickets, so already-issued URL
+subscribe before acquiring tickets, so already-issued URL
 tickets cannot publish a late result after retirement. The signal itself never
 crosses into a serializable worker message.
 Replacement services and authentication providers cannot inherit another
 service's URL cache. Mounts borrowing the same service retain warm reuse.
-Content-addressed decoded tessellations retain their existing exact input/object,
-tolerance and payload-version keys and bounded geometry ownership.
+Decoded display meshes are keyed by their part and its mesh's object
+(`partCacheKey`) and keep bounded geometry ownership.
 
 The public low-level core loaders continue to support omitted providers for
 standalone static HTTP callers. This is an explicit transport API default,

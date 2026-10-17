@@ -42,7 +42,7 @@ function harness(displaySettings) {
 const pose = { position: [30, 40, 50], target: [3, 4, 5], up: [0, 0, 1], zoom: 1.4 };
 
 test('setCamera turns its controls on and applies the projection and lens it saves in display', () => {
-  const current = { mode: 'render', camera: { enabled: false }, clip: { enabled: true, offset: 0.3 } };
+  const current = { mode: 'render', camera: { enabled: false }, clip: { enabled: true, at: 0.3 } };
   const view = harness(current);
   view.apply({ ...pose, projection: 'perspective', focalLength: 85 });
   assert.deepEqual(view.result.applied, { ...pose, projection: 'perspective', focalLength: 85 });

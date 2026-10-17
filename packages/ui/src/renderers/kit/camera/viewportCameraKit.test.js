@@ -175,7 +175,7 @@ test("a progressive load whose box still grows fits again when the last componen
 });
 
 // The owner's call: "keeping the perspective and zoom level makes sense in every case". A
-// saved revision, a detail swap and another publish of the same geometry are all the same
+// saved revision and another publish of the same geometry are both the same
 // model, framed already; whatever its zero pose did, only the person's Zoom to fit re-frames it.
 test("a rebuild never re-frames, whether its zero pose grew, shrank or stayed", () => {
   const framedOn = { min: [0, 0, 0], max: [10, 4, 2] };

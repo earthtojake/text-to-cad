@@ -33,6 +33,7 @@ import unittest.mock
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.warm_daemon import verified
 
 add_repo_path("packages/cadgen/src")
 
@@ -198,6 +199,9 @@ class PackagePortabilityTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        from cadgen.store.paths import store_root
+
+        verified(store_root())
         cls._tmp.cleanup()
 
     @classmethod
@@ -289,7 +293,6 @@ class PackagePortabilityTest(unittest.TestCase):
             recorded = [
                 *([descriptor["sourcePath"]] if "sourcePath" in descriptor else []),
                 *descriptor.get("sourceClosureFiles", []),
-                *(entry.get("surf", "") for entry in descriptor.get("components", {}).values()),
             ]
             for value in recorded:
                 with self.subTest(descriptor=descriptor_path.parent.name, value=value):
@@ -312,6 +315,11 @@ class PackagePortabilityTest(unittest.TestCase):
         moved.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(self.root, moved)
         self.addCleanup(shutil.rmtree, self.root.parent / "deeper", True)
+        # Registered after the removal, so it runs first: the moved project's builds are
+        # verified before their files go.
+        from cadgen.store.paths import store_root
+
+        self.addCleanup(verified, store_root())
 
         before = write_identities(moved)
         self._noop_pass(moved)
@@ -357,8 +365,11 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
     def _descriptor_built_from(self, cwd: Path, project: Path) -> dict:
         from cadgen.catalog import result_view_dir
         from cadgen.generation import generate_step_targets
+        from cadgen.store.paths import store_root
 
         step = project / "widget.step"
+        # The previous build's verify may still read the file: joined before it goes.
+        verified(store_root())
         if step.exists():
             shutil.rmtree(result_view_dir(step), ignore_errors=True)
             step.unlink()
@@ -377,6 +388,8 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
         return descriptor
 
     def test_the_descriptor_is_the_same_from_any_working_directory(self) -> None:
+        from cadgen.store.paths import store_root
+
         with tempfile.TemporaryDirectory(prefix="cadcwd-") as temp_dir:
             root = Path(temp_dir)
             project = root / "project"
@@ -386,6 +399,7 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
             from_inside = self._descriptor_built_from(project, project)
             from_above = self._descriptor_built_from(root, project)
             from_elsewhere = self._descriptor_built_from(Path(tempfile.gettempdir()), project)
+            verified(store_root())
 
         self.assertEqual(from_inside, from_above)
         self.assertEqual(from_inside, from_elsewhere)

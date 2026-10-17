@@ -6,9 +6,8 @@ import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
 import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
 import { createViewSync, LOST_AFTER, NEWS_MS, SYNC_MS } from './sync';
-import {
-  createHttpTessellationCacheProvider, encodeComponentTessellation, tessellationPayloadFacts,
-} from '@text-to-cad/core/lib/surf/tessellationCache.js';
+import { createHttpTessellationCacheProvider, partRow } from '@text-to-cad/core/lib/parts/tessellationCache.js';
+import { encodeMeshFixture, partMeshFacts, testPartKey } from '@text-to-cad/core/lib/parts/testing.js';
 import { createTunnelClient, createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -96,7 +95,7 @@ describe('a view\'s one call each second', () => {
       const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
         show: next => shown.push(next.model),
         capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
-        state: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
+        state: () => ({ model: '/p/a.step', selection: ['/p/a.step#o:3f2a9c1d7e5b/f:bracket.extrude1.3'] }),
       });
       sync.run(stop.signal);
       await vi.advanceTimersByTimeAsync(0);
@@ -107,7 +106,7 @@ describe('a view\'s one call each second', () => {
       expect(requests).toHaveLength(4);
       // What the view shows goes up once, and again only when it changes.
       expect(requests.map(request => Boolean(request.state))).toEqual([true, false, false, false]);
-      expect(requests[0]).toMatchObject({ view: 'v1', surface: 'tab', model: '/p/a.step', state: { selection: ['/p/a.step#o1.f2'] } });
+      expect(requests[0]).toMatchObject({ view: 'v1', surface: 'tab', model: '/p/a.step', state: { selection: ['/p/a.step#o:3f2a9c1d7e5b/f:bracket.extrude1.3'] } });
       expect(shown).toEqual(['/p/b.step']);
       expect(replied).toEqual(expect.arrayContaining([
         { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
@@ -232,8 +231,8 @@ describe('the fetch tunnel', () => {
       },
     });
     const tunnel = createTunnelFetch(server);
-    const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/surfaces?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
-    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/surfaces?x=1` } });
+    const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/parts?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
+    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/parts?x=1` } });
     expect(calls[0].args.headers['x-cadgen-viewer']).toBe('1');
     expect(new TextDecoder().decode(decodeBase64(calls[0].args.body))).toBe('{"a":1}');
     expect(posted.status).toBe(201);
@@ -301,23 +300,22 @@ describe('the fetch tunnel', () => {
   it('verifies a tessellation read in parts as a whole one: put together it is the body, and a damaged part makes it a miss', async () => {
     const vertices = 200_000;
     const triangles = 50_000;
-    const bytes = encodeComponentTessellation({
+    const key = testPartKey('1');
+    const bytes = encodeMeshFixture({
       positions: new Float32Array(3 * vertices).map((_, index) => index % 97),
       normals: new Float32Array(3 * vertices).fill(1),
-      faceOrds: new Float32Array(vertices).fill(1),
       indices: new Uint32Array(3 * triangles).map((_, index) => index % vertices),
-      sideOrds: new Uint32Array(3 * triangles).fill(1),
       faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 * triangles }],
       edges: [],
       bounds: { min: [0, 0, 0], max: [96, 96, 96] },
-      scale: 166,
-    }, { surfaceInput: '1'.repeat(64), surfaceObject: 'a'.repeat(64), edgeClasses: [] });
+    }, { part: key });
     expect(bytes.length).toBeGreaterThan(TUNNEL_REPLY_MAX_BYTES);
     const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-    const row = { schemaVersion: 1, object: digest, ...tessellationPayloadFacts(bytes) };
+    const row = partRow(key, { glb: { object: digest, ...partMeshFacts(bytes) },
+      selectors: { object: 'e'.repeat(64), byteLength: 2, faceCount: 1, edgeCount: 0, vertexCount: 0 } })!;
     const read = (parted: ReturnType<typeof servingInParts>) => createHttpTessellationCacheProvider({
       origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(parted.server), maxBatchBytes: TUNNEL_REPLY_MAX_BYTES,
-    }).getProbed(row, { maxBytes: row.byteLength });
+    }).getProbed(row, { maxBytes: row.glb.byteLength });
     const whole = await read(servingInParts(bytes, { etag: () => `"${digest}"` }));
     expect(whole && same(whole, bytes)).toBe(true);
     const damaged = servingInParts(bytes, { etag: () => `"${digest}"`, alter: (part, first) => (first === TUNNEL_REPLY_MAX_BYTES ? part.map(value => value ^ 1) : part) });
@@ -368,7 +366,7 @@ function servingInParts(bytes: Uint8Array, {
 
 describe('a Quick Edit in the chat', () => {
   const file = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
-  const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
+  const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o:3f2a9c1d7e5b/f:bracket.extrude1.3'] } }, 'face');
   const sketch = () => ({ id: 'sketch', kind: 'attachment' as const, name: 'a-sketch.png', label: 'Sketch', mimeType: 'image/png', about: ['file'],
     content: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }) });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
@@ -391,7 +389,7 @@ describe('a Quick Edit in the chat', () => {
     expect((await port.deliver(edit(face, sketch()))).status).toBe('added');
     const [text, image] = updates[0].params.content;
     expect(updates[0].method).toBe('ui/update-model-context');
-    expect(text).toEqual({ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#o1.f2', _meta: { 'openai/title': 'Quick edit · a.step' } });
+    expect(text).toEqual({ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#o:3f2a9c1d7e5b/f:bracket.extrude1.3', _meta: { 'openai/title': 'Quick edit · a.step' } });
     expect([image.type, image.mimeType, image._meta['openai/title']]).toEqual(['image', 'image/png', 'Sketch · a.step']);
     await port.deliver(edit());
     expect(updates[1].params.content).toHaveLength(3);
@@ -451,5 +449,46 @@ describe('the frame\'s clipboard', () => {
       await copied;
       expect(events).toEqual(['item', 'write', 'File: /work/a.step']);
     } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('copies by the page\'s copy command where the host grants the frame no clipboard, and fails only when that fails too', async () => {
+    const details = ['File: /work/gear.step', 'Operation: loading geometry', 'Traceback (most recent call last):',
+      ...Array.from({ length: 40 }, (_, line) => `  File "/work/gear.py", line ${line + 1}, in build`), 'ValueError: no teeth'].join('\n');
+    // What the copy command would put on the clipboard: the selection in the focused field.
+    const copied: string[] = [];
+    const execCommand = vi.fn((command: string) => {
+      const field = document.activeElement as HTMLTextAreaElement;
+      copied.push(`${command}:${field.value.slice(field.selectionStart, field.selectionEnd)}`);
+      return true;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    const button = document.body.appendChild(document.createElement('button'));
+    const refusing = { clipboard: { writeText: async () => { throw new DOMException('Write permission denied.', 'NotAllowedError'); } } };
+    try {
+      // Granted: the clipboard API, and nothing else.
+      const written: string[] = [];
+      vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { written.push(text); } } });
+      await frameClipboard.writeText(details);
+      expect([written, execCommand.mock.calls.length]).toEqual([[details], 0]);
+      // Refused, or no clipboard API at all: the copy command takes the whole text, and leaves the
+      // page as it was, its field gone and the focus back on the button pressed.
+      vi.stubGlobal('navigator', refusing);
+      button.focus();
+      await frameClipboard.writeText(details);
+      expect([copied, document.querySelector('textarea'), document.activeElement]).toEqual([[`copy:${details}`], null, button]);
+      vi.stubGlobal('navigator', {});
+      await frameClipboard.writeText('File: /work/a.step');
+      await frameClipboard.writeText(Promise.resolve('File: /work/b.step'));
+      expect(copied.slice(1)).toEqual(['copy:File: /work/a.step', 'copy:File: /work/b.step']);
+      // Both refused: the copy fails, with the clipboard's refusal where there was one.
+      execCommand.mockReturnValue(false);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Copying is not available here.');
+      vi.stubGlobal('navigator', refusing);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Write permission denied.');
+    } finally {
+      vi.unstubAllGlobals();
+      delete (document as { execCommand?: unknown }).execCommand;
+      button.remove();
+    }
   });
 });

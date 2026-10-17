@@ -1,12 +1,12 @@
 import { encodeBase64 } from './base64.js';
 import { requestViewerJson, ViewerRequestError } from "./request.js";
-import { retainSurfWorkerPool } from '../lib/surf/surfWorkerClient.js';
+import { retainPartWorkerPool } from '../lib/parts/partWorkerClient.js';
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
 import { applyViewerOriginToEntries, normalizeViewerOrigin, viewerOriginUrl } from './origin.js';
-import { createHttpTessellationCacheProvider, createTessellationCache } from '../lib/surf/tessellationCache.js';
+import { createHttpTessellationCacheProvider, createTessellationCache } from '../lib/parts/tessellationCache.js';
 
-import { resolveSurfaceComponents } from './surfaceResolution.js';
+import { resolveParts } from './partResolution.js';
 import { observeEditingPreview } from './editingPreviewFeed.js';
 import { createHttpCadResourceProvider, scopeCadResources } from './resources.js';
 export * from './origin.js';
@@ -31,6 +31,8 @@ function abortError() {
 
 // The longest a drawing's 202 may ask the client to wait before it asks again.
 const DRAWING_RETRY_MAX_MS = 5000;
+// The longest a measure's 202 may have the client wait before it asks again.
+const MEASURE_RETRY_MAX_MS = 2000;
 
 /** `ms` of waiting that `signal` ends early, as an AbortError. */
 function pause(ms, signal) {
@@ -294,23 +296,63 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
-    requestSurfaces(body, { signal } = {}) {
-      return request('/__cad/surfaces', {
-        body, signal, method: 'POST', operation: 'surfaces',
+    robot(file, { signal } = {}) {
+      // A robot description resolved on the SERVER (cadgen.robot_payload): the articulation
+      // the page plays and the visuals it draws, each mesh by a URL this server answers.
+      // Derived data cached by the description's bytes, so a second request is one object
+      // read; a cold read validates, resolves frames and meshes primitives within the 10 s.
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/robot', { file, signal, timeoutMs: 10_000, operation: 'robot' });
+    },
+    requestParts(body, { signal } = {}) {
+      return request('/__cad/parts', {
+        body, signal, method: 'POST', operation: 'parts',
         headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
       });
     },
-    cancelSurfaceRequest(body, { signal } = {}) {
-      return request('/__cad/surfaces/cancel', {
-        body, signal, method: 'POST', operation: 'cancel-surfaces',
+    async measureFace(body, { signal } = {}) {
+      // A face's exact area and centroid, measured by cadgen on its component's stored BREP
+      // (`POST /__cad/measure`, no part carries them): the store's answer at once, else a
+      // build-pool job, whose 202 { state: 'measuring', retryMs } has the client ask again.
+      // `body` names the view, the component and its part, and the face by its ordinal.
+      for (;;) {
+        const reply = await request('/__cad/measure', {
+          body, signal, method: 'POST', operation: 'measure', timeoutMs: 10_000,
+          headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
+        });
+        if (reply?.state !== 'measuring') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), MEASURE_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
+    cancelPartRequest(body, { signal } = {}) {
+      return request('/__cad/parts/cancel', {
+        body, signal, method: 'POST', operation: 'cancel-parts',
         headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
       });
     },
     editingPreview(file, { after = '', signal } = {}) {
       return request('/__cad/preview', { file, signal, params: { after }, operation: 'preview' });
     },
-    resolveSurfaceComponents(descriptor, requested, options) {
-      return resolveSurfaceComponents(descriptor, requested, { ...options, client });
+    // Where a store tree's view is read, as a catalog row names a saved file's: `assembly.json`
+    // under it resolves as a package asset (`resolvePackageAssetUrl`). A build feed's preview names
+    // its tree and the producer its parts are keyed under; with none, the view keys them as for a
+    // saved file.
+    storeTreeUrl(tree, { producer = null } = {}) {
+      return cadApiUrl('/__cad/store', { origin, file: tree, params: producer ? { producer: JSON.stringify(producer) } : {} });
+    },
+    // A preview revision's annotations object: what the sidecar will carry, resolved against the
+    // preview's tree. Null for an object the store does not hold (expired with its build).
+    async previewAnnotations(object, { signal } = {}) {
+      try {
+        return await request('/__cad/store', { signal, params: { annotations: object }, timeoutMs: 10_000, operation: 'annotations' });
+      } catch (error) {
+        if (error?.failure?.status === 404) return null;
+        throw error;
+      }
+    },
+    resolveParts(descriptor, requested, options) {
+      return resolveParts(descriptor, requested, { ...options, client });
     },
     // A host that already hears a file's build feed (on a call it makes anyway) hands it in as
     // `editingPreviewFeed`, and nothing here asks the route.
@@ -322,10 +364,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (disposed) throw new Error('This CAD client has been disposed.');
       if (file) activeFiles.set(file, (activeFiles.get(file) || 0) + 1);
       const controller = new AbortController();
-      const releases = [retainSurfWorkerPool(), retainGlbMeshWorker(), retainStlMeshWorker()];
+      const releases = [retainPartWorkerPool(), retainGlbMeshWorker(), retainStlMeshWorker()];
       tessellationCache ??= createTessellationCache({
         provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl, maxBatchBytes }),
-        writeBack: { deferMs: 1500, concurrency: 2 }
       });
       const cache = tessellationCache.createSession({ signal: controller.signal });
       let sessionDisposed = false;

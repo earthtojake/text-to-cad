@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import sys
 import time
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 import unicodedata
 
 from OCP.BinXCAFDrivers import BinXCAFDrivers
@@ -15,10 +15,12 @@ from OCP.IFSelect import IFSelect_RetDone
 from OCP.Quantity import Quantity_ColorRGBA
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
+from OCP.TCollection import TCollection_AsciiString
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_ChildIterator
 from OCP.TDF import TDF_Label
 from OCP.TDF import TDF_LabelSequence
+from OCP.TDF import TDF_Tool
 from OCP.TDataStd import TDataStd_Name
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopAbs import TopAbs_FACE
@@ -33,8 +35,7 @@ from OCP.XCAFDoc import XCAFDoc_ColorTool
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
-from cadgen._internal.step_hash import step_file_hash
-
+from cadgen._internal.step_names import ComponentNames, FileNames, read_component_names, read_file_names
 from cadgen._internal.step_scene_types import ColorRGBA, LoadedStepScene, OccurrenceNode, _identity_transform_matrix
 
 
@@ -145,7 +146,8 @@ def _decode_step_unicode_escapes(text: str) -> str:
 
     Some vendor files leave these escape sequences in XCAF labels while a
     cadgen write/read returns the decoded Unicode spelling.  They are the same
-    authored name and must compare as such during strict correspondence.
+    authored name and must read as one, so a file's names mint the tokens its
+    result's do.
     """
     def replace(match: re.Match[str]) -> str:
         digits = match.group(2)
@@ -176,7 +178,20 @@ def _repair_utf8_mojibake(text: str) -> str:
     return repaired
 
 
+# An XCAF label entry: the document address OCCT writes where a STEP had no name
+# for a product or an occurrence -- `0:1:1:2`, or `=>[0:1:1:2]` for a reference
+# to another label. An address, not a name somebody gave.
+_XCAF_LABEL_ENTRY = re.compile(r"(?:=>\s*)?(?:\[\s*[0-9]+(?::[0-9]+)+\s*\]|[0-9]+(?::[0-9]+)+)")
+
+
 def _normalize_label_name(raw_name: object) -> str | None:
+    """What a STEP calls a product or an occurrence, or None where it gave no name.
+
+    The one rule for every name cadgen reads from a STEP: a blank, the
+    translator's default, a shape kind, digits alone and an XCAF label entry
+    are no name, and whoever shows the thing names it otherwise (its
+    occurrence id).
+    """
     if raw_name is None:
         return None
     text = _decode_step_unicode_escapes(str(raw_name))
@@ -189,9 +204,24 @@ def _normalize_label_name(raw_name: object) -> str | None:
         return None
     if lowered in {"assembly", "solid", "compound", "compsolid", "shell", "face", "wire", "edge", "vertex"}:
         return None
-    if text.isdigit():
+    if text.isdigit() or _XCAF_LABEL_ENTRY.fullmatch(text):
         return None
     return text
+
+
+def document_roots(roots: Sequence[Any]) -> list[Any]:
+    """The roots of the document a parsed STEP is: its product roots, but for a file of
+    one part placed away from the identity. STEP can place no root product, so a writer
+    wraps such a part in an unnamed product holding it alone (``step_export``): that file
+    is the one part, placed, as the result it was written from has it. Every reader that
+    names a parse's nodes takes its roots here (``store.build._document_walk``,
+    ``step_scene_package.scene_tokens``)."""
+    roots = list(roots)
+    if len(roots) == 1:
+        root = roots[0]
+        if not (root.name or root.source_name) and len(root.children) == 1 and not root.children[0].children:
+            return [root.children[0]]
+    return roots
 
 
 def _label_name(label: object) -> str | None:
@@ -309,6 +339,7 @@ def _load_occurrence_tree(
     dict[int, str | None],
     dict[int, ColorRGBA],
     dict[int, dict[int, ColorRGBA]],
+    dict[int, ComponentNames],
     Any | None,
 ]:
     app = XCAFApp_Application.GetApplication_s()
@@ -323,13 +354,17 @@ def _load_occurrence_tree(
         mode = getattr(reader, mode_name, None)
         if callable(mode):
             mode(True)
+    # What a file names its parts by (``step_names``): each product's description, read
+    # into its label's properties. A file that names nothing reads as it would without.
+    reader.SetProductMetaMode(True)
     with kernel_messages_on_stderr():
         read_status = reader.ReadFile(str(step_path))
         transferred = int(read_status) == int(IFSelect_RetDone) and reader.Transfer(doc)
     if not transferred:
         return (*_load_fallback_occurrence_tree(step_path, named=named), None)
 
-    loaded = _load_occurrence_tree_from_xcaf_doc(step_path, doc)
+    # And each face and edge it names, through the transfer's own map from entities to shapes.
+    loaded = _load_occurrence_tree_from_xcaf_doc(step_path, doc, file_names=read_file_names(reader))
     if loaded is None:
         return (*_load_fallback_occurrence_tree(step_path, named=named), None)
     return (*loaded, doc)
@@ -338,12 +373,15 @@ def _load_occurrence_tree(
 def _load_occurrence_tree_from_xcaf_doc(
     step_path: Path,
     doc: Any,
+    *,
+    file_names: FileNames | None = None,
 ) -> tuple[
     list[OccurrenceNode],
     dict[int, Any],
     dict[int, str | None],
     dict[int, ColorRGBA],
     dict[int, dict[int, ColorRGBA]],
+    dict[int, ComponentNames],
 ] | None:
 
     shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
@@ -357,6 +395,8 @@ def _load_occurrence_tree_from_xcaf_doc(
     prototype_names: dict[int, str | None] = {}
     prototype_colors: dict[int, ColorRGBA] = {}
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = {}
+    prototype_step_names: dict[int, ComponentNames] = {}
+    named_prototypes: set[int] = set()
 
     def collect(label: object, *, path: tuple[int, ...], parent_location: object | None = None) -> OccurrenceNode | None:
         resolved_label = _resolve_referred_label(shape_tool, label)
@@ -366,8 +406,13 @@ def _load_occurrence_tree_from_xcaf_doc(
         local_location = _shape_location(base_shape)
         current_location = _compose_locations(parent_location, local_location)
         children = _xcaf_children(shape_tool, label, resolved_label)
-        name = _label_name(label) or _label_name(resolved_label)
-        source_name = _label_name(resolved_label) or name
+        # An occurrence's own name, and its product's: one label for a shape no reference
+        # places. Which of them it shows is settled once every occurrence is read
+        # (_withhold_borrowed_product_names).
+        own = _label_name(label)
+        product = _label_name(resolved_label) if resolved_label is not label else own
+        name = own or product
+        source_name = product or name
         occurrence_color = (
             _color_from_label(color_tool, label)
             or _color_from_shape(color_tool, instance_shape)
@@ -376,13 +421,20 @@ def _load_occurrence_tree_from_xcaf_doc(
         )
         prototype_key: int | None = None
         if not children and not resolved_shape.IsNull():
+            defined_by = (resolved_label, resolved_shape)
             prototype_shape = _unlocated_shape(resolved_shape)
             prototype_key = _shape_hash(prototype_shape)
             prototypes.setdefault(prototype_key, prototype_shape)
         elif not children and not base_shape.IsNull():
+            defined_by = (label, base_shape)
             prototype_shape = _unlocated_shape(base_shape)
             prototype_key = _shape_hash(prototype_shape)
             prototypes.setdefault(prototype_key, prototype_shape)
+        if prototype_key is not None and prototype_key not in named_prototypes:
+            named_prototypes.add(prototype_key)
+            step_names = read_component_names(shape_tool, *defined_by, file_names=file_names)
+            if step_names is not None:
+                prototype_step_names[prototype_key] = step_names
         if prototype_key is not None:
             prototype_names.setdefault(prototype_key, source_name or name)
             prototype_color = _color_from_label(color_tool, resolved_label) or _color_from_shape(color_tool, resolved_shape)
@@ -400,7 +452,7 @@ def _load_occurrence_tree_from_xcaf_doc(
         ]
         if prototype_key is None and not child_nodes:
             return None
-        return OccurrenceNode(
+        node = OccurrenceNode(
             path=path,
             name=name,
             source_name=source_name,
@@ -411,7 +463,10 @@ def _load_occurrence_tree_from_xcaf_doc(
             location=current_location,
             children=child_nodes,
         )
+        usages.append((node, _label_entry(resolved_label), own is None))
+        return node
 
+    usages: list[tuple[OccurrenceNode, str, bool]] = []
     roots = [
         node
         for index in range(1, free_labels.Length() + 1)
@@ -419,43 +474,33 @@ def _load_occurrence_tree_from_xcaf_doc(
     ]
     if not roots:
         return None
-    return roots, prototypes, prototype_names, prototype_colors, prototype_face_colors
+    _withhold_borrowed_product_names(usages)
+    return roots, prototypes, prototype_names, prototype_colors, prototype_face_colors, prototype_step_names
 
 
-def load_step_scene_from_xcaf_doc(
-    step_path: Path,
-    doc: Any,
-    *,
-    step_hash: str | None = None,
-    source_kind: str = "step",
-    source_hash: str | None = None,
-    load_elapsed: float | None = None,
-) -> LoadedStepScene:
-    resolved_step_path = step_path.expanduser().resolve()
-    load_started = time.perf_counter()
-    loaded = _load_occurrence_tree_from_xcaf_doc(resolved_step_path, doc)
-    if loaded is None:
-        raise RuntimeError(f"XCAF document contains no STEP geometry: {resolved_step_path}")
-    (
-        roots,
-        prototype_shapes,
-        prototype_names,
-        prototype_colors,
-        prototype_face_colors,
-    ) = loaded
-    return LoadedStepScene(
-        step_path=resolved_step_path,
-        roots=roots,
-        prototype_shapes=prototype_shapes,
-        prototype_names=prototype_names,
-        prototype_colors=prototype_colors,
-        prototype_face_colors=prototype_face_colors,
-        load_elapsed=time.perf_counter() - load_started if load_elapsed is None else load_elapsed,
-        step_hash=step_hash,
-        source_kind=source_kind,
-        source_hash=source_hash,
-        doc=doc,
-    )
+def _label_entry(label: object) -> str:
+    """A label's address in its document (``0:1:1:3``): which product a reference places."""
+    entry = TCollection_AsciiString()
+    TDF_Tool.Entry_s(label, entry)
+    return entry.ToCString()
+
+
+def _withhold_borrowed_product_names(usages: list[tuple[OccurrenceNode, str, bool]]) -> None:
+    """An occurrence with no name of its own shows its product's -- unless that name is
+    another occurrence's own label, which is how a writer names a product its occurrences
+    share (cadgen's after the last of them). Shown on the unnamed one, it would give two
+    parts one name, and ``#motor`` would mean either: that occurrence shows its id instead.
+
+    ``usages`` is every node with the address of the product it places and whether its
+    name is borrowed from that product."""
+    own_names: dict[str, set[str]] = {}
+    for node, product, borrowed in usages:
+        if not borrowed and node.name is not None:
+            own_names.setdefault(product, set()).add(node.name)
+    for node, product, borrowed in usages:
+        if borrowed and node.name in own_names.get(product, ()):
+            node.name = None
+            node.source_name = None
 
 
 @contextlib.contextmanager
@@ -488,7 +533,8 @@ def _load_fallback_occurrence_tree(
     step_path: Path,
     *,
     named: Path | None = None,
-) -> tuple[list[OccurrenceNode], dict[int, Any], dict[int, str | None], dict[int, ColorRGBA], dict[int, dict[int, ColorRGBA]]]:
+) -> tuple[list[OccurrenceNode], dict[int, Any], dict[int, str | None], dict[int, ColorRGBA], dict[int, dict[int, ColorRGBA]],
+           dict[int, ComponentNames]]:
     # ``named`` is the document the USER gave when ``step_path`` is cadgen's
     # private snapshot of its bytes: an error names their file, never ours.
     named = step_path if named is None else named
@@ -527,6 +573,7 @@ def _load_fallback_occurrence_tree(
         {prototype_key: "model"},
         {},
         {},
+        {},
     )
 
 
@@ -543,6 +590,7 @@ def load_step_scene(step_path: Path, *, named: Path | None = None) -> LoadedStep
         prototype_names,
         prototype_colors,
         prototype_face_colors,
+        prototype_step_names,
         doc,
     ) = _load_occurrence_tree(resolved_step_path, named=named)
     return LoadedStepScene(
@@ -552,27 +600,11 @@ def load_step_scene(step_path: Path, *, named: Path | None = None) -> LoadedStep
         prototype_names=prototype_names,
         prototype_colors=prototype_colors,
         prototype_face_colors=prototype_face_colors,
+        prototype_step_names=prototype_step_names,
         load_elapsed=time.perf_counter() - load_started,
         doc=doc,
     )
 
 
-def _scene_step_hash(scene: LoadedStepScene) -> str:
-    if scene.step_hash is None:
-        scene.step_hash = _step_hash(scene.step_path)
-    return scene.step_hash
-
-
 def _selector_id(path: tuple[int, ...]) -> str:
     return "o" + ".".join(str(segment) for segment in path)
-
-
-def _relative_path_from_directory(path: Path, base_dir: Path) -> str:
-    return os.path.relpath(
-        path.expanduser().resolve(),
-        start=base_dir.expanduser().resolve(),
-    ).replace(os.sep, "/")
-
-
-def _step_hash(step_path: Path) -> str:
-    return step_file_hash(step_path)

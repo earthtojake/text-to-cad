@@ -67,15 +67,23 @@ class ModelClosureBoundaries(unittest.TestCase):
         from cadgen.store.index import model_ref
         from cadgen.store.records import write_record
 
-        closure = build_closure(script, executed={}, children=[child for child, _pin in children])
+        from cadgen.store.results import producer_versions
+
+        closure = build_closure(script, executed={}, children=[child for child, _key in children])
         reference = model_ref(script, function)
-        write_record(reference, {
+        record = {
             "entryKind": "part", "sourceKind": "python", "tree": tree,
             "closure": closure.as_json(), "constants": closure.constants,
-            "children": [{"model": child, "tree": pin} for child, pin in children],
-            "outputs": {},
-        })
+            "children": [{"model": child, "key": key} for child, key in children],
+            "outputs": {}, "producer": producer_versions(),
+        }
+        write_record(reference, record)
         return reference
+
+    def key_of(self, reference):
+        from cadgen.store.records import read_record
+
+        return read_record(reference)["key"]
 
     def test_imported_model_names_from_a_multi_model_file_are_result_edges(self):
         from cadgen.store.closure import static_closure
@@ -165,7 +173,7 @@ class ModelClosureBoundaries(unittest.TestCase):
             body="import importlib\nparts = importlib.import_module('family')\n"
                  "return bd.Compound(children=[parts.left(), bd.Box(parts.helper(), 1, 1)])",
         )
-        parent = self.record(parent_script, "parent", tree=child_tree, children=[(left, child_tree)])
+        parent = self.record(parent_script, "parent", tree=child_tree, children=[(left, self.key_of(left))])
         self.assertIn("family.py", read_record(parent)["closure"]["files"])
         self.assertFalse(stale(parent).stale)
         self.family.write_text(FAMILY.replace("WIDTH = 4", "WIDTH = 5"), encoding="utf-8")
@@ -187,8 +195,8 @@ class ModelClosureBoundaries(unittest.TestCase):
             imports,
             body=f"result = {alias}.left()\nresult.label = str({helper_expression})\nreturn result",
         )
-        parent = self.record(parent_script, "parent", tree=child_tree, children=[(left, child_tree)])
-        self.assertEqual(read_record(parent)["children"], [{"model": left, "tree": child_tree}])
+        parent = self.record(parent_script, "parent", tree=child_tree, children=[(left, self.key_of(left))])
+        self.assertEqual(read_record(parent)["children"], [{"model": left, "key": self.key_of(left)}])
         self.assertFalse(stale(parent).stale)
         family.write_text(FAMILY.replace("WIDTH = 4", "WIDTH = 5"), encoding="utf-8")
         # Only the helper changes. Rebuilding left makes its exact result pin
@@ -217,14 +225,18 @@ class ModelClosureBoundaries(unittest.TestCase):
         child_tree = self.geometry_tree("child")
         left = self.record(self.family, "left", tree=child_tree)
         script = self.parent("import family as parts", body="return parts.left()")
-        parent = self.record(script, "parent", tree=child_tree, children=[(left, child_tree)])
+        parent = self.record(script, "parent", tree=child_tree, children=[(left, self.key_of(left))])
         self.assertEqual(read_record(parent)["closure"]["files"], ["!family/__init__.py", "family.py", "parent.py"])
         self.assertTrue(read_record(parent)["closure"]["shas"]["family.py"].startswith("islice1:"))
-        self.assertEqual(read_record(parent)["children"], [{"model": left, "tree": child_tree}])
+        self.assertEqual(read_record(parent)["children"], [{"model": left, "key": self.key_of(left)}])
         self.family.write_text(FAMILY.replace("WIDTH = 4", "WIDTH = 5"), encoding="utf-8")
         self.assertTrue(stale(parent).stale, "the called child's whole-file source is stale until rebuilt")
         self.record(self.family, "left", tree=child_tree)
-        self.assertFalse(stale(parent).stale, "a static model call depends on its result, not an unused helper")
+        # The helper the parent never uses reaches it only through the child's key -- the
+        # child was rebuilt from an edited file -- never through the parent's own closure.
+        verdict = stale(parent)
+        self.assertEqual([c["clause"] for c in verdict.clauses if c["stale"]], [3])
+        self.assertEqual(verdict.reason(), "child rebuilt: family.py")
 
     def test_aliased_package_submodule_uses_the_bound_name_for_result_and_source_edges(self):
         from cadgen.store.closure import static_closure
@@ -275,10 +287,10 @@ class ModelClosureBoundaries(unittest.TestCase):
         A body importing its child imports the child's child and that child's
         helpers too, and every one of them is in ``executed``. Subtracting only
         one level of child ownership put the grandchild's script and helper in
-        the ROOT's closure, so a geometry-neutral edit two levels down rebuilt
-        the root — while the same edit one level down correctly left it current,
-        because a pinned tree that does not move is what "models by result"
-        means.
+        the ROOT's closure, so an edit two levels down reached the root's own
+        closure — while the same edit one level down correctly reached only the
+        child, which is what "models by key" means: a child's edit reaches its
+        parent through the child's key, never through the parent's closure.
         """
         from cadgen.store.closure import build_closure
 
@@ -342,8 +354,8 @@ class ModelClosureBoundaries(unittest.TestCase):
         left = self.record(self.family, "left", tree=left_tree)
         right = self.record(self.family, "right", tree=right_tree)
         parent_script = self.parent("from family import left")
-        parent = self.record(parent_script, "parent", tree=left_tree, children=[(left, left_tree)])
-        self.assertEqual(read_record(parent)["children"], [{"model": model_ref(self.family, "left"), "tree": left_tree}])
+        parent = self.record(parent_script, "parent", tree=left_tree, children=[(left, self.key_of(left))])
+        self.assertEqual(read_record(parent)["children"], [{"model": model_ref(self.family, "left"), "key": self.key_of(left)}])
         self.assertFalse(stale(parent).stale)
         # The uncalled sibling's result does not enter the parent's pins.
         self.record(self.family, "right", tree=left_tree)

@@ -80,12 +80,12 @@ class SignatureTest(unittest.TestCase):
         self.assertIsNone(analytics.signature(KeyError("x"), "somewhere"))
 
     def test_an_error_cadgen_raises_on_purpose_is_never_its_bug_whatever_its_type(self) -> None:
-        # cadgen tells a person their mistake in Python's own words ("@step returned a dict" is a TypeError):
+        # cadgen tells a person their mistake in Python's own words ("@step must return a build123d Shape" is a TypeError):
         # a crash is only an error Python raised in cadgen's code, never one at a raise.
         folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         source = folder / "generation.py"
-        source.write_text("def told():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+        source.write_text("def told():\n    raise TypeError(\n        '@step must return a build123d Shape')\n\n"
                           "def told_too(x):\n    if not x: raise KeyError('no such joint')\n\n"
                           "def broke():\n    return {}['tree']\n", encoding="utf-8")
         namespace: dict = {}
@@ -241,7 +241,7 @@ class FailureReasonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         source = folder / "export.py"
         source.write_text("def export(write):\n    return write()\n\n"
-                          "def refuse():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+                          "def refuse():\n    raise TypeError(\n        '@step must return a build123d Shape')\n\n"
                           "def broke():\n    return {}['tree']\n", encoding="utf-8")
         self.cadgen: dict = {}
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
@@ -258,7 +258,6 @@ class FailureReasonTest(unittest.TestCase):
         from PIL import Image
 
         kernel = functools.partial(Image.new, "NOT A MODE", (1, 1))  # a library refusing what it was asked
-        child = type("ChildBuildError", (RuntimeError,), {"__module__": "cadgen.store.lazy"})
         raises = _raises
         cases = {
             "model_error": raises(ValueError("No module named secret: a message is never read")),
@@ -272,7 +271,6 @@ class FailureReasonTest(unittest.TestCase):
             "io_error": raises(PermissionError("locked")),
             "timeout": raises(TimeoutError()),
             "memory": raises(MemoryError()),
-            "child_failed": raises(child("child model secret_arm failed")),
         }
         for reason, call in cases.items():
             with self.subTest(reason=reason):

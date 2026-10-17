@@ -14,7 +14,7 @@ cutters are applied is decided in THIS file, explicitly:
   Nothing visual is lost: at 19 m rendered to 1920 px a 4 mm groove is
   sub-pixel, and panel lines read from the renderer's feature-edge overlay.
 
-`f14d.py` links this model as occurrence `o1.1`.
+`f14d.py` links this model as `#airframe`.
 """
 
 from __future__ import annotations

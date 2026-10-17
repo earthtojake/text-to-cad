@@ -90,7 +90,7 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
     },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light' },
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async () => {}, writeImage: async () => {} },
     promptContext: {
       getSnapshot: () => destination, subscribe: () => noop,
       deliver: async (context: any) => {
@@ -147,7 +147,7 @@ it('a DXF has no panels of its own, no tools, no Display and no preview', async 
   expect(pane.querySelectorAll('[data-tool-panel]')).toHaveLength(0);
   const inPane = within(pane);
   expect(inPane.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Preview',
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animation', 'Preview',
     'Switch to 2D view', 'Switch to 3D view', 'Display', 'Display settings', 'Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }

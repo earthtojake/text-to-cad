@@ -1,10 +1,12 @@
 """Verify the exploded view: continuous interpenetration check, floor, visibility.
 
     cd src && python -m lib.explodecheck [--workers 2] [--json ../tmp/kin/explodecheck.json]
-                                         [--plan ../tmp/kin/explode_plan.json] [--no-visibility]
+                                         [--plan lib/explode_plan.json] [--no-visibility]
 
-1. EQUIVALENCE: the embedded `explode` clip, evaluated by the viewer's own runtime
-   (lib/anim_eval.mjs) at 1/4 s steps, equals the plan (max |translation diff|).
+1. EQUIVALENCE: the `explode` clip (lib/clips.py), sampled on the built document
+   as the build samples it (lib/animcheck.sample) at 1/4 s steps, equals the plan
+   (max |translation diff|). Planned labels the build lacks, and built labels the
+   plan lacks (they stay put until lib/explodeplan.py reruns), are listed.
 2. INTERPENETRATION, continuously in t. Every leaf moves by a sum of eased
    straight translations, and each eased segment is monotonic, so over a time
    interval [ta, tb] a leaf's displacement lies in a box computable exactly
@@ -47,7 +49,7 @@ import numpy as np
 
 SRC = Path(__file__).resolve().parent.parent
 ROOT = SRC.parent
-PLAN = ROOT / "tmp" / "kin" / "explode_plan.json"
+PLAN = SRC / "lib" / "explode_plan.json"
 STEP_FILE = ROOT / "STEP" / "radial.step"
 H = 1.0                 # mm of relative travel between tested samples of a close pair
 CLASH_MM3 = 0.5
@@ -84,7 +86,7 @@ def _init(step_file, plan_path):
     _W["xg"] = xg
     plan = json.loads(Path(plan_path).read_text())
     lm = leaf_moves(plan)
-    _W["moves"] = [lm[lf["label"]] for lf in _W["g"].leaves]
+    _W["moves"] = [lm.get(lf["label"], []) for lf in _W["g"].leaves]
     _W["T"] = plan["motion"]
 
 
@@ -214,31 +216,22 @@ def visibility(g, moves, T, cam=CAMERA_DIR, px=2400):
     return counts, 1.0 / s
 
 
-def equivalence(plan, step_file, module=None, dt=0.25):
-    """Max |translation difference| between the embedded explode clip (viewer runtime)
-    and the plan, over t = 0, dt, ..., duration."""
-    import subprocess
-    from lib import animgen, explodeplan as ep
-    pairs = animgen.scene_labels(Path(step_file))
-    lj = ROOT / "tmp" / "kin" / "explodecheck_labels.json"
-    animgen.write_labels_json(pairs, lj)
+def equivalence(plan, step_file, dt=0.25):
+    """Max |translation difference| between the `explode` clip (sampled as the build
+    samples it) and the plan, over t = 0, dt, ..., duration; and the labels only one of
+    the plan and the build has."""
+    from lib import animcheck, explodeplan as ep
+    doc = animcheck.built_document(step_file)
     times = [round(k * dt, 4) for k in range(int(plan["duration"] / dt) + 1)]
-    cmd = ["node", str(SRC / "lib" / "anim_eval.mjs"), "explode", ",".join(f"{t:.4f}" for t in times), str(lj)]
-    if module:
-        cmd.append(f"--module={module}")
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode:
-        raise RuntimeError(r.stderr[-2000:])
-    data = json.loads(r.stdout)
     lm = leaf_moves(plan)
     worst = (0.0, None, None)
     missing = 0
-    for t, smp in zip(times, data["samples"]):
+    for t, smp in zip(times, animcheck.sample("explode", times, doc)):
         mats = smp["matrices"]
         for lab, moves in lm.items():
             want = ep.offset(moves, t)
             if lab in mats:
-                M = np.array(mats[lab]).reshape(4, 4).T
+                M = mats[lab]
                 got = M[:3, 3]
                 if np.max(np.abs(M[:3, :3] - np.eye(3))) > 1e-9:
                     worst = max(worst, (1.0, lab, t))
@@ -249,7 +242,8 @@ def equivalence(plan, step_file, module=None, dt=0.25):
             dlt = float(np.max(np.abs(got - want)))
             if dlt > worst[0]:
                 worst = (dlt, lab, t)
-    return worst, missing, len(times)
+    built = {lab for lab in doc.labels if ":" in lab}
+    return worst, missing, len(times), sorted(set(lm) - built), sorted(built - set(lm))
 
 
 def main(argv=None):
@@ -259,7 +253,6 @@ def main(argv=None):
     ap.add_argument("--json", default=str(ROOT / "tmp" / "kin" / "explodecheck.json"))
     ap.add_argument("--no-visibility", action="store_true")
     ap.add_argument("--no-equivalence", action="store_true")
-    ap.add_argument("--module", default=None, help="generated animation file (default lib/anim_js.py)")
     ap.add_argument("--limit", type=int, default=0, help="check only the first N candidate pairs (debug)")
     a = ap.parse_args(argv)
     sys.path.insert(0, str(SRC))
@@ -268,13 +261,18 @@ def main(argv=None):
     g.ensure_triangles()
     plan = json.loads(Path(a.plan).read_text())
     lm = leaf_moves(plan)
-    moves = [lm[lf["label"]] for lf in g.leaves]
+    moves = [lm.get(lf["label"], []) for lf in g.leaves]      # a label the plan never saw stays put, as in the clip
     T = plan["motion"]
     if not a.no_equivalence:
-        (dmax, dl, dt_), missing, nt = equivalence(plan, STEP_FILE, a.module)
-        print(f"[explodecheck] EQUIVALENCE embedded clip vs plan at {nt} times: max |diff| {dmax:.2e} mm "
+        (dmax, dl, dt_), missing, nt, unbuilt, unplanned = equivalence(plan, STEP_FILE)
+        print(f"[explodecheck] EQUIVALENCE explode clip vs plan at {nt} times: max |diff| {dmax:.2e} mm "
               f"({dl} @ {dt_} s); {missing} leaf-samples missing -> {'PASS' if dmax < 1e-6 and not missing else 'FAIL'}",
               flush=True)
+        if unbuilt:
+            print(f"[explodecheck]   {len(unbuilt)} planned labels are not in the build, e.g. {unbuilt[:5]}")
+        if unplanned:
+            print(f"[explodecheck]   {len(unplanned)} built labels are not in the plan and stay put, e.g. "
+                  f"{unplanned[:5]}: rerun `python -m lib.explodeplan`", flush=True)
     t0 = time.time()
     pairs = candidate_pairs(g, moves, T)
     if a.limit:

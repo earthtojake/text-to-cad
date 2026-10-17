@@ -9,9 +9,6 @@
 // re-collision into an error instead of a plausible wrong image. Callers that never declare a
 // scope (the interactive viewer) keep the empty default and are unaffected: every comparison is
 // then "" === "".
-//
-// Both render asset clients share this state deliberately. They are near-verbatim forks, and the
-// guard living in only one of them is exactly how the hole stayed open.
 
 let activeAssetSourceScope = "";
 const assetSourceScopes = new WeakMap();
@@ -49,9 +46,8 @@ export function renderAssetSourceScope() {
 // coercing it to the empty default would both disable the guard for that job and claim every URL it
 // touched for "(unset)", which is worse than refusing.
 //
-// A caller that presents no resolved job — the interactive viewer, and the single-source
-// docs/viewer shape documented in packages/core/docs/render-pipeline.md — renders one source per
-// page and keeps the unscoped default, unchanged.
+// A caller that presents no resolved job (the interactive viewer) renders one source per page and
+// keeps the unscoped default.
 export function renderAssetSourceScopeForJob(job) {
   const resolved = job?.resolved;
   if (!resolved || typeof resolved !== "object" || Array.isArray(resolved)) {

@@ -85,7 +85,7 @@ Floor. Preset changes never reorder controls. Clip and Explode are not Display
 sections: they are STEP toolbar tools with their own panels, and their settings
 live in this same store (`clip`, `exploded`). A tool opens neutral — Explode at
 0%, Clip at no cut — and an edit enables its group; removing the tool discards
-its amount, offsets and Flip. Preset selection preserves Clip/Explode; Display
+its amount, axis and Flip. Preset selection preserves Clip/Explode; Display
 Reset disables both. See
 [settings-ui.md](./settings-ui.md#tools-and-lifecycle) for their lifecycle.
 The remaining optional effects use the same feature gate primitive. A surface
@@ -140,10 +140,10 @@ not create a photographic environment. Authored materials are read-only. Color
 overrides are presentation settings, not edits to the model or its material
 assignments.
 
-| Lighting quality | Screen error | Shadow map | Environment | Capture scale |
-| --- | --- | --- | --- | --- |
-| Preview | 1 px | 2048 px | 256 px | 1× |
-| Final | 0.25 px | 4096 px | 512 px | 2× |
+| Lighting quality | Shadow map | Environment | Capture scale |
+| --- | --- | --- | --- |
+| Preview | 2048 px | 256 px | 1× |
+| Final | 4096 px | 512 px | 2× |
 
 The interactive viewer retains one WebGL renderer, canvas and camera controls
 across every preset and settings edit. It uses shadow-compatible conventional
@@ -157,8 +157,8 @@ SIZED from the model's rest placement for every renderer, STEP included: a pose,
 playing routine, or entering Render while the model is posed never rescales or
 slides the ground; its height, the lighting and the shadow reach follow the model. Enabling photographic effects updates that live scene;
 it never clears or covers the canvas with a loading screen. Only actual context
-recovery replaces the renderer. Quality refines tessellation within the same
-cache and memory budget. Picking/topology stays demand-driven in every preset.
+recovery replaces the renderer. Quality never changes a mesh: every preset draws
+cadgen's one display mesh. Picking/topology stays demand-driven in every preset.
 
 Enabling Clip prepares its shader/cap variants before presentation. Moving an
 enabled cut stays live. Explicit neutral boundaries

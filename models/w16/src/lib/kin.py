@@ -1,9 +1,8 @@
 """W16 kinematics — pure math, no build123d.
 
 Everything that moves is positioned by these functions, both when the STEP is
-authored (theta = 0, the rest pose) and when it is animated (the .anim.js
-re-describes the same formulas; `tables()` bakes the nonlinear follower solve
-into interpolation tables for it). The collision harness samples them too.
+authored (theta = 0, the rest pose) and when it is animated (`lib/animation.py`
+samples them when the engine builds). The collision harness samples them too.
 
 Frames: engine frame per lib/spec.py. Rotations about +X are right-handed:
 Rot_x(t): (y, z) -> (y cos t - z sin t, y sin t + z cos t), and the crank-angle
@@ -265,39 +264,7 @@ def lobe_phase(cyl: int, kind: str) -> float:
     return (cam_angle(centre)) % 360.0
 
 
-# ---------------------------------------------------------------------------
-# Tables for the .anim.js (nonlinear follower solve baked to samples)
-# ---------------------------------------------------------------------------
-
-def tables(step_deg: float = 2.0):
-    """Follower angle vs relative crank angle for each (bank,row,kind) class."""
-    out = {}
-    for bank in (1, 2):
-        for row in ("inner", "outer"):
-            for kind in ("intake", "exhaust"):
-                cyl = next(c.number for c in S.CYLINDERS if c.bank == bank and c.row == row)
-                g = valve_geom(cyl, kind, -1)
-                c = S.CYLINDERS[cyl - 1]
-                centre = c.tdc + (S.INTAKE_CENTRE if kind == "intake" else S.EXHAUST_CENTRE)
-                dur = S.INTAKE_DURATION if kind == "intake" else S.EXHAUST_DURATION
-                rel = []
-                eps = []
-                lift = []
-                r = -dur / 2.0
-                while r <= dur / 2.0 + 1e-9:
-                    lf = S.VALVE_LIFT * lift_profile(r / dur + 0.5)
-                    rel.append(r)
-                    lift.append(lf)
-                    eps.append(follower_angle(g, lf))
-                    r += step_deg
-                out[f"{bank}_{row}_{kind}"] = {"rel": rel, "lift": lift, "eps": eps,
-                                               "centre_offset": centre - c.tdc}
-    return out
-
-
 if __name__ == "__main__":
-    import json
-
     for cyl in (1, 2, 9, 10):
         lo, hi = piston_s_range(cyl)
         st0 = piston(cyl, 0.0)
@@ -312,8 +279,6 @@ if __name__ == "__main__":
     prof = lobe_profile(g, 360)
     rads = [math.hypot(*p) for p in prof]
     print("lobe radius range", min(rads), max(rads))
-    t = tables()
-    print("tables:", {k: (len(v["rel"]), max(v["eps"], key=abs)) for k, v in t.items()})
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """F1 part model: cooling (radiators, ducts).
 
 The geometry `lib/sidepods.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.12`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#cooling`; rebuild `f1.py`
 to pick up a change here.
 """
 

@@ -54,10 +54,10 @@ test("no path of this machine goes into the issue: the file's is written as its 
   // What a card says of a file the viewer's catalog lists by its absolute path: in its message and
   // failure, in Details as the file and as the request for it, and in what the failure itself names.
   const alert = { title: "Couldn’t prepare the model", message: `“${path}” could not be prepared for display.`,
-    reason: `${path}: Surface derivation failed for 03ff06ae62ca3a91`,
+    reason: `${path}: Part derivation failed for 03ff06ae62ca3a91`,
     details: [`File: ${path}`, "Operation: preparing display assets",
       `Request: POST http://127.0.0.1:4178/__cad/artifact?${new URLSearchParams({ file: path })}`,
-      `${path}: Surface derivation failed for 03ff06ae62ca3a91`,
+      `${path}: Part derivation failed for 03ff06ae62ca3a91`,
       "  File \"/Users/jakefitzgerald/.venv/lib/python3.12/site-packages/cadgen/build.py\", line 9, in build",
       "  C:\\Users\\Ada Lovelace\\Desktop\\drawing.dxf, /home/ada/parts.step"].join("\n") };
   const query = read(alertIssueUrl(ISSUES, alert, { file: path, version: "0.7.5", platform: "darwin" }));
@@ -65,11 +65,11 @@ test("no path of this machine goes into the issue: the file's is written as its 
   assert.equal(query.get("body"), [
     "**What were you doing?**", "", "", "",
     "**Error**", "", "> **Couldn’t prepare the model**", "> “plate.step” could not be prepared for display.",
-    "> plate.step: Surface derivation failed for 03ff06ae62ca3a91", "",
+    "> plate.step: Part derivation failed for 03ff06ae62ca3a91", "",
     "**Environment**", "", "- File: plate.step", "- CAD: 0.7.5", "- Platform: darwin", "",
     "**Details**", "", "```", "File: plate.step", "Operation: preparing display assets",
     "Request: POST http://127.0.0.1:4178/__cad/artifact?file=plate.step",
-    "plate.step: Surface derivation failed for 03ff06ae62ca3a91",
+    "plate.step: Part derivation failed for 03ff06ae62ca3a91",
     "  File \"~/.venv/lib/python3.12/site-packages/cadgen/build.py\", line 9, in build",
     "  ~/Desktop\\drawing.dxf, ~/parts.step", "```"
   ].join("\n"));

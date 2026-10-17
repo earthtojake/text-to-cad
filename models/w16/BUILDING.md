@@ -21,7 +21,7 @@ Read this whole file before touching a module. Then read `src/lib/spec.py`
   its next run). `cadgen store why src/w16.py` says which system is stale and
   why. Other agents build concurrently; builds never wait on one another.
 - Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `castings.py`,
-  `fasteners.py`, `collide.py`, `animgen.py`, `w16.py` without being told to.
+  `fasteners.py`, `collide.py`, `animation.py`, `w16.py` without being told to.
   Add helpers inside your own module.
 - Never `git commit`. Never touch files outside `models/w16`.
 
@@ -59,7 +59,8 @@ Read this whole file before touching a module. Then read `src/lib/spec.py`
 ## Kinematics are sacred
 
 - Anything that moves is positioned by `lib/kin.py` at θ = 0 and animated by
-  the `ANIMATION_JS` literal in `src/w16.py`. Do not change a moving part's frame, size envelope where it
+  the clips in `src/lib/animation.py`, which sample the same functions and
+  target parts by label. Do not change a moving part's frame, size envelope where it
   meets another moving part, or label scheme. If a visual change you want
   would move a moving part, STOP and report it instead.
 - New static geometry must not intrude into any moving part's swept volume:

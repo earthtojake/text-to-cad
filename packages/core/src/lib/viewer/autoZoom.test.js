@@ -36,12 +36,14 @@ test("auto zoom merges and shifts display record bounds", () => {
     displayRecordsBounds([left, right], { partIds: new Set(["right"]), translationByRecord }),
     { min: [12, 0, 0], max: [13, 1, 1] }
   );
+  // A subassembly reaches the filter as its leaves' tokens (the tree lists them); an id names
+  // exactly one record.
   assert.deepEqual(
     displayRecordsBounds([
-      { partId: "o1.4.1", partBounds: { min: [10, 0, 0], max: [11, 1, 1] } },
-      { partId: "o1.4.2", partBounds: { min: [12, 0, 0], max: [13, 1, 1] } },
-      { partId: "o1.5", partBounds: { min: [100, 0, 0], max: [101, 1, 1] } }
-    ], { partIds: new Set(["o1.4"]) }),
+      { partId: "o:3f2a9c1d7e5b", partBounds: { min: [10, 0, 0], max: [11, 1, 1] } },
+      { partId: "o:a1b2c3d4e5f6", partBounds: { min: [12, 0, 0], max: [13, 1, 1] } },
+      { partId: "o:0f1e2d3c4b5a", partBounds: { min: [100, 0, 0], max: [101, 1, 1] } }
+    ], { partIds: new Set(["o:3f2a9c1d7e5b", "o:a1b2c3d4e5f6"]) }),
     { min: [10, 0, 0], max: [13, 1, 1] }
   );
   assert.deepEqual(
@@ -53,12 +55,12 @@ test("auto zoom merges and shifts display record bounds", () => {
 test("focused auto zoom waits for matching record bounds instead of fitting the whole model", () => {
   const baseBounds = { min: [0, 0, 0], max: [100, 100, 100] };
   const records = [
-    { partId: "o1.1", partBounds: { min: [0, 0, 0], max: [1, 1, 1] } }
+    { partId: "o:3f2a9c1d7e5b", partBounds: { min: [0, 0, 0], max: [1, 1, 1] } }
   ];
 
   assert.equal(
     focusedDisplayRecordsBounds(records, {
-      partIds: new Set(["o1.2"]),
+      partIds: new Set(["o:a1b2c3d4e5f6"]),
       fallbackBounds: baseBounds
     }),
     null

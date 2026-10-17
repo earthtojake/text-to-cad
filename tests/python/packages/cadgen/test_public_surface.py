@@ -1,4 +1,5 @@
-"""The public verb surface, and the CLIs that mirror it (design/format-doors.md).
+"""The public verb surface, and the CLIs that mirror it (packages/cadgen/README.md,
+law 6).
 
 Three properties that only hold if something checks them:
 
@@ -216,13 +217,14 @@ class Manifest(unittest.TestCase):
         self.assertIs(inspect.unwrap(wrapped), wrapped)
 
     def test_the_retired_commands_are_gone(self):
-        # No backwards compatibility: `cadgen import` folded into the STEP
-        # door, `cadgen step export` into the three per-format doors, and
-        # `cadgen dxf build` was deleted outright.
+        # No backwards compatibility: a retired command has no entry and no
+        # module, so it gets the same answer as any unknown command.
         self.assertNotIn("import", cli._COMMANDS)
         self.assertNotIn("step export", cli._COMMANDS)
+        self.assertNotIn("step inspect", cli._COMMANDS)
         self.assertNotIn("dxf build", cli._COMMANDS)
-        for module in ("cadgen.cli.step_import", "cadgen.cli.step_export", "cadgen.cli.dxf_build"):
+        for module in ("cadgen.cli.step_import", "cadgen.cli.step_export", "cadgen.cli.step_inspect",
+                       "cadgen.cli.dxf_build"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 
@@ -234,28 +236,6 @@ class Manifest(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = cli.main(list(argv))
         return code, out.getvalue(), err.getvalue()
-
-    def test_every_retired_command_names_its_replacement(self):
-        # Law 8: a retired surface fails loudly with a teaching error naming its
-        # replacement -- never "unknown command", never an alias that still works.
-        cases = {
-            ("gen", "model.py"): ("cadgen gen has been removed", "python <model>.py"),
-            ("gen",): ("cadgen gen has been removed", "python <model>.py"),
-            ("step", "export", "part.step", "--stl", "part.stl"): (
-                "cadgen step export has been removed", "cadgen stl build IN.step", "cadgen glb build",
-                "cadgen 3mf build",
-            ),
-            ("step", "inspect", "part.step"): ("cadgen step inspect has been removed", "read_scene"),
-            ("srdf", "snapshot", "robot.srdf"): ("cadgen snapshot <file>.srdf",),
-        }
-        for argv, expected in cases.items():
-            with self.subTest(argv=argv):
-                code, out, err = self._dispatch(*argv)
-                self.assertEqual(2, code)
-                self.assertEqual("", out)
-                self.assertNotIn("unknown command", err)
-                for text in expected:
-                    self.assertIn(text, err)
 
     def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
         for noun, verbs in {"step": ("step build", "step snapshot"), "stl": ("stl build", "stl snapshot"),
@@ -298,8 +278,10 @@ class Manifest(unittest.TestCase):
         ):
             self.assertIn(summary, out)
         line = next(text for text in out.splitlines() if text.strip().startswith("step build"))
-        for word in ("kinematics", "materials", "animation"):
+        for word in ("kinematics", "materials"):
             self.assertIn(word, line)
+        # Clips are Python a model declares; a re-emitted document has none to bake.
+        self.assertNotIn("animation", line)
 
     def test_a_name_that_is_not_a_door_raises_the_plain_attribute_error(self):
         # No retired-surface recognition: `cadgen.dxf` has no `build` door, and

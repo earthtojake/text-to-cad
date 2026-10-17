@@ -4,8 +4,7 @@ from lib.axis_transport import crossover
 from lib.transport_guide import make_guide, make_tendon
 
 
-@step(out='../STEP/transport_review.step',
-      mesh_tolerance=.006,mesh_angular_tolerance=.035)
+@step(out='../STEP/transport_review.step')
 def transport_review():
     bodies=[]
     for i in range(6):

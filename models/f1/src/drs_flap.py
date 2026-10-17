@@ -1,7 +1,7 @@
-"""F1 part model: DRS flap (rotates through `ANIMATION_JS` in `f1.py`).
+"""F1 part model: DRS flap (rotates through the `ANIMATION` clips in `f1.py`).
 
 The geometry `lib/rear_wing.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.16`; rebuild `f1.py`
+own STEP and record. `f1.py` links it as `#drs_flap`; rebuild `f1.py`
 to pick up a change here.
 """
 

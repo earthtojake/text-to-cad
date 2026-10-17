@@ -67,6 +67,9 @@ test("display settings this build cannot read are the defaults, and the stored r
   const before = JSON.stringify(raw);
   assert.equal(readFileView(raw).display.mode, "solid");
   assert.equal(JSON.stringify(raw), before);
+  // A tool's group is read as strictly: a clip key this build does not know is not a clip.
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, display: { mode: "render", clip: { enabled: true, offset: 0.3 } } }).display,
+    readFileView(undefined).display);
 });
 
 test("a stored camera is scoped to the model it frames on the way in, and stripped of its scope on the way out", () => {
