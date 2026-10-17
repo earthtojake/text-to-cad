@@ -135,6 +135,12 @@ export const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
   },
   {
+    name: "cadjoint",
+    path: "skills/cadjoint",
+    summary:
+      "Implicit (SDF) modeling with smooth blends, shells and sketch-based solids in a differentiable JAX kernel; meshes the field to STL, OBJ or faceted STEP and draws slices of the field.",
+  },
+  {
     name: "step.parts",
     path: "skills/step-parts",
     summary:

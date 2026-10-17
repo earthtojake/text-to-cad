@@ -21,6 +21,8 @@ ziglang==0.16.0
 # - skills/dfam-check/requirements.txt
 rtree
 scipy
+# - skills/cadjoint/requirements.txt (exact pin, pre-1.0 API; brings jax)
+cadjoint==0.1.1
 
 # Repo tests only.
 networkx
