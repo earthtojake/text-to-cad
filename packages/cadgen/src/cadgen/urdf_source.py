@@ -6,6 +6,7 @@ from enum import Enum
 from math import isfinite
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 import xml.etree.ElementTree as ET
 
 from cadgen.findings import FindingsReport
@@ -1388,6 +1389,9 @@ def _is_rooted(path: Path) -> bool:
 def classify_mesh_uri(uri: str) -> MeshReference:
     value = str(uri or "").strip()
     parsed = urlparse(value)
+    # A Windows drive letter ("C:/meshes/base.stl") parses as a one-letter scheme.
+    if len(parsed.scheme) == 1:
+        parsed = parsed._replace(scheme="")
 
     if parsed.scheme == "package":
         package_name = unquote(parsed.netloc).strip()
@@ -1402,7 +1406,8 @@ def classify_mesh_uri(uri: str) -> MeshReference:
         )
 
     if parsed.scheme == "file":
-        file_path = Path(unquote(parsed.path))
+        # url2pathname turns "/C:/meshes/base.stl" into "C:\\meshes\\base.stl" on Windows.
+        file_path = Path(url2pathname(parsed.path))
         if _is_rooted(file_path):
             return MeshReference(uri=value, kind=MeshUriKind.LOCAL_ABSOLUTE, path=file_path.resolve())
         return MeshReference(uri=value, kind=MeshUriKind.LOCAL_RELATIVE, path=file_path)

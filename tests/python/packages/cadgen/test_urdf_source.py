@@ -192,6 +192,20 @@ class UrdfSourceTests(unittest.TestCase):
         self.assertEqual(MeshUriKind.LOCAL_ABSOLUTE, classify_mesh_uri("/tmp/base.stl").kind)
         self.assertEqual(MeshUriKind.LOCAL_RELATIVE, classify_mesh_uri("meshes/base.stl").kind)
 
+    def test_absolute_mesh_paths_and_file_uris_are_local(self) -> None:
+        mesh_path = self.temp_root / "meshes" / "base.stl"
+        mesh_path.parent.mkdir(parents=True)
+        mesh_path.write_text("solid empty\nendsolid empty\n", encoding="utf-8")
+        absolute = mesh_path.resolve()
+
+        # On Windows these are "C:\\...\\base.stl" and "file:///C:/.../base.stl".
+        for uri in (str(absolute), absolute.as_uri()):
+            reference = classify_mesh_uri(uri)
+            self.assertEqual((MeshUriKind.LOCAL_ABSOLUTE, absolute), (reference.kind, reference.path), uri)
+
+        # A drive letter is not a URI scheme, on any platform.
+        self.assertNotEqual(MeshUriKind.REMOTE, classify_mesh_uri("C:/robot/meshes/base.stl").kind)
+
     def test_resolves_package_mesh_uri_with_package_map(self) -> None:
         package_root = self.temp_root / "robot_description"
         mesh_path = package_root / "meshes" / "base.stl"
