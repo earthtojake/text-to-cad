@@ -4,7 +4,8 @@ from collections.abc import Mapping
 import math
 from pathlib import Path
 import re
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 import xml.etree.ElementTree as ET
 
 from cadgen.findings import FindingsReport, format_findings
@@ -740,17 +741,18 @@ def _validate_frame_cycles(
 
 def _validate_mesh_uri(uri: str, result: FindingsReport, base_dir: Path, uri_path: str) -> None:
     parsed = urlparse(uri)
-    if parsed.scheme in EXTERNAL_URI_SCHEMES:
+    scheme = parsed.scheme if len(parsed.scheme) > 1 else ""  # "C:" is a drive, not a scheme
+    if scheme in EXTERNAL_URI_SCHEMES:
         return
-    if parsed.scheme and parsed.scheme != "file":
+    if scheme and scheme != "file":
         result.add(
             "warning",
             "unresolved_mesh_uri_scheme",
-            f"mesh URI scheme {parsed.scheme!r} is not resolved by bundled validation",
+            f"mesh URI scheme {scheme!r} is not resolved by bundled validation",
             path=uri_path,
         )
         return
-    mesh_path = Path(unquote(parsed.path)).resolve() if parsed.scheme == "file" else (base_dir / uri).resolve()
+    mesh_path = Path(url2pathname(parsed.path)).resolve() if scheme == "file" else (base_dir / uri).resolve()
     if not mesh_path.is_file():
         result.add(
             "error",

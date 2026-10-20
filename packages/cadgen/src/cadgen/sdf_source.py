@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 import xml.etree.ElementTree as ET
 
 from cadgen.sdf_validation import raise_for_validation_errors, validate_sdf_root
@@ -299,12 +300,13 @@ def _geometry_mesh_paths(
 
 def _resolve_local_mesh_uri(uri: str, *, base_dir: Path) -> Path | None:
     parsed = urlparse(uri)
-    if parsed.scheme in EXTERNAL_URI_SCHEMES:
+    scheme = parsed.scheme if len(parsed.scheme) > 1 else ""  # "C:" is a drive, not a scheme
+    if scheme in EXTERNAL_URI_SCHEMES:
         return None
-    if parsed.scheme and parsed.scheme != "file":
+    if scheme and scheme != "file":
         return None
-    if parsed.scheme == "file":
-        return Path(unquote(parsed.path)).resolve()
+    if scheme == "file":
+        return Path(url2pathname(parsed.path)).resolve()
     return (base_dir / uri).resolve()
 
 
