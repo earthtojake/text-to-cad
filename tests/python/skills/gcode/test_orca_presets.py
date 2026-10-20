@@ -96,6 +96,15 @@ class OrcaPresetsTests(unittest.TestCase):
             self.assertEqual(filament["compatible_printers"], ["Acme One 0.4 nozzle"])
             self.assertEqual(filament["nozzle_temperature"], ["210"])
 
+    def test_lists_presets_of_the_flatpak_build(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            home = Path(scratch)
+            profile_tree(home / ".var/app/com.orcaslicer.OrcaSlicer/config/OrcaSlicer/system")
+            listed = subprocess.run([sys.executable, str(SCRIPT), "--list", "machine"],
+                                    check=True, capture_output=True, text=True,
+                                    env={"HOME": str(home), "PATH": ""})
+            self.assertEqual(listed.stdout.split("\n")[0], "Acme One 0.4 nozzle")
+
     def test_an_unknown_preset_name_fails_with_a_hint(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             profile_tree(Path(scratch))

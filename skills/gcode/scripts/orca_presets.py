@@ -31,6 +31,10 @@ def profile_roots(extra: list[str]) -> list[Path]:
                  Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config") / "OrcaSlicer"]
     if os.environ.get("APPDATA"):
         data_dirs.append(Path(os.environ["APPDATA"]) / "OrcaSlicer")
+    # The Flathub build keeps its config under the sandbox's own XDG_CONFIG_HOME
+    # (current app id, then the id it had before OrcaSlicer 2.3.2).
+    for app_id in ("com.orcaslicer.OrcaSlicer", "io.github.softfever.OrcaSlicer"):
+        data_dirs.append(home / ".var" / "app" / app_id / "config" / "OrcaSlicer")
     roots = [Path(folder) for folder in extra]
     roots += [data / "user" for data in data_dirs] + [data / "system" for data in data_dirs]
     roots.append(Path("/Applications/OrcaSlicer.app/Contents/Resources/profiles"))
