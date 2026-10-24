@@ -2,7 +2,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { Popover, PopoverTrigger, PopoverContent } from "@text-to-cad/ui/primitives/popover";
 import { useEffect, useState } from 'react';
-import { LoaderCircle, RotateCcw } from 'lucide-react';
+import { Eye, LoaderCircle, RotateCcw } from 'lucide-react';
 import { cn } from '@text-to-cad/ui/utils';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { useI18n } from '@text-to-cad/ui/i18n';
@@ -49,5 +49,19 @@ export function ViewUpdateStatus({ status, onRetry, className }) {
     {status.error ? <><TooltipHint content={status.error}><span >{t('viewUpdate.failed')}</span></TooltipHint>
       <Button size="icon-xs" variant="ghost" aria-label={t('viewUpdate.retry')} onClick={onRetry}><RotateCcw className="size-3.5" /></Button></>
       : <><LoaderCircle className="size-3.5 shrink-0 animate-spin" aria-hidden="true" /><span className="truncate">{updating}</span></>}
+  </div>;
+}
+
+/**
+ * The model on screen is a build's own preview revision, not the saved file:
+ * said where the update status is said, for as long as it is drawn -- through the rest of the build,
+ * and under the alert of one that failed -- and gone once the saved file replaces it in place.
+ */
+export function ViewPreviewLabel({ className }) {
+  return <div className={cn('pointer-events-auto flex min-w-0 items-center gap-1.5 bg-transparent text-xs font-medium text-foreground', className)}
+    role="status" aria-live="polite" data-view-preview-label>
+    <TooltipHint content="A preview of the build result. The saved file replaces it after this revision is saved.">
+      <span className="flex items-center gap-1.5"><Eye className="size-3.5 shrink-0" aria-hidden="true" />Preview</span>
+    </TooltipHint>
   </div>;
 }

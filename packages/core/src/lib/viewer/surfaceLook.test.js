@@ -129,3 +129,31 @@ test("dispose restores the authored scene and releases only what the look create
   assert.deepEqual([shared.roughness, shared.metalness], [0.2, 1]);
   assert.deepEqual([sharedDisposed, cloneDisposed, standInDisposed], [0, 1, 1]);
 });
+
+test("a look's surface model: its stand-ins compile OCCT's lighting after three's, an authored look and none keep three's", () => {
+  const { root, a } = scene();
+  const authored = a.material;
+  const look = createSurfaceLook(THREE, root);
+  look.apply({ materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 }, brdf: "occt" });
+  const standIn = a.material;
+  assert.equal(standIn.customProgramCacheKey(), "surface-brdf:occt", "one program per model, shared by every stand-in");
+  const shader = { fragmentShader: THREE.ShaderLib.physical.fragmentShader, uniforms: {} };
+  standIn.onBeforeCompile(shader);
+  const at = (text) => shader.fragmentShader.indexOf(text);
+  assert.ok(at("#include <lights_physical_pars_fragment>") < at("#define RE_Direct RE_Direct_Occt"), "after three's own functions");
+  assert.ok(at("#define RE_IndirectSpecular RE_IndirectSpecular_Occt") > 0);
+  assert.ok(at("#include <lights_physical_fragment>") < at("material.roughness = clamp( roughnessFactor, 0.01, 1.0 );"));
+  assert.ok(at("material.roughness = clamp( roughnessFactor, 0.01, 1.0 );") < at("#include <lights_fragment_begin>"),
+    "the roughness set before the lights read it");
+  assert.equal(shader.uniforms.occtEnvironmentTable.value.image.width, 32, "OCCT's split-sum table, not three's");
+  assert.throws(() => look.apply({ materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 }, brdf: "phong" }),
+    /a surface model is one of occt, not "phong"/);
+
+  look.apply({ materialSettings: INSPECT, authored: true, surface: { style: "shaded", opacity: 1 }, brdf: "occt" });
+  assert.equal(a.material, authored);
+  assert.equal(authored.onBeforeCompile, THREE.Material.prototype.onBeforeCompile, "an authored material is never touched");
+  look.apply({ materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 } });
+  assert.equal(a.material, standIn);
+  assert.equal(standIn.onBeforeCompile, THREE.Material.prototype.onBeforeCompile, "no model named: three's own");
+  assert.equal(standIn.customProgramCacheKey, THREE.Material.prototype.customProgramCacheKey);
+});

@@ -13,7 +13,7 @@ sleeve OD, so the seating transition cannot intersect a close fitting eye.
 """
 
 from math import sqrt
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 

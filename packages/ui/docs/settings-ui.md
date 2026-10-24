@@ -63,8 +63,9 @@ none.
   menu's.
 
   *Design note: the strip is for tools; the view's controls are the navbar's.* What a host or
-  the file adds (the update, an alert's icon, Full size) is the navbar's right end, and last
-  after them the view's own controls, **Display** and **Preview** (`navbarSlot`): they act on
+  the file adds (the update, an alert's icon, Full size) is the navbar's right end, after
+  them the view's own controls, **Display** and **Preview** (`navbarSlot`), and last the
+  host's **Open in browser**, where it has one (the CAD app's). The view's controls act on
   the whole view, whatever tool is in hand, so they are no tools. In Preview the same place
   holds its own controls, **Preview settings** and **Exit preview**. A host with no navbar has
   them over the view instead: Display and Preview ending the strip after a thin rule, the
@@ -206,7 +207,7 @@ Explode or Clip with its effect set takes it up again, as it is; unset, it start
 | --- | --- | --- | --- |
 | Select | The default tool of every 3D file but an STL; picks what its filter ticks, or a GLB's nodes, a 3MF's objects (Shift adds; Delete deletes annotations and measurements); what is picked is Quick Edit's chips | None: its filter is the chevron after its button | The selection stays, lit and in Quick Edit, under any tool |
 | Pencil / Shapes | Draws on the view: Pencil with the pen, the highlighter or the eraser, Shapes with the rectangle, line, arrow, ellipse or text; each button is the tool last chosen in it | One row for both: the tools of the one that is up, then Color, Stroke width, Placement and Clear annotations (Undo and Redo are ⌘Z, ⇧⌘Z) | The annotations stay in the model, their chip in Quick Edit; each tool keeps what it draws with, the strip showing its icon |
-| Measure | Arms picking two entities and reading what the pair makes (a STEP's exact vertices, edges and faces, what its filter ticks; on a mesh, two points on its surface, approximately, in its file's unit; a drawing's ends, centres and lines, in the unit it declares, else "units"); each result a chip in its colour | Its measurements, as chips, then Clear measurements; none while nothing is measured | Unfinished picks are cancelled; completed measurements stay, drawn on the model, their row back with the tool |
+| Measure | Arms picking two entities and reading what the pair makes (an engine document's — an `.xbf`'s or a STEP's — exact vertices, edges and faces, what its filter ticks; on a mesh, two points on its surface, approximately, in its file's unit; a drawing's ends, centres and lines, in the unit it declares, else "units"); each result a chip in its colour | Its measurements, as chips, then Clear measurements; none while nothing is measured | Unfinished picks are cancelled; completed measurements stay, drawn on the model, their row back with the tool |
 | Explode / Clip | The effect as it is set, or neutral; an edit applies it (Explode's, as a motion: see below) | The slider, its amount beside it, Reset (Clip's: its axis first, whose dropdown holds its settings) | The effect stays on the model |
 
 **One motion at a time.** Every tool's state stands beside every other's — the selection,
@@ -220,7 +221,8 @@ pose back at rest, and using either puts the routine back at rest; paused, its f
 model as a pose does. Preview's routine is its own and moves nothing of the tools view's.
 Another file has the motions its tools have, under the same rule, decided by value
 (`kit/tools/model-effects/motionExclusion.js`): a GLB's Explode, routine and Clip; a robot's
-Position and Clip.
+Position and Clip; an engine document's Explode, Position and its motions (its **Motion**
+section, where Position shows a motion's frame read-only while it owns the pose).
 
 A tree is the file sidebar's, on screen under every tool; a pick in it takes Select up
 before it acts.
@@ -250,7 +252,7 @@ context menu, and the Animation section's routine and Playback settings (`Playba
 priority (Fusion's Select > Face Priority, Blender's vertex, edge and face modes), not a
 checklist: the chevron's dropdown, headed "Pick", lists ONE choice of what a click on the model
 takes, each with its glyph — **All** first, the default, then each kind alone. Choosing
-one puts the menu away and takes Select up. A STEP's (`SelectionModes.jsx`'s `stepSelectModes`):
+one puts the menu away and takes Select up. An `.xbf`'s and a STEP's (`XbfSelectionModes.jsx`'s `xbfSelectModes`):
 **All** (the pointer: a face or an edge where a part's are loaded, the part elsewhere,
 Position's knobs, the annotations and the measurements), **Parts** (a whole cube; an assembly's
 only — in a part file a press that reaches no face or edge picks the whole part), **Faces** (a
@@ -263,13 +265,13 @@ picks that kind only. All is chosen when a file opens; the choice holds while th
 open, across updates of it, and another file starts on All. The chevron's name says what
 is chosen ("Selection filter: everything", "Selection filter: Faces"), and Select's button wears
 it as a badge on the pointer (`modeGlyphs.jsx`'s `ToolModeIcon`; none for All), so what a
-click takes is on the strip, not only in the menu. After a rule, a STEP's menu ends in how a face
+click takes is on the strip, not only in the menu. After a rule, an `.xbf`'s menu ends in how a face
 or edge pick grows, each with its glyph and independent of each other: **Group edges** (the
 connected edges with a picked edge), shown while edges are picked, and **Group faces** (the
 smoothly joined faces with a picked face), shown while faces are; a hidden one keeps its choice
 for when it shows again.
 
-The geometry chosen is picked as one mode (`step/workbench/selectionFilter.js`'s
+The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
 `selectGeometryMode`): All, a press takes the face or edge it lands on where the part's
 topology can be picked, and the part elsewhere; Parts, the part; Faces or Edges, that topology
 alone. The mode sets the model tree's shape: under All, or Position (no geometry at all),
@@ -278,12 +280,8 @@ was when they left it, with the owners of what is still selected kept open); Par
 opens every assembly and shuts every part; Faces or Edges open every assembly. A
 part is a leaf in every shape: nothing opens under it, and a face or edge picked in the
 viewport is revealed at its part's row. Outside the person's own shape the disclosure is
-locked (chevrons shown, not pressable) and Expand/Collapse leave the row menus. Under Faces
-or Edges a part's topology is asked for as its row comes on screen in the tree, never for a
-whole large assembly at once; a viewport press on a part not yet loaded loads that part and
-picks, and the model tree's heading says "Loading…" meanwhile. In a large assembly (more than 300
-rows of assemblies and parts, `LARGE_TREE_ROWS`) a part's row coming on screen asks for
-nothing: the pointer resting on the part in the viewport (150ms) or pressing it asks.
+locked (chevrons shown, not pressable) and Expand/Collapse leave the row menus. Every face and
+edge is to hand from the start: nothing waits on a part's topology.
 
 **Sub-toolbars** (`kit/tools/SubToolbar.jsx`): the tool in hand's controls, one row hung
 under the strip, centred, 8px below it, on the strip's surface, its buttons the strip's
@@ -336,15 +334,16 @@ the view with its annotations to the clipboard as a PNG. A first stroke opens
 disable the cube without hiding it.
 
 **Measure.** Its button is the ruler, badged as Select's is with what it
-picks alone. On a STEP, its menu is Select's own (`kit/tools/measure/MeasureFilterMenu.jsx`):
-**All** (when a file opens), **Vertices**, **Edges** or **Faces**, one chosen. A press takes an
-ENTITY, whole, as a CAD measure tool does: an edge's end within 10px of the pointer is its
-vertex, else the edge, else the face (`measureFilter.js`). What lights under the resting pointer
-is what a press takes, with what it is worth on its own beside it (a vertex's X Y Z, an edge's
-length or ⌀, a face's area). With one kind chosen, only that kind is taken: an edge's end is still
-its vertex under Vertices, and anywhere else a press takes nothing. Shift held, a press takes the
-point on the model as it is. In an assembly, a press on a part whose faces and edges are not loaded asks
-for them and takes the pick there once they arrive.
+picks alone. On an engine document (an `.xbf`, or a STEP, which opens as one), its menu is
+Select's own (`kit/tools/measure/MeasureFilterMenu.jsx`): **All** (when a file opens),
+**Vertices**, **Edges** or **Faces**, one chosen. A press takes an ENTITY, whole, as a CAD measure
+tool does: an edge's end within 10px of the pointer is its vertex, else the edge, else the face
+(`measureFilter.js`, `xbf/xbfMeasurePick.js`), of any part, open in the Model tree or not. What
+lights under the resting pointer is what a press takes, with what it is worth on its own beside
+it (a vertex's X Y Z; an edge's length or ⌀, a face's ⌀ or normal and its area, the length along
+a curve and the area the engine's facts of it, shown once they are in). With one kind chosen,
+only that kind is taken: an edge's end is still its vertex under Vertices, and anywhere else a
+press takes nothing. Shift held, a press takes the point on the model as it is.
 
 The reading follows from the pair (`@text-to-cad/core/lib/viewer/measureEntities.js`), not from
 where on each the pointer happened to be:
@@ -406,7 +405,7 @@ assembly's **Model tree** (a part file, whose tree would be its one row, has non
 **Position**, where a joint can be driven; a drawing's **Layers**, where it has four or more
 layers or any block reference (a flat pattern's CUT and BEND has none): each layer's pen, name,
 entity count and eye, its block references under it; and, after them, the shell's own **Animation** for a
-file with routines (`kit/tools/playbar/AnimationSection.jsx`). A file with none of them has no
+file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
 section, a tree's a tree icon named for it (Model tree, Links), Position's a spline, Animation's a
@@ -431,8 +430,7 @@ Animation alone, their tiles bare in its top-left corner; the rest stay mounted,
 - **Filter.** A tree is headed by its filter ("Filter model", "Filter links": "Filter…"), in place of a title,
   always there, a tree row's 24px and 11px text, its icon over the rows' glyph column
   (`primitives/tree-filter.jsx`'s `TreeFilterInput`, `dense`), its X clearing it once something
-  is typed, Escape too. The model tree's filter is followed by "Loading…" while a part's faces load
-  and **Show all** while parts are hidden. Every tree's search is one ranked flat search
+  is typed, Escape too. The model tree's filter is followed by **Show all** while parts are hidden. Every tree's search is one ranked flat search
   (`kit/inspector/modelTreeSearch.js`).
 - **Size, each section's own.** A section's panel opens a tool panel's width
   (`TOOL_PANEL_WIDTH`, 164px) and as tall as its section, capped at the room under the toolbar.
@@ -592,8 +590,8 @@ dropdown or colour is as wide as its value, at the row's right end. Sliders are 
 as everywhere, with a committed value field after them. By part's palette is a row of
 swatches, then add and remove. Choices use Select controls. Continuous values use compact
 slider and committed-number fields; their keyboard input stays with the field. Colours
-retain swatches and a custom colour picker. Floor is on by default, at the model's Z=0
-plane. A long form scrolls within the available viewer height. A nested Select or colour
+retain swatches and a custom colour picker. Floor is on by default, at the model's lowest
+point (its Placement, **Lowest point**; **Model origin** stands it at Z=0). A long form scrolls within the available viewer height. A nested Select or colour
 picker owns Escape and outside interaction before its parent surface. The last item is
 **Reset to default**, disabled at Preview's defaults; it removes only Preview's overrides,
 never the display.
@@ -728,11 +726,7 @@ volume; a run on one part, one row each. Its rows are the UI font at `text-tiny`
 tabular figures — no monospace. A click on a chip copies its references, each naming its file
 by absolute path; resting on it lights its picks; its X drops them.
 
-Viewport picks reach individual faces and edges. In an assembly, faces and edges load per part, when first
-needed: under a face or edge filter, a press on a part whose faces are not
-loaded loads that part alone and then picks what is under the pointer — one
-press, with "Loading…" in the model tree's heading meanwhile. Until
-then, hovering such a part lights the whole part.
+Viewport picks reach individual faces and edges, every one to hand from the start.
 Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click, or a row's Isolate,
 isolates a component or subassembly; double-click on empty space leaves
@@ -741,6 +735,9 @@ an edge or ink turns the view square to it (CAD's Normal To, `kit/camera/lookAt.
 selects nothing: the selection is as its first click found it.
 
 ## Quick Edit
+
+Quick Edit is always available in an interactive CAD view. It has no enable/disable
+control or persisted preference; stale settings cannot suppress it.
 
 Quick Edit is a person's note to their agent about the file on screen, and the
 one way the viewer hands it over: a box at the viewport's top-right, 8px in, on the
@@ -827,7 +824,8 @@ in the prompt as JSON. Larger packets are written to system temporary storage as
 one `.snapshot.json` and named by path. Drawing, selecting and typing write nothing.
 Captured 3D views preserve projection and lens. No PNG is rendered or attached.
 To render inline JSON, the receiving agent saves it to a temporary file first,
-then runs `cadgen snapshot --job <file>`.
+then draws a view with `cadgen snapshot <document> <out.png> --annotation <file>
+--camera authored`.
 
 
 Queue and Send clear the note and what it carries, and so close the box, once the
@@ -835,8 +833,9 @@ note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
 `References:` and one reference per line; then each file that travels as a file by its
-label and path — `Snapshot (cadgen snapshot --job):` — or the compact object under
-`Snapshot JSON (cadgen snapshot --job):`.
+label and path — `Snapshot (cadgen snapshot --annotation):` — or the compact object under
+`Snapshot JSON (cadgen snapshot --annotation):`. An agent draws each view with
+`cadgen snapshot SRC OUT.png --annotation PACKET --camera authored`.
 
 ## Camera, animation and Preview
 
@@ -863,15 +862,13 @@ hosts neither start nor observe it. Its button is a play triangle ("Preview"), a
 right end after Display (the renderer's `navbarSlot`; a host with no navbar has both end the
 strip). A press covers the view at once
 ("Preparing preview…", in the scene's backdrop colour) and enters Preview under the cover,
-which lifts once Preview's view has presented its first frame, no finer detail is on its way
-(the quality is neither preview nor refining) and the studio frame's picture has converged
+which lifts once Preview's view has presented its first frame, its published mesh is complete
+and the studio frame's picture has converged
 (every sample drawn: the viewport's `pictureProgress`) — at least 700ms; at five seconds it stops
-waiting for detail and lifts on the picture converged, a second later at the latest — fading from
+waiting for more components and lifts on the picture converged, a second later at the latest — fading from
 the finished picture (`kit/shell/previewCover.js`). A view the shell set moving, Orbit
-on or a routine playing, has nothing to wait for; detail that lands starts the picture again and
-is waited for, never read as motion. Preview's scene takes finer detail in grouped steps,
-after a quiet moment or every second while it streams (`step/workbench/settledValue.js`), so a
-burst of batches restarts the picture once or twice, not per batch. The navbar stays, so its menu and the explorer
+on or a routine playing, has nothing to wait for; a published component that lands starts the
+picture again and is waited for, never read as motion. The navbar stays, so its menu and the explorer
 still lead to other files; the tool strip, its sub-toolbar, the tool stack and their resize grips, Quick
 Edit, joint handles, cube and context menu are gone (`PreviewChrome`, hidden and inert).
 
@@ -899,13 +896,13 @@ Preview alike (`kit/tools/playbar/AnimationSection.jsx`): its heading holds **Re
 which stops the routine and puts the model at rest, disabled while it is; its body is the
 routine in hand, a dropdown of the routines where there are two or more, then **Play** or
 **Pause**, the scrubber (`AnimationTimeControl`) and **Playback settings** (a cog: the routine's
-Speed, a submenu, then Loop and Autoplay). In the tools view a routine is a motion as a pose is
+Speed, a submenu, then Loop and Autoplay). Each routine in the dropdown says its duration at its
+right, muted, in tabular figures. In the tools view a routine is a motion as a pose is
 (see [one motion at a time](#tools-and-lifecycle)): paused, its frame stays on the model. A
-routine opens at rest (a STEP's does not own the pose: `restingAnimationState`,
-`step/workbench/motionRestore.js`). Each view's routine is its own: entering Preview sets the
+routine opens at rest. Each view's routine is its own: entering Preview sets the
 tools view's untouched and starts its own at rest, playing only under Autoplay (off by default);
-leaving throws Preview's away, and the tools view's is as it was left. An update of the model that leaves its routines as they were neither stops nor rewinds
-one that is playing; a changed routine starts at rest. Speed and Loop are the file's, one set,
+leaving throws Preview's away, and the tools view's is as it was left. A new revision of the
+model starts its routine at rest. Speed and Loop are the file's, one set,
 chosen in Playback settings and kept in its view once chosen — until then the routine's own
 apply. Orbit's speed (1×) and Autoplay are the file's too, remembered between leaving and
 re-entering Preview and across a reload of the tab; whether it orbits is not kept. Another
@@ -998,8 +995,16 @@ buttons (Quick Edit's alone say what they do). A disabled, selected or expanded 
 pending one. A hint appears on focus only for keyboard navigation (a Tab), never
 when a closing menu hands focus back.
 
-The viewer shows no toasts or notifications: copy, snapshot and prompt actions
-complete silently, the Copy and Quick Edit buttons showing a tick for a moment.
+Copy, snapshot and prompt actions complete silently, the Copy and Quick Edit
+buttons showing a tick for a moment. Explicit export jobs are the one exception: each
+has a persistent toast at the top-right below the navbar, with its state, elapsed time,
+Cancel, Download again (Export again once the file is gone) and Remove, in the menu's one size (`text-tiny`); on a phone
+the stack sits at the view's bottom, the view's width less 8px each side, and its buttons are 36px. Multiple jobs
+stack and scroll within the viewport; dismissing one only hides it, and Export's Show
+exports restores the stack. No other action earns a toast. Export is an icon button at
+the navbar's right end, named on hover as the view controls are, never in the tool strip.
+A finished file is a plain browser download, started once by itself; where it lands is
+the browser's setting. No source bundle is an export format.
 Progress stays in the viewport; a failed action is the
 viewport's alert card, whose **Retry** reloads the file and whose **Report Issue**,
 where the host has a tracker, opens a new issue titled "Issue: ", labelled `bug`, filled

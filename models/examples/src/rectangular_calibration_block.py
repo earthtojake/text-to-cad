@@ -1,6 +1,6 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+from cadgen import materials, model
+import build123d as bd
 
 from lib.part_common import line_edges_at_z, safe_chamfer
 
@@ -13,7 +13,7 @@ HOLE_LOCATIONS = ((-35.0, -20.0), (-35.0, 20.0), (35.0, -20.0), (35.0, 20.0))
 TOP_CHAMFER = 2.0
 
 
-@step(out="../STEP/rectangular_calibration_block.step")
+@model
 def rectangular_calibration_block():
     """Return the rectangular calibration block model in millimeters."""
     with bd.BuildPart() as block:
@@ -31,6 +31,7 @@ def rectangular_calibration_block():
     part = block.part
     part = safe_chamfer(part, line_edges_at_z(part, HEIGHT), length=TOP_CHAMFER)
     part.label = "rectangular_calibration_block"
+    part.material = materials.steel_1018
     return part
 
 

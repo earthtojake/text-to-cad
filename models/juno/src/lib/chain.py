@@ -1,8 +1,8 @@
 """juno kinematic chain spec shared by the CAD assembly and URDF/SRDF.
 
 Stdlib-only (no build123d) so robot-description generators can import it
-cheaply. `juno.py` consumes the same offsets and CAD pose angles, keeping
-the STEP assembly and the URDF tree in lockstep.
+cheaply. `juno.py` consumes the same offsets, ranges and CAD pose angles,
+keeping the xbf assembly's joints and the URDF tree in lockstep.
 
 Design ledger (URDF):
 - Units: chain offsets are millimeters in each parent part's local frame;
@@ -11,7 +11,7 @@ Design ledger (URDF):
   robot origin; every child link frame sits at its joint center with axes
   parallel to the parent at zero joint angle (pure translations).
 - Source: offsets and axes mirror the `revolute_attach()` calls in
-  `juno.py` (the build123d assembly), which is the CAD source of truth.
+  `juno.py` (the build123d assembly and its joints), the CAD source of truth.
 - Positive-motion conventions (verified against the CAD athletic stance):
   pitch joints rotate about +Y (positive swings the distal segment
   backward: knee flexion positive, hip/shoulder flexion forward negative);
@@ -358,7 +358,7 @@ def link_frames(angles_deg: dict[str, float]) -> dict[str, dict]:
     """World frame {"R": 3x3, "p": [x, y, z]} of every link at a joint pose.
 
     Pure chain FK in millimetres with the pelvis fixed at the world origin —
-    the same recursion the URDF describes and the animation module repeats.
+    the same recursion the URDF describes.
     """
     frames = {"pelvis": {"R": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], "p": [0.0, 0.0, 0.0]}}
     for joint in all_joints():
@@ -369,29 +369,6 @@ def link_frames(angles_deg: dict[str, float]) -> dict[str, dict]:
             "p": [parent["p"][k] + offset[k] for k in range(3)],
         }
     return frames
-
-
-def world_joint_axes(angles_deg: dict[str, float] | None = None) -> dict[str, tuple[list[float], list[float]]]:
-    """Every joint's (origin_mm, direction) in WORLD space at the given pose.
-
-    Defaults to the athletic ready stance, which is the pose the STEP is
-    written in. These are exactly the screw axes a product-of-exponentials
-    FK evaluates about, so declaring them as `cadgen.revolute(origin=,
-    direction=)` makes the viewer's mate FK agree with the chain FK to the
-    bit — including at joints whose local axis is tilted out of world X/Y/Z
-    by an upstream abduction (every leg pitch axis carries the +-3 deg hip
-    roll, every arm axis below the shoulder carries the pitch/roll/yaw).
-    """
-    angles = athletic_ready_deg() if angles_deg is None else angles_deg
-    frames = link_frames(angles)
-    axes: dict[str, tuple[list[float], list[float]]] = {}
-    for joint in all_joints():
-        parent = frames[joint["parent"]]
-        offset = _mat_vec(parent["R"], list(joint["origin_mm"]))
-        origin = [parent["p"][k] + offset[k] for k in range(3)]
-        direction = _mat_vec(parent["R"], list(joint["axis"]))
-        axes[joint["name"]] = (origin, direction)
-    return axes
 
 
 # ----------------------------------------------------------------- poses
@@ -476,20 +453,4 @@ def named_poses_deg() -> dict[str, dict[str, float]]:
         "t_pose": _t_pose_deg(),
         "wave_right": _wave_right_deg(),
         "squat": _squat_deg(),
-    }
-
-
-def named_pose_deltas_deg() -> dict[str, dict[str, float]]:
-    """The SRDF group states as DELTAS from the authored (athletic) stance.
-
-    The STEP is written in the athletic ready stance, and a cadgen mate's
-    rest value is the artifact as written — so a preset that fed absolute
-    joint angles into the viewer would land every pose at (athletic +
-    pose), doubly offset. `athletic_ready` is therefore all-zero here: it
-    IS the artifact.
-    """
-    rest = athletic_ready_deg()
-    return {
-        name: {joint: angle - rest[joint] for joint, angle in pose.items()}
-        for name, pose in named_poses_deg().items()
     }

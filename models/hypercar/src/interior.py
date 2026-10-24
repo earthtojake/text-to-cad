@@ -1,21 +1,16 @@
-"""Hypercar system model: interior — seats, wheel, dash, console, pedals, door cards.
+"""Hypercar system: interior — seats, wheel, dash, console, pedals, door cards.
 
-A sub-assembly of the car: the group `lib/interior.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.10`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/interior.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import interior as interior_lib
 
 
-@step(out="../STEP/interior.step")
+@memo
 def interior():
-    return interior_lib.build()
-
-
-if __name__ == "__main__":
-    interior()
+    built = interior_lib.build()
+    return built

@@ -8,15 +8,15 @@ decorator, and briefly from a ``cadgen dxf build`` engine path. The re-run also
 had a Windows hazard of its own (issue #245: ``os.execv`` does not quote, so an
 interpreter path containing a space arrived as two arguments).
 
-That whole apparatus is deleted. ``cadgen._internal.dxf_emit`` makes DXF bytes a
-function of the drawing's geometry — layers sorted by name, edges sorted by
-geometric content, ezdxf's volatile provenance pinned, and its CLASSES registry
-(the actual seed-sensitive part) sorted — so the seed cannot reach the file.
+That whole apparatus is deleted. The engine's DXF export (``cadgen.engine.export.dxf``)
+makes DXF bytes a function of the drawing's geometry — layers sorted by name, edges
+sorted by geometric content, ezdxf's volatile provenance pinned, and its CLASSES
+registry (the actual seed-sensitive part) sorted — so the seed cannot reach the file.
 
-The warm daemon is in scope too. Its workers used to be spawned with the seed
-pinned, which was the same ritual by another route, and worse in one way: a
-worker whose seed differed from every other process was a standing warm/cold
-divergence, ready to hide the next ordering bug rather than reveal it.
+The engine's daemon is in scope too. Workers once were spawned with the seed pinned,
+which was the same ritual by another route, and worse in one way: a worker whose seed
+differed from every other process was a standing warm/cold divergence, ready to hide
+the next ordering bug rather than reveal it.
 
 This guard exists because the re-exec is easy to reintroduce and expensive:
 it would silently double the cold cost of every drawing, and nothing else in
@@ -34,15 +34,17 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CADGEN = REPO_ROOT / "packages/cadgen/src/cadgen"
 
 # Named explicitly rather than globbed: a glob over cadgen would sweep in modules
-# that legitimately spawn other programs. These are the four places a build starts
-# — both front doors, the model runner, the generator — plus the daemon's worker
-# spawn, which had the seed pinned in its environment instead of in a restart.
+# that legitimately spawn other programs. These are the places a build starts -- the
+# front door, a model script asking the daemon, the engine's commands, its client
+# starting the daemon, the daemon spawning a worker, the worker's build.
 ENTRY_POINT_SOURCES = [
     CADGEN / "cli/__init__.py",
-    CADGEN / "authoring.py",
-    CADGEN / "cli/_run_model.py",
-    CADGEN / "_internal/generation_runner.py",
-    CADGEN / "daemon/pool.py",
+    CADGEN / "engine/model.py",
+    CADGEN / "engine/cli.py",
+    CADGEN / "engine/client.py",
+    CADGEN / "engine/daemon.py",
+    CADGEN / "engine/worker.py",
+    CADGEN / "engine/build.py",
 ]
 
 
@@ -74,7 +76,7 @@ class NoHashSeedReExecTest(unittest.TestCase):
             [],
             offenders,
             "an entry point pins PYTHONHASHSEED again. DXF byte-determinism is "
-            "engineered in cadgen._internal.dxf_emit; a seed re-exec would double "
+            "engineered in cadgen.engine.export.dxf; a seed re-exec would double "
             "every cold drawing build to hide an ordering bug instead of fixing it.",
         )
 

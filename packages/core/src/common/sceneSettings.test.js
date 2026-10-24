@@ -62,8 +62,8 @@ test("omitted Render fields stay sparse while configuration expands effective de
     quality: "final",
     exposure: 0,
     lighting: { rotation: 0, size: 1, fill: 0.25 },
-    // Render's floor at Z=0, as the Display preset's (`RENDER_FLOOR_PLACEMENT`).
-    backdrop: { color: "#ffffff", transparent: false, ground: true, groundPlacement: "origin", groundColor: "#e7e7e5", groundOpacity: 0.6, groundFinish: "matte" }
+    // Render's floor at the model's lowest point, as Preview's (`RENDER_FLOOR_PLACEMENT`).
+    backdrop: { color: "#ffffff", transparent: false, ground: true, groundPlacement: "lowest", groundColor: "#e7e7e5", groundOpacity: 0.6, groundFinish: "matte" }
   });
   assert.equal(camera.projection, "orthographic");
   assert.deepEqual(light.camera, camera);

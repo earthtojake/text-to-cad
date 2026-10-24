@@ -22,7 +22,7 @@ where it is.
 - Skill docs: `skills/cad/SKILL.md`
   and `references/build123d-modeling.md` (read the pitfalls: `align=None`,
   `.located()` vs `.moved()`, multi-tool booleans, tangent booleans, fillets
-  last; colour is linear unless via `srgb()`).
+  last; a colour is the sRGB hex you want to see).
 - Your system: `src/<name>.py` is a thin wrapper (do not edit it); you write
   `src/lib/<name>.py`, which must define
   - `MATERIALS`: a tuple of the palette material ids your leaves use (exactly

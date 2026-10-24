@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import dxf
+from cadgen import model
+
+import build123d as bd
 
 BLANK_WIDTH_MM = 60.0
 LEG_A_LENGTH_MM = 50.0
@@ -15,7 +16,7 @@ HOLE_EDGE_INSET_MM = 12.0
 BLANK_LENGTH_MM = LEG_A_LENGTH_MM + LEG_B_LENGTH_MM
 
 
-@dxf(out="../DXF/l_bracket_flat.dxf")
+@model
 def l_bracket_flat():
     # The blank is drawn in its own first-quadrant coordinates (0,0 at the
     # bottom-left corner), which is how a flat pattern is dimensioned on the
@@ -31,7 +32,10 @@ def l_bracket_flat():
     # Open geometry: allowed only because the layer name carries bend intent.
     bend = bd.Line((LEG_A_LENGTH_MM, 0.0), (LEG_A_LENGTH_MM, BLANK_WIDTH_MM))
 
-    return {"CUT": cut.sketch, "BEND": bend}
+    # A part per layer, named by its label.
+    blank = cut.sketch
+    blank.label, bend.label = "CUT", "BEND"
+    return bd.Compound(children=[blank, bend], label="l_bracket_flat")
 
 
 if __name__ == "__main__":

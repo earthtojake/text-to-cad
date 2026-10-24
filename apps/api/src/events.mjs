@@ -6,8 +6,9 @@
  * needs, or an event counted twice in one batch. A row carries the batch's context and one event's counts;
  * nothing in it names a person, a file or what they made.
  *
- * Each event counts what one process -- the CAD app (`app`), the browser viewer (`viewer`) or the build
- * daemon (`daemon`) -- saw since its last batch (`FIELDS`):
+ * Each event counts what one process -- the CAD app (`app`), the browser viewer (`viewer`), the build
+ * daemon (`daemon`), or the sender a `cadgen` command starts for what commands counted (`cli`) -- saw since
+ * its last batch (`FIELDS`):
  *
  *   tool      a CAD tool's calls, and how many of them failed
  *   tool_failure
@@ -36,7 +37,9 @@
  * random id (`batch`), and when it was made (`at`, whole seconds of the sender's clock). A sender that is not
  * sure its batch was taken sends it again as it was, so each of its rows gets an id of its own (`id`, a UUIDv5
  * of the batch's id and the row's key) that is the same every time, and a store tells the copy for what it is.
- * A receiver that reads a new schema is deployed before any release sends it.
+ * Schema 6 is schema 5 with one more format, the engine's document (`xbf`), and one more process, `cli`: the
+ * sender a command starts when no CAD app or viewer has sent what commands counted. A schema before it names
+ * neither. A receiver that reads a new schema is deployed before any release sends it.
  */
 
 import { createHash } from 'node:crypto';
@@ -61,11 +64,14 @@ const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', '
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
   'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
+// Who sends, and the formats an event counts: each schema's own (`SCHEMAS`), the later a superset.
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
+const PROCESSES_6 = new Set([...PROCESSES, 'cli']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
+const KINDS_6 = new Set([...KINDS, 'xbf']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
@@ -136,7 +142,8 @@ const exactly = (event, fields, name) => {
   for (const field of fields) if (event[field] === undefined) fail(`${name} has no ${field}`);
 };
 
-// Each event as a schema sends it: its key in the batch (one event per key), and its row's fields.
+// Each event as a schema sends it: its key in the batch (one event per key), and its row's fields. A format is
+// one of the schema's own (`kinds`).
 const READERS = {
   tool(event, at) {
     only(event, ['name', 'tool', 'calls', 'errors'], at);
@@ -156,19 +163,19 @@ const READERS = {
     only(event, ['name', 'calls'], at);
     return { key: 'view', fields: { calls: some(event.calls, `${at}.calls`) } };
   },
-  file(event, at) {
+  file(event, at, kinds) {
     only(event, ['name', 'file', 'kind'], at);
     const file = typeof event.file === 'string' && FILE_CODE.test(event.file) ? event.file : fail(`${at}.file is not a file code`);
-    return { key: `file ${file}`, event: 'files', fields: { kind: oneOf(event.kind, KINDS, `${at}.kind`), count: 1 } };
+    return { key: `file ${file}`, event: 'files', fields: { kind: oneOf(event.kind, kinds, `${at}.kind`), count: 1 } };
   },
-  files(event, at) {
+  files(event, at, kinds) {
     exactly(event, FIELDS.files, at);
-    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const kind = oneOf(event.kind, kinds, `${at}.kind`);
     return { key: `files ${kind}`, fields: { kind, count: some(event.count, `${at}.count`) } };
   },
-  build(event, at) {
+  build(event, at, kinds) {
     exactly(event, FIELDS.build, at);
-    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const via = oneOf(event.via, VIAS, `${at}.via`);
     const builds = some(event.count, `${at}.count`);
     const [failed, crashed, cancelled, cached] = ['failed', 'crashed', 'cancelled', 'cached'].map(name => count(event[name], `${at}.${name}`));
@@ -177,22 +184,22 @@ const READERS = {
     return { key: `build ${kind} ${via}`, fields: { kind, via, count: builds, failed, crashed, cancelled, cached,
       seconds: seconds(event.seconds, `${at}.seconds`), longest: seconds(event.longest, `${at}.longest`) } };
   },
-  build_failure(event, at) {
+  build_failure(event, at, kinds) {
     exactly(event, FIELDS.build_failure, at);
-    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const via = oneOf(event.via, VIAS, `${at}.via`);
     const reason = oneOf(event.reason, BUILD_FAILURES, `${at}.reason`);
     return { key: `build_failure ${kind} ${via} ${reason}`, fields: { kind, via, reason, count: some(event.count, `${at}.count`) } };
   },
-  snapshot_failure(event, at) {
+  snapshot_failure(event, at, kinds) {
     exactly(event, FIELDS.snapshot_failure, at);
-    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const reason = oneOf(event.reason, SNAPSHOT_FAILURES, `${at}.reason`);
     return { key: `snapshot_failure ${kind} ${reason}`, fields: { kind, reason, count: some(event.count, `${at}.count`) } };
   },
-  snapshot(event, at) {
+  snapshot(event, at, kinds) {
     exactly(event, FIELDS.snapshot, at);
-    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const snapshots = some(event.count, `${at}.count`);
     const failed = count(event.failed, `${at}.failed`);
     if (failed > snapshots) fail(`${at} counts more failures than snapshots`);
@@ -232,25 +239,31 @@ const READERS = {
 const appOf = batch => (batch.presentation === 'browser' ? 'viewer' : 'app');
 const BEFORE_DAEMON = new Set(['tool', 'view', 'file']);
 const WITH_DAEMON = ['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception'];
-const byProcess = batch => ({
-  channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process'),
+const NAMED_EVENTS = [...WITH_DAEMON, 'tool_failure', 'build_failure', 'snapshot_failure'];
+const byProcess = processes => batch => ({
+  channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, processes, 'process'),
 });
 // What each schema says beside the shared fields -- where the install came from, and which process sent
-// it -- and the events it sends. A new schema adds a reader here and keeps the old ones.
+// it -- the events it sends, and the formats they count (`kinds`). A new schema adds a reader here and keeps the
+// old ones.
 const SCHEMAS = new Map([
   // cadgen 0.7.7 to 0.7.11: how it was installed, which names no channel. Kept as `source`.
-  [1, { fields: ['source'], events: BEFORE_DAEMON,
+  [1, { fields: ['source'], events: BEFORE_DAEMON, kinds: KINDS,
     origin: batch => ({ channel: 'unknown', source: oneOf(batch.source, SOURCES, 'source'), process: appOf(batch) }) }],
   // cadgen 0.7.12 to 0.7.15: the channel its plugin's startup command named.
-  [2, { fields: ['channel'], events: BEFORE_DAEMON,
+  [2, { fields: ['channel'], events: BEFORE_DAEMON, kinds: KINDS,
     origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: appOf(batch) }) }],
   // The build daemon joins the apps: each batch names its process, and counts files rather than naming them.
-  [3, { fields: ['channel', 'process'], events: new Set(WITH_DAEMON), origin: byProcess }],
+  [3, { fields: ['channel', 'process'], events: new Set(WITH_DAEMON), kinds: KINDS, origin: byProcess(PROCESSES) }],
   // Why tool calls failed, beside how many did.
-  [4, { fields: ['channel', 'process'], events: new Set([...WITH_DAEMON, 'tool_failure']), origin: byProcess }],
+  [4, { fields: ['channel', 'process'], events: new Set([...WITH_DAEMON, 'tool_failure']), kinds: KINDS,
+    origin: byProcess(PROCESSES) }],
   // Why builds and snapshots failed; and each batch's id and time, which give each row an id of its own.
-  [5, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...WITH_DAEMON, 'tool_failure', 'build_failure', 'snapshot_failure']),
-    origin: byProcess, named: true }],
+  [5, { fields: ['channel', 'process', 'batch', 'at'], events: new Set(NAMED_EVENTS), kinds: KINDS,
+    origin: byProcess(PROCESSES), named: true }],
+  // The engine's documents (`xbf`), and the sender a command starts (`cli`).
+  [6, { fields: ['channel', 'process', 'batch', 'at'], events: new Set(NAMED_EVENTS), kinds: KINDS_6,
+    origin: byProcess(PROCESSES_6), named: true }],
 ]);
 
 export function isUuid(value) {
@@ -290,8 +303,8 @@ export function rowsOf(batch) {
     client_version: client.version === undefined ? null : token(client.version, 'client.version', 32),
     presentation: batch.presentation === undefined ? null : oneOf(batch.presentation, PRESENTATIONS, 'presentation'),
   };
-  // Schema 5 names its batch, so each row carries an id that is the same however often the batch is sent, and the
-  // time the batch was made. Earlier schemas' rows carry neither, as ever.
+  // Schemas 5 and 6 name their batch, so each row carries an id that is the same however often the batch is sent,
+  // and the time the batch was made. Earlier schemas' rows carry neither, as ever.
   const named = schema.named ? {
     batch: isUuid(batch.batch) ? batch.batch : fail('batch is not a uuid'),
     at: Number.isInteger(batch.at) && batch.at >= 0 && batch.at <= MAX_AT ? batch.at : fail('at is not a time'),
@@ -304,7 +317,7 @@ export function rowsOf(batch) {
   events.forEach((event, index) => {
     const at = `events[${index}]`;
     if (!event || typeof event !== 'object' || Array.isArray(event) || !schema.events.has(event.name)) fail(`${at} is not an event`);
-    const { key, event: name = event.name, fields } = READERS[event.name](event, at);
+    const { key, event: name = event.name, fields } = READERS[event.name](event, at, schema.kinds);
     if (seen.has(key)) fail(`${at} is already in the batch`);
     seen.add(key);
     // A file by its code (schemas 1 and 2) is one more of its format's.

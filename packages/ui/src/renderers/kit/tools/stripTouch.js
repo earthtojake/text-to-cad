@@ -13,4 +13,3 @@ export const StripTouchProvider = StripTouch.Provider;
 export const useStripTouch = () => useContext(StripTouch);
 /** The class of a tile of the strip in hand. */
 export const useStripButtonClass = () => useStripTouch() ? TOUCH_STRIP_BUTTON_CLASS : STRIP_BUTTON_CLASS;
-

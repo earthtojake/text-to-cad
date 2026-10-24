@@ -19,7 +19,7 @@ const renderer = defineFileRenderer({
 // A host that shows one file and browses nothing, has no home and can do nothing with the file.
 const host = {
   files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file' as const, extension: 'step', size: 1 }) },
-  clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+  clipboard: { writeText: async () => {}, writeImage: async () => {} },
   promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, navigation: { openFile(_path: string) {} },
 };
 const open = (props: { host?: object; file?: string | null; presentation?: object }) =>
@@ -28,7 +28,7 @@ const navbar = () => document.querySelector('[data-viewer-navbar]');
 const fileName = () => document.querySelector<HTMLElement>('[data-file-name]')!;
 const labels = (selector = '[data-viewer-navbar]') => [...document.querySelectorAll(`${selector} a, ${selector} button`)].map(node => node.getAttribute('aria-label'));
 
-it('draws the navbar over every file, named by its name, and over the home with only its menu, update and Full size; never over a view shown small', async () => {
+it('draws the navbar over every file, named by its name, and over the home with only its menu, update, Full size and the host\'s last control; never over a view shown small', async () => {
   open({});
   await screen.findByText('shown');
   // The name, as words where nothing can be browsed; no logo with no home, no ⋯ where the host can do nothing.
@@ -40,15 +40,16 @@ it('draws the navbar over every file, named by its name, and over the home with 
   expect(navbar()).toBeNull();
   cleanup();
   // The home has the same navbar: the logo's menu, Back and Forward where the host keeps the view's
-  // history, and the host's update and Full size, as over a file; no file, no box for view controls.
+  // history, and the host's update, Full size and Open in browser, as over a file; no file, no box for view controls.
   const back = vi.fn();
   open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } }, file: null,
     history: { canGoBack: true, canGoForward: false, back, forward() {} },
     update: <button type="button" aria-label="Update to 0.7.5" />, fullSize: <button type="button" aria-label="Full size" />,
+    openInBrowser: <button type="button" aria-label="Open in browser" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-view-controls]')])
-    .toEqual([['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Full size'], null, null]);
+    .toEqual([['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Full size', 'Open in browser'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
   expect(back).toHaveBeenCalledOnce();
@@ -56,7 +57,7 @@ it('draws the navbar over every file, named by its name, and over the home with 
   expect(screen.queryByRole('menuitem', { name: 'Back to files' })).toBeNull();
 });
 
-it('keeps the right of the navbar for the host\'s update button and Full size, then hands the renderer a box for its own view controls, last; a view shown small has no navbar and no box', async () => {
+it('keeps the right of the navbar for the host\'s update button and Full size, then hands the renderer a box for its own view controls, then the host\'s Open in browser, last; a view shown small has no navbar and no box', async () => {
   // A renderer that draws its view controls into the box it is handed (the CAD viewer's Display
   // and Preview), and over its view where it is handed none.
   const handed: (HTMLElement | null)[] = [];
@@ -70,10 +71,11 @@ it('keeps the right of the navbar for the host\'s update button and Full size, t
     } }),
   });
   const view = (extra: object = {}) => render(<FileViewer file={FILE} host={{ ...host, ...extra } as any} renderers={[slotted]} state={{}} onStateChange={() => {}}
-    update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />} />);
+    update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />}
+    openInBrowser={<button type="button" aria-label="Open in browser" />} />);
   view();
   await screen.findByRole('button', { name: 'Preview' });
-  expect([labels(), screen.getByRole('button', { name: 'Preview' }).parentElement!.hasAttribute('data-view-controls')]).toEqual([['Update to 0.7.5', 'Full size', 'Preview'], true]);
+  expect([labels(), screen.getByRole('button', { name: 'Preview' }).parentElement!.hasAttribute('data-view-controls')]).toEqual([['Update to 0.7.5', 'Full size', 'Preview', 'Open in browser'], true]);
   cleanup();
   handed.length = 0;
   view({ environment: { colorScheme: 'light', compact: true } });
@@ -220,6 +222,20 @@ it('opens the explorer from the file\'s name where the host\'s files can be brow
   expect(fileName().tagName).toBe('SPAN');
 });
 
+it('has no Select File and no file menu on a document with no file of its own, which its name names', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const list = vi.fn(async () => []);
+  const model = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } }, files: { id: 'one', list,
+    search: async () => ({ paths: [], truncated: false }),
+    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
+  open({ host: model, file: id });
+  await screen.findByText('shown');
+  // Its name is the model's, a name and no button; no file menu; nothing is listed.
+  expect([fileName().tagName, fileName().textContent]).toEqual(['SPAN', 'bracket']);
+  expect(labels()).not.toContain('File actions');
+  expect(list).not.toHaveBeenCalled();
+});
+
 it('says why a file will not open, and that it does not exist when it is missing', async () => {
   const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
   expect(isMissingFileError(missing)).toBe(true);
@@ -231,10 +247,22 @@ it('says why a file will not open, and that it does not exist when it is missing
   cleanup();
   open({ host: failing(new Error('The disk is gone')), presentation });
   await screen.findByText('failed');
-  expect(failures.at(0)).toEqual({ message: 'File does not exist: /models/gone.step', missing: true });
-  expect(failures.at(-1)).toEqual({ message: 'The disk is gone', missing: false });
+  expect(failures.at(0)).toEqual({ message: 'File does not exist: /models/gone.step', missing: true, reload: expect.any(Function) });
+  expect(failures.at(-1)).toEqual({ message: 'The disk is gone', missing: false, reload: expect.any(Function) });
   cleanup();
   // A host with no page of its own for it gets the viewer's.
   open({ host: failing(new Error('The disk is gone')) });
   expect(await screen.findByText('Could not open that file')).toBeTruthy();
+});
+
+it('a missing-file presentation can reread the requested file through its injected reload', async () => {
+  const missing = Object.assign(new Error('File does not exist'), { code: 'cad-file-missing' });
+  const stat = vi.fn().mockRejectedValueOnce(missing).mockImplementation(host.files.stat);
+  let retry = () => {};
+  open({ host: { ...host, files: { ...host.files, stat } },
+    presentation: { error: ({ reload }: { reload: () => void }) => { retry = reload; return <button onClick={reload}>Retry missing file</button>; } } });
+  await userEvent.click(await screen.findByRole('button', { name: 'Retry missing file' }));
+  expect(await screen.findByText('shown')).toBeTruthy();
+  act(() => retry());
+  expect(stat.mock.calls.map(([path]) => path)).toEqual([FILE, FILE]);
 });

@@ -31,6 +31,9 @@ const CONTEXT = ['process', 'version', 'channel', 'source', 'platform', 'arch', 
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
 const REGIONS = new Set(['us', 'eu']);
 const TIMEOUT_MS = 8000; // well inside a function's own limit: a PostHog that hangs is a failure, and the batch waits
+// How long an instance keeps health's answer. /v1/health is open to anyone and each check spends the personal
+// key, so a burst of checks asks PostHog at most once a minute per instance (the host reuses a warm one).
+export const READY_TTL_MS = 60_000;
 
 /** The settings a host lacks, by name -- missing, or not what PostHog would take (health says so). */
 export function missingSettings(env) {
@@ -85,7 +88,7 @@ export function propertiesOf(row, country) {
 }
 
 /**
- * A row as one PostHog event. A row with an id (schema 5's, `events.mjs`: `idOf`) is sent under it as the event's
+ * A row as one PostHog event. A row with an id (schema 5's and 6's, `events.mjs`: `idOf`) is sent under it as the event's
  * `uuid`, and at its batch's time (`at`, the sender's clock): PostHog takes events with the same uuid, event,
  * distinct id and timestamp as one (they are de-duplicated as its tables merge), so a batch sent again -- its
  * sender never heard it was taken -- is the same events again, not more counts, however long after. Every earlier
@@ -100,9 +103,9 @@ export function eventOf(row, country) {
 
 /**
  * @param {{ region: string, projectKey: string, personalKey: string, projectId: string }} settings
- * @param {{ fetch?: typeof fetch }} [options]
+ * @param {{ fetch?: typeof fetch, now?: () => number }} [options] `now`: the clock health's answer is kept by.
  */
-export function posthogStore({ region, projectKey, personalKey, projectId }, { fetch: send = fetch } = {}) {
+export function posthogStore({ region, projectKey, personalKey, projectId }, { fetch: send = fetch, now = Date.now } = {}) {
   const capture = `https://${region}.i.posthog.com`;
   const api = `https://${region}.posthog.com/api/projects/${projectId}`;
   // Anything but a 2xx is the receiver's failure, never the client's: a 5xx tells it to keep its batch, or
@@ -113,6 +116,18 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
     return response;
   };
   const authorized = { authorization: `Bearer ${personalKey}` };
+  // Health's question, every setting at once: the region and the id name a project that answers to the
+  // personal key, and the capture key is that project's own (`api_token`). A key from another project would
+  // put every batch there; one PostHog does not know would lose them all, unseen until someone looked.
+  const check = async () => {
+    const project = await (await call(`${api}/`, { headers: authorized })).json().catch(() => ({}));
+    if (typeof project?.api_token === 'string' && project.api_token !== projectKey) {
+      throw Object.assign(new Error("POSTHOG_PROJECT_KEY is not this project's"), { code: 'posthog_project_key' });
+    }
+  };
+  // The answer is kept, failure or not, for READY_TTL_MS from when it was asked: checks that come meanwhile,
+  // even while it is still on its way, share it. Nothing waits longer than the one call's own timeout.
+  let checked = null;
   return {
     /** @param {object[]} rows @param {{ country?: string | null }} [context] */
     async insert(rows, { country = null } = {}) {
@@ -127,14 +142,10 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
         body: JSON.stringify({ distinct_ids: [install], delete_events: true }),
       });
     },
-    // Health's question, every setting at once: the region and the id name a project that answers to the
-    // personal key, and the capture key is that project's own (`api_token`). A key from another project would
-    // put every batch there; one PostHog does not know would lose them all, unseen until someone looked.
-    async ready() {
-      const project = await (await call(`${api}/`, { headers: authorized })).json().catch(() => ({}));
-      if (typeof project?.api_token === 'string' && project.api_token !== projectKey) {
-        throw Object.assign(new Error("POSTHOG_PROJECT_KEY is not this project's"), { code: 'posthog_project_key' });
-      }
+    ready() {
+      const at = now();
+      if (!checked || at - checked.at >= READY_TTL_MS) checked = { at, answer: check() };
+      return checked.answer;
     },
   };
 }

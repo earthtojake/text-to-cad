@@ -25,42 +25,12 @@ script converted to `@step` whose stale v0.4 sidecar is still on disk fails at
 the sidecar, not at the script. Do the deletion step (step 5) before you start
 debugging anything.
 
-## Since 0.5.1: the render module moved into the decorator
-
-This guide was written against 0.5.0, where animation was a companion ES
-module discovered **by name** beside the document (`STEP/<name>.step.js`).
-That file is retired. Animation is declared on the model now, exactly as
-kinematics is:
-
-```python
-ANIMATION = """
-export const clips = { demo: { duration: 8, update(t, m) { /* ... */ } } };
-"""
-
-@step(out="../STEP/arm.step", kinematics=KINEMATICS, animation=ANIMATION)
-def arm():
-    ...
-```
-
-The module text is the same JavaScript; only where it lives changed. The build
-embeds it in the document's sidecar (`<name>.step.json`), which is what the
-viewer, snapshots and mesh exports read — so the module travels with the
-document instead of being found beside it. Every mention of `<name>.step.js`
-below refers to the retired arrangement and should be read through this
-section:
-
-- Where a step says to write `STEP/<name>.step.js`, put the module text in
-  `animation=` instead and write no file. The `.gitignore` whitelist for
-  `/STEP/*.step.js` in step 5 is no longer needed either.
-- **A leftover `<name>.step.js` is read by nothing.** Building the model
-  **fails**, naming `@step(animation=...)`; the CAD Viewer warns on the entry
-  and renders it anyway. Delete the file.
-- For a document with no model script, `cadgen step build IN OUT` takes
-  `--animation` beside `--kinematics`.
-- Animation stays outside the geometry: changing `animation=` rewrites the
-  sidecar and leaves the STEP bytes and component identities untouched.
-- `cadgen step snapshot --animation` on a document whose sidecar carries no
-  animation says so, and names the decorator.
+Two things work differently today than in 0.5: animation is clips written in
+Python, which `animation=` takes and the build bakes into the sidecar as
+keyframes, and cadgen meshes every component at one display tolerance, so
+neither `@step` nor a model run takes a mesh tolerance. For both, and for every
+interface that changed after 0.5, follow
+[`skills/cad/references/migrations.md`](../../skills/cad/references/migrations.md).
 
 ### The one-paragraph summary
 
@@ -117,8 +87,7 @@ Do these in order. Later steps assume earlier ones.
 - [ ] 1. Rewrite imports
 - [ ] 2. Convert the generator into a model
 - [ ] 3. Convert composition: children are models you call
-- [ ] 4. Move articulation to kinematics + `animation=` (0.5.0 wrote a
-      `<name>.step.js`; see "Since 0.5.1" above)
+- [ ] 4. Move articulation to kinematics, and animation to clips
 - [ ] 5. Reshape the project layout, then delete v0.4 leftovers
 - [ ] 6. Rebuild
 - [ ] 7. Verify
@@ -256,12 +225,10 @@ Mechanically:
 | --- | --- |
 | `out=` | Output path. **Script-relative** (see the path note below). Default: sibling `<stem>.step`. |
 | `kinematics=` | The typed-mates dict. See step 4. |
-| `mesh_tolerance=` | Chord tolerance for the tree's tessellation. Relative — see step 6. |
-| `mesh_angular_tolerance=` | Angular tolerance, radians. |
+| `animation=` | Clips, written in Python. See step 4. |
 
 `@dxf` takes **only `out=`**. It has no `kinematics=` (a drawing is 2D
-geometry); passing it is an error. **No decorator takes `animation=`** —
-choreography is a file beside the document, not a declaration (step 4).
+geometry); passing it is an error.
 
 There is no `kind=`. v0.5 briefly accepted `kind="part"|"assembly"` and
 inferred one from the return statement; both are deleted. What a model
@@ -270,8 +237,8 @@ occurrences, a single solid as one component — and `inspect` reports
 `part`/`assembly` off the resulting tree. No decorator argument changes the
 geometry a model produces.
 
-Every decorator argument — `out=`, the two tolerances, `kinematics=` — is
-ordinary Python evaluated when the module loads: an f-string, `NAME + ".step"`,
+Every decorator argument — `out=`, a mesh decorator's tolerances, `kinematics=` —
+is ordinary Python evaluated when the module loads: an f-string, `NAME + ".step"`,
 a constant imported from `lib/`, a dict built at import. Nothing is parsed off
 the source text, and the values behind an argument are tracked like any other
 input. Unknown keyword arguments are rejected outright on every decorator; a
@@ -357,8 +324,6 @@ Flags ride the script's argv:
 | Flag | Effect |
 | --- | --- |
 | `--force` | Rebuild even when the gate says current. |
-| `--mesh-tolerance FLOAT` | Override chord tolerance for this run. |
-| `--mesh-angular-tolerance FLOAT` | Override angular tolerance, radians. |
 | `--verbose` | Stage timing and full tracebacks on stderr. |
 | `--json` | One JSON result line on stdout. |
 
@@ -465,11 +430,7 @@ if __name__ == "__main__":
   through them leaves a stale result reading as current. A configuration is a
   factory argument; another configuration is another model.
 
-### 4. Move articulation to kinematics + the animation module
-
-> Read "Since 0.5.1: the render module moved into the decorator" first: the
-> `<name>.step.js` file this step describes is retired, and its module text
-> is now `animation=` on the decorator.
+### 4. Move articulation to kinematics, and animation to clips
 
 v0.4's `.params.js` sidecar — FK scripts, pose functions, demo modes — is gone,
 and so is GIF export. v0.5 splits what `.params.js` conflated into three
@@ -479,7 +440,7 @@ systems with different lifecycles:
 | --- | --- | --- |
 | Geometry | The model function's body and the factories it calls | Changing one rebuilds the model |
 | Kinematics | `kinematics=` on the decorator, pure data | Drives viewer sliders and posed exports; a kinematics edit rewrites the sidecar, never the geometry |
-| Animation | `animation=` on the decorator, an ES module as a string (0.5.0: `STEP/<name>.step.js` beside the document) | Embedded in the sidecar by the build; an animation edit rewrites the sidecar, never the geometry |
+| Animation | `animation=` on the decorator: clips written in Python | Baked into the sidecar by the build; an animation edit rewrites the sidecar, never the geometry |
 
 A note on the name: v0.4 had a `<name>.step.js` too, the JS *declarations
 sidecar*, and 0.5.0 reused the name for the render module. Both are gone.
@@ -544,45 +505,15 @@ Rules that catch v0.4 conversions:
 - **Mates stay with the model that declares them.** A parent that links an
   articulated child gets its geometry, not its mates (step 3).
 
-#### The animation module: `animation=`
+#### Animation: `animation=`
 
-Choreography is a plain ES module. 0.5.0 put it beside the **document**, named
-after it; since 0.5.1 the same text is the decorator's `animation=` argument
-and the build embeds it in the sidecar. The module itself is unchanged:
-
-```js
-// the value of animation=, as a Python string
-export const clips = {
-  demo: {
-    label: "Demo",
-    duration: 8,          // seconds
-    loop: true,           // default
-    update(t, m) {        // called every frame; t in seconds
-      m.get("forearm").rotate([0, 0, 1], 120 * (t / 8), [0, 0, 25]);
-      m.get("#o1.3.1,o1.3.2").translate([0, 0, 40 * Math.min(t / 2, 1)]);
-      m.get("lid").opacity(t < 5 ? 1 : 1 - (t - 5) / 2);
-    },
-  },
-};
-```
-
-- `m.get(target)` takes a label (canonical) or occurrence-id refs, comma-listed;
-  each id covers its whole subtree. Unknown targets **throw** — a typo never
-  silently animates nothing.
-- Handles: `.rotate(axis, degrees, origin=[0,0,0])`, `.translate(vec)`,
-  `.opacity(0..1)`, `.visible(bool)`. Successive transforms **premultiply**.
-- Every frame starts from rest and `update(t)` rebuilds the state — a pure
-  function of `t`, so scrub, loop and seek are free. No wall-clock, no state.
-- Animation is deliberately ignorant of mates. That independence is what
-  guarantees a choreography edit can never invalidate a build.
-- The only export the renderer understands today is `clips`, and an export it
-  does not know is a load error shown in the Status tab. Targets are checked
-  at load against the compiled tree.
-- It rides the sidecar, so it needs no `.gitignore` whitelist of its own: the
-  module is authored in the model script, which is committed like any source.
-- Coming from a v0.4 `.params.js` demo mode, an early-0.5 `.anim.js`, or a
-  0.5.0 `STEP/<name>.step.js`: keep the `clips` export, move the module text
-  into `animation=`, and delete the file.
+Choreography is clips: Python functions of time, declared with `cadgen.clip` and
+passed to `animation=` on the decorator. The build runs them and bakes their
+keyframes into the sidecar, so a page plays data and reads nothing beside the
+document. A v0.4 `.params.js` demo mode becomes such a clip:
+[`skills/cad/references/migrations.md`](../../skills/cad/references/migrations.md) ports a JavaScript clip
+module to Python clips, and the cad skill's kinematics reference documents the
+clip vocabulary. Delete the `.params.js`.
 
 **GIF export is deleted.** Snapshot writes PNG stills only, and a `.gif` output
 path is refused. Motion review is interactive in the CAD Viewer. For still
@@ -597,11 +528,9 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open   # a declared
 
 A document with no model script gets kinematics from `cadgen step build IN OUT`,
 whose `--kinematics` takes the whole space as inline JSON or a `.json` path.
-`OUT` is required and is never `IN`. Choreography rides the same verb:
-`--animation` takes the module as inline text or a `.js` path, and the build
-embeds it in `OUT`'s sidecar. To make an import a first-class model instead, wrap
-it: a `@step` whose body is `return read_step(...)` gives the vendor file a
-record, a tree and a place in your assemblies.
+`OUT` is required and is never `IN`. Clips need a model script: wrap the import
+in a `@step` whose body is `return read_step(...)`, which gives the vendor file a
+record, a tree, its clips and a place in your assemblies.
 
 ### 5. Reshape the project layout, then delete v0.4 leftovers
 
@@ -705,25 +634,16 @@ python src/frame.py        # builds plate and standoff too, in parallel, then li
 Run each model script explicitly, or the roots. A second run of a current model
 prints `current ...` and never touches the kernel.
 
-#### Rethink your tolerance flags — do not copy them
+#### Mesh tolerances are relative — do not copy them
 
-This is the easiest thing to get silently wrong.
-
-| | v0.4 | v0.5 |
-| --- | --- | --- |
-| `--mesh-tolerance` | **absolute** linear deflection, mm; default `0.02` | **relative** chord tolerance, fraction of each component's bounding diagonal; default `1.5e-3` |
-| `--mesh-angular-tolerance` | radians; default `0.6` | radians; default `0.35` |
-
-A v0.4 value carried over unchanged means something entirely different. On a
-200 mm part, `--mesh-tolerance 0.02` used to mean 0.02 mm; in v0.5 it means
-0.02 × 200 = 4 mm — vastly coarser. Drop your old numbers and start from the
-new defaults, tightening only where a curved part visibly needs it. Tolerances
-declared on a root do not reach its children; declare them on every model that
-needs them.
-
-There is now **one** JS tessellator for both render and export; the OCCT mesh
-path is deleted. An exported STL/3MF/GLB is the same tessellation the viewer
-draws, watertight, colored, and byte-deterministic across repeated exports.
+A model run takes no tolerance flag and `@step` no tolerance: cadgen meshes every
+component itself, at one display tolerance, and every view and snapshot draws those
+meshes ([`skills/cad/references/migrations.md`](../../skills/cad/references/migrations.md)).
+A mesh decorator (`@stl`/`@glb`/`@threemf`) or a mesh export command may name its
+own, and there the chord tolerance is **relative**, a fraction of each component's
+bounding diagonal, where v0.4's was absolute millimetres: on a 200 mm part, v0.4's
+`0.02` meant 0.02 mm and means 4 mm here. Drop the old numbers and start from the
+display tolerance, tightening only where a curved part visibly needs it.
 
 #### The daemon and the pool
 
@@ -808,7 +728,7 @@ directly. Every subcommand is also reachable as `python -m cadgen.cli <verb>`.
 | `python scripts/gen ... --write PATH` | `out=` on the decorator (there is no per-run override) |
 | `python scripts/gen ... --force` | `python model.py --force` |
 | `python scripts/gen ... --json` / `--verbose` | `python model.py --json` / `--verbose` |
-| `python scripts/gen ... --mesh-tolerance` | same flag — **but the units changed**, see step 6 |
+| `python scripts/gen ... --mesh-tolerance` | none: cadgen meshes at one display tolerance; a mesh decorator or export names its own, see step 6 |
 | `python scripts/export TARGET --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` on the model, or `cadgen stl\|3mf\|glb build DOC [OUT]` |
 | `cadgen.compose.memo(helper, ...)` | a child model, imported and called |
 | `python scripts/inspect refs\|measure\|align\|frame\|diff\|validate` | `cadgen step inspect <inspection> ...` |
@@ -940,8 +860,7 @@ Also removed: the `params` key (it is `kinematics` now), and `workspaceRoot` /
 `rootDir` (pass a relative or absolute `input` path instead). `.gif` output
 paths are refused.
 
-- `mode` is `view` (default), `section` or `list`. Mesh inputs allow only
-  `view` and `list`.
+- `mode` is `view` (default) or `list`.
 - `selection.focus`/`selection.refs` and `selection.hide` are mutually
   exclusive within one job. Selection requires STEP topology, so mesh, robot
   and DXF inputs refuse it.
@@ -983,7 +902,7 @@ them.
 | Children | Inline geometry, `lib/` helpers, `compose.memo` | Sibling models, called; the parent's tree **links** their trees |
 | Declarations sidecar | `<name>.step.js` (a JS module) | `<name>.step.json`, schema 6, JSON |
 | Pose/FK script | `<name>.params.js` | `kinematics=` on the decorator (data, in the sidecar) |
-| Animation | `.params.js` demo modes; GIF export | `animation=` on the decorator, embedded in the sidecar by the build; PNG stills only |
+| Animation | `.params.js` demo modes; GIF export | `animation=` clips on the decorator, baked into the sidecar by the build; PNG stills only |
 | Mesh outputs | `scripts/export --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` decorators, or the format doors |
 
 ### The sidecar: `<name>.step.json`, schema 6
@@ -995,8 +914,8 @@ kinematics deletes the stale one. What a model declares about its outputs
 (`@stl`/`@glb`/`@threemf`) lives in its store record; the `meshExports`
 section that once copied it beside the STEP is gone (a mesh door tessellates
 the document's tree and writes the file it was asked for, no lookup).
-Choreography IS in it: `animation=` on the decorator puts the module text in
-the sidecar's animation section (step 4).
+Choreography IS in it: the build bakes `animation=`'s clips into the sidecar's
+animation section as keyframes (step 4).
 
 ```
 schemaVersion   6
@@ -1076,10 +995,9 @@ A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
 the artifact. → Delete it and rebuild. Step 5.
 
 **Unexpected keyword argument on a decorator, or "out= must be a non-empty path string"**
-You passed a retired name — `write=` instead of `out=`, `pose=`, or
-`kinematics=` on `@dxf` — or a value of the wrong kind. (`animation=` on
-`@step` is current; it was the 0.5.0 spelling that had no such argument.) → The decorator table
-in step 2.
+You passed a retired name — `write=` instead of `out=`, `pose=`, a mesh
+tolerance on `@step`, or `kinematics=` on `@dxf` — or a value of the wrong kind.
+→ The decorator table in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**
 Your kinematics dict has something other than `mates`, `couplings`, `poses`
@@ -1106,13 +1024,9 @@ The part was reflected, `located()`, or otherwise modified after the call.
 → Place with `Pos/Rot/Location *` or `.moved()`; make a mirrored part its own
 model. Step 3.
 
-**Mesh export fails with `ERR_MODULE_NOT_FOUND 'three'`** (source checkouts only)
-The checkout's `packages/cadgen-js/node_modules` is missing; cadgen names the
-fix. Installed wheels never see this.
-
 **Meshes came out far coarser (or finer) than in v0.4**
-You carried a tolerance number across. `--mesh-tolerance` is relative now.
-→ Step 6.
+You carried a tolerance number across. A mesh export's `mesh_tolerance` is
+relative now. → Step 6.
 
 **The viewer shows a document as "not compiled" after a build**
 The build ran with `CADGEN_DAEMON=0`, which the viewer cannot see, or the
@@ -1131,7 +1045,7 @@ it from its bytes.
       own models; placement uses `Pos/Rot/Location *` or `.moved()`.
 - [ ] No `__cadgen__` directory, `.step.js`, `.params.js`, or
       `.step.source.json` remains anywhere in the project; animation is
-      `animation=` on the decorator; the old cache root is gone.
+      clips on `animation=`; the old cache root is gone.
 - [ ] Every model script runs clean, a second run prints `current`, and
       `cadgen store why` agrees.
 - [ ] `cadgen step inspect validate` passes on each STEP you author. Purchased
@@ -1139,5 +1053,5 @@ it from its bytes.
       geometry: validate them once to know what you have, and expect an
       assembly that contains them to report their defects, not yours.
 - [ ] A snapshot of each primary STEP has been rendered and reviewed.
-- [ ] Tolerance flags have been re-derived from the new relative defaults, not
-      copied.
+- [ ] Mesh export tolerances have been re-derived as fractions of the bounding
+      diagonal, not copied.

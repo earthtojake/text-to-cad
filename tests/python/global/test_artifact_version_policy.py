@@ -1,100 +1,19 @@
-"""One cache key per file type, and no hand-copied version that can drift.
+"""No hand-copied version that can drift, and no number nobody reads.
 
-Two rules, both learned the hard way.
-
-The first: a cached artifact's version has to cover EVERYTHING about how that
-artifact was produced -- the descriptor's layout and the bytes inside the payloads
-it references. Split across two numbers, a fix ships half applied: the descriptor
-advances while content-addressed payloads are reused unchanged, and the package
-reports itself current while serving the old bytes.
-
-The second: ``STEP_TOPOLOGY_SCHEMA_VERSION`` is a Python->JS wire contract, and the
-JS client throws on a mismatch. It is declared once in each language, so nothing
-but this test stops the two from drifting -- which is the same
-"a second hand-copied number is how the two drift" failure that put the package
-version in a stdlib-only module in the first place.
+A number stamped into a payload that nothing checks is not a contract; it is a value that
+looks load-bearing and invites a reader to reason about compatibility that was never enforced.
+And an external constant (the glTF container's framing) declared twice is two places to get
+it wrong.
 """
 
 from __future__ import annotations
 
 import re
 import unittest
-from pathlib import Path
 
-from tests.python.support.paths import REPO_ROOT, add_repo_path
-
-add_repo_path("packages/cadgen/src")
-
-from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
+from tests.python.support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-
-
-class TopologySchemaVersionMirrorTest(unittest.TestCase):
-    def test_python_and_js_declare_the_same_topology_schema_version(self) -> None:
-        source = (ROOT / "packages/core/src/common/stepTopology.mjs").read_text(encoding="utf-8")
-        match = re.search(r"STEP_TOPOLOGY_SCHEMA_VERSION\s*=\s*(\d+)", source)
-        self.assertIsNotNone(match, "@text-to-cad/core must declare STEP_TOPOLOGY_SCHEMA_VERSION")
-        self.assertEqual(
-            STEP_TOPOLOGY_SCHEMA_VERSION,
-            int(match.group(1)),
-            "cadgen and @text-to-cad/core disagree on STEP_topology schemaVersion; the JS client throws "
-            "on a mismatch, so a bump has to land in both languages together",
-        )
-
-
-class PackageVersionIsOneNumberPerFileTypeTest(unittest.TestCase):
-    def test_the_step_cid_salt_is_one_constant_that_re_keys_every_component(self) -> None:
-        # ONE number, and moving it moves every component id. A second version
-        # beside it is the split this rule exists to prevent: a descriptor bump
-        # could then ship without re-emitting the payloads it describes.
-        from unittest import mock
-
-        from cadgen._internal import component_package
-
-        def component_id() -> str:
-            return component_package.geometry_component_hash("bintools-v4", b"brep", {})
-
-        before = component_id()
-        with mock.patch.object(
-            component_package, "GEOMETRY_SCHEME", component_package.GEOMETRY_SCHEME + "-next"
-        ):
-            after = component_id()
-        self.assertNotEqual(
-            before,
-            after,
-            "the component id salt must reach the hash, or bumping the extraction scheme "
-            "would leave every stale component readable under its old key",
-        )
-
-    def test_no_separate_payload_version_has_reappeared(self) -> None:
-        source = (
-            ROOT / "packages/cadgen/src/cadgen/_internal/component_package.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(
-            "COMPONENT_PAYLOAD_VERSION",
-            source,
-            "the component payload version was folded into the component id salt; a second "
-            "number lets a descriptor bump ship without re-emitting the payloads",
-        )
-
-    def test_each_file_type_keeps_its_own_cache_key(self) -> None:
-        # Deliberately NOT one shared number: a drawing rebuild is milliseconds and a
-        # large STEP assembly is tens of seconds, so a DXF change must not re-mesh every
-        # STEP model on next open. The gate lives in the store KEY salt
-        # (component_package.GEOMETRY_SCHEME, reached through
-        # component_package._content_hash_and_bytes), not in a descriptor check:
-        # a version bump re-keys every component.
-        from cadgen._internal import component_package
-
-        # DXF is absent by design: a generated drawing's render IS the sibling
-        # .dxf the client parses, so there is no artifact to gate.
-        self.assertIsInstance(component_package.GEOMETRY_SCHEME, str)
-        self.assertTrue(
-            component_package.GEOMETRY_SCHEME.strip(),
-            "the STEP component key needs its own salt so that file type invalidates "
-            "independently of the others",
-        )
 
 
 class DeadVersionsStayDeadTest(unittest.TestCase):
@@ -110,18 +29,21 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
             (ROOT / "packages/cadgen/src/cadgen/viewer/http_app.py").read_text(encoding="utf-8"),
         )
 
-    def test_the_gltf_container_version_is_declared_once(self) -> None:
-        # GLB_VERSION is the glTF 2.0 spec's container version, not ours to bump, and
-        # two copies of an external constant is two places to get it wrong.
-        declarations = [
-            path
-            for path in (ROOT / "packages/cadgen/src/cadgen/_internal").glob("*.py")
-            if re.search(r"^GLB_VERSION\s*=", path.read_text(encoding="utf-8"), re.MULTILINE)
-        ]
-        self.assertEqual(
-            ["glb_topology.py"],
-            sorted(path.name for path in declarations),
+    def test_the_glb_container_is_declared_once(self) -> None:
+        # The container's magic, version and chunk types are the glTF 2.0 spec's, not ours
+        # to bump, and two copies of an external constant is two places to get it wrong:
+        # the one GLB cadgen writes outside the engine (a robot primitive's mesh) is framed in
+        # cadgen._internal.primitive_mesh. cadgen.engine is the one exception: it is standalone
+        # by law (it imports nothing of cadgen outside itself) and writes its own GLB, so it
+        # declares the container once more, in its GLB writer.
+        package = ROOT / "packages/cadgen/src/cadgen"
+        magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)
+        declarations = sorted(
+            path.relative_to(package).as_posix()
+            for path in package.rglob("*.py")
+            if magic.search(path.read_text(encoding="utf-8"))
         )
+        self.assertEqual(["_internal/primitive_mesh.py", "engine/export/glb.py"], declarations)
 
 
 if __name__ == "__main__":

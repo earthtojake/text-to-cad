@@ -10,8 +10,7 @@ existed, and how `cadgen step export` would have outlived its deletion.
 So: extract the command forms out of the skills' own fenced code blocks and put
 them through the real dispatcher's registry and the real parsers. Nothing is
 executed — a smoke test may not build CAD — but a form that names a command that
-is gone, or passes a flag that no longer exists, fails here
-(design/format-doors.md, "executed docs").
+is gone, or passes a flag that no longer exists, fails here.
 """
 
 from __future__ import annotations
@@ -130,6 +129,13 @@ class DocumentedCommands(unittest.TestCase):
                     _split_command(argv),
                     f"{source} documents `cadgen {' '.join(argv)}`, which no command answers",
                 )
+
+    def test_no_document_runs_a_verb_outside_the_engine(self):
+        # Every build and every verb goes through the engine: no documented form passes --no-daemon (the parse
+        # below refuses one; this names the rule). Migrations' tables name the retired flag, outside any fence.
+        for source, argv, _elided in _documented_forms():
+            with self.subTest(source=str(source), form=" ".join(argv)):
+                self.assertNotIn("--no-daemon", argv)
 
     def test_every_documented_form_parses(self):
         for source, argv, elided in _documented_forms():

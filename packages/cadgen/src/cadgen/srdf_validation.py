@@ -341,29 +341,30 @@ def validate_srdf_against_urdf(
 
 
 def _check_subgroup_cycles(groups_by_name: dict[str, SrdfPlanningGroup], result: FindingsReport) -> None:
+    """A cycle among planning subgroups, each said once. Depth first in document order with a stack
+    of its own (each group and the path to it): a nesting as deep as a file can write is no
+    deeper a call."""
     visited: set[str] = set()
-
-    def visit(name: str, stack: tuple[str, ...]) -> None:
-        if name in stack:
-            cycle = [*stack[stack.index(name):], name]
-            result.add(
-                "error",
-                "subgroup_cycle",
-                f"planning subgroups form a cycle: {' -> '.join(cycle)}",
-                path=f"/robot/group[@name='{name}']",
-            )
-            return
-        if name in visited:
-            return
-        visited.add(name)
-        group = groups_by_name.get(name)
-        if group is None:
-            return
-        for subgroup in group.subgroups:
-            visit(subgroup, (*stack, name))
-
-    for name in groups_by_name:
-        visit(name, ())
+    for start in groups_by_name:
+        pending: list[tuple[str, tuple[str, ...]]] = [(start, ())]
+        while pending:
+            name, path = pending.pop()
+            if name in path:
+                cycle = [*path[path.index(name):], name]
+                result.add(
+                    "error",
+                    "subgroup_cycle",
+                    f"planning subgroups form a cycle: {' -> '.join(cycle)}",
+                    path=f"/robot/group[@name='{name}']",
+                )
+                continue
+            if name in visited:
+                continue
+            visited.add(name)
+            group = groups_by_name.get(name)
+            if group is None:
+                continue
+            pending.extend((subgroup, (*path, name)) for subgroup in reversed(group.subgroups))
 
 
 def _links_are_adjacent(urdf_robot: dict[str, object], link1: str, link2: str) -> bool:

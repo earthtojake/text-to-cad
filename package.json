@@ -1,6 +1,6 @@
 {
   "name": "text-to-cad-workspace",
-  "version": "0.7.26",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -27,5 +27,8 @@
     "esbuild@0.28.2": true,
     "fsevents@2.3.3": true,
     "esbuild@0.27.7": true
+  },
+  "devDependencies": {
+    "gltf-validator": "2.0.0-dev.3.10"
   }
 }

@@ -9,14 +9,12 @@ because a plugin's config pins a release of cadgen that may predate a setting: a
 environment variable it does not know, where a flag it does not know would stop the server.
 
 Only the server hears it, though, and most of CAD's work is not the server's: a skill's ``cadgen``
-command, a model script, the CAD Viewer a skill opens and the build daemon run with nothing a plugin
-set. So the server writes its channel down for its installation (``remember``): uv keeps one
-installation per requirement, and the plugin's server and its skills run the same requirement, so
-the same installation -- the one the build daemon is named after. Any process of that installation
-that was not told a channel itself reports the one written down (``recorded``), re-read with each
-batch, as the build daemon outlives the server that wrote it. The build daemon serves every caller
-of its installation, so it takes no channel from whichever process started it, only the one written
-down (``cadgen.daemon.client``). Where two plugins pin the same release on one machine they share an
+command, a model script and the CAD Viewer a skill opens run with nothing a plugin set. So the
+server writes its channel down for its installation (``remember``): uv keeps one installation per
+requirement, and the plugin's server and its skills run the same requirement, so the same
+installation -- the one the engine daemon is named after. Any process of that installation that was
+not told a channel itself reports the one written down (``recorded``), re-read with each batch, as
+the viewer outlives the server that wrote it. Where two plugins pin the same release on one machine they share an
 installation, and the server that started last is the one written down: the app most likely in use.
 The CAD server itself never reads it: a server its plugin did not name is configured by hand, and says
 so as ``unknown``.
@@ -63,15 +61,20 @@ def is_channel(value: object) -> bool:
 
 @functools.cache
 def _source_tree() -> bool:
-    """An editable install, or cadgen imported from a checkout by path -- as the build daemon and its
+    """An editable install, or cadgen imported from a checkout by path -- as the engine daemon and its
     workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found
-    can be a build's leftover rather than the editable install's record."""
+    can be a build's leftover rather than the editable install's record. Told by where cadgen is
+    imported from before any metadata is read: the scan costs every command that counts something
+    tens of milliseconds, and cadgen imported from a folder of installed packages is no source tree
+    (an editable install imports from its source)."""
+    package = Path(__file__).resolve().parents[1]  # cadgen/
+    if package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file():
+        return True
+    if package.parent.name in ("site-packages", "dist-packages"):
+        return False
     from cadgen._internal.editable import editable_source
 
-    if editable_source() is not None:
-        return True
-    package = Path(__file__).resolve().parents[1]  # cadgen/
-    return package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file()
+    return editable_source() is not None
 
 
 def named() -> str | None:
@@ -96,7 +99,7 @@ def _record_path() -> Path:
 
 @functools.cache
 def installation() -> str:
-    """This installation's short name: its cadgen folder's, as the build daemon's is (``cadgen.daemon.client``)."""
+    """This installation's short name: its cadgen folder's."""
     package = str(Path(__file__).resolve().parents[1])
     return hashlib.sha256(package.encode("utf-8")).hexdigest()[:16]
 

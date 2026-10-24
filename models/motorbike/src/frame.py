@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import chassis as B
 
 
-@step(out="../STEP/frame.step")
+@model
 def frame():
     built = B.build_frame()
     if isinstance(built, list):

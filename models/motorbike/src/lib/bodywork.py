@@ -12,19 +12,20 @@ def build_leg_shield():
     shield = L.loft_path_xz(
         S.LEG_SHIELD_SECTIONS, S.LEG_SHIELD_TH, S.LEG_SHIELD_CORNER,
     )
-    return L.paint(shield, "leg_shield", "apron", color=S.CREAM)
+    return L.paint(shield, "leg_shield", "apron", color=S.CREAM, material=S.PAINTED_ABS)
 
 
 def build_steering_cover():
     cover = L.loft_path_xz(
         S.FRONT_COVER_SECTIONS, S.FRONT_COVER_TH, 6.0,
     )
-    return L.paint(cover, "steering_cover", "head_tube", color=S.CREAM_DEEP)
+    return L.paint(cover, "steering_cover", "head_tube", color=S.CREAM_DEEP,
+                   material=S.PAINTED_ABS)
 
 
 def build_under_seat_body():
     body = L.loft_x_sections(S.REAR_BODY_SECTIONS, S.REAR_BODY_CORNER)
-    return L.paint(body, "under_seat_body", color=S.CREAM_DEEP)
+    return L.paint(body, "under_seat_body", color=S.CREAM_DEEP, material=S.PAINTED_ABS)
 
 
 def build_rear_fender():
@@ -35,9 +36,9 @@ def build_rear_fender():
         S.REAR_FENDER_ANGLES[0], S.REAR_FENDER_ANGLES[1],
         corner=3.0,
     )
-    return L.paint(band, "rear_fender", color=S.CREAM)
+    return L.paint(band, "rear_fender", color=S.CREAM, material=S.PAINTED_ABS)
 
 
 def build_seat():
     seat = L.loft_x_sections(S.SEAT_SECTIONS, S.SEAT_CORNER)
-    return L.paint(seat, "seat", "saddle", color=S.SEAT_BROWN)
+    return L.paint(seat, "seat", "saddle", color=S.SEAT_BROWN, material=S.LEATHER)

@@ -2,8 +2,8 @@
 
 An agent app starts cadgen's MCP server with it, and every skill tells the agent to run its
 commands with it. uv keeps one installation per requirement and reuses it, so the same command
-means the same installation -- and cadgen names its warm daemon after the installation's folder,
-so the server, every thread and every skill command share one daemon. ``--no-config`` keeps the
+means the same installation -- and cadgen keeps one engine daemon per installation, so the
+server, every thread and every skill command share one daemon. ``--no-config`` keeps the
 user's own uv settings (an index, a cache policy) from resolving it differently, and
 ``--managed-python --python 3.13`` makes the installation the first command creates the same on
 every machine, whatever interpreter a GUI app's PATH happens to find first.

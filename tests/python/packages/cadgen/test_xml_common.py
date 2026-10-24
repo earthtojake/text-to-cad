@@ -121,7 +121,6 @@ class DeliberateDifferencesSurvive(unittest.TestCase):
 class InvalidRobotFileText(unittest.TestCase):
     def test_invalid_utf8_is_a_validation_result(self):
         from cadgen import sdf, srdf, urdf
-        from cadgen.sdf_source import SdfSourceError, read_sdf_source
 
         with tempfile.TemporaryDirectory() as tmp:
             for extension, validate in (("urdf", urdf.validate), ("srdf", srdf.validate), ("sdf", sdf.validate)):
@@ -131,8 +130,6 @@ class InvalidRobotFileText(unittest.TestCase):
                     result = validate(path)
                     self.assertFalse(result.ok)
                     self.assertEqual([issue.code for issue in result.issues], ["unreadable_file"])
-            with self.assertRaises(SdfSourceError):
-                read_sdf_source(pathlib.Path(tmp) / "invalid.sdf")
 
 
 if __name__ == "__main__":

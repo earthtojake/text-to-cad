@@ -45,6 +45,6 @@ def absolute_path(ref) -> str:
 
 
 def asset_path(ref) -> str | None:
-    """The file the asset route may send for ``ref``: a CAD file or its sidecar, else ``None`` (404)."""
+    """The file the asset route may send for ``ref``: a CAD file, else ``None`` (404)."""
     path = absolute_path(ref)
     return path if is_served_cad_asset(path) else None

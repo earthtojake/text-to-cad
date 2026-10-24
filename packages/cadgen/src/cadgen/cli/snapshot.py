@@ -1,19 +1,8 @@
-"""``cadgen snapshot`` — render any supported input, routed by suffix.
+"""``cadgen snapshot SRC OUT.png``: a document, a mesh file, a robot or a drawing drawn by OCCT
+as the CAD Viewer draws it (``cadgen.engine.cli``).
 
-The polymorphic door: where a format door accepts only its own kinds, this one
-accepts every kind at once and lets the suffix decide, which is also what a
-mixed-format ``--job`` packet needs.
-
-Its verb is the UNION shape — the STEP surface plus ``joint_values`` — so the
-CLI is GENERATED like every other command in the schema
-(:mod:`cadgen._internal.cli_from_function`). Snapshot used to be the schema's
-one adapter, with a hand-written argv scanner here and a declared option
-surface a policy test pinned; nothing about a snapshot's arguments is written
-down twice any more.
-
-The verb lives here rather than on a ``cadgen.snapshot`` namespace because
-there is no polymorphic FORMAT: `cadgen snapshot` is a routing convenience over
-the seven real doors, and the public namespaces stay one-per-format.
+The parser and the run are the engine's (``cadgen.engine.cli.parser_for``, ``run``), the same
+verb ``python -m cadgen.engine snapshot`` takes.
 """
 
 from __future__ import annotations
@@ -21,23 +10,20 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from cadgen._internal.cli_from_function import generated_main, generated_parser
-from cadgen._internal.snapshot_door import polymorphic_snapshot_verb
-
 DEFAULT_PROG = "cadgen snapshot"
-VERB = ("cadgen.cli.snapshot", "snapshot")
-
-#: Every kind at once. Which kinds each format door takes is
-#: :data:`cadgen._internal.snapshot_door.DOOR_KINDS`, beside the verbs it binds.
-snapshot = polymorphic_snapshot_verb()
+ENGINE_VERB = "snapshot"
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    return generated_parser(VERB, prog=prog)
+    from cadgen.engine.cli import parser_for
+
+    return parser_for(ENGINE_VERB, prog)
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    return generated_main(VERB, argv, prog=prog)
+    from cadgen.engine.cli import run
+
+    return run(ENGINE_VERB, list(argv) if argv is not None else None, prog)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 from math import tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib.gear_teeth import polar_point, trapezoid_tooth_profile
 
@@ -99,7 +99,7 @@ def _make_internal_ring_gear():
         bd.extrude(amount=GEAR_THICKNESS, mode=bd.Mode.SUBTRACT)
     part = ring.part
     part.label = "ring_gear_60_internal_teeth"
-    part.color = bd.Color(0.66, 0.68, 0.70, 1.0)
+    part.color = bd.Color("#d4d7da")
     return part
 
 
@@ -113,7 +113,7 @@ def _make_carrier_plate():
             )
     part = carrier.part
     part.label = "carrier_plate"
-    part.color = bd.Color(0.52, 0.62, 0.58, 1.0)
+    part.color = bd.Color("#bfcec8")
     return part
 
 
@@ -127,7 +127,7 @@ def _make_pin(label: str, center: tuple[float, float]):
             )
     part = pin.part
     part.label = label
-    part.color = bd.Color(0.22, 0.25, 0.29, 1.0)
+    part.color = bd.Color("#818993")
     return part
 
 
@@ -135,7 +135,7 @@ def _planet_center(index: int) -> tuple[float, float]:
     return polar_point(PLANET_CENTER_RADIUS, tau * index / PLANET_COUNT)
 
 
-@step(out="../../STEP/planetary_gear_stage/planetary_gear_stage.step")
+@model
 def planetary_gear_stage():
     """Return the simplified planetary gear assembly in millimeters."""
     parts = [
@@ -148,7 +148,7 @@ def planetary_gear_stage():
             outside_diameter=SUN_OUTSIDE_DIAMETER,
             phase=-tau / SUN_TEETH / 2.0,
             bore_diameter=SUN_BORE_DIAMETER,
-            color=bd.Color(0.94, 0.60, 0.22, 1.0),
+            color=bd.Color("#f8cb81"),
         ),
     ]
 
@@ -163,7 +163,7 @@ def planetary_gear_stage():
                 phase=tau * index / PLANET_COUNT,
                 center=center,
                 bore_diameter=PLANET_BORE_DIAMETER,
-                color=bd.Color(0.24, 0.51, 0.76, 1.0),
+                color=bd.Color("#86bde2"),
             )
         )
         parts.append(_make_pin(f"planet_pin_{index + 1}", center))

@@ -1,4 +1,4 @@
-"""Gear-tooth helpers for the planetary gear stage (plain module: no @step here)."""
+"""Gear-tooth helpers for the planetary gear stage (a plain module: no model here)."""
 
 from __future__ import annotations
 

@@ -58,7 +58,7 @@ import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS, pressToolKey } from "../kit/tools/to
  * pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
- * on screen as a plan-view camera, which `cadgen dxf snapshot --job` draws again. A drawing with
+ * on screen as a plan-view camera, which `cadgen snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has a Layers section in the file sidebar (`layersSectionShown`). The
  * chrome is every view's — the strip at the top centre, the tool's row under it, the sidebar at the
  * top-left, Quick Edit at the top-right — drawn from the kit's parts around the 2D canvas.
@@ -357,7 +357,7 @@ function DxfSurface({ view, data }) {
 
   // ---- Quick Edit ------------------------------------------------------------
   // A note carries the views with annotation ink as JSON files — a plan-view job
-  // `cadgen dxf snapshot --job` renders, the annotation on the sheet.
+  // `cadgen snapshot --annotation PACKET --camera authored` draws, the annotation on the sheet.
   const promptFile = useCallback(() => (resourceRef.current?.kind === "workspace-file" ? resourceRef.current.path : null), []);
   const annotationNow = useCallback(() => drawingAnnotationDocument(annotationRef.current.items, unitsRef.current.unit), []);
   const quickEditPrompt = useMemo(() => ({

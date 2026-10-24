@@ -102,7 +102,8 @@ pointer cursor, and no tooltip.
 At the right, only what a host or a file adds: the host's update button, a renderer's
 actions and the host's Full size, where the host shows the view small. A renderer's
 own view controls (a 3D view's Display and Preview, or Preview's settings and Exit preview)
-go last, in the box FileViewer hands it (`navbarSlot`, `data-view-controls`).
+follow, in the box FileViewer hands it (`navbarSlot`, `data-view-controls`), and last the
+host's Open in browser (`openInBrowser`), where the host has one.
 
 The explorer (`navigation/FolderExplorer.jsx`) is a popover under the file's name, a
 fixed 18rem wide and never resized. It floats over the view, so opening it resizes

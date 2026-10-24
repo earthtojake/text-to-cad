@@ -54,7 +54,7 @@ export function entryAsset(entry, key) {
   if (
     assetKey === kind ||
     assetKey === sourceFormat ||
-    (sourceFormat === RENDER_FORMAT.STEP && ["glb", "topology", "selectortopology", "displayedgetopology"].includes(assetKey)) ||
+    (sourceFormat === RENDER_FORMAT.STEP && assetKey === "glb") ||
     (kind === "srdf" && assetKey === "srdf")
   ) {
     return primaryAsset(entry);
@@ -87,18 +87,6 @@ export function entryMeshAssetBytes(entry) {
   return entryAssetBytes(entry, meshAssetKeyForEntry(entry));
 }
 
-export function entryTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "topology") || entryAssetUrl(entry, "glb");
-}
-
-export function entrySelectorTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "selectorTopology") || entryTopologyAssetUrl(entry);
-}
-
-export function entryDisplayEdgeTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "displayEdgeTopology") || entryTopologyAssetUrl(entry);
-}
-
 export function entryUrdfAssetHash(entry) {
   return [
     entryAssetHash(entry, "urdf"),
@@ -120,7 +108,7 @@ export function entryMeshAssetSignature(entry) {
 }
 
 export function entryReferenceAssetSignature(entry) {
-  return entryAssetHash(entry, "selectorTopology") || normalizeString(entry?.hash);
+  return normalizeString(entry?.hash);
 }
 
 export function entryHasMesh(entry) {
@@ -135,32 +123,14 @@ export function entryHasMesh(entry) {
 }
 
 export function entryHasReferences(entry) {
-  return Boolean(
-    entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entryAssetUrl(entry, "glb") &&
-    entryAssetHash(entry, "selectorTopology")
-  );
-}
-
-export function entryHasDisplayEdges(entry) {
-  return Boolean(
-    entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entryAssetUrl(entry, "glb") &&
-    entryAssetHash(entry, "displayEdgeTopology")
-  );
+  return entrySourceFormat(entry) === RENDER_FORMAT.STEP && entryHasMesh(entry);
 }
 
 export function entryPoseUrl(entry) {
-  // The sidecar URL for a STEP model that declares kinematics — the source of
-  // the viewer's Pose tab. The block is authored on the decorator and travels
-  // in the sidecar.
+  // The sidecar URL of a STEP model with kinematics: it versions the articulation
+  // cadgen resolved from that sidecar, which travels inline on the entry
+  // (`articulation`).
   return entrySourceFormat(entry) === RENDER_FORMAT.STEP
     ? normalizeString(entry?.poseUrl)
-    : "";
-}
-
-export function entrySourceSidecarUrl(entry) {
-  return entrySourceFormat(entry) === RENDER_FORMAT.STEP
-    ? normalizeString(entry?.sourceUrl)
     : "";
 }

@@ -72,7 +72,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec, surfaces
 
@@ -819,8 +819,7 @@ def _cover_shell():
 
 
 def build_cover_panel():
-    """The carbon cover shell: nine tenths of the engine cover's build time, so
-    it is its own model and an edit to the parts around it never rebuilds it."""
+    """The carbon cover shell: nine tenths of the engine cover's build time."""
     return surfaces.styled(_cover_shell(), "cover_panel", spec.CARBON_GLOSS)
 
 

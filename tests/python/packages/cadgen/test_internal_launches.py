@@ -2,7 +2,7 @@
 
 ``python -m`` puts the folder a process runs in first on its import path. cadgen's
 processes run in the system temp folder (the daemon, its workers, the store's gc, the
-artifact producer) or in a project (a transient build, the Viewer): whatever other
+artifact producer) or in a project (the Viewer): whatever other
 programs, or on a shared ``/tmp`` other users, leave there must never stand in for
 cadgen's own modules (STORE.md §9). ``-P`` keeps that folder off the path; PYTHONPATH and
 the installation still apply. ``test_daemon_pool`` runs a worker beside a shadow package;

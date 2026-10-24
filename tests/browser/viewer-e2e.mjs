@@ -30,17 +30,23 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const diagnosticDir = args.out || process.env.VIEWER_TEST_DIAGNOSTICS_DIR || "";
 const root = path.resolve(args.dir || ".");
-// One fixture per LOAD PATH: an exact-surface STEP package, a mesh, a 2D drawing,
-// a robot description.
+// One fixture per LOAD PATH: a mesh, a 2D drawing, a robot description, and the two
+// documents the cadgen engine serves -- a STEP and an engine document (.xbf) -- read through
+// the viewer and drawn by one renderer.
 const fixtures = [
   // `tools` is the file's own tool strip; unavailable tools are hidden. `threeD` has
   // Projection, Display and Preview at the strip's end; `sections`
   // are file sidebar tiles it must have (what there is to read of the file, whatever the tool).
   { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: ["Model tree"], threeD: true },
+  // A STEP: read by the engine, drawn as an engine document is.
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model tree"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
   { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: [], threeD: false, minCoverage: 0.003 },
   { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Links"], threeD: true },
+  // A cadgen engine document: served by the engine, read by the page from it, and picked,
+  // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
+  { format: "xbf", file: "smoke.xbf", parts: true,
+    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model tree"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -73,7 +79,7 @@ const browser = await chromium.launch({
 });
 
 async function newPage() {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, extraHTTPHeaders: process.env.VIEWER_TEST_TOKEN ? { Authorization: `Bearer ${process.env.VIEWER_TEST_TOKEN}` } : {} });
   const errors = [];
   const responseReads = new Set();
   await context.route("**/*", async (route) => {
@@ -92,16 +98,18 @@ async function newPage() {
       return;
     }
     const parsed = new URL(url);
-    // A file is named by its absolute path in every request: the page resolves a relative
-    // `?file=` (as this suite opens them) against where the viewer started before it asks.
+    // A file is named by its absolute path in every request: the page addresses documents by id
+    // (`/<id>`) and asks for a file by the path its row gives.
     if (["/__cad/catalog", "/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
       const file = parsed.searchParams.get("file") || "";
       if (file && !/^(?:\/|[a-z]:\/)/i.test(file)) {
         errors.push(`a relative file reached ${parsed.pathname}: ${file}`);
       }
     }
+    // The page reads its own origin alone: a document the cadgen engine serves is read through
+    // the viewer (`/__cad/api/...`), never from the engine's own port.
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
-      errors.push(`unexpected external request: ${request.method()} ${url} (${request.resourceType()})`);
+      errors.push(`a request to another origin: ${request.method()} ${url} (${request.resourceType()})`);
       await route.abort("blockedbyclient");
       return;
     }
@@ -132,16 +140,6 @@ async function newPage() {
     errors.push(`console: ${message.text()}${source}`);
   });
   await page.addInitScript(MODEL_BOUNDS_SCRIPT);
-  await page.addInitScript(() => {
-    window.__viewerTestCameraLodTrace = [];
-    window.addEventListener("cad:lod-status", (event) => {
-      const status = event.detail;
-      const trace = window.__viewerTestCameraLodTrace;
-      trace.push({ at: performance.now(), camera: window.__cadCamera?.(), pending: status?.pendingEvaluation,
-        occupied: status?.occupied, settled: status?.qualitySettled });
-      if (trace.length > 8) trace.shift();
-    });
-  });
   // Keep one bounded diagnostic snapshot per gate. It is written before the
   // owned context closes, so a thrown assertion still leaves its actual UI and
   // renderer state available instead of only a locator timeout.
@@ -165,9 +163,7 @@ async function newPage() {
             placement: window.__cadModelPlacement,
             canvases: [...document.querySelectorAll('canvas')].map(canvas => canvas.getBoundingClientRect().toJSON()),
             camera: window.__cadCamera?.(),
-            cameraLodTrace: window.__viewerTestCameraLodTrace,
-            lod: window.__cadViewportLod?.(),
-            quality: window.__cadViewerQuality,
+            load: window.__cadViewerLoad,
             badge: document.querySelector('[data-file-status]')?.dataset.fileStatus,
           })),
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
@@ -195,7 +191,13 @@ async function newPage() {
 }
 
 async function openFile(page, file) {
-  await page.goto(`${args.url.replace(/\/$/, "")}/?file=${encodeURIComponent(file)}`, {
+  // A page names its document by id, `/<id>`: the file's, which the server derives from its canonical
+  // path and registers when the catalog is asked for it (as Select File and the home do).
+  const base = args.url.replace(/\/$/, "");
+  const catalog = await page.request.get(`${base}/__cad/catalog?file=${encodeURIComponent(path.join(root, file))}`);
+  const id = (await catalog.json()).entries?.[0]?.id;
+  if (!id) fail(`the catalog gave ${file} no document id`);
+  await page.goto(`${base}/${id}`, {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
@@ -399,10 +401,9 @@ async function resetView(page) {
   const box = await page.locator("canvas").first().boundingBox();
   await page.mouse.click(box.x + box.width * 0.12, box.y + box.height * 0.86, { button: "right" });
   await page.getByRole("menuitem", { name: "Zoom to fit", exact: true }).click();
-  // Reset changes framing on the presented model. The pose and zero-pose
-  // camera assertions do not require a queued LOD camera sample to finish;
-  // actual geometry adoption, presentation and camera stability still do.
-  await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
+  // Reset changes framing on the presented model: presentation and camera
+  // stability are what it waits for.
+  await settledCameraFrame(page, { stage: "reset view" });
 }
 
 // --- the camera across modes ----------------------------------------------
@@ -411,28 +412,21 @@ async function resetView(page) {
 // camera back exactly. A model opens framed against its own zero pose.
 async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
   const startedAt = Date.now();
-  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection } });
   // Projection is published during scene reconciliation, before Render's
   // environment and first frame are necessarily ready. The presentation host
-  // clears aria-busy only after drawing that destination scene. Camera damping
-  // must settle for every framing assertion; mode/gesture checks also require
-  // settled LOD refinement.
-  const ready = await page.waitForFunction(({ want, requireSettledLod }) => {
+  // clears aria-busy only after drawing that destination scene. The whole model
+  // must be loaded, and camera damping must settle, for every framing assertion.
+  const ready = await page.waitForFunction(({ want }) => {
     const read = () => {
       const canvas = document.querySelector("canvas");
       const camera = window.__cadCamera?.();
-      const quality = window.__cadViewerQuality;
-      const lod = window.__cadViewportLod?.();
       if (!canvas || !camera || (want && camera.projection !== want)
         || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
         || getComputedStyle(canvas).visibility !== "visible"
-        || document.querySelector("[data-viewer-transition]")) return null;
-      const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
-      if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
-      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || lod.busy || lod.collectionPending
-        || (requireSettledLod && (!lod.qualitySettled || lod.pendingEvaluation)))) return null;
-      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts,
-        lodSettled: lod?.qualitySettled, lodPendingEvaluation: lod?.pendingEvaluation };
+        || document.querySelector("[data-viewer-transition]")
+        || !window.__cadViewerLoad?.complete) return null;
+      return { canvas, camera };
     };
     const after = read();
     if (!after) {
@@ -443,7 +437,7 @@ async function settledCameraFrame(page, { projection = null, stage, requireSettl
       ...(camera.projection === "orthographic" ? [camera.halfHeight] : [])];
     const before = window.__viewerTestCameraFrame;
     const a = before ? coordinates(before.camera) : [], b = coordinates(after.camera);
-    const stable = before?.canvas === after.canvas && before.quality === after.quality
+    const stable = before?.canvas === after.canvas
       && a.every((value, index) => Math.abs(value - b[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
     const stableFrames = stable ? before.stableFrames + 1 : 0;
     window.__viewerTestCameraFrame = { ...after, stableFrames };
@@ -456,10 +450,8 @@ async function settledCameraFrame(page, { projection = null, stage, requireSettl
       gl.finish();
     } else if (!(window.__cadGpuDevice?.().views > 0)) throw new Error('camera: presented canvas draws through no GPU device');
     delete window.__viewerTestCameraFrame;
-    return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
-      lodSettled: after.lodSettled, lodPendingEvaluation: after.lodPendingEvaluation,
-      width: after.canvas.width, height: after.canvas.height };
-  }, { want: projection, requireSettledLod }, { timeout, polling: "raf" });
+    return { camera: after.camera, width: after.canvas.width, height: after.canvas.height };
+  }, { want: projection }, { timeout, polling: "raf" });
   try {
     const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
     cameraReadiness.set(page, state);

@@ -1,7 +1,7 @@
 """Small exact machined cap passages from recorded guide sweeps."""
 import json
 from pathlib import Path
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import _finish
 from lib.transport_guide import path_wire
 DATA=json.loads(Path(__file__).with_name('remaining_cap_reliefs.json').read_text())

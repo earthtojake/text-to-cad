@@ -118,20 +118,19 @@ function RobotSearchRow({ match, highlighted, cursor, selection, hiddenIds, onVi
 
 /**
  * @param {object} props
- * @param {object | null} props.description The parsed robot model (URDF, an SRDF's paired URDF, or SDF).
+ * @param {object | null} props.robot The payload cadgen resolved (`cadgen.robot_payload`): a URDF, an SRDF's paired URDF
+ *   with the SRDF's semantics on it, or an SDF.
  * @param {object[]} props.components `buildRobotParts(...).components`: every visual or named mesh object.
- * @param {{ id: string, linkName: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
+ * @param {{ id: string, link: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
  * @param {string[]} [props.hiddenPartIds] Hidden visual component ids.
  * @param {(ids: string[], visible: boolean) => void} [props.onVisibilityChange] Changes visibility of loaded parts.
  * @param {object} props.selection `useLinkSelection`, with `select`/`selectLink` routed through the Select tool.
- * @param {Map<string, string[]> | null} [props.groupNamesByLink] SRDF planning groups per link.
  * @param {boolean} [props.active] Whether Select is the tool, which is when the panels show; a hidden tree does not scroll to a selection.
- * @param {(filename: string) => string} [props.meshPath] The host path of a mesh the description names, or "" when it has none here.
- * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names.
+ * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names, by the host path the payload resolved for it.
  */
-export default function LinksSection({ description = null, components = EMPTY, parts = EMPTY, selection, groupNamesByLink = null, active = true, meshPath = null, onOpenFile = null, hiddenPartIds = EMPTY, onVisibilityChange }) {
+export default function LinksSection({ robot = null, components = EMPTY, parts = EMPTY, selection, active = true, onOpenFile = null, hiddenPartIds = EMPTY, onVisibilityChange }) {
   const hiddenIds = useMemo(() => new Set(hiddenPartIds), [hiddenPartIds]);
-  const tree = useMemo(() => buildRobotTree(description, { components, parts }), [description, components, parts]);
+  const tree = useMemo(() => buildRobotTree(robot, { components, parts }), [robot, components, parts]);
   const [userExpanded, setUserExpanded] = useState(null);
   const defaultExpanded = useMemo(() => initialExpansion(tree), [tree]);
   const expanded = userExpanded || defaultExpanded;
@@ -181,7 +180,7 @@ export default function LinksSection({ description = null, components = EMPTY, p
             : deferredQuery.trim() && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{`No link matches “${deferredQuery.trim()}”`}</p>
           : tree.roots.length
             ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs, hiddenIds, onVisibilityChange }}/>)}</ul>
-            : <p role="status" className="p-2 text-tiny text-muted-foreground">{description ? "This description has no links." : "Loading links…"}</p>}
+            : <p role="status" className="p-2 text-tiny text-muted-foreground">{robot ? "This description has no links." : "Loading links…"}</p>}
         </div>
       </div>
     </ToolPanel>

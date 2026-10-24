@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 
 const emptyCommands = Object.freeze({});
@@ -24,9 +25,11 @@ export function useWorkspaceDocument({ view, data }) {
   // The catalog is live: a rewritten file arrives as the same entry with a new hash.
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const modelKey = fileKey(entry);
-  const liveEntry = catalog.entries.find(item => fileKey(item) === modelKey) || entry;
+  // The live row is the same document's: joined by its id, however its path was spelled.
+  const liveEntry = catalog.entries.find(item => (entry?.id ? item.id === entry.id : fileKey(item) === modelKey)) || entry;
   const resource = useMemo(() => ({
-    kind: "workspace-file", path: view.file.path,
+    // A document the engine holds by its id alone (a model's) is referenced by that id.
+    kind: isDocumentId(view.file.path) ? "cad-model" : "workspace-file", path: view.file.path,
     revision: String(liveEntry?.documentHash || liveEntry?.hash || view.file.revision || "")
   }), [view.file.path, view.file.revision, liveEntry?.documentHash, liveEntry?.hash]);
   const shellServices = useMemo(() => ({

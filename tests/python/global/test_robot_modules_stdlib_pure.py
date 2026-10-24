@@ -8,14 +8,8 @@ added in passing would silently destroy that property — every suite would stil
 pass, because the test environment has the kernel installed.
 
 Static check over the AST (not an import-time sys.modules probe) so an offending
-import is caught even when it is lazy, conditional, or function-local.
-
-`snapshot` is the one verb outside that promise, and deliberately: rendering a robot
-means a headless browser, so `urdf.snapshot()` cannot be extraction-ready and there
-is nothing to gain from pretending. What it MUST stay is import-cheap — the
-namespace binds a door object built by a stdlib-only factory, and the renderer is
-reached only when the verb is called. `ImportCost` below pins that half, which is
-what the static scan can no longer see.
+import is caught even when it is lazy, conditional, or function-local. Drawing a robot
+is the engine's (`cadgen urdf snapshot` is its snapshot), outside this family.
 """
 
 from __future__ import annotations
@@ -41,7 +35,7 @@ FAMILY = [
     "cli/urdf_validate.py",
     "cli/srdf_validate.py",
     "cli/sdf_validate.py",
-    # The public namespaces the CLIs are shells over (design/format-doors.md).
+    # The public namespaces the CLIs are shells over (packages/cadgen/README.md, law 6).
     # They are the family's front door now, so they inherit its purity rule.
     "urdf.py",
     "srdf.py",
@@ -61,20 +55,14 @@ ALLOWED_CADGEN = {
     "cadgen.sdf_source",
     "cadgen.sdf_validation",
     "cadgen.sdf_external",
-    "cadgen.cli_logging",
-    "cadgen.cli",  # report_cli_error / shared CLI plumbing, itself lazy
+    "cadgen.cli",  # shared CLI plumbing, itself lazy
     "cadgen.results",  # the typed line protocol: dataclasses and pathlib only
     "cadgen._internal.validation_door",  # findings -> ValidationResult, stdlib only
     "cadgen._internal.cli_from_function",  # argparse over a signature, stdlib only
-    # The `snapshot` verb factory. Stdlib + cadgen.results at module scope; the
-    # renderer it reaches is imported inside the verb body, so it costs an import
-    # of `cadgen.urdf` nothing. Rendering itself is NOT extraction-ready (see the
-    # module docstring) — ImportCost is the guard that replaces the static one.
-    "cadgen._internal.snapshot_door",
 }
 
-# What the snapshot verb must not drag in at IMPORT time. `cadgen urdf validate`
-# runs on machines with none of these installed.
+# What importing the family must not drag in. `cadgen urdf validate` runs on machines with
+# none of these installed.
 HEAVY_AT_IMPORT = ("OCP", "build123d", "playwright", "numpy", "ezdxf")
 
 
@@ -112,7 +100,7 @@ class RobotModulesStdlibPure(unittest.TestCase):
 
 
 class ImportCost(unittest.TestCase):
-    """Importing the family must stay free, snapshot verb and all.
+    """Importing the family must stay free.
 
     Run in a subprocess: this one has the CAD stack loaded already.
     """
@@ -130,24 +118,6 @@ class ImportCost(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("HEAVY:\n", proc.stdout)
-
-    def test_the_snapshot_verb_is_bound_without_being_reached(self) -> None:
-        # The namespace exposes a real callable; nothing about the renderer has
-        # been touched to produce it.
-        code = (
-            "import sys, cadgen.urdf;"
-            "assert callable(cadgen.urdf.snapshot);"
-            "print('LOADED:' + ','.join("
-            "m for m in ('cadgen.snapshot_cli', 'cadgen.snapshot_core') if m in sys.modules))"
-        )
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            env={"PYTHONPATH": str(CADGEN_SRC.parent), "PATH": "/usr/bin:/bin"},
-        )
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("LOADED:\n", proc.stdout)
 
 
 if __name__ == "__main__":

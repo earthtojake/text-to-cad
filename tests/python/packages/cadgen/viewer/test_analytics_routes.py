@@ -141,7 +141,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
             self.assertEqual(self.request("POST", "/__cad/analytics/activity", activity)[0], 204)
         # A route that breaks for no reason its caller gave is the server's crash; a bad request is not.
         with mock.patch.object(type(self.app), "_recents_payload", side_effect=KeyError("secret")):
-            self.assertEqual(self.request("GET", "/__cad/recents")[0], 400)
+            self.assertEqual(self.request("GET", "/__cad/recents")[0], 500)
         self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": "relative.stl"})[0], 400)
         self.assertTrue(self.app.analytics.flush())
         events = self.sent[-1]["events"]
@@ -194,7 +194,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.
         port = self.serve(create_cad_app(host="127.0.0.1", port=0))
         self.assertEqual(self.request("GET", "/__cad/analytics", port=port)[0], 404)
-        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True}, port=port)[0], 405)
+        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True}, port=port)[0], 404)
 
 
 if __name__ == "__main__":

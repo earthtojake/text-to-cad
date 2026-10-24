@@ -19,6 +19,17 @@ test("a build of the file is an update of the model on screen until it ends", ()
   assert.equal(viewerLoadingState({ editPending: true, previousView: true }).updating, true);
   assert.equal(viewerLoadingState({ editPending: true, previousView: true }).opening, false);
   assert.equal(viewerLoadingState({}).busy, false);
+  assert.equal(viewerLoadingState({}).preview, false);
+});
+
+test("a build whose own preview is drawn is no longer a wait, and the view says it is a preview", () => {
+  const drawn = viewerLoadingState({ editPending: true, previousView: true, currentPreview: true });
+  assert.deepEqual([drawn.updating, drawn.busy, drawn.preview], [false, false, true]);
+  // Its own geometry still arriving is a wait of its own, said beside the label.
+  const arriving = viewerLoadingState({ busy: true, editPending: true, previousView: true, currentPreview: true });
+  assert.deepEqual([arriving.updating, arriving.preview], [true, true]);
+  // The label outlives the build: a failed one leaves its preview on screen under the alert.
+  assert.equal(viewerLoadingState({ previousView: true, currentPreview: true, error: { severity: "error", blocking: false } }).preview, true);
 });
 
 test("technical stages have a small vocabulary and uncounted waits never claim a fraction", () => {
@@ -46,7 +57,9 @@ test("a file being imported reads as importing, and a cold open's meshing as mes
     { label: "Importing model", detail: "", counts: "120/256", percent: 47, connectionLost: null });
   // A model script's own build is not an import, nor a read: every phase of it is building,
   // the parts it stores included.
-  for (const [phase, label] of [["generate", "Building geometry"], ["package", "Collecting parts"], ["components", "Storing parts"], ["finalize", "Writing outputs"], ["mesh", "Meshing parts"]]) {
+  for (const [phase, label] of [["generate", "Building geometry"], ["package", "Collecting parts"], ["components", "Storing parts"], ["finalize", "Writing outputs"], ["mesh", "Meshing parts"],
+    // The engine's stages (`progress.PHASES`).
+    ["load", "Loading the script"], ["body", "Building geometry"], ["names", "Naming elements"], ["document", "Making the document"], ["write", "Writing files"]]) {
     assert.equal(loadingProgress({ phase, label }).label, "Building model");
   }
   // "Reading model" is a read; a wait with nothing to say is opening.

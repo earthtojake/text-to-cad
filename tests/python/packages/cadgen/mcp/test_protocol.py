@@ -117,6 +117,30 @@ class ConnectionTest(unittest.TestCase):
         self.assertTrue(self.sink.frames.empty())
 
 
+class EndTest(unittest.TestCase):
+    def test_the_process_ends_with_its_host_while_a_call_is_in_flight(self) -> None:
+        # A call the engine still holds (a status wait, a capture) once kept the shim alive after the
+        # host closed its pipe: the pool's threads are joined at interpreter exit.
+        import subprocess
+        import sys
+
+        script = (
+            "import sys, threading\n"
+            "from cadgen.mcp.protocol import Connection\n"
+            "def handler(method, params, context):\n"
+            "    sys.stderr.write('entered\\n'); sys.stderr.flush()\n"
+            "    threading.Event().wait()\n"
+            "Connection(sys.stdin.buffer, sys.stdout.buffer, handler).serve()\n"
+        )
+        process = subprocess.Popen([sys.executable, "-c", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        process.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"held"}\n')
+        process.stdin.flush()
+        self.assertEqual(process.stderr.readline(), b"entered\n")
+        process.stdin.close()
+        self.assertEqual(process.wait(timeout=60), 0)
+
 class ClaimStdoutTest(unittest.TestCase):
     def test_stray_output_goes_to_stderr_not_the_protocol(self) -> None:
         import subprocess
@@ -135,6 +159,23 @@ class ClaimStdoutTest(unittest.TestCase):
         self.assertIn(b"stray", done.stderr)
         self.assertIn(b"child", done.stderr)
 
+
+class ClaimStdinTest(unittest.TestCase):
+    def test_requests_arrive_on_their_own_handle_and_standard_input_is_null(self) -> None:
+        import subprocess
+        import sys
+
+        script = (
+            "import os,sys\n"
+            "from cadgen.mcp.protocol import claim_stdin\n"
+            "requests = claim_stdin()\n"
+            "null = os.stat(os.devnull)\n"
+            "zero = os.fstat(0)\n"
+            "print((zero.st_dev, zero.st_ino) == (null.st_dev, null.st_ino) if os.name != 'nt' else True, sys.stdin.read() == '')\n"
+            "print(requests.readline().decode().strip())\n"
+        )
+        done = subprocess.run([sys.executable, "-c", script], input=b'{"id":1}\n', capture_output=True, timeout=60)
+        self.assertEqual(done.stdout.decode().split(), ["True", "True", '{"id":1}'], done.stderr)
 
 if __name__ == "__main__":
     unittest.main()

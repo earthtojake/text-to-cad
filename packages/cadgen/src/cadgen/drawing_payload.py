@@ -61,19 +61,15 @@ of its own near-black.
 
 Storage
 -------
-The payload is derived data, cached in the store's ``drawing`` index — keyed by
-the document's bytes plus this extraction's scheme, exactly as every other
-input-addressed derivation is (``STORE.md`` §2). ``drawing_payload_bytes`` is
-the door: a second call for unchanged bytes never re-enters ezdxf, and never
-even imports it. Its two halves — ``cached_drawing_payload`` and
-``render_drawing_payload`` under one ``drawing_payload_key`` — are there for a
-caller that renders off its request (the CAD Viewer's route).
+Nothing is stored. The CAD Viewer's route holds the payloads it rendered in its
+own memory, by the bytes it read, and renders those bytes
+(``build_drawing_payload(path, data)``; ``cadgen.viewer.drawings``).
 """
 
 from __future__ import annotations
 
 import contextlib
-import hashlib
+import io
 import json
 import random
 import threading
@@ -83,18 +79,12 @@ __all__ = [
     "DRAWING_PAYLOAD_SCHEMA_VERSION",
     "DrawingReadError",
     "build_drawing_payload",
-    "cached_drawing_payload",
-    "drawing_extraction_scheme",
-    "drawing_payload_bytes",
-    "drawing_payload_key",
     "encode_drawing_payload",
     "read_drawing_document",
-    "render_drawing_payload",
 ]
 
 # Bumped when the payload's SHAPE changes. It rides in the payload (a client
-# checks it before drawing) and in the cache key (an old shape is not served
-# from the store after an upgrade). 2: text is a `text` primitive and the
+# checks it before drawing). 2: text is a `text` primitive and the
 # payload lists its `fonts`, where 1 outlined every glyph into `filled-paths`.
 # 3: every primitive names its `entity` (a handle), the payload lists its
 # `entities`, and a layer row counts `entities` rather than primitives.
@@ -119,8 +109,6 @@ _LINEAR_DECIMALS = 6
 # primitive for a string it has not outlined.
 _TEXT = "text"
 
-_extraction_scheme: str | None = None
-
 # ezdxf offsets a pattern hatch's base lines by `random.random()` "to avoid
 # intersections" with the boundary's corners, from the PROCESS-WIDE random
 # module. Left alone, the same drawing renders differently every time and
@@ -143,20 +131,24 @@ class DrawingReadError(ValueError):
 # --- reading ---------------------------------------------------------------
 
 
-def read_drawing_document(path):
+def read_drawing_document(path, data=None):
     """The parsed ``ezdxf`` document, recovering a damaged file once.
 
     ``ezdxf.readfile`` is strict. When it rejects the structure,
     ``ezdxf.recover.readfile`` re-reads the same bytes tolerantly (it repairs
     the classes of damage other CAD software writes); anything it cannot make
     sense of raises with the reason rather than an empty drawing.
+
+    ``data`` is the file's bytes, read already: they are parsed as ``readfile``
+    parses a file (a binary DXF by its sentinel, else text in the encoding its
+    header names, with universal newlines), and ``path`` only names them.
     """
     import ezdxf
     import ezdxf.recover
 
     text = str(path)
     try:
-        return ezdxf.readfile(text)
+        return ezdxf.readfile(text) if data is None else _document_of(bytes(data))
     except FileNotFoundError:
         raise DrawingReadError(f"{Path(text).name} does not exist; check the path") from None
     except (PermissionError, IsADirectoryError) as error:
@@ -170,7 +162,10 @@ def read_drawing_document(path):
         # DXF at all comes back as a bare OSError. Both get the second attempt.
         pass
     try:
-        document, _auditor = ezdxf.recover.readfile(text)
+        if data is None:
+            document, _auditor = ezdxf.recover.readfile(text)
+        else:
+            document, _auditor = ezdxf.recover.read(io.BytesIO(bytes(data)))
     except (ezdxf.DXFError, OSError, ValueError) as error:
         raise DrawingReadError(
             f"{Path(text).name} is not a readable DXF ({error}); "
@@ -178,6 +173,26 @@ def read_drawing_document(path):
             "`ezdxf audit` on it to see what is damaged"
         ) from None
     return document
+
+
+_BINARY_DXF = b"AutoCAD Binary DXF\r\n\x1a\x00"
+
+
+def _document_of(data: bytes):
+    """A DXF's bytes parsed as ``ezdxf.readfile`` parses its file."""
+    import ezdxf
+    from ezdxf.document import Drawing
+    from ezdxf.filemanagement import dxf_stream_info
+    from ezdxf.lldxf.tagger import binary_tags_loader
+    from ezdxf.lldxf.validator import is_dxf_stream
+
+    if data[: len(_BINARY_DXF)] == _BINARY_DXF:
+        return Drawing.load(binary_tags_loader(data, errors="surrogateescape"))
+    probe = data.decode("utf-8", errors="ignore")
+    if not is_dxf_stream(io.StringIO(probe, newline=None)):
+        raise OSError("not a DXF file")
+    encoding = dxf_stream_info(io.StringIO(probe, newline=None)).encoding
+    return ezdxf.read(io.StringIO(data.decode(encoding, errors="surrogateescape"), newline=None))
 
 
 # --- rendering -------------------------------------------------------------
@@ -612,14 +627,15 @@ def _units(document):
 # --- the payload -----------------------------------------------------------
 
 
-def build_drawing_payload(path) -> dict:
-    """The flat 2D render payload for one ``.dxf`` file.
+def build_drawing_payload(path, data=None) -> dict:
+    """The flat 2D render payload for one ``.dxf`` file (its bytes, when ``data``
+    holds them: ``read_drawing_document``).
 
     ``{schemaVersion, units, bounds, layers, entities, fonts, primitives}``;
     see the module docstring for the coordinate, colour, text and entity
     contracts.
     """
-    document = read_drawing_document(path)
+    document = read_drawing_document(path, data)
     context, emitted = _render(document)
 
     extent = _Extent()
@@ -665,84 +681,3 @@ def encode_drawing_payload(payload) -> bytes:
             "coincident control points) in the program that made it"
         ) from None
     return text.encode("utf-8")
-
-
-# --- the cached door -------------------------------------------------------
-
-
-def drawing_extraction_scheme() -> str:
-    """What this extraction IS, for the cache key.
-
-    The payload's shape plus the ezdxf release that draws it: upgrading ezdxf
-    changes flattening, font outlines and hatch patterns, so entries written by
-    the old one must not be served. The version is read from distribution
-    metadata rather than by importing ezdxf, so a cache HIT costs no import.
-    """
-    global _extraction_scheme
-    if _extraction_scheme is None:
-        from importlib.metadata import PackageNotFoundError, version
-
-        try:
-            ezdxf_version = str(version("ezdxf") or "")
-        except PackageNotFoundError:
-            import ezdxf
-
-            ezdxf_version = str(ezdxf.__version__)
-        _extraction_scheme = (
-            f"cadgen-drawing-payload-v{DRAWING_PAYLOAD_SCHEMA_VERSION}+ezdxf-{ezdxf_version}"
-        )
-    return _extraction_scheme
-
-
-def _document_hash(path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while chunk := handle.read(1 << 20):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def drawing_payload_key(path) -> str:
-    """The store key of this file's payload: its bytes' hash under this extraction's scheme."""
-    from cadgen.store import drawings as drawing_index
-
-    try:
-        return drawing_index.drawing_input_key(
-            _document_hash(path), scheme=drawing_extraction_scheme()
-        )
-    except OSError as error:
-        raise DrawingReadError(
-            f"{Path(str(path)).name} could not be read ({error}); "
-            "check that the file exists and that this user can read it"
-        ) from None
-
-
-def cached_drawing_payload(key: str) -> bytes | None:
-    """The payload the store holds under ``key``, or ``None``: never a render."""
-    from cadgen.store import drawings as drawing_index
-
-    return drawing_index.read(key)
-
-
-def render_drawing_payload(path, key: str) -> bytes:
-    """Render the payload and keep it under ``key``. A store that cannot be
-    written costs the cache, never the answer."""
-    from cadgen.store import drawings as drawing_index
-
-    data = encode_drawing_payload(build_drawing_payload(path))
-    drawing_index.write(key, data)
-    return data
-
-
-def drawing_payload_bytes(path) -> bytes:
-    """``encode_drawing_payload(build_drawing_payload(path))``, cached by content.
-
-    The store answers for bytes it has already drawn, so re-opening a drawing
-    — or opening one two tabs already have — never re-enters ezdxf. A store
-    that cannot be read or written costs the cache, never the answer.
-    """
-    key = drawing_payload_key(path)
-    cached = cached_drawing_payload(key)
-    if cached is not None:
-        return cached
-    return render_drawing_payload(path, key)

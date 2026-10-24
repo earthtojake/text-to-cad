@@ -2,12 +2,13 @@ import { FileWarning } from 'lucide-react';
 import { EmptyState } from '@text-to-cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createCrashReporter } from '@text-to-cad/core/client';
+import { createCrashReporter, isEngineGone } from '@text-to-cad/core/client';
 import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
 import { I18nProvider, resolveLocale, translateIn } from '@text-to-cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
 import App from './App';
+import { EngineStopped } from './EngineStopped';
 import { sessionTabRecord } from './persistence/tabRecord';
 import faviconUrl from './client/assets/favicon.png';
 import './client/styles/globals.css';
@@ -20,8 +21,9 @@ const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
 function StartingView({ error }: { error?: Error }) {
   // Before the server answers there is no kept choice to read: the browser's language.
   const locale = resolveLocale(navigator.languages ?? [navigator.language]);
-  return <I18nProvider locale={locale}><div className="relative h-svh overflow-hidden bg-background">{error
-    ? <EmptyState icon={FileWarning} title={translateIn(locale, 'app.start.notAnswering')} description={error.message} tone="warn" />
+  return <I18nProvider locale={locale}><div className="relative h-svh overflow-hidden bg-background">{error && isEngineGone(error)
+    ? <EngineStopped locale={locale} />
+    : error ? <EmptyState icon={FileWarning} title={translateIn(locale, 'app.start.notAnswering')} description={error.message} tone="warn" />
     : <ViewerLoadingOverlay viewerLoading />}</div></I18nProvider>;
 }
 

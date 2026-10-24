@@ -4,7 +4,8 @@ The carrier rotates about Z and carries two outboard X-axis bearing eyes.
 Neither orthogonal shaft traverses the tendon transport corridor. Four curved
 load-path ribbons join the peripheral flex eyes to the outboard yaw hubs.
 """
-from cadgen import build123d as bd, srgb
+import build123d as bd
+
 from .layout import MCP_YAW_HUB_PLANES,CMC_YAW_HUB_PLANES
 from .phalanx import _drive_bore
 
@@ -72,7 +73,7 @@ def make_universal_carrier(phalanx_width=18.,yaw_plane=8.,
           and abs(e.center().X)<1.04 and abs(e.center().Y)<1.04]
     frame=bd.fillet(rims,.08)
     frame.label=label
-    frame.color=srgb('#a9b7c1')
+    frame.color='#a9b7c1'
     bounds=frame.bounding_box()
     if bounds.min.X > -x-.9 or bounds.max.X < x+.9:
         raise ValueError(f'{label}: Boolean result lost a bearing cheek')

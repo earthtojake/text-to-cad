@@ -19,6 +19,7 @@ from __future__ import annotations
 import socket
 import socketserver
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import url_norm
@@ -26,15 +27,21 @@ from .response import Request, Response
 
 __all__ = ["CadHTTPServer", "make_handler_class", "MAX_REQUEST_BODY_BYTES"]
 
-# The tess-cache POSTs are the only body-carrying routes; everything else rides
-# the query string. The largest legitimate payload is one component's
-# tessellation entry.
+# The most body any request may carry, past every route's own cap (a Quick Edit's
+# prompt files are the largest: ``prompt_files.MAX_BODY_BYTES``); a body over it is
+# refused before it is read.
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 
 _ALLOWED_METHODS = ("GET", "HEAD", "POST")
 
 # How long a closing connection waits for each piece of a body its route never read (`_linger`).
 LINGER_SECONDS = 1.0
+# How long any one read of a connection may wait -- a request's line, its headers, a piece of its
+# body, or the next request on a kept-alive connection -- before the connection is closed: a peer
+# that sends nothing, or trickles a request, holds no thread past it, before the token gate or after.
+REQUEST_TIMEOUT_SECONDS = 30.0
+# The most connections served at once; one more is closed as it is accepted, not queued behind them.
+MAX_CONNECTIONS = 256
 
 
 class CadHTTPServer(ThreadingHTTPServer):
@@ -54,7 +61,24 @@ class CadHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, address, handler_class, app):
         self.app = app
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         super().__init__(address, handler_class)
+
+    def process_request(self, request, client_address):  # noqa: D102
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)  # past MAX_CONNECTIONS: closed now, never a waiting thread
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):  # noqa: D102
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
 
     def server_bind(self):  # noqa: D102
         # Not HTTPServer's: it names the host by reverse DNS (socket.getfqdn),
@@ -76,10 +100,11 @@ class CadHTTPServer(ThreadingHTTPServer):
 def make_handler_class(app):
     class CadRequestHandler(BaseHTTPRequestHandler):
         # Python defaults to HTTP/1.0, which means no keep-alive. The client
-        # fetches many .surf components in parallel; without keep-alive every
+        # fetches many parts' meshes and tables in parallel; without keep-alive every
         # component pays a fresh connection. Safe because every response here
         # carries an explicit content-length.
         protocol_version = "HTTP/1.1"
+        timeout = REQUEST_TIMEOUT_SECONDS  # every read of the connection (``StreamRequestHandler.setup``)
 
         # No Server header is emitted anywhere: every response goes through
         # send_response_only + explicit send_header, and version_string() feeds
@@ -216,9 +241,7 @@ def make_handler_class(app):
             if "chunked" in transfer_encoding:
                 # The stdlib decodes no chunked framing at all: content-length
                 # is None and rfile sits on the chunk header. Refuse rather
-                # than silently mangle — a mangled /__tess_cache/batch body
-                # permanently demotes the client's provider to per-key gets for
-                # the life of the page.
+                # than hand a route a mangled body.
                 response.send_json(400, {"ok": False, "error": "chunked request bodies are not supported"})
                 self.close_connection = True
                 return False
@@ -268,6 +291,9 @@ def make_handler_class(app):
         def do_HEAD(self):  # noqa: N802
             self._dispatch()
 
+        def do_DELETE(self):
+            self._dispatch()
+
         def do_POST(self):  # noqa: N802
             self._dispatch()
 
@@ -291,7 +317,7 @@ def make_handler_class(app):
                     return
                 if not self.parse_request():
                     return
-                if self.command not in _ALLOWED_METHODS:
+                if self.command not in _ALLOWED_METHODS and not (self.command == "DELETE" and self.path == "/mcp"):
                     if "chunked" in (self.headers.get("transfer-encoding") or "").lower():
                         # Nothing here can frame a chunked body, so the only
                         # safe answer is to stop reusing the connection.

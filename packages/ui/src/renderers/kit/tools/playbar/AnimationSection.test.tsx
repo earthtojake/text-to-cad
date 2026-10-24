@@ -59,15 +59,15 @@ it('one routine is its transport alone: Reset in the heading, then Play, the scr
   expect(onAutoplayChange).toHaveBeenLastCalledWith(true);
 });
 
-it('several routines lead with the one in hand, a list to choose another from', async () => {
+it('several routines lead with the one in hand, a list to choose another from, each with its duration', async () => {
   const user = userEvent.setup();
   const runtime = routines([TURN, OPEN]);
   await openSection(user, <AnimationSection runtime={runtime} autoplay={false} onAutoplayChange={vi.fn()} />);
   await user.click(screen.getByRole('button', { name: 'Routine: Turn' }));
   const menu = screen.getByRole('menu');
   expect(within(menu).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Turn', 'true'], ['Open', 'false']]);
-  await user.click(within(menu).getByRole('menuitemradio', { name: 'Open' }));
+    .toEqual([['Turn8.00s', 'true'], ['Open3.00s', 'false']]);
+  await user.click(within(menu).getByRole('menuitemradio', { name: /^Open/ }));
   expect(runtime.onClipSelect).toHaveBeenLastCalledWith('open');
 });
 

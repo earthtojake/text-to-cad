@@ -16,34 +16,32 @@ Kinematics
 * 15 revolute axes per five-finger hand
 * 58 total revolute relationships
 
-The static export uses an athletic ready pose.  Every relationship is authored
-with native build123d joints through ``AssemblyHelper``; the exported STEP is a
-resolved pose with labeled occurrences and source-level mate metadata.
+The model is built in an athletic ready pose.  Every relationship is a
+build123d revolute joint connected at 0 where the parts stand, so the pose is
+the as-built configuration of the document's mechanism.
 """
 
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt
 from typing import Iterable, Sequence
 
-from cadgen import build123d as bd
-from cadgen.assembly import AssemblyHelper, label_shape
+import build123d as bd
 
 
 # Restrained industrial material palette.  Source colors survive the repo's
 # topology/render path; external STEP viewers may display transparency as solid.
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
+# sRGB hex strings: build123d's Shape.color setter builds the Color on
+# assignment.
 GRAPHITE = "#252B30"
 CARBON = "#343B40"
 ALUMINUM = "#AEB6BC"
 TITANIUM = "#747E86"
 OFF_WHITE = "#D8D9D4"
-SMOKED_GLASS = (0.025, 0.075, 0.095, 0.82)
-OPTIC_GLASS = (0.01, 0.055, 0.065, 0.94)
+SMOKED_GLASS = "#2c4d57d1"
+OPTIC_GLASS = "#194248f0"
 STATUS_AMBER = "#B8893A"
 
 JOINT_CLEARANCE = 1.8
@@ -115,7 +113,9 @@ def _plane(origin: Point, axis: Vec, x_hint: Vec = (1.0, 0.0, 0.0)) -> bd.Plane:
 
 
 def _shape(shape, label: str, color: bd.Color):
-    return label_shape(shape, label, color=color)
+    shape.label = "_".join(label.strip().replace(":", "_").split())
+    shape.color = color
+    return shape
 
 
 def _module(name: str, children: Iterable) -> bd.Compound:
@@ -1523,11 +1523,10 @@ def _palm_module(side: str, sign: float, wrist: Point) -> tuple[bd.Compound, Poi
     ), palm_center
 
 
-@step(out="../../STEP/sculpted_humanoid/sculpted_humanoid.step")
+@model
 def sculpted_humanoid():
     """Return the complete labeled humanoid assembly in its athletic pose."""
 
-    asm = AssemblyHelper("sculpted_humanoid_28_body_dof_plus_dexterous_hands")
     raw_parts: dict[str, bd.Compound] = {}
     parts: dict[str, bd.Compound] = {}
     body_joints: list[JointSpec] = []
@@ -2405,38 +2404,24 @@ def sculpted_humanoid():
         raw_parts[host_name] = host
 
     for name, part in raw_parts.items():
-        parts[name] = asm.add(part, name)
+        part.label = name
+        parts[name] = part
 
     # Fixed side owns the native RevoluteJoint.  The moving side owns a RigidJoint
     # at the identical world frame; angle=0 preserves the authored athletic pose.
     for spec in all_joints:
         fixed_part = parts[spec.fixed]
         moving_part = parts[spec.moving]
-        axis = bd.Axis(spec.center, spec.axis)
-        fixed_frame = asm.revolute_frame(
-            fixed_part,
-            f"{spec.name}_axis",
-            axis,
-            angular_range=spec.limits,
-        )
-        fixed_joint_location = fixed_part.joints[fixed_frame.frame].location
+        bd.RevoluteJoint(spec.name, fixed_part, axis=bd.Axis(spec.center, spec.axis), angular_range=spec.limits)
+        fixed_joint_location = fixed_part.joints[spec.name].location
         follower_location = bd.Location(
             tuple(fixed_joint_location.position),
             tuple(fixed_joint_location.orientation),
         )
-        moving_frame = asm.rigid_frame(
-            moving_part,
-            f"{spec.name}_follower",
-            follower_location,
-        )
-        asm.revolute(
-            fixed_frame,
-            moving_frame,
-            angle=0.0,
-            label=spec.name,
-        )
+        bd.RigidJoint(spec.name, moving_part, follower_location)
+        fixed_part.joints[spec.name].connect_to(moving_part.joints[spec.name], angle=0.0)
 
-    root = asm.build()
+    root = bd.Compound(children=list(parts.values()), label="sculpted_humanoid_28_body_dof_plus_dexterous_hands")
     root.dof_summary = {
         "body": 28,
         "left_hand": 15,

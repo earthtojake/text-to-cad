@@ -16,9 +16,11 @@ Coordinates: vehicle centerline = Z, first-stage Merlin nozzle exit plane
 
 from __future__ import annotations
 
+from cadgen import memo
+
 from math import cos, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import merlin_common as eng
 
@@ -43,21 +45,20 @@ Z_RP1_TOP = 17000.0        # S1 RP-1 tank (lower) top. schematic
 Z_LOX_BOT = 17500.0        # S1 LOX tank (upper) bottom. schematic
 OCTAWEB_R = 1290.0         # outer engine circle radius. cluster-fit estimate
 
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-COL_WHITE = (0.92, 0.92, 0.93, 1.0)
-COL_SOOT = (0.78, 0.78, 0.79, 1.0)
-COL_BLACK = (0.10, 0.10, 0.11, 1.0)
-COL_BAY = (0.16, 0.16, 0.17, 1.0)
-COL_METAL = (0.55, 0.57, 0.60, 1.0)
-COL_TITAN = (0.48, 0.47, 0.50, 1.0)
-COL_LEG = (0.20, 0.20, 0.22, 1.0)
-COL_NIOB = (0.27, 0.26, 0.28, 1.0)
-COL_LOX = (0.20, 0.45, 0.95, 0.45)
-COL_RP1 = (0.85, 0.60, 0.15, 0.45)
-COL_GRAY = (0.62, 0.62, 0.68, 0.40)
-COL_GUIDE = (0.55, 0.57, 0.62, 0.45)
+# Plain RGB(A) tuples: build123d's Shape.color setter builds the Color on
+# assignment.
+COL_WHITE = "#f6f6f7"
+COL_SOOT = "#e5e5e6"
+COL_BLACK = "#59595d"
+COL_BAY = "#6f6f73"
+COL_METAL = "#c4c7cb"
+COL_TITAN = "#b8b6bc"
+COL_LEG = "#7c7c81"
+COL_NIOB = "#8e8b90"
+COL_LOX = "#7cb3f973"
+COL_RP1 = "#edcb6c73"
+COL_GRAY = "#ceced766"
+COL_GUIDE = "#c4c7ce73"
 
 CUT_START, CUT_ARC = 135.0, 270.0     # cutaway opening faces +Y
 
@@ -105,38 +106,36 @@ def _dome(x, y, z, r, up, label, color, squash=0.55):
 # Engine cluster (linked Merlin 1D instances)
 # ---------------------------------------------------------------------------
 
-_ENGINE_PROTO = None
-
-
+@memo
 def engine_prototype() -> bd.Compound:
-    """One reduced-detail Merlin 1D built from the vendored linked library."""
-    global _ENGINE_PROTO
-    if _ENGINE_PROTO is None:
-        eng.DETAIL_BOLTS = False
-        groups = [
-            eng.make_nozzle_assembly(),
-            eng.make_chamber_assembly(),
-            eng.make_thrust_structure(),
-            eng.make_turbopump_assembly(),
-            eng.make_gas_generator_assembly(),
-            eng.make_turbine_exhaust_assembly(),
-        ]
-        _ENGINE_PROTO = _grp("merlin1d_linked_prototype", groups)
-    return _ENGINE_PROTO
+    """One reduced-detail Merlin 1D built from the vendored linked library.
+
+    A `@memo` stage (~400 kernel calls): every cluster calls it, and in a build
+    the first call runs it (or replays it) and every other call is a new
+    placement of its result -- one Merlin per build for the 27 of each vehicle.
+    """
+    groups = [
+        eng.make_nozzle_assembly(),
+        eng.make_chamber_assembly(),
+        eng.make_thrust_structure(),
+        eng.make_turbopump_assembly(),
+        eng.make_gas_generator_assembly(),
+        eng.make_turbine_exhaust_assembly(),
+    ]
+    proto = _grp("merlin1d_linked_prototype", groups)
+    return proto
 
 
 def make_engine_cluster(core_x: float, core_tag: str) -> bd.Compound:
     """Octaweb 8-around-1; outer pumps oriented tangentially to clear neighbors.
 
-    Instances share the prototype geometry via cadgen.compound_from_instances
-    (O(1) OCCT placements); build123d .moved() deep-copies the ~70-solid
-    engine per instance, which dominated stack compose time.
+    Every engine is a placement of one prototype: cadgen's engine places a
+    moved shape on the same geometry, so nine moves of the ~70-solid Merlin
+    are nine placements of one B-rep, never nine copies.
     """
-    from cadgen import compound_from_instances
-
     proto = engine_prototype()
     placements = [
-        (proto, bd.Location((core_x, 0, 0), (0, 0, 90)),
+        (bd.Location((core_x, 0, 0), (0, 0, 90)),
          f"merlin1d_instance_{core_tag}_center__linked"),
     ]
     for i in range(8):
@@ -144,14 +143,16 @@ def make_engine_cluster(core_x: float, core_tag: str) -> bd.Compound:
         a = radians(az)
         placements.append(
             (
-                proto,
                 bd.Location((core_x + OCTAWEB_R * cos(a), OCTAWEB_R * sin(a), 0), (0, 0, az + 90)),
                 f"merlin1d_instance_{core_tag}_outer_{i + 1}__linked",
             )
         )
-    return compound_from_instances(
-        f"{core_tag}_engine_cluster__octaweb_9x_merlin1d", placements
-    )
+    engines = []
+    for location, label in placements:
+        engine = proto.moved(location)
+        engine.label = label
+        engines.append(engine)
+    return _grp(f"{core_tag}_engine_cluster__octaweb_9x_merlin1d", engines)
 
 
 def make_mvac() -> bd.Compound:
@@ -160,7 +161,6 @@ def make_mvac() -> bd.Compound:
     MVac exit diameter is publicly conflicting (2.4-3.3 m); modeled 2.9 m,
     labeled estimate. Nozzle is a schematic two-cone extension, NOT a sourced
     contour."""
-    eng.DETAIL_BOLTS = False
     parts = [
         eng.make_chamber_assembly(),
         eng.make_thrust_structure(),
@@ -420,7 +420,14 @@ def build_center_interior() -> list[bd.Compound]:
 # ---------------------------------------------------------------------------
 
 
+@memo
 def build_vehicle(cutaway: bool = False) -> list[bd.Compound]:
+    """The vehicle's top-level groups, as built or sectioned for the cutaway.
+
+    A `@memo` stage (~1,300 kernel calls beside the engine's): the full stack
+    and the exploded view both call `build_vehicle()`, so in a build the
+    second call is a new placement of the first's result.
+    """
     arc, start = (CUT_ARC, CUT_START) if cutaway else (360.0, 0.0)
     groups = []
     groups += [ _grp("center_core_group",

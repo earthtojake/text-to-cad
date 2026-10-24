@@ -577,7 +577,7 @@ class UndimensionedSheetTests(unittest.TestCase):
 
     def test_the_duplicate_and_empty_checks_still_run(self) -> None:
         """Exempting the cut-profile checks must not exempt the rest."""
-        from cadgen.drawing_checks import validate_drawing_document
+        from cadgen.engine.export.dxf import validate_drawing_document
 
         import ezdxf
 

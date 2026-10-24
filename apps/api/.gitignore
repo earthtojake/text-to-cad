@@ -1,0 +1,7 @@
+# api.texttocad.dev's local state: Vercel's project link and pulled environment (its PostHog keys)
+# are never committed; an example file that names the variables, with no values, is.
+.vercel
+.env
+.env.*
+!.env.example
+node_modules

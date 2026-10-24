@@ -20,9 +20,9 @@ python scripts/mold_tool.py pulls part.stl
 ```
 
 Input is a mesh (`.stl`, `.obj`, `.ply`, `.3mf`). For a STEP, export an STL
-sidecar with `$cad` first — around 50,000 to 200,000 triangles is the useful
-range: enough that a 1 mm feature has facets of its own, few enough that the
-run stays under a minute. The tool splits faces further where it needs to.
+with `$cad` first: `cadgen export <id> part.stl` writes one from the model (or `cadgen export part.step part.stl` from a STEP) with `$cad`'s launch command.
+Its mesh comes at one fixed tolerance; the tool splits faces further where it
+needs to, so a 1 mm feature gets facets of its own.
 
 Mesh files carry no units, so `--units mm|cm|m|in|ft` states the file's, and
 the report repeats it as `scale.declared_units`. Without it everything is read

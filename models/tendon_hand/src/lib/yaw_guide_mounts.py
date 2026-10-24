@@ -5,7 +5,7 @@ liner outlet; all metal extends upstream, preserving the3mm drive approach.
 """
 from math import cos,sin,radians
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import _finish,_sweep
 from lib.universal_carrier import make_universal_carrier
 from lib.layout import FINGERS,finger_fan_matrix

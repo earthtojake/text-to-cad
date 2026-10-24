@@ -1,21 +1,16 @@
-"""F-14D system model: wings — panels, slats, flaps, spoilers, tip lights.
+"""F-14D system: wings — panels, slats, flaps, spoilers, tip lights.
 
-The group `lib/wings.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.3`; rebuild `f14d.py` to pick up a change here.
+A stage of the aircraft: the group `lib/wings.py` builds, already on its gear
+stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
+not reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import wings as wings_lib
 
 
-@step(out="../STEP/wings.step")
+@memo
 def wings():
-    return wings_lib.build()
-
-
-if __name__ == "__main__":
-    wings()
+    group = wings_lib.build()
+    return group

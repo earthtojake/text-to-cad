@@ -12,11 +12,10 @@ Locked interfaces:
 
 from __future__ import annotations
 
-import functools
 
 import math  # noqa: F401  (kept for tuning)
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .juno_lib import (
     ACCENT,
@@ -137,13 +136,8 @@ KNUCKLE_XS = (-27.0, -9.0, 9.0, 27.0)
 THUMB_ROOT = (39.5, 2.0, -60.0)
 
 
-@functools.cache
 def _thumb_frames():
-    """(CMC, SEG1, SEG2) Locations of the thumb chain.
-
-    Built on first use rather than at import: a module-level ``bd.Pos(...)``
-    would load the CAD kernel before the @step freshness gate runs.
-    """
+    """(CMC, SEG1, SEG2) Locations of the thumb chain."""
     t_cmc = bd.Pos(*THUMB_ROOT) * bd.Rot(0, -28, 0) * bd.Rot(0, 0, 38)  # hinge axis = local X
     t_seg1 = t_cmc * bd.Rot(12, 0, 0)  # CMC curl
     t_seg2 = t_seg1 * bd.Pos(0, 0, -32.0) * bd.Rot(30, 0, 0)  # IP curl

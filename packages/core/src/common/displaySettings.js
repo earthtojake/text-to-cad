@@ -171,12 +171,6 @@ export function normalizeDisplayMode(value, { fallback = CAD_DISPLAY_MODE.SHADED
   if (!normalized) {
     return fallback;
   }
-  if (normalized === "rendered") {
-    throw new Error("Display mode 'rendered' was removed; use 'shaded'.");
-  }
-  if (normalized === "solid") {
-    throw new Error("Display mode 'solid' was removed; use 'shaded_edges'.");
-  }
   if (!CAD_DISPLAY_MODE_VALUES.includes(normalized)) {
     throw new Error(`Unknown display mode '${value}'. Expected one of: ${CAD_DISPLAY_MODE_VALUES.join(", ")}`);
   }

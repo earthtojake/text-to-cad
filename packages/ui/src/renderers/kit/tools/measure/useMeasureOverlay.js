@@ -22,8 +22,8 @@ import { projectWorldPointToClient } from "@text-to-cad/core/lib/viewer/measureR
 import { measureRulerDraftMeasurement } from "./measureRulerState.js";
 
 /** What a pick is, in words, beside the pointer: its kind and what it is worth on its own ("Edge ⌀ 6.60 mm L 20.73 mm"). */
-function entityChipText(pick) {
-  return [MEASURE_SNAP_LABELS[pick?.snapKind] || "", formatEntityMeasurement(entityMeasurementFromPick(pick))].filter(Boolean).join("  ");
+function entityChipText(pick, faceArea = null) {
+  return [MEASURE_SNAP_LABELS[pick?.snapKind] || "", formatEntityMeasurement(entityMeasurementFromPick(pick, { faceArea }))].filter(Boolean).join("  ");
 }
 
 // What Select has picked, as the annotations and the parts are: the one selection blue.
@@ -48,7 +48,8 @@ export function useMeasureOverlay({
   runtimeRef,
   mountRef,
   preview,
-  viewerReadyTick
+  viewerReadyTick,
+  faceAreas = null
 }) {
   const measureStateRef = useRef(measureState);
   measureStateRef.current = measureState;
@@ -195,7 +196,8 @@ export function useMeasureOverlay({
           const hoverPoint = projectWorldPointToClient(hover.point, camera, localRect);
           if (hoverPoint) {
             drawMeasureSnapMarker(context, hoverPoint, { snapKind: hover.snapKind, now });
-            const chipText = entityChipText(hover);
+            const faceArea = hover.snapKind === "face" ? faceAreas?.read(hover.reference) : null;
+            const chipText = entityChipText(hover, faceArea);
             if (chipText) {
               drawMeasureSnapChip(context, hoverPoint, chipText, { bounds });
             }
@@ -233,5 +235,5 @@ export function useMeasureOverlay({
       window.cancelAnimationFrame(rafId);
       if (hooked?.onAfterRender === afterRender) hooked.onAfterRender = previous;
     };
-  }, [measureCanvasRef, measureHoverRef, measureModeActive, runtimeRef, mountRef, preview, viewerReadyTick, hasOverlayContent]);
+  }, [measureCanvasRef, measureHoverRef, measureModeActive, runtimeRef, mountRef, preview, viewerReadyTick, hasOverlayContent, faceAreas]);
 }

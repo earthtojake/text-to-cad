@@ -3,7 +3,8 @@ import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
 /**
- * `@text-to-cad/ui/catalog`: CAD files as the viewer reads them, by absolute path. Pure — no React
+ * `@text-to-cad/ui/catalog`: CAD files as the viewer reads them, by absolute path, and documents the
+ * engine holds by their id alone (a model's), which have no file to browse. Pure — no React
  * and no transport — so a host's adapters and their unit tests import it alone.
  *
  * A view shows one file and browses from its folder. The source a host hands the viewer
@@ -33,7 +34,7 @@ export function joinPath(folder: string, name: string): string {
 
 /** Render-affecting revisions, not transient compiler progress, invalidate a document. */
 export function contentRevision(entry: CadEntry): string {
-  return JSON.stringify([entry.hash, entry.documentHash, entry.animationHash, entry.appearanceHash, entry.url, entry.relations, entry.sourceSidecar, entry.mtime, entry.bytes]);
+  return JSON.stringify([entry.hash, entry.documentHash, entry.animationHash, entry.appearanceHash, entry.url, entry.relations, entry.articulation, entry.display, entry.mtime, entry.bytes]);
 }
 
 /**
@@ -49,9 +50,14 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
     async stat(path, { signal }): Promise<FileMetadata> {
       const entry = await client.resolveEntry(path, { signal });
       signal.throwIfAborted();
-      const file = normalizePath(entry.file);
-      const name = baseName(file);
-      return { path: file, name, kind: 'file', size: Number(entry.bytes || 0), extension: name.split('.').pop()?.toLowerCase() || '', mediaType: 'cad', revision: contentRevision(entry) };
+      // A document known by its id alone (a model's) keeps its id for a path, is named by its
+      // function, and has no file to browse from or act on (`navigationPath: null`).
+      const byId = entry.sourcePath === null;
+      const file = byId ? entry.file : normalizePath(entry.file);
+      const name = entry.name || baseName(file);
+      return { path: file, name, ...(byId ? { navigationPath: null } : {}), kind: 'file', size: Number(entry.bytes || 0),
+        extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
+        revision: contentRevision(entry) };
     },
     async list(directory, { signal }) {
       const folder = await client.folder(directory, { signal });

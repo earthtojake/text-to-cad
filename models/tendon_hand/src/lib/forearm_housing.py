@@ -3,7 +3,8 @@
 The two 1.8 mm side frames stay outside X±42.5 mm. Existing actuator, guide,
 chassis and tendon geometry is immutable. All screws are nominal envelopes.
 """
-from cadgen import build123d as bd, srgb
+import build123d as bd
+
 from .finish import finish
 from .actuator_fasteners import socket_screw
 from .forearm_frame import SIDE_RAIL_WIDTH,SIDE_RAIL_LENGTH,SIDE_RAIL_HEIGHT,SIDE_RAIL_CENTER_Y,SIDE_RAIL_FILLET
@@ -68,7 +69,7 @@ def make_cable_grommet():
     seat=bd.Cylinder(4,1.8)-bd.Cylinder(2.2,2.0)
     s=s-seat
     s=_done(s,'dark','silicone_two_lip_cable_exit_grommet')
-    s.color=srgb('#242a2b')
+    s.color='#242a2b'
     return s
 
 

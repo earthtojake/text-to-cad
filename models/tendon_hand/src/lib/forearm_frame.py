@@ -6,7 +6,8 @@ clearance. Side beams and deep inter-row ribs provide a load path around the
 open rotor and tendon corridors. No actuator or route coordinate is changed.
 """
 from math import cos, sin, radians, atan2, degrees, hypot
-from cadgen import build123d as bd, report
+
+import build123d as bd
 from .finish import finish
 
 STATION_X=(-27.,-9.,9.,27.)
@@ -93,9 +94,7 @@ def make_rear_flange():
 
 def make_forearm_chassis():
     """One fused skeletal reaction frame, including its four wrist fixing eyes."""
-    report('24 sensor seats and four open ladders')
     ladders=[_ladder(x) for x in STATION_X]
-    report('longerons and transverse load paths')
     rails=[bd.Pos(x,SIDE_RAIL_CENTER_Y,0)*_rounded_box(SIDE_RAIL_WIDTH,SIDE_RAIL_LENGTH,SIDE_RAIL_HEIGHT,SIDE_RAIL_FILLET) for x in (-38,38)]
     # Rear/distal crossmembers and five vaulted transverse braces. They sit
     # between actuator rows, so the motor/sensor envelope remains unobstructed.
@@ -104,7 +103,6 @@ def make_forearm_chassis():
     for y0,y1 in zip(STATION_Y,STATION_Y[1:]):
         ym=(y0+y1)/2
         cross.append(bd.Pos(0,ym,0)*_rounded_box(76,2.25,3.4,1.0))
-    report('wrist mounting branches')
     eyes=[];branches=[]
     for x,y,z in WRIST_FRAME_EYES:
         eye=bd.Pos(x,y,z)*bd.Cylinder(3.2,3,rotation=(90,0,0))

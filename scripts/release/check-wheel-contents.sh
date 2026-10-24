@@ -3,12 +3,12 @@ set -euo pipefail
 
 # Assert the cadgen wheel actually contains its runtime assets.
 #
-# cadgen ships JavaScript it executes (Node builders, the snapshot browser bundle, the
-# CAD Viewer's built client), the native file tracer every build loads, and non-Python
-# data its server reads (collation.json).
+# cadgen ships JavaScript it serves (the CAD Viewer's built client, the CAD app page,
+# the headless browser bundle of the viewer's scene) and non-Python data its server reads
+# (collation.json).
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
 # declaration that fails QUIETLY: a glob that does not match nested files produces a
-# wheel that imports fine, passes every Python test, and then cannot build a DXF preview
+# wheel that imports fine, passes every Python test, and then cannot render a snapshot
 # -- or serve a Viewer -- on a user's machine. The repo has already been bitten by the
 # same shape of bug in JS bundling (an entry tree-shaken to a 20-byte shebang, exit
 # code 0).
@@ -36,48 +36,45 @@ if [ -z "$PYTHON_BIN" ]; then
   fi
 fi
 
-# Paths every wheel must carry. The Node builders are what cadgen spawns for DXF and mesh
-# export; the browser bundle is what the snapshot CLI loads in a page.
+# Paths every wheel must carry.
 REQUIRED=(
   # The Python the wheel must actually contain. Asset globs were the whole list once,
   # back when cadgen was Python-plus-data; it now also carries the CLI parsers and the
-  # warm daemon, and a packages.find regression that dropped any of them would produce a
+  # engine, and a packages.find regression that dropped any of them would produce a
   # wheel whose `cadgen` console script dies at import. This is the ONLY packaging gate
   # the publish job runs -- test-installed.sh covers the same ground far better but runs
   # in test.yml, not at publish.
   "cadgen/__init__.py"
   "cadgen/assets.py"
   "cadgen/cli/__init__.py"
-  "cadgen/cli/step_build.py"
   "cadgen/cli/viewer.py"
   "cadgen/viewer/__init__.py"
   "cadgen/viewer/__main__.py"
   "cadgen/viewer/main.py"
-  "cadgen/viewer/compiles.py"
+  "cadgen/viewer/documents.py"
   "cadgen/viewer/collation.json"
-  "cadgen/authoring.py"
-  "cadgen/build123d.py"
+  # `import build123d` made lazy at interpreter start: the finder, and the .pth at the root of
+  # site-packages that installs it.
+  "cadgen/_internal/lazy_kernel.py"
+  "cadgen-lazy-kernel.pth"
   # The robot validators moved out of skills/{sdf,srdf,urdf}/scripts into cadgen, so a
   # packaging regression here would ship a cadgen whose `cadgen urdf validate` cannot import.
   "cadgen/cli/urdf_validate.py"
   "cadgen/urdf_source.py"
   "cadgen/srdf_validation.py"
   "cadgen/findings.py"
-  "cadgen/daemon/__init__.py"
-  "cadgen/daemon/server.py"
-  # The warm-worker pool. Without these the daemon supervisor starts and then
-  # cannot spawn a worker, so every build silently falls back to cold.
-  "cadgen/daemon/pool.py"
-  "cadgen/daemon/worker.py"
-  "cadgen/cli/daemon_status.py"
-  # Doubles as a rename sentinel: step_artifacts.py became step_topology_artifact.py, so a
-  # merge that resurrected the old name would ship a wheel missing this one.
-  "cadgen/step_topology_artifact.py"
-  "cadgen/_internal/node_resolve_register.mjs"
-  "cadgen/_internal/node_resolve_hooks.mjs"
-  "cadgen/_runtime/node/mesh-export.mjs"
-  "cadgen/_runtime/node/package.json"
-  "cadgen/_runtime/node/THIRD_PARTY_LICENSES.txt"
+  # The engine: its daemon and the warm worker every build runs in. Without these the
+  # daemon starts and then cannot spawn a worker, so every build fails.
+  "cadgen/engine/__init__.py"
+  "cadgen/engine/daemon.py"
+  "cadgen/engine/worker.py"
+  "cadgen/engine/cli.py"
+  # The engine's data: the page `cadgen serve` shows a document in, the environment image its
+  # look lights the display modes with, and its README (the mechanisms the package's laws name).
+  "cadgen/engine/README.md"
+  "cadgen/engine/page/index.html"
+  "cadgen/engine/page/viewer.js"
+  "cadgen/engine/render/studio.hdr"
   "cadgen/_runtime/browser/snapshot-render.js"
   "cadgen/_runtime/browser/render.html"
   "cadgen/_runtime/viewer/index.html"
@@ -86,13 +83,6 @@ REQUIRED=(
   "cadgen/mcp/server.py"
   "cadgen/mcp/tunnel.py"
   "cadgen/_runtime/mcp/index.html"
-  # The file tracer every build loads, one per platform: a wheel missing one builds
-  # nothing on that platform.
-  "cadgen/_runtime/native/filetrace-macos-aarch64.dylib"
-  "cadgen/_runtime/native/filetrace-macos-x86_64.dylib"
-  "cadgen/_runtime/native/filetrace-linux-x86_64.so"
-  "cadgen/_runtime/native/filetrace-linux-aarch64.so"
-  "cadgen/_runtime/native/filetrace-windows-x86_64.dll"
 )
 
 echo "Building cadgen wheel for content check..."
@@ -129,6 +119,15 @@ for path in "${REQUIRED[@]}"; do
     missing="$missing  - $path"$'\n'
   fi
 done
+
+# The engine's test goldens (pictures and payloads its tests compare against) are the tests'
+# own and never ship: a wheel that carries one carries a fixture a user never reads.
+shipped_goldens="$(grep -E '^cadgen/engine/.*(golden|\.png$)' "$listing" || true)"
+if [ -n "$shipped_goldens" ]; then
+  echo "The cadgen wheel ships engine test goldens:" >&2
+  printf '%s\n' "$shipped_goldens" >&2
+  exit 1
+fi
 
 # A nested-glob failure usually loses MANY files at once rather than one, so report the
 # count too: it distinguishes "one file moved" from "package-data is not matching".

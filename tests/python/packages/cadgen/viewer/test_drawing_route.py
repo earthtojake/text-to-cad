@@ -1,10 +1,10 @@
-"""``GET /__cad/drawing`` against a real launched server.
+"""``GET /__cad/drawing`` against a real launched server, and the answers it holds.
 
 The fixture writes its own drawings with ezdxf into a fresh temporary folder and
-points the store at a temporary directory; nothing here reads the sample
-corpus and nothing shares a store with another test file. A drawing is named by
-its absolute path, as every file is; every refusal asserts both the status and
-that the secret bytes never appear in the body.
+points the store at a temporary directory, which the route never writes: it holds
+its answers in memory, by the bytes it read. Nothing here reads the sample
+corpus. A drawing is named by its absolute path, as every file is; every refusal
+asserts both the status and that the secret bytes never appear in the body.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from urllib.parse import quote
@@ -25,7 +26,7 @@ import ezdxf
 
 from cadgen.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
 from cadgen.viewer import handler as handler_module
-from cadgen.viewer.drawings import DrawingRenders
+from cadgen.viewer.drawings import HELD, DrawingRenders
 from cadgen.viewer.http_app import create_cad_app
 
 SECRET = "TOP-SECRET-BYTES"
@@ -50,14 +51,12 @@ def plate(document, modelspace) -> None:
 
 
 class DrawingRouteFixture:
-    """``base/project`` behind a live server, plus a store."""
+    """``base/project`` behind a live server."""
 
     def __init__(self) -> None:
         self.base = tempfile.mkdtemp()
         self.root = os.path.join(self.base, "project")
         os.makedirs(self.root)
-        self._previous_cache = os.environ.get("CADGEN_CACHE_DIR")
-        os.environ["CADGEN_CACHE_DIR"] = os.path.join(self.base, "cache")
 
         write_drawing(Path(self.root, "plate.dxf"), plate)
         write_drawing(Path(self.root, "nested", "bracket.dxf"), plate)
@@ -82,10 +81,6 @@ class DrawingRouteFixture:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
-        if self._previous_cache is None:
-            os.environ.pop("CADGEN_CACHE_DIR", None)
-        else:
-            os.environ["CADGEN_CACHE_DIR"] = self._previous_cache
         shutil.rmtree(self.base, ignore_errors=True)
 
     def request(self, target: str):
@@ -201,40 +196,37 @@ class OneRenderPerDrawing(unittest.TestCase):
     """A render runs off the request, once per drawing's bytes, and every request joins it.
 
     The render is held on an event, so "still rendering" is a state the test sets rather than a
-    race it hopes to win, and it writes no store: the answer must come from the render itself, as
-    it does where the store cannot keep it.
+    race it hopes to win; the answer comes from the render itself, then from memory.
     """
 
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
-        patcher = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.base / "cache")})
-        patcher.start()
-        self.addCleanup(patcher.stop)
         self.drawing = write_drawing(self.base / "plate.dxf", plate)
         self.release = threading.Event()
         self.calls = []
 
     def render(self, outcome):
-        def rendered(path, key):
-            self.calls.append(path)
+        def rendered(path, data):
+            self.calls.append((path, data))
             self.release.wait(30)
             if isinstance(outcome, Exception):
                 raise outcome
             return outcome
 
-        return mock.patch("cadgen.drawing_payload.render_drawing_payload", side_effect=rendered)
+        return mock.patch("cadgen.drawing_payload.build_drawing_payload", side_effect=rendered)
 
     def test_requests_while_it_renders_join_it_and_the_next_has_its_payload(self) -> None:
         renders = DrawingRenders(hold_seconds=0, retry_ms=750)
-        with self.render(b'{"payload":1}'):
+        with self.render({"payload": 1}):
             self.assertEqual(renders.response(str(self.drawing)), (202, {"state": "drawing", "retryMs": 750}))
             self.assertEqual(renders.response(str(self.drawing))[0], 202)
             self.assertTrue(renders.any_in_flight())
             self.release.set()
             renders.hold_seconds = 30
             self.assertEqual(renders.response(str(self.drawing)), (200, b'{"payload":1}'))
-        self.assertEqual(len(self.calls), 1)
+        # Rendered once, from the bytes the request read.
+        self.assertEqual(self.calls, [(str(self.drawing), self.drawing.read_bytes())])
         self.assertFalse(renders.any_in_flight())
 
     def test_a_drawing_that_will_not_render_is_reported_to_the_request_that_follows(self) -> None:
@@ -245,21 +237,73 @@ class OneRenderPerDrawing(unittest.TestCase):
             self.release.set()
             renders.hold_seconds = 30
             self.assertEqual(renders.response(str(self.drawing)), (400, {"error": "ezdxf tripped"}))
+            self.assertEqual(renders.response(str(self.drawing)), (400, {"error": "ezdxf tripped"}))
         self.assertEqual([str(error) for error in crashes], ["ezdxf tripped"], "a bug is counted once, by the render")
 
 
-class ItStaysOffTheKernelAndTheReloadCounter(DrawingRouteTestCase):
-    def test_the_route_is_counted_by_the_development_reload_gate(self) -> None:
-        """Not an uncounted poll: a render is work a restart would throw away.
+class HeldByItsBytes(unittest.TestCase):
+    """An answer is held in memory by the bytes it was rendered from: the last ``HELD``, the one
+    asked for least recently going first; nothing is written anywhere."""
 
-        ``_UNCOUNTED_ROUTES`` exists for the watcher's own poll and for routes
-        that PARK; this one burns CPU, like a compile, and a restart mid-render
-        wastes it.
-        """
-        from cadgen.viewer.http_app import _UNCOUNTED_ROUTES
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.renders = DrawingRenders(hold_seconds=30)
+        self.rendered = []
+        from cadgen import drawing_payload
 
-        self.assertNotIn("/__cad/drawing", _UNCOUNTED_ROUTES)
+        real = drawing_payload.build_drawing_payload
 
+        def counted(path, data):
+            self.rendered.append(Path(path).name)
+            return real(path, data)
+
+        patcher = mock.patch("cadgen.drawing_payload.build_drawing_payload", side_effect=counted)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def drawing(self, name: str, radius: float) -> Path:
+        def build(document, modelspace) -> None:
+            plate(document, modelspace)
+            modelspace.add_circle((5, 5), radius, dxfattribs={"layer": "CUT"})
+
+        return write_drawing(self.base / name, build)
+
+    def answer(self, path: Path) -> bytes:
+        status, body = self.renders.response(str(path))
+        self.assertEqual(status, 200, body)
+        return body
+
+    def test_the_same_bytes_anywhere_are_answered_from_memory_and_new_bytes_are_drawn(self) -> None:
+        first = self.drawing("plate.dxf", 1)
+        body = self.answer(first)
+        self.assertEqual(json.loads(body)["schemaVersion"], DRAWING_PAYLOAD_SCHEMA_VERSION)
+        os.utime(first, ns=(time.time_ns(), time.time_ns()))  # touched: the same bytes
+        copy = self.base / "copy.dxf"
+        copy.write_bytes(first.read_bytes())
+        self.assertEqual((self.answer(first), self.answer(copy)), (body, body))
+        self.assertEqual(self.rendered, ["plate.dxf"])
+        self.drawing("plate.dxf", 2)  # rewritten: other bytes, drawn again
+        self.assertNotEqual(self.answer(first), body)
+        self.assertEqual(self.rendered, ["plate.dxf", "plate.dxf"])
+        self.assertEqual(sorted(path.name for path in self.base.iterdir()), ["copy.dxf", "plate.dxf"],
+                         "the route writes nothing beside the drawings")
+
+    def test_it_holds_the_last_answers_asked_for(self) -> None:
+        paths = [self.drawing(f"d{index}.dxf", 1 + index) for index in range(HELD + 1)]
+        for path in paths[:HELD]:
+            self.answer(path)
+        self.answer(paths[0])  # asked for again: the most recent now
+        self.answer(paths[HELD])  # one more: the least recently asked for, d1, goes
+        self.rendered.clear()
+        self.answer(paths[0])
+        self.answer(paths[HELD])
+        self.assertEqual(self.rendered, [])
+        self.answer(paths[1])
+        self.assertEqual(self.rendered, ["d1.dxf"])
+
+
+class ItStaysOffTheKernel(DrawingRouteTestCase):
     def test_serving_a_drawing_does_not_load_the_cad_kernel(self) -> None:
         import sys
 

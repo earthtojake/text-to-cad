@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import fasteners as F, geo, kin, palette as P, spec as S
 from lib.castings import safe_fillet, safe_chamfer, fuse_all, is_sound

@@ -24,7 +24,7 @@ const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? e
  * @property {string} prefix Ancestor labels joined by `/`, with a trailing `/`; shared between siblings.
  * @property {string} lowerLabel
  * @property {string} lowerPrefix
- * @property {string} reference Lower-case id the node is selected by (`node.selectionId`, e.g. `o1.2`), when it has one.
+ * @property {string} reference Lower-case id the node is selected by (`node.selectionId`, e.g. `o:3f2a9c1d7e5b`), when it has one.
  * @property {string[]} aliases Other names the row answers to (`node.searchAliases`).
  */
 
@@ -91,7 +91,7 @@ export function searchModelTree(index, query, limit = 200) {
   const scored = [];
   for (let at = 0; at < index.length; at += 1) {
     const entry = index[at];
-    // A pasted reference (`#o1.2`) names one row; nothing outranks it.
+    // A pasted reference (`#o:3f2a9c1d7e5b`) names one row; nothing outranks it.
     if (entry.reference === lower) { scored.push({ at, entry, indices: [], score: 1000 }); continue; }
     // The whole query against the name first, as the file filter reads a
     // filename: `m3scr` finds `M3 Screw`. Names are short, so a subsequence

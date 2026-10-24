@@ -1,4 +1,4 @@
-from cadgen import build123d as bd
+import build123d as bd
 
 # mm. Same 80 x 60 x 25 envelope; bottom mounting datum Z=0.
 WIDTH, DEPTH, HEIGHT = 80, 60, 25

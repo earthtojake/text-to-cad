@@ -15,6 +15,14 @@ __pycache__/
 htmlcov/
 .python-version
 
+# Local secrets: environment files, keys and certificates are never committed (an example
+# file that names the variables, with no values, is).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # Local environments and caches
 .venv
 .cache
@@ -41,14 +49,17 @@ repo-scan*.md
 # Benchmark output is local evidence, not source. Use tmp/ for reports.
 /scripts/bench/**/results/
 /scripts/bench/**/*.json
+# ...but a benchmark's inputs are source: the corpus batch's models and the old engine's numbers.
+!/scripts/bench/corpus.json
+!/scripts/bench/old-engine-numbers.json
 /scripts/bench/**/*.log
 /scripts/bench/**/*.gz
 /scripts/bench/**/*.cpuprofile
 /scripts/bench/**/*.heapsnapshot
 /scripts/bench/**/*.png
 
-# Review media rendered next to a fixture. models/ holds CAD/robot sources,
-# generated 3D and fabrication outputs, and docs only; see models/README.md.
+# Review media rendered next to a fixture. models/ holds CAD/robot sources and docs
+# only; see models/README.md.
 models/**/*.png
 models/**/*.jpg
 models/**/*.jpeg
@@ -64,6 +75,17 @@ models/**/*.mov
 models/**/*.webm
 models/**/*.mkv
 
+# models/ holds sources only. A run writes nothing; each project's own .gitignore keeps out
+# the files written on request (STEP/ STL/ GLB/ 3MF/ DXF/, and the PDF/ of an @eng_drawing).
+# An xbf saved by hand lands where it was asked to.
+models/**/XBF/
+# tom's vendor STEP inputs (536 MB, tom-cad's read-only data): a local copy, never committed.
+models/tom/STEP/
+# The unported models' frozen inputs and generated validation output (tendon_hand's
+# palm and native hand, 8.5 MB and 250 MB), wherever someone restores them.
+models/*/unported/STEP/
+models/*/unported/validation/
+
 # Component-GLB render packages are regenerated on demand; never committed.
 .*.step.glb/
 .*.step.glb
@@ -73,9 +95,9 @@ models/**/*.mkv
 # `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
 packages/cadgen/build/
 
-# cadgen's packaged runtime: the esbuilt Node builders (node/), the headless
-# snapshot bundle (browser/) and the CAD Viewer's built client (viewer/). All
-# three are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
+# cadgen's packaged runtime: the headless snapshot bundle (browser/), the CAD
+# Viewer's built client (viewer/), the CAD app (mcp/) and the file tracers
+# (native/). All are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
 # wheel; none of them is committed. A fresh checkout has no _runtime until the
 # bundler runs, and cadgen says so by name when it needs one that is absent.
 packages/cadgen/src/cadgen/_runtime/

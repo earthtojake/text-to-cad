@@ -1,4 +1,4 @@
-import { HeroStepRender } from "@/components/hero-step-render";
+import { HeroGlbRender } from "@/components/hero-glb-render";
 import { LogoBuild } from "@/components/logo-build";
 
 export function HeroSection() {
@@ -22,7 +22,7 @@ export function HeroSection() {
       </div>
 
       <div className="h-[260px] min-h-0 overflow-hidden rounded-xl border border-border bg-background sm:h-[300px] lg:h-[340px]">
-        <HeroStepRender />
+        <HeroGlbRender />
       </div>
     </section>
   );

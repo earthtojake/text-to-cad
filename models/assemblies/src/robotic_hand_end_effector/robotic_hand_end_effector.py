@@ -1,8 +1,8 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 from math import cos, radians, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Units: millimeters.
@@ -55,16 +55,15 @@ WRIST_CENTER = (0.0, -45.0, -12.0)
 WRIST_RING_OUTER_RADIUS = 27.0
 WRIST_RING_INNER_RADIUS = 19.0
 
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-BRUSHED_ALUMINUM = (0.72, 0.74, 0.74, 1.0)
-DARK_TITANIUM = (0.18, 0.20, 0.22, 1.0)
-MATTE_BLACK = (0.01, 0.011, 0.012, 1.0)
-DARK_GRAPHITE = (0.10, 0.105, 0.11, 1.0)
-POLISHED_STEEL = (0.86, 0.88, 0.88, 1.0)
-BLUE_ACCENT = (0.05, 0.33, 0.86, 1.0)
-AMBER_ACCENT = (1.0, 0.55, 0.12, 1.0)
+# Plain RGB(A) tuples / sRGB hex strings: build123d's Shape.color setter
+# builds the Color on assignment.
+BRUSHED_ALUMINUM = "#dddfdf"
+DARK_TITANIUM = "#767c81"
+MATTE_BLACK = "#191b1d"
+DARK_GRAPHITE = "#595b5d"
+POLISHED_STEEL = "#eff1f1"
+BLUE_ACCENT = "#3f9bef"
+AMBER_ACCENT = "#ffc461"
 
 
 def _safe_fillet(edges, radius: float) -> None:
@@ -557,9 +556,9 @@ def _make_decorative_hex_fasteners():
     return parts
 
 
-@step(out="../../STEP/robotic_hand_end_effector/robotic_hand_end_effector.step")
+@model
 def robotic_hand_end_effector():
-    """Return a labeled cybernetic robotic hand end-effector STEP assembly."""
+    """Return a labeled cybernetic robotic hand end-effector assembly."""
     parts = [
         _make_display_base(),
         _make_support_post(),

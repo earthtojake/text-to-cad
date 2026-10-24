@@ -1,7 +1,7 @@
 """JSON-RPC 2.0 over newline-delimited stdio: the transport an MCP host speaks.
 
-One reader thread parses messages. Requests the host sends run on a small pool,
-so a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
+One reader thread parses messages. Requests the host sends run on daemon threads, a
+bounded number at once, so the process ends with its host even mid-call, and a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
 run on the reader so a handshake is never queued behind work. Every outgoing
 message is one line written under one lock. This side only answers: it sends no
 requests of its own, so a response that arrives is ignored.
@@ -20,7 +20,6 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, BinaryIO
 
 LOG = logging.getLogger("cadgen.mcp")
@@ -72,6 +71,21 @@ def claim_stdout() -> BinaryIO:
     return os.fdopen(protocol_fd, "wb", buffering=0)
 
 
+def claim_stdin() -> BinaryIO:
+    """Return the host's requests on a handle of their own; point fd 0 at the null device.
+
+    On Windows a thread blocked reading a pipe holds every other call on that pipe --
+    GetFileType, which a DLL's C runtime asks of the standard handles as it loads -- so a
+    request thread loading one would wait for the host's next message (the engine worker's
+    deadlock, ``cadgen.engine.worker``). Nothing but the reader touches the request pipe."""
+    requests = os.fdopen(os.dup(0), "rb")
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, 0)
+    os.close(null)
+    sys.stdin = open(os.devnull, encoding="utf-8")  # noqa: SIM115 - standard input, for the process's life
+    return requests
+
+
 class Connection:
     """One peer: reads frames from ``reader``, writes frames to ``writer``."""
 
@@ -82,13 +96,18 @@ class Connection:
         handler: Handler,
         *,
         workers: int = 16,
+        notification=None,
     ) -> None:
         self._reader = reader
         self._writer = writer
         self._handler = handler
+        self._notify = notification
         self._write_lock = threading.Lock()
         self._cancelled: set[Any] = set()
-        self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="cadgen-mcp")
+        # Each request runs on a daemon thread of its own, at most ``workers`` at once: a call still in
+        # flight when the host goes never holds the process open (a pool's threads are joined at exit).
+        self._slots = threading.BoundedSemaphore(workers)
+        self._closed = False
 
     # -- serving -------------------------------------------------------------
 
@@ -100,7 +119,7 @@ class Connection:
                 if line:
                     self._receive(line)
         finally:
-            self._pool.shutdown(wait=False, cancel_futures=True)
+            self._closed = True  # what is queued is never started
 
     def is_cancelled(self, request_id: Any) -> bool:
         return request_id in self._cancelled
@@ -127,12 +146,26 @@ class Connection:
         if method in _INLINE_METHODS:
             self._run(request_id, method, params)
         else:
-            self._pool.submit(self._run, request_id, method, params)
+            self._submit(request_id, method, params)
+
+    def _submit(self, *job: Any) -> None:
+        threading.Thread(target=self._work, args=job, name="cadgen-mcp", daemon=True).start()
+
+    def _work(self, *job: Any) -> None:
+        with self._slots:
+            if not self._closed:  # one still waiting when the host went is never started
+                self._run(*job)
 
     def _notification(self, method: str, params: dict[str, Any]) -> None:
         # The one notification read: a request the host gave up on gets no response.
         if method == "notifications/cancelled":
             self._cancelled.add(params.get("requestId"))
+        if self._notify is not None:
+            try:
+                self._notify(method, params)
+            except Exception:
+                LOG.exception("notification %s failed", method)
+
 
     def _run(self, request_id: Any, method: str, params: dict[str, Any]) -> None:
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}

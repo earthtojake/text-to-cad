@@ -2,6 +2,7 @@ import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { cn } from "@text-to-cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "./ToolPanel.jsx";
 import { useStripTouch } from "./stripTouch.js";
 

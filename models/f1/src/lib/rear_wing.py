@@ -1,6 +1,6 @@
 """Rear wing: mainplane, DRS flap, endplates, swan-neck pylon, beam wing, DRS linkage.
 
-Four assembly children, because the animation sidecar drives two of them:
+Four assembly children, because `f1.py`'s DRS joints drive two of them:
 
   build_rear_wing()    static structure  — mainplane, endplates, pylon
   build_drs_flap()     rotates about the axis through spec.DRS_PIVOT parallel to Y
@@ -38,7 +38,7 @@ import functools
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec, surfaces
 
@@ -737,7 +737,7 @@ def _drs_points():
     """(crank pivot, crank end, lug) as Vectors.
 
     Built on first use, not at import, so loading this module never touches
-    the CAD kernel (the @step freshness gate must run before that).
+    the CAD kernel.
     """
     return (bd.Vector(*spec.DRS_CRANK_PIVOT),
             bd.Vector(*spec.DRS_CRANK_END_CLOSED),

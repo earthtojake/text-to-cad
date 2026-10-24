@@ -5,15 +5,20 @@ import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { useViewerAutoReload } from './useViewerAutoReload.js';
 
-function driver(answers) {
+function driver(answers, { follow = true } = {}) {
   const queued = [];
   const reloads = [];
+  const foreign = [];
   let clock = 0;
+  let asks = 0;
   let asked = Promise.resolve();
   return {
     reloads,
+    foreign,
+    get asks() { return asks; },
     options: {
-      fetchServerInfo: () => (asked = Promise.resolve(answers.shift() ?? { ok: true, identityToken: 'a' })),
+      follow, onForeign: () => foreign.push(clock),
+      fetchServerInfo: () => { asks += 1; return (asked = Promise.resolve(answers.shift() ?? { ok: true, identityToken: 'a' })); },
       reload: () => reloads.push(clock), now: () => clock,
       schedule: (run, delayMs) => { const timer = { run, delayMs }; queued.push(timer); return timer; },
       cancel: timer => { const index = queued.indexOf(timer); if (index >= 0) queued.splice(index, 1); },
@@ -41,9 +46,22 @@ async function mount(serverInfo, drive) {
   };
 }
 
-test('an installed viewer reloads for another install on its port, not for its own restart', async () => {
+test('an engine-served page stops at another process on its port and never loads it', async () => {
+  const drive = driver([{ ok: false }, { ok: true, identityToken: 'b' }, { ok: true, identityToken: 'c' }], { follow: false });
+  const view = await mount({ identityToken: 'a' }, drive);
+  try {
+    await view.advance(); await view.advance();
+    assert.deepEqual(drive.reloads, [], 'nothing on the port is loaded into the tab');
+    assert.deepEqual(drive.foreign, [5_000], 'it is said as the engine being gone');
+    assert.equal(drive.scheduled, 0, 'and it stops asking');
+    await view.focus();
+    assert.equal(drive.asks, 2, 'coming back to the window asks nothing more');
+  } finally { await view.dispose(); }
+});
+
+test('a dev server reloads for another build on its port, not for its own restart', async () => {
   const drive = driver([{ ok: false }, { ok: true, identityToken: 'a' }, { ok: true, identityToken: 'b' }]);
-  const view = await mount({ autoReload: false, identityToken: 'a' }, drive);
+  const view = await mount({ identityToken: 'a' }, drive);
   try {
     await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
     await view.advance();
@@ -53,26 +71,16 @@ test('an installed viewer reloads for another install on its port, not for its o
 
 test('coming back to the window asks at once', async () => {
   const drive = driver([{ ok: true, identityToken: 'b' }]);
-  const view = await mount({ autoReload: false, identityToken: 'a' }, drive);
+  const view = await mount({ identityToken: 'a' }, drive);
   try {
     await view.focus();
     assert.equal(drive.reloads.length, 1); assert.equal(drive.scheduled, 0, 'the tick it pre-empted is cancelled');
   } finally { await view.dispose(); }
 });
 
-test('a development restart reloads exactly once, when the new server answers', async () => {
-  const drive = driver([{ ok: true, identityToken: 'a' }, { ok: false }, { ok: false }, { ok: true, identityToken: 'b' }]);
-  const view = await mount({ autoReload: true, identityToken: 'a' }, drive);
-  try {
-    await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
-    await view.advance(); await view.advance();
-    assert.equal(drive.reloads.length, 1); assert.equal(drive.scheduled, 0);
-  } finally { await view.dispose(); }
-});
-
 test('a transient outage does not reload, and unmount cancels polling', async () => {
   const drive = driver([{ ok: false }, { ok: true, identityToken: 'a' }]);
-  const view = await mount({ autoReload: true, identityToken: 'a' }, drive);
+  const view = await mount({ identityToken: 'a' }, drive);
   await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
   assert.equal(drive.scheduled, 1);
   await view.dispose(); assert.equal(drive.scheduled, 0);

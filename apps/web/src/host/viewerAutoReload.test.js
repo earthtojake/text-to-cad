@@ -27,15 +27,26 @@ test("a closed port is the restart beginning, not a failure", () => {
   assert.equal(still.since, 10, "a continuing outage keeps its first date");
 });
 
-test("a different identity on the same port reloads the page", () => {
-  const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", now: 10 });
-  const back = nextAutoReloadState(down, { ok: true, identityToken: "b" }, { baseline: "a", now: 500 });
+test("a different identity on a dev server's port reloads the page", () => {
+  const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", now: 10, follow: true });
+  const back = nextAutoReloadState(down, { ok: true, identityToken: "b" }, { baseline: "a", now: 500, follow: true });
   assert.equal(back.reload, true);
 });
 
-test("the restarted server is noticed even when no poll ever missed", () => {
-  const next = nextAutoReloadState(watching, { ok: true, identityToken: "b" }, { baseline: "a", now: 10 });
+test("the restarted dev server is noticed even when no poll ever missed", () => {
+  const next = nextAutoReloadState(watching, { ok: true, identityToken: "b" }, { baseline: "a", now: 10, follow: true });
   assert.equal(next.reload, true);
+});
+
+test("an engine-served page is never reloaded into another process on its port", () => {
+  // The engine's token is new with every engine, so a later engine refuses this page (ok: false);
+  // whatever answers as another identity is a process the page cannot authenticate.
+  const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", now: 10 });
+  for (const state of [watching, down]) {
+    const next = nextAutoReloadState(state, { ok: true, identityToken: "b" }, { baseline: "a", now: 500 });
+    assert.equal(next.phase, AUTO_RELOAD_PHASE.FOREIGN);
+    assert.equal(next.reload, false);
+  }
 });
 
 test("a transient fetch failure that resolves to the same server is not a restart", () => {
@@ -49,7 +60,8 @@ test("the watch is not bounded: a very slow restart still reloads when it lands"
   const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", now: 0 });
   const late = nextAutoReloadState(down, { ok: true, identityToken: "b" }, {
     baseline: "a",
-    now: 90_000
+    now: 90_000,
+    follow: true
   });
   assert.equal(late.reload, true, "a very slow restart still reloads when it lands");
 });

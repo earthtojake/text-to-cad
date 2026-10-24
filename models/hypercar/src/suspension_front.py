@@ -1,21 +1,16 @@
-"""Hypercar system model: suspension_front — wishbones, uprights, pushrods, rockers, coilovers.
+"""Hypercar system: suspension_front — wishbones, uprights, pushrods, rockers, coilovers.
 
-A sub-assembly of the car: the group `lib/suspension_front.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.5`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/suspension_front.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import suspension_front as suspension_front_lib
 
 
-@step(out="../STEP/suspension_front.step")
+@memo
 def suspension_front():
-    return suspension_front_lib.build()
-
-
-if __name__ == "__main__":
-    suspension_front()
+    built = suspension_front_lib.build()
+    return built

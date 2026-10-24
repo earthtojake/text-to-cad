@@ -41,7 +41,6 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
-export const FILE_SHEET_COMPACT_BUTTON_CLASSES = "h-7 px-2 text-tiny text-muted-foreground hover:text-foreground";
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
 // A joint's slider: in its row's 16px band, with no fill — a joint's zero is mostly mid-range, so a
 // bar from the left end up to the thumb would mean nothing.
@@ -356,17 +355,10 @@ export function FileSheetInlineControlRow({ label, children, className }) {
   );
 }
 
-// Loading / empty / info line, or an error with tone="error". The one style
-// for every in-sheet message.
-export function FileSheetStatusText({ children, tone = "muted", className }) {
+// An empty or info line. The one style for every in-sheet message.
+export function FileSheetStatusText({ children, className }) {
   return (
-    <p
-      className={cn(
-        FILE_SHEET_STATUS_TEXT_CLASSES,
-        tone === "error" && "whitespace-pre-line text-destructive",
-        className
-      )}
-    >
+    <p className={cn(FILE_SHEET_STATUS_TEXT_CLASSES, className)}>
       {children}
     </p>
   );
@@ -392,19 +384,6 @@ export function FileSheetFieldGrid({ columns = 2, children, className }) {
     <div
       className={cn("grid gap-1 px-2", className)}
       style={{ gridTemplateColumns: typeof columns === "number" ? `repeat(${columns}, minmax(0, 1fr))` : columns }}
-    >
-      {children}
-    </div>
-  );
-}
-
-// Sibling actions as equal-width columns; a single child renders full width.
-export function FileSheetButtonRow({ children }) {
-  const columnCount = Math.max(1, Children.count(children));
-  return (
-    <div
-      className="grid gap-1.5 px-2"
-      style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
     >
       {children}
     </div>

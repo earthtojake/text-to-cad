@@ -25,31 +25,31 @@ Coordinate conventions:
 """
 
 # ---------------------------------------------------------------------------
-# Shared colors (linear RGB + alpha, matched to the presentation theme's
+# Shared colors (sRGB hex, alpha as a fourth byte, matched to the presentation theme's
 # neutral grade — the theme does not override source colors).
 # ---------------------------------------------------------------------------
 
-STEEL = (0.620, 0.630, 0.660, 1.0)          # polished/brushed stainless
-STEEL_BRIGHT = (0.800, 0.810, 0.840, 1.0)   # mirror bevels, hands
-STEEL_DARK = (0.520, 0.530, 0.555, 1.0)     # recessed steel, springs
-STEEL_LEVER = (0.700, 0.705, 0.720, 1.0)    # straight-grained chrono levers
-COPPER_GOLD = (0.555, 0.305, 0.195, 1.0)    # salmon copper-gold bridges/plate
-COPPER_GOLD_DEEP = (0.430, 0.230, 0.140, 1.0)  # striping groove shadow
-GILT = (0.735, 0.650, 0.380, 1.0)           # pale champagne train wheels
-BLUED = (0.022, 0.038, 0.120, 1.0)          # flame-blued screws (near-black, blue flash)
-RUBY = (0.560, 0.070, 0.210, 1.0)           # jewels (deep ruby)
-RUBY_BRIGHT = (0.540, 0.070, 0.230, 1.0)    # cap jewels
-DIAL_BLACK = (0.038, 0.038, 0.044, 1.0)     # step dial lacquer
-DIAL_PRINT = (0.930, 0.930, 0.915, 1.0)     # white print / indices
-LUME = (0.820, 0.850, 0.660, 1.0)           # aged-neutral luminous plots
-BEZEL_BLACK = (0.045, 0.045, 0.050, 1.0)    # anodized tachymeter insert
-BEZEL_FILL = (0.920, 0.920, 0.910, 1.0)     # filled tachymeter engraving
-CRYSTAL = (0.760, 0.800, 0.830, 0.11)       # domed crystal (transparent)
-SAPPHIRE = (0.780, 0.810, 0.850, 0.05)      # display back glass (AR-coated read)
-GASKET = (0.080, 0.080, 0.085, 1.0)         # black nitrile
-BRACELET_OUTER = (0.580, 0.595, 0.630, 1.0) # brushed outer links (darker)
-BRACELET_CENTER = (0.850, 0.855, 0.870, 1.0)  # polished center links
-BRASS_MOVEMENT = (0.700, 0.560, 0.330, 1.0) # unplated brass small parts
+STEEL = "#ced0d4"          # polished/brushed stainless
+STEEL_BRIGHT = "#e7e8ec"   # mirror bevels, hands
+STEEL_DARK = "#bfc0c4"     # recessed steel, springs
+STEEL_LEVER = "#dadbdd"    # straight-grained chrono levers
+COPPER_GOLD = "#c4967a"    # salmon copper-gold bridges/plate
+COPPER_GOLD_DEEP = "#af8469"  # striping groove shadow
+GILT = "#dfd3a6"           # pale champagne train wheels
+BLUED = "#293761"          # flame-blued screws (near-black, blue flash)
+RUBY = "#c54b7e"           # jewels (deep ruby)
+RUBY_BRIGHT = "#c24b84"    # cap jewels
+DIAL_BLACK = "#37373b"     # step dial lacquer
+DIAL_PRINT = "#f7f7f5"     # white print / indices
+LUME = "#eaedd4"           # aged-neutral luminous plots
+BEZEL_BLACK = "#3c3c3f"    # anodized tachymeter insert
+BEZEL_FILL = "#f6f6f5"     # filled tachymeter engraving
+CRYSTAL = "#e2e7eb1c"       # domed crystal (transparent)
+SAPPHIRE = "#e5e8ed0d"      # display back glass (AR-coated read)
+GASKET = "#505052"         # black nitrile
+BRACELET_OUTER = "#c8cbd0" # brushed outer links (darker)
+BRACELET_CENTER = "#edeef0"  # polished center links
+BRASS_MOVEMENT = "#dac59b" # unplated brass small parts
 
 # ---------------------------------------------------------------------------
 # Case

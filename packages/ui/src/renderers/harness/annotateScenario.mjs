@@ -6,8 +6,8 @@ import { PNG } from 'pngjs';
 // projection; this is the flow a person actually uses.
 //
 // They are KIT tools, so this body takes an already-open page and knows nothing about the frame
-// that mounted it: one scenario, run under each frame that offers them. Today that is STEP
-// (`serveStepHarness`).
+// that mounted it: one scenario, run under each frame that offers them. Today that is the engine
+// document's renderer, an .xbf's and a STEP's (`serveXbfHarness`).
 //
 // Ink is read off screenshots of the viewport, by colour, with the chrome hidden -- and with the drawing
 // surface's own preview canvas hidden, so what is counted is the ink the scene draws in WebGL, in the model.
@@ -17,7 +17,7 @@ import { PNG } from 'pngjs';
 const HIDDEN = '[data-cad-tool-groups], [data-file-sidebar-room], [aria-label="View cube"], [data-slot=popover-content], '
   + '[data-cad-annotation-overlay] canvas { visibility: hidden !important; }';
 // Neon red (#ff2d55, the pen's default) and neon green (#39ff14). The fixture's parts are blue and
-// orange; orange is told from the red by its blue channel.
+// grey-blue, neither of them red or green.
 const RED = (r, g, b) => r > 200 && g < 100 && b > 50 && b < 150;
 const GREEN = (r, g, b) => g > 200 && r < 140 && b < 100;
 const NONE = 10;

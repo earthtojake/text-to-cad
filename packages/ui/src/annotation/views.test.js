@@ -33,6 +33,12 @@ test("a view is the viewer's camera at the prompt's size, its mode and Grid swit
   assert.deepEqual(promptView({ camera: camera(), width: 800, height: 600 }, { display: { mode: 'parts' } }).display, { mode: 'parts', grid: false });
   assert.ok(!sameView(view({ display: { mode: 'solid', grid: false } }), view({ display: { mode: 'solid', grid: true } })));
   assert.ok(!sameView(view({ display: { mode: 'solid', grid: false } }), view({ display: { mode: 'shaded', grid: false } })));
+  // Parts named by refs are hidden and isolated in the view's display, as `--display` takes them.
+  const refs = { hidden: ['/w/kit.xbf#lid'], isolated: ['/w/kit.xbf#hand'] };
+  const hiding = promptView({ camera: camera(), width: 800, height: 600 }, { display: { mode: 'solid' }, state: refs });
+  assert.deepEqual(hiding.display, { mode: 'solid', grid: false, ...refs });
+  assert.equal(promptView({ camera: camera(), width: 800, height: 600 }, { state: { hidden: [], isolated: [] } }).display, undefined);
+  assert.ok(!sameView(view({ display: { mode: 'solid', grid: false } }), view({ display: hiding.display })));
 });
 
 test("a routine's kept frame is the view's animation, a snapshot job's {clip, time}", () => {

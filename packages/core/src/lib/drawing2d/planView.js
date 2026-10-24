@@ -3,7 +3,7 @@
  * down at the sheet. A prompt's views carry a camera (`annotation/views.js`), and a snapshot job
  * takes one; for a drawing that camera is the window the pane shows — centred on `target`,
  * `orthographicHalfHeight` drawing units above and below — and nothing else, since a drawing is
- * never turned (`cadgen.snapshot_cli.drawing_plan_view` checks the same).
+ * never turned.
  *
  * `planProjection` is the same view as the two matrices a scene camera carries, for the code that
  * projects a point the way a 3D view does (Measure's dimensions, `measureRuler.js`): drawing

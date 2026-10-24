@@ -4,5 +4,4 @@ export * from "./common/photographicStudio.js";
 export * from "./common/photographicStudioRig.js";
 export * from "./common/renderModel.js";
 export * from "./common/sceneSettings.js";
-export * from "./common/source.js";
 export * from "./common/themeSettings.js";

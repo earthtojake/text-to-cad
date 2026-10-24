@@ -1,21 +1,16 @@
-"""Hypercar system model: aero — splitter, diffuser, wing.
+"""Hypercar system: aero — splitter, diffuser, wing.
 
-A sub-assembly of the car: the group `lib/aero.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.11`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/aero.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import aero as aero_lib
 
 
-@step(out="../STEP/aero.step")
+@memo
 def aero():
-    return aero_lib.build()
-
-
-if __name__ == "__main__":
-    aero()
+    built = aero_lib.build()
+    return built

@@ -1,6 +1,6 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+from cadgen import materials, model
+import build123d as bd
 
 from lib.part_common import circular_edges, safe_chamfer
 
@@ -30,7 +30,7 @@ def _add_shaft_section(x_start: float, x_end: float, diameter: float):
         )
 
 
-@step(out="../STEP/stepped_shaft_keyway.step")
+@model
 def stepped_shaft_keyway():
     """Return the stepped shaft with keyway model in millimeters."""
     with bd.BuildPart() as shaft:
@@ -53,6 +53,7 @@ def stepped_shaft_keyway():
     end_edges.extend(circular_edges(part, radius=SMALL_DIAMETER / 2.0, axis="x", coordinate=TOTAL_LENGTH))
     part = safe_chamfer(part, end_edges, length=END_CHAMFER)
     part.label = "stepped_shaft_keyway"
+    part.material = materials.steel_4140
     return part
 
 

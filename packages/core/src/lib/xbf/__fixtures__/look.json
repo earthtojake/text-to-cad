@@ -1,0 +1,118 @@
+{
+  "version": 4,
+  "backdrop": "#f0f4f9",
+  "lights": [
+    {
+      "name": "key",
+      "direction": [
+        -0.35,
+        0.55,
+        -1.0
+      ],
+      "intensity": 4.0
+    }
+  ],
+  "environment": {
+    "url": "/api/look/environment",
+    "intensity": 0.5
+  },
+  "colourPower": 2.0,
+  "plain": {
+    "metallic": 0.0,
+    "roughness": 0.5,
+    "ior": 1.5
+  },
+  "brdf": "occt",
+  "tone": "clamp",
+  "exposure": 0.0,
+  "fill": "#b6c4ce",
+  "palette": [
+    "#b6c4ce",
+    "#f4a7a7",
+    "#f8c77e",
+    "#f7e38d",
+    "#b9e88f",
+    "#8fe3c0",
+    "#92d7f5",
+    "#a9b8ff",
+    "#c7a8ff",
+    "#f2a7d9"
+  ],
+  "edges": {
+    "colours": {
+      "feature": "#253443",
+      "tangent": "#667788",
+      "seam": "#495b6c"
+    },
+    "width": 1.0
+  },
+  "modes": {
+    "solid": {
+      "faces": "lit",
+      "edges": "visible",
+      "opacity": 1.0,
+      "palette": false
+    },
+    "shaded": {
+      "faces": "lit",
+      "edges": "none",
+      "opacity": 1.0,
+      "palette": false
+    },
+    "parts": {
+      "faces": "lit",
+      "edges": "visible",
+      "opacity": 1.0,
+      "palette": true
+    },
+    "xray": {
+      "faces": "lit",
+      "edges": "all",
+      "opacity": 0.22,
+      "palette": false
+    },
+    "hidden-line": {
+      "faces": "backdrop",
+      "edges": "visible",
+      "opacity": 1.0,
+      "palette": false
+    },
+    "wireframe": {
+      "faces": "none",
+      "edges": "all",
+      "opacity": 1.0,
+      "palette": false
+    }
+  },
+  "grid": {
+    "colour": "#4ea8cc",
+    "cells": 20.0,
+    "extent": 6.0,
+    "axes": true
+  },
+  "xray": {
+    "ambient": 0.5,
+    "lights": [
+      {
+        "name": "key",
+        "direction": [
+          -0.35,
+          0.55,
+          -1.0
+        ],
+        "intensity": 1.0
+      },
+      {
+        "name": "fill",
+        "direction": [
+          0.6,
+          0.2,
+          -0.3
+        ],
+        "intensity": 1.0
+      }
+    ],
+    "specular": 0.08,
+    "shininess": 0.35
+  }
+}

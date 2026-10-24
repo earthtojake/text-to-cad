@@ -61,10 +61,11 @@ def condition(job: str) -> str:
     return match[1]
 
 
-def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str]) -> bool:
-    """A job condition, given the needed jobs' results and the gate's outputs."""
+def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str], ref: str = "refs/heads/main") -> bool:
+    """A job condition, given the needed jobs' results, the gate's outputs and the run's ref."""
     expression = re.sub(r"needs\.(\w+)\.result (==|!=) '(\w*)'",
                         lambda m: str((results[m[1]] == m[3]) == (m[2] == "==")), expression)
+    expression = re.sub(r"github\.ref (==|!=) '([^']*)'", lambda m: str((ref == m[2]) == (m[1] == "==")), expression)
     expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w*)'",
                         lambda m: str((outputs.get(m[1], "") == m[3]) == (m[2] == "==")), expression)
     expression = expression.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
@@ -135,21 +136,50 @@ class PublishGate(unittest.TestCase):
                 self.assertEqual(evaluate(publish, {"test": result}, {"should_publish": "true", "tested": tested}), expected)
         self.assertFalse(evaluate(publish, {"test": "skipped"}, {"should_publish": "false", "tested": "true"}))
 
+    def test_the_release_bundles_the_viewer_and_the_cad_app_as_the_release(self):
+        # The bundle step names the version it releases in the variable the apps' build reads
+        # (packages/ui/scripts/build-id.mjs): their app menu then shows `v<VERSION>`, where every
+        # other build shows `v<VERSION>-dev.<commit>`.
+        helper = (REPO_ROOT / "packages/ui/scripts/build-id.mjs").read_text(encoding="utf-8")
+        variable = re.search(r'^export const RELEASE_ENV = "(\w+)";$', helper, re.M)[1]
+        step = JOBS["publish"].split("- name: Bundle production outputs\n", 1)[1].split("\n      - name: ", 1)[0]
+        self.assertIn(f"{variable}: ${{{{ needs.gate.outputs.version }}}}", step)
+        self.assertIn("run: scripts/bundle/bundle.sh --clean", step)
+
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
         # The upload, then PyPI's index -- what uv resolves a pin through -- listing it, both in the
-        # publish job, which the branches job needs. The docs deploy and the tag follow the branches.
-        publish = JOBS["publish"]
-        self.assertLess(publish.index("pypa/gh-action-pypi-publish"), publish.index("https://pypi.org/simple/cadgen/"))
+        # pypi job, which the branches job needs. The docs deploy and the tag follow the branches.
+        pypi = JOBS["pypi"]
+        self.assertLess(pypi.index("pypa/gh-action-pypi-publish"), pypi.index("https://pypi.org/simple/cadgen/"))
         branches = condition("branches")
-        self.assertTrue(evaluate(branches, {"publish": "success"}, {"is_main": "true"}))
-        self.assertFalse(evaluate(branches, {"publish": "success"}, {"is_main": "false"}))
+        self.assertTrue(evaluate(branches, {"pypi": "success"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(branches, {"pypi": "success"}, {"is_main": "false"}))
         for result in ("failure", "skipped", "cancelled"):
-            self.assertFalse(evaluate(branches, {"publish": result}, {"is_main": "true"}))
+            self.assertFalse(evaluate(branches, {"pypi": result}, {"is_main": "true"}))
         for job in ("deploy-docs", "tag-release"):
             with self.subTest(job=job):
                 self.assertTrue(evaluate(condition(job), {"branches": "success"}, {}))
                 for result in ("skipped", "failure", "cancelled"):
                     self.assertFalse(evaluate(condition(job), {"branches": result}, {}))
+
+    def test_only_the_pypi_job_on_main_in_its_environment_may_mint_a_pypi_token(self):
+        # PyPI's trusted publisher names this workflow and the `release` environment, which deploys from
+        # main alone: the token-minting permission lives in that one job, and nowhere else.
+        minting = [job for job, body in JOBS.items() if re.search(r"^\s+id-token: write$", body, re.M)]
+        self.assertEqual(minting, ["pypi"])
+        self.assertRegex(JOBS["pypi"], re.compile(r"^    environment: release$", re.M))
+        self.assertNotRegex(WORKFLOW, re.compile(r"^permissions:(?:\n  .*)*\n  id-token", re.M), "no workflow-wide token")
+        pypi = condition("pypi")
+        self.assertTrue(evaluate(pypi, {"publish": "success"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(pypi, {"publish": "success"}, {"is_main": "true"}, ref="refs/heads/build-test"))
+        self.assertFalse(evaluate(pypi, {"publish": "success"}, {"is_main": "false"}))
+        for result in ("failure", "skipped", "cancelled"):
+            self.assertFalse(evaluate(pypi, {"publish": result}, {"is_main": "true"}))
+        # A file PyPI already holds is never uploaded again unchecked: no skip-existing, and the
+        # release attaches what PyPI serves.
+        self.assertNotIn("skip-existing", WORKFLOW)
+        self.assertIn("scripts/release/pypi_release.py", JOBS["pypi"])
+        self.assertIn("name: cadgen-${{ needs.gate.outputs.version }}-released", JOBS["tag-release"])
 
     def test_the_branches_get_their_copies_of_the_plugin(self):
         # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither.
@@ -170,6 +200,36 @@ class PublishGate(unittest.TestCase):
         self.assertIn("if: steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true'", check)
         self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", check)
         self.assertNotIn("PUBLISH_PUSH_TOKEN", WORKFLOW)
+
+
+pypi_release = load("pypi_release", "scripts/release/pypi_release.py")
+
+
+class PypiRelease(unittest.TestCase):
+    def test_a_release_uploads_only_what_pypi_lacks_and_attaches_what_pypi_holds(self):
+        built = ["cadgen-1.0.0-py3-none-any.whl", "cadgen-1.0.0.tar.gz"]
+        self.assertEqual(pypi_release.plan(built, {}), (built, [], []))
+        held = {"cadgen-1.0.0-py3-none-any.whl": {"sha256": "a", "url": "u"}}
+        self.assertEqual(pypi_release.plan(built, held), (["cadgen-1.0.0.tar.gz"], ["cadgen-1.0.0-py3-none-any.whl"], []))
+        held["cadgen-1.0.0-cp312-cp312-linux_x86_64.whl"] = {"sha256": "b", "url": "v"}
+        self.assertEqual(pypi_release.plan(built, held)[2], ["cadgen-1.0.0-cp312-cp312-linux_x86_64.whl"])
+
+    def test_a_file_from_pypi_that_does_not_match_its_listed_sha256_is_refused(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "served.whl"
+            source.write_bytes(b"wheel bytes")
+            target = Path(folder) / "cadgen-1.0.0-py3-none-any.whl"
+            good = hashlib.sha256(b"wheel bytes").hexdigest()
+            pypi_release.download(source.as_uri(), good, target)
+            self.assertEqual(target.read_bytes(), b"wheel bytes")
+            target.unlink()
+            with self.assertRaises(SystemExit):
+                pypi_release.download(source.as_uri(), "0" * 64, target)
+            self.assertEqual(sorted(path.name for path in Path(folder).iterdir()), ["served.whl"])
 
 
 class PrepareRelease(unittest.TestCase):

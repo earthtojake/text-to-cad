@@ -25,19 +25,20 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 ## Setup
 
 Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
-one installation, and its warm build daemon, with the CAD app's server:
+one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.26 cadgen`
-- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.26 python`
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 python`
 
 The first run downloads that installation; later runs reuse it.
 
 ## Workflow
 
-1. Get the part. `cadgen.read_step(Path(__file__).parent / "../STEP/part.step")`
-   reads the artifact a `@step` model wrote (run `python <model>.py` first); a
-   live build123d shape works just as well. The drawing documents geometry, it
-   does not build it.
+1. Get the part. Call the model: `enclosure()`, imported from the model's script,
+   is built by cadgen's engine (a replay when the engine already holds it) and
+   returns the part. For a part with no model, read its file: `read_step` for a
+   STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
+   shape works. The drawing documents geometry, it does not build it.
 2. Write `<name>_drawing.py` beside the model, from
    [the template](references/sheet-api.md#template). Import the model facts the
    dimensions reference (hole pitch, overall size, wall) from the model module
@@ -117,7 +118,8 @@ The script raises rather than writing a wrong or missing document:
   `angle()` legs that are collinear or zero-length, a non-finite `at=` or
   `offset=`.
 - A missing renderer. The PDF is the drawing, so no matplotlib is a failure,
-  not a skipped half. A failed render leaves no file behind.
+  not a skipped half. A failed render leaves no file
+  it wrote; an earlier PDF stays byte for byte.
 - `out=` missing or not naming a `.pdf`, at import time.
 
 ## Limits to state in the handoff

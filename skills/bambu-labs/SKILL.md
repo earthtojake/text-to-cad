@@ -30,7 +30,7 @@ Connect is still in development, use Bambu Studio.
 | --- | --- |
 | A sliced `.gcode.3mf`, from `$gcode` or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a `$cad` model: `cadgen export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ## Open a file in Bambu Connect
 

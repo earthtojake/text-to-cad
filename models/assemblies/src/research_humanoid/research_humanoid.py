@@ -10,9 +10,8 @@ floor midway between the ankle centers.  Dimensions are millimetres.
 
 Layout
 ------
-The shared builders live in ``lib/research_humanoid_lib.py``; each dexterous
-hand is its own model (``research_humanoid_hand_left.py`` /
-``_right.py``) that this assembly links.
+The shared builders live in ``lib/research_humanoid_lib.py``; the robot calls
+``build_hand(side)`` for each dexterous hand, a sub-assembly of its own.
 
 Articulation contract
 ---------------------
@@ -23,10 +22,11 @@ axes (three per digit), for 30 hand axes and 58 total modeled joint frames.
 
 from __future__ import annotations
 
+from cadgen import model
+
 from dataclasses import asdict
 
-from cadgen import step
-from cadgen.assembly import AssemblyHelper
+import build123d as bd
 
 from lib.research_humanoid_lib import (
     ANKLES,
@@ -47,34 +47,34 @@ from lib.research_humanoid_lib import (
     _add_structural_link,
     _add_torso,
     _distance,
+    _label_text,
     _relate_revolute,
     _relate_rigid,
+    build_hand,
 )
-from research_humanoid_hand_left import research_humanoid_hand_left
-from research_humanoid_hand_right import research_humanoid_hand_right
-
-# The hands are sibling models: calling one inside the body builds it if stale
-# (on its own worker, alongside the rest) or loads it, and the robot links its
-# tree. Rebuilding a hand alone does not rebuild the robot; rerun this script.
-HANDS = {"left": research_humanoid_hand_left, "right": research_humanoid_hand_right}
 
 
 def _add_body_kinematics(
-    assembly: AssemblyHelper,
     modules: dict[str, object],
     actuators: dict[str, object],
+    yokes: dict[str, object],
 ) -> None:
     """Connect the body as a true proximal-to-distal serial joint graph."""
 
     specs = {spec.name: spec for spec in BODY_JOINT_SPECS}
 
-    _relate_revolute(assembly, modules["pelvis"], actuators["waist_yaw"], specs["waist_yaw"])
-    _relate_revolute(assembly, actuators["waist_yaw"], actuators["waist_pitch"], specs["waist_pitch"])
-    _relate_rigid(assembly, actuators["waist_pitch"], modules["torso"], (0.0, 8.0, 1215.0), "waist_to_torso")
+    def _revolute(fixed: object, moving: object, spec: object) -> None:
+        # The joint, and its clevis yoke fastened to the fixed side, which holds it.
+        _relate_revolute(fixed, moving, spec)
+        _relate_rigid(fixed, yokes[spec.name], spec.center, f"{spec.name}_yoke")
 
-    _relate_revolute(assembly, modules["torso"], actuators["neck_yaw"], specs["neck_yaw"])
-    _relate_revolute(assembly, actuators["neck_yaw"], actuators["neck_pitch"], specs["neck_pitch"])
-    _relate_rigid(assembly, actuators["neck_pitch"], modules["head"], (0.0, 6.0, 1570.0), "neck_to_head")
+    _revolute(modules["pelvis"], actuators["waist_yaw"], specs["waist_yaw"])
+    _revolute(actuators["waist_yaw"], actuators["waist_pitch"], specs["waist_pitch"])
+    _relate_rigid(actuators["waist_pitch"], modules["torso"], (0.0, 8.0, 1215.0), "waist_to_torso")
+
+    _revolute(modules["torso"], actuators["neck_yaw"], specs["neck_yaw"])
+    _revolute(actuators["neck_yaw"], actuators["neck_pitch"], specs["neck_pitch"])
+    _relate_rigid(actuators["neck_pitch"], modules["head"], (0.0, 6.0, 1570.0), "neck_to_head")
 
     for side in SIDES:
         hip_yaw = specs[f"{side}_hip_yaw"]
@@ -90,40 +90,42 @@ def _add_body_kinematics(
         wrist_roll = specs[f"{side}_wrist_roll"]
         wrist_pitch = specs[f"{side}_wrist_pitch"]
 
-        _relate_revolute(assembly, modules["pelvis"], actuators[hip_yaw.name], hip_yaw)
-        _relate_revolute(assembly, actuators[hip_yaw.name], actuators[hip_roll.name], hip_roll)
-        _relate_revolute(assembly, actuators[hip_roll.name], actuators[hip_pitch.name], hip_pitch)
-        _relate_rigid(assembly, actuators[hip_pitch.name], modules[f"{side}_thigh"], HIPS[side], f"{side}_hip_output")
-        _relate_revolute(assembly, modules[f"{side}_thigh"], actuators[knee.name], knee)
-        _relate_rigid(assembly, actuators[knee.name], modules[f"{side}_shank"], KNEES[side], f"{side}_knee_output")
-        _relate_revolute(assembly, modules[f"{side}_shank"], actuators[ankle_pitch.name], ankle_pitch)
-        _relate_revolute(assembly, actuators[ankle_pitch.name], actuators[ankle_roll.name], ankle_roll)
-        _relate_rigid(assembly, actuators[ankle_roll.name], modules[f"{side}_foot"], ANKLES[side], f"{side}_ankle_output")
+        _revolute(modules["pelvis"], actuators[hip_yaw.name], hip_yaw)
+        _revolute(actuators[hip_yaw.name], actuators[hip_roll.name], hip_roll)
+        _revolute(actuators[hip_roll.name], actuators[hip_pitch.name], hip_pitch)
+        _relate_rigid(actuators[hip_pitch.name], modules[f"{side}_thigh"], HIPS[side], f"{side}_hip_output")
+        _revolute(modules[f"{side}_thigh"], actuators[knee.name], knee)
+        _relate_rigid(actuators[knee.name], modules[f"{side}_shank"], KNEES[side], f"{side}_knee_output")
+        _revolute(modules[f"{side}_shank"], actuators[ankle_pitch.name], ankle_pitch)
+        _revolute(actuators[ankle_pitch.name], actuators[ankle_roll.name], ankle_roll)
+        _relate_rigid(actuators[ankle_roll.name], modules[f"{side}_foot"], ANKLES[side], f"{side}_ankle_output")
 
-        _relate_revolute(assembly, modules["torso"], actuators[shoulder_pitch.name], shoulder_pitch)
-        _relate_revolute(assembly, actuators[shoulder_pitch.name], actuators[shoulder_roll.name], shoulder_roll)
-        _relate_revolute(assembly, actuators[shoulder_roll.name], actuators[shoulder_yaw.name], shoulder_yaw)
-        _relate_rigid(assembly, actuators[shoulder_yaw.name], modules[f"{side}_upper_arm"], SHOULDERS[side], f"{side}_shoulder_output")
-        _relate_revolute(assembly, modules[f"{side}_upper_arm"], actuators[elbow.name], elbow)
-        _relate_rigid(assembly, actuators[elbow.name], modules[f"{side}_forearm"], ELBOWS[side], f"{side}_elbow_output")
-        _relate_revolute(assembly, modules[f"{side}_forearm"], actuators[wrist_roll.name], wrist_roll)
-        _relate_revolute(assembly, actuators[wrist_roll.name], actuators[wrist_pitch.name], wrist_pitch)
-        _relate_rigid(assembly, actuators[wrist_pitch.name], modules[f"{side}_wrist_carrier"], WRISTS[side], f"{side}_wrist_output")
-        _relate_rigid(assembly, modules[f"{side}_wrist_carrier"], modules[f"{side}_hand"], PALMS[side], f"{side}_hand_mount")
+        _revolute(modules["torso"], actuators[shoulder_pitch.name], shoulder_pitch)
+        _revolute(actuators[shoulder_pitch.name], actuators[shoulder_roll.name], shoulder_roll)
+        _revolute(actuators[shoulder_roll.name], actuators[shoulder_yaw.name], shoulder_yaw)
+        _relate_rigid(actuators[shoulder_yaw.name], modules[f"{side}_upper_arm"], SHOULDERS[side], f"{side}_shoulder_output")
+        _revolute(modules[f"{side}_upper_arm"], actuators[elbow.name], elbow)
+        _relate_rigid(actuators[elbow.name], modules[f"{side}_forearm"], ELBOWS[side], f"{side}_elbow_output")
+        _revolute(modules[f"{side}_forearm"], actuators[wrist_roll.name], wrist_roll)
+        _revolute(actuators[wrist_roll.name], actuators[wrist_pitch.name], wrist_pitch)
+        _relate_rigid(actuators[wrist_pitch.name], modules[f"{side}_wrist_carrier"], WRISTS[side], f"{side}_wrist_output")
+        # The hand's palm carries this mount's twin, inside the hand's compound: the
+        # label pairs them where they stand.
+        bd.RigidJoint(f"{side}_hand_mount", modules[f"{side}_wrist_carrier"], bd.Location(PALMS[side]))
 
 
 def _build_robot() -> object:
-    assembly = AssemblyHelper("research_humanoid_28_body_dof_plus_dexterous_hands")
+    parts: list[object] = []
     modules: dict[str, object] = {
-        "pelvis": _add_pelvis(assembly),
-        "torso": _add_torso(assembly),
-        "head": _add_head(assembly),
+        "pelvis": _add_pelvis(parts),
+        "torso": _add_torso(parts),
+        "head": _add_head(parts),
     }
 
     for side in SIDES:
-        modules[f"{side}_foot"] = _add_foot(assembly, side)
+        modules[f"{side}_foot"] = _add_foot(parts, side)
         modules[f"{side}_shank"] = _add_structural_link(
-            assembly,
+            parts,
             f"{side}_shank",
             ANKLES[side],
             KNEES[side],
@@ -137,7 +139,7 @@ def _build_robot() -> object:
             end_scale=1.0,
         )
         modules[f"{side}_thigh"] = _add_structural_link(
-            assembly,
+            parts,
             f"{side}_thigh",
             KNEES[side],
             HIPS[side],
@@ -151,7 +153,7 @@ def _build_robot() -> object:
             end_scale=1.0,
         )
         modules[f"{side}_upper_arm"] = _add_structural_link(
-            assembly,
+            parts,
             f"{side}_upper_arm",
             SHOULDERS[side],
             ELBOWS[side],
@@ -165,7 +167,7 @@ def _build_robot() -> object:
             end_scale=0.78,
         )
         modules[f"{side}_forearm"] = _add_structural_link(
-            assembly,
+            parts,
             f"{side}_forearm",
             ELBOWS[side],
             WRISTS[side],
@@ -179,7 +181,7 @@ def _build_robot() -> object:
             end_scale=0.72,
         )
         modules[f"{side}_wrist_carrier"] = _add_structural_link(
-            assembly,
+            parts,
             f"{side}_wrist_carrier",
             WRISTS[side],
             PALMS[side],
@@ -192,17 +194,19 @@ def _build_robot() -> object:
             start_scale=1.0,
             end_scale=0.82,
         )
-        modules[f"{side}_hand"] = assembly.add(HANDS[side](), "dexterous_hand", side)   # a linked child
+        hand = build_hand(side)
+        hand.label = _label_text("dexterous_hand", side)
+        parts.append(hand)
+        modules[f"{side}_hand"] = hand
 
     actuators: dict[str, object] = {}
+    yokes: dict[str, object] = {}
     for spec in BODY_JOINT_SPECS:
-        _add_joint_yoke(assembly, spec)
-        actuators[spec.name] = _add_actuator(assembly, spec)
+        yokes[spec.name] = _add_joint_yoke(parts, spec)
+        actuators[spec.name] = _add_actuator(parts, spec)
 
-    _add_body_kinematics(assembly, modules, actuators)
-    robot = assembly.build()
-    robot.label = "research_humanoid_28_body_dof_plus_dexterous_hands"
-    return robot
+    _add_body_kinematics(modules, actuators, yokes)
+    return bd.Compound(children=parts, label="research_humanoid_28_body_dof_plus_dexterous_hands")
 
 
 def joint_manifest() -> dict[str, list[dict[str, object]]]:
@@ -229,7 +233,7 @@ def design_metrics() -> dict[str, object]:
     }
 
 
-@step(out="../../STEP/research_humanoid/research_humanoid.step")
+@model
 def research_humanoid() -> object:
     return _build_robot()
 

@@ -24,7 +24,6 @@ function makeOccurrenceGlb({
   cadExtras = true,
   nodeName = "leaf",
   upAxis = null,
-  stepTopology = false,
   materialBaseColor = null,
   materialExtras = null,
   vertexColors = null
@@ -50,14 +49,6 @@ function makeOccurrenceGlb({
     asset: {
       version: "2.0"
     },
-    ...(stepTopology
-      ? {
-          extensionsUsed: ["STEP_topology"],
-          extensions: {
-            STEP_topology: {}
-          }
-        }
-      : {}),
     scenes: [
       {
         nodes: [0]
@@ -171,7 +162,6 @@ function makeOccurrenceGlb({
 }
 
 function makeTwoPrimitiveOccurrenceGlb({
-  stepTopology = false,
   materialBaseColors = [
     [1, 0, 0, 1],
     [0, 0, 1, 1]
@@ -194,14 +184,6 @@ function makeTwoPrimitiveOccurrenceGlb({
     asset: {
       version: "2.0"
     },
-    ...(stepTopology
-      ? {
-          extensionsUsed: ["STEP_topology"],
-          extensions: {
-            STEP_topology: {}
-          }
-        }
-      : {}),
     scenes: [
       {
         nodes: [0]
@@ -315,7 +297,6 @@ function makeTwoPrimitiveOccurrenceGlb({
 }
 
 function makeIndexedMaterialOccurrenceGlb({
-  stepTopology = false,
   primitiveMaterial = 1,
   materialBaseColors = [
     [0.72, 0.72, 0.72, 1],
@@ -337,14 +318,6 @@ function makeIndexedMaterialOccurrenceGlb({
     asset: {
       version: "2.0"
     },
-    ...(stepTopology
-      ? {
-          extensionsUsed: ["STEP_topology"],
-          extensions: {
-            STEP_topology: {}
-          }
-        }
-      : {}),
     scenes: [
       {
         nodes: [0]
@@ -505,29 +478,8 @@ test("a GLB DECLARING CAD Z-up is left alone", async () => {
   assert.deepEqual(cadVertices(meshData), Y_UP_UNCONVERTED);
 });
 
-test("STEP topology still means CAD space when nothing is declared", async () => {
-  const meshData = await buildMeshDataFromGlbBuffer(
-    makeOccurrenceGlb({ stepTopology: true })
-  );
-  assert.deepEqual(cadVertices(meshData), Y_UP_UNCONVERTED);
-});
-
-test("STEP GLB mesh data ignores generated default material colors", async () => {
-  const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({
-    stepTopology: true,
-    materialBaseColor: [0.72, 0.72, 0.72, 1]
-  }));
-
-  assert.equal(meshData.has_source_colors, false);
-  assert.equal(meshData.sourceColor, "");
-  assert.deepEqual([...meshData.colors], []);
-  assert.equal(meshData.parts[0].color, "");
-  assert.equal(meshData.parts[0].hasSourceColors, false);
-});
-
-test("STEP GLB mesh data preserves neutral source material colors", async () => {
+test("GLB mesh data preserves neutral source material colors", async () => {
   const meshData = await buildMeshDataFromGlbBuffer(makeTwoPrimitiveOccurrenceGlb({
-    stepTopology: true,
     materialBaseColors: [
       [0, 0, 0, 1],
       [1, 1, 1, 1]
@@ -540,9 +492,8 @@ test("STEP GLB mesh data preserves neutral source material colors", async () => 
   assert.deepEqual(meshData.parts.map((part) => part.hasSourceColors), [true, true]);
 });
 
-test("STEP GLB mesh data honors explicit non-source material metadata", async () => {
+test("GLB mesh data honors explicit non-source material metadata", async () => {
   const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({
-    stepTopology: true,
     materialBaseColor: [0.05, 0.05, 0.05, 1],
     materialExtras: { cadSourceColor: false }
   }));
@@ -551,19 +502,6 @@ test("STEP GLB mesh data honors explicit non-source material metadata", async ()
   assert.equal(meshData.sourceColor, "");
   assert.equal(meshData.parts[0].color, "");
   assert.equal(meshData.parts[0].hasSourceColors, false);
-});
-
-test("STEP GLB mesh data honors explicit source material metadata", async () => {
-  const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({
-    stepTopology: true,
-    materialBaseColor: [0.72, 0.72, 0.72, 1],
-    materialExtras: { cadSourceColor: true }
-  }));
-
-  assert.equal(meshData.has_source_colors, true);
-  assert.equal(meshData.sourceColor, "#dddddd");
-  assert.equal(meshData.parts[0].color, "#dddddd");
-  assert.equal(meshData.parts[0].hasSourceColors, true);
 });
 
 test("plain GLB COLOR_0 vertex colors are source colors", async () => {
@@ -596,10 +534,8 @@ test("a material color alongside COLOR_0 keeps vertex colors flowing", async () 
   assert.deepEqual([...meshData.colors], ramp);
 });
 
-test("STEP GLB mesh data preserves loaded material metadata on single-primitive meshes", async () => {
-  const meshData = await buildMeshDataFromGlbBuffer(makeIndexedMaterialOccurrenceGlb({
-    stepTopology: true
-  }));
+test("GLB mesh data preserves loaded material metadata on single-primitive meshes", async () => {
+  const meshData = await buildMeshDataFromGlbBuffer(makeIndexedMaterialOccurrenceGlb());
 
   assert.equal(meshData.has_source_colors, true);
   assert.equal(meshData.sourceColor, "#ff0000");
@@ -607,9 +543,8 @@ test("STEP GLB mesh data preserves loaded material metadata on single-primitive 
   assert.equal(meshData.parts[0].hasSourceColors, true);
 });
 
-test("STEP GLB mesh data preserves non-gray material colors", async () => {
+test("GLB mesh data preserves material colors", async () => {
   const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({
-    stepTopology: true,
     materialBaseColor: [1, 0, 0, 1]
   }));
 
@@ -620,9 +555,8 @@ test("STEP GLB mesh data preserves non-gray material colors", async () => {
   assert.equal(meshData.parts[0].hasSourceColors, true);
 });
 
-test("STEP GLB mesh data preserves source material opacity", async () => {
+test("GLB mesh data preserves source material opacity", async () => {
   const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({
-    stepTopology: true,
     materialBaseColor: [1, 0, 0, 0.2]
   }));
 
@@ -630,24 +564,6 @@ test("STEP GLB mesh data preserves source material opacity", async () => {
   assert.equal(meshData.parts[0].color, "#ff0000");
   assert.equal(meshData.parts[0].opacity, 0.2);
   assert.equal(meshData.parts[0].hasSourceColors, true);
-});
-
-test("STEP GLB mesh data preserves colored primitives alongside generated default materials", async () => {
-  const meshData = await buildMeshDataFromGlbBuffer(makeTwoPrimitiveOccurrenceGlb({
-    stepTopology: true,
-    materialBaseColors: [
-      [0.72, 0.72, 0.72, 1],
-      [0.05, 0.33, 0.86, 1]
-    ]
-  }));
-
-  assert.equal(meshData.has_source_colors, true);
-  assert.equal(meshData.sourceColor, "#3f9bef");
-  assert.equal(meshData.colors.length, 0);
-  assert.equal(meshData.parts[0].color, "");
-  assert.equal(meshData.parts[0].hasSourceColors, false);
-  assert.equal(meshData.parts[1].color, "#3f9bef");
-  assert.equal(meshData.parts[1].hasSourceColors, true);
 });
 
 test("GLB mesh data assigns stable primitive indexes per occurrence", async () => {
@@ -680,4 +596,39 @@ test('external glTF buffers use the resource provider and release temporary URLs
   assert.equal(mesh.vertices.length, 9);
   assert.equal(revoke.mock.callCount(), 1);
   assert.deepEqual(calls,[['resolve','private:document','private.bin'],['read','private:bytes',64*1024*1024]]);
+});
+
+// Two triangles at a fold and no NORMAL attribute: glTF asks a client for flat normals, each
+// triangle its own, kept outward under a mirroring placement (a negative determinant).
+function twoTriangleGlb(scale = [1, 1, 1]) {
+  const positions = floatBuffer([0, 0, 0, 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0, 0, 0, 0.001, 0.001, 0, 0]);
+  const binary = pad4(positions);
+  const gltf = {
+    asset: { version: "2.0" }, scenes: [{ nodes: [0] }], nodes: [{ name: "fold", mesh: 0, scale }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+    buffers: [{ byteLength: binary.length }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.length, target: 34962 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 6, type: "VEC3", min: [0, 0, 0], max: [0.001, 0.001, 0.001] }]
+  };
+  const json = pad4(Buffer.from(JSON.stringify(gltf)), 0x20);
+  const header = Buffer.alloc(12);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(12 + 8 + json.length + 8 + binary.length, 8);
+  const chunk = (data, type) => { const head = Buffer.alloc(8); head.writeUInt32LE(data.length, 0); head.writeUInt32LE(type, 4); return Buffer.concat([head, data]); };
+  const glb = Buffer.concat([header, chunk(json, 0x4e4f534a), chunk(binary, 0x004e4942)]);
+  return glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength);
+}
+
+test("a GLB primitive without normals is shaded flat, each triangle its own, mirrored or not", async () => {
+  // glTF +Z and +Y, the two triangles' faces, are CAD -Y and +Z.
+  const expected = [[0, -1, 0], [0, -1, 0], [0, -1, 0], [0, 0, 1], [0, 0, 1], [0, 0, 1]];
+  for (const scale of [[1, 1, 1], [-1, 1, 1]]) {
+    const meshData = await buildMeshDataFromGlbBuffer(twoTriangleGlb(scale));
+    const normals = [];
+    for (let at = 0; at < meshData.normals.length; at += 3) {
+      normals.push(Array.from(meshData.normals.slice(at, at + 3), value => Math.round(value * 1e6) / 1e6 + 0));
+    }
+    assert.deepEqual(normals, expected, `scale ${scale}`);
+  }
 });

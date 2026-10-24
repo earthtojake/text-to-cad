@@ -14,7 +14,7 @@ await build({
 });
 const { createWebPromptContext, browserClipboard } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
-const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', path: '/Car project/folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } };
+const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', path: '/Car project/folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o:3f2a9c1d7e5b/f:bracket.extrude1.3'] } } };
 const context = (operationId, parts) => ({ schemaVersion: 1, operationId, parts });
 function replaceGlobal(name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -30,7 +30,7 @@ test('web references name the file by its absolute path, in ordered plain text, 
   const result = await port.deliver(bundle);
   assert.deepEqual(result, { status: 'copied', partIds: ['intro', 'ref'] });
   assert.deepEqual(await port.deliver(bundle), result);
-  assert.deepEqual(writes, ['Inspect this face\n"/Car project/folder/part.step"#o1.f2']);
+  assert.deepEqual(writes, ['Inspect this face\n"/Car project/folder/part.step"#o:3f2a9c1d7e5b/f:bracket.extrude1.3']);
 });
 
 test('browser mixed copy starts within the gesture and reports separate representations truthfully', async () => {
@@ -41,7 +41,7 @@ test('browser mixed copy starts within the gesture and reports separate represen
   const restoreItem = replaceGlobal('ClipboardItem', Item);
   const restoreNavigator = replaceGlobal('navigator', { clipboard: { write: async items => {
     events.push('write');
-    assert.equal(await items[0].content['text/plain'].text(), '"/Car project/folder/part.step"#o1.f2');
+    assert.equal(await items[0].content['text/plain'].text(), '"/Car project/folder/part.step"#o:3f2a9c1d7e5b/f:bracket.extrude1.3');
     assert.equal(typeof items[0].content['image/png'].then, 'function');
     await items[0].content['image/png'];
     events.push('encoded');

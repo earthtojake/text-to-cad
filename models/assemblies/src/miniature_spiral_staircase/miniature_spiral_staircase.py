@@ -1,8 +1,8 @@
 from __future__ import annotations
-from cadgen import glb, step, stl, threemf
+from cadgen import model
 from math import cos, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Units: millimeters.
@@ -46,7 +46,7 @@ def _make_base():
 
     part = base.part
     part.label = "circular_base_disk_diameter_90mm_thickness_5mm"
-    part.color = bd.Color(0.42, 0.43, 0.45, 1.0)
+    part.color = bd.Color("#adafb3")
     return part
 
 
@@ -60,7 +60,7 @@ def _make_column():
 
     part = column.part
     part.label = "central_column_diameter_14mm_height_140mm"
-    part.color = bd.Color(0.70, 0.72, 0.74, 1.0)
+    part.color = bd.Color("#dadddf")
     return part
 
 
@@ -87,7 +87,7 @@ def _make_tread_profile():
 
     part = tread.part
     part.label = "tread_profile_inner_10mm_outer_62mm_sweep_24deg"
-    part.color = bd.Color(0.78, 0.58, 0.35, 1.0)
+    part.color = bd.Color("#e5c8a0")
     return part
 
 
@@ -127,7 +127,7 @@ def _make_handrail():
 
     part = rail.part
     part.label = "helical_outer_handrail_radius_66mm_diameter_5mm"
-    part.color = bd.Color(0.22, 0.28, 0.34, 1.0)
+    part.color = bd.Color("#81909e")
     return part
 
 
@@ -147,16 +147,13 @@ def _make_baluster(index: int):
 
     part = baluster.part.moved(bd.Location((x_pos, y_pos, tread_top_z)))
     part.label = f"baluster_{index + 1:02d}_diameter_3mm"
-    part.color = bd.Color(0.30, 0.33, 0.36, 1.0)
+    part.color = bd.Color("#959ba2")
     return part
 
 
-@step(out="../../STEP/miniature_spiral_staircase/miniature_spiral_staircase.step")
-@stl(out="../../STL/miniature_spiral_staircase/miniature_spiral_staircase_highres.stl", mesh_tolerance=4e-4)
-@threemf(out="../../3MF/miniature_spiral_staircase/miniature_spiral_staircase_highres.3mf", mesh_tolerance=4e-4)
-@glb(out="../../GLB/miniature_spiral_staircase/miniature_spiral_staircase_highres.glb", mesh_tolerance=4e-4)
+@model
 def miniature_spiral_staircase():
-    """Return a labeled miniature spiral staircase STEP compound in millimeters."""
+    """Return a labeled miniature spiral staircase compound in millimeters."""
     parts = [
         _make_base(),
         _make_column(),

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import bodywork as B
 
 
-@step(out="../STEP/rear_fender.step")
+@model
 def rear_fender():
     built = B.build_rear_fender()
     if isinstance(built, list):

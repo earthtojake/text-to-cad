@@ -8,9 +8,8 @@ defaults. Within the tab, a model's state lasts only while it is the model on
 screen: leaving it drops it. The one thing outside the rule is a network cache,
 listed at the end.
 
-This doc covers browser state only. Catalogs, CAD assets, and hidden STEP
-GLB/topology artifacts are backend concerns; use [backend.md](./backend.md) for
-that interface.
+This doc covers browser state only. Catalogs and CAD assets are backend concerns;
+use [backend.md](./backend.md) for that interface.
 
 ## URL Query Params
 

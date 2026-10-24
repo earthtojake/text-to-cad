@@ -12,7 +12,7 @@ shop:
                   `palette.MACHINED` so the eye reads the material change.
 
 Conventions
-  * build123d algebra mode; `from cadgen import build123d as bd`.
+  * build123d algebra mode; `import build123d as bd`.
   * Every primitive is returned in its OWN local frame with the base at z=0 and
     +Z up.  The caller places it — with `locate()`, or `bd.Pos`/`bd.Rot`.
   * Millimetres.  Casting radii 3-8 mm on the block/heads/sump, 1-2 mm on small
@@ -53,7 +53,7 @@ import math
 import sys
 from typing import Callable, Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Run BRepAlgoAPI_Check as part of is_sound(). Costs real time on big

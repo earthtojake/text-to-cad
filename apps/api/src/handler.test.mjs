@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 import { handle } from './handler.mjs';
+import { rateLimiter } from './limit.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -176,6 +177,42 @@ test('schema 5 says why builds and snapshots failed, by a word cadgen chose, and
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
 });
 
+// Schema 6: schema 5, with the engine's documents (`xbf`) and the sender a `cadgen` command starts (`cli`).
+const ENGINE = {
+  ...NAMED, schema: 6, process: 'cli', batch: '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f',
+  events: [
+    { name: 'build', kind: 'xbf', via: 'script', count: 3, failed: 1, crashed: 0, cancelled: 0, cached: 1, seconds: 2.5, longest: 1.5 },
+    { name: 'build_failure', kind: 'xbf', via: 'script', reason: 'model_error', count: 1 },
+    { name: 'build', kind: 'step', via: 'command', count: 1, failed: 0, crashed: 0, cancelled: 0, cached: 0, seconds: 0.4, longest: 0.4 },
+    { name: 'snapshot', kind: 'xbf', count: 1, failed: 1, seconds: 2.4 },
+    { name: 'snapshot_failure', kind: 'xbf', reason: 'render_error', count: 1 },
+    { name: 'health', workers: 1, crashes: 0, recycles: 0, refusals: 0 },
+  ],
+};
+
+test("schema 6 counts the engine's documents, and names the sender a command starts", async () => {
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', ENGINE)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    ENGINE.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  assert.ok(store.rows.every(row => row.process === 'cli' && row.at === ENGINE.at && /^[0-9a-f-]{36}$/.test(row.id)));
+  // Every process sends it: a view that showed an xbf.
+  const view = { ...BATCH, schema: 6, batch: ENGINE.batch, at: ENGINE.at, events: [{ name: 'files', kind: 'xbf', count: 1 }] };
+  assert.equal((await send(store, 'POST', '/v1/events', view)).status, 204);
+  // Every schema before it is read as ever.
+  for (const earlier of [SCHEMA_1, SCHEMA_2, BATCH, { ...BATCH, schema: 4 }, NAMED]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', earlier)).status, 204, `schema ${earlier.schema}`);
+  }
+  for (const bad of [
+    { ...NAMED, events: [ENGINE.events[0]] }, // schema 5 never counted an xbf
+    { ...NAMED, process: 'cli' }, // nor came from a command's sender
+    { ...BATCH, events: [{ name: 'files', kind: 'xbf', count: 1 }] },
+    { ...ENGINE, process: 'engine' },
+    { ...ENGINE, batch: undefined }, // named, as schema 5 is
+    { ...ENGINE, events: [{ ...ENGINE.events[0], kind: 'xbf2' }] },
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -271,7 +308,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 6 }, // a schema no release sends
+    { ...BATCH, schema: 7 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },
@@ -373,6 +410,36 @@ test('an install id forgets everything sent under it; retention is the service\'
   assert.deepEqual(store.rows, []);
   assert.equal((await send(store, 'GET', '/v1/prune')).status, 404);
   assert.equal((await send(store, 'GET', '/v1/events')).status, 404);
+});
+
+test('forgetting is limited per address and per install id: past five in ten minutes, 429 with Retry-After and no deletion', async () => {
+  const warn = mock.method(console, 'warn', () => {});
+  try {
+    let at = 0;
+    const limiter = rateLimiter({ now: () => at });
+    const forgotten = [];
+    const store = { ...memory(), async forget(id) { forgotten.push(id); } };
+    const forget = (install, client) => handle(new Request('https://api.texttocad.dev/v1/forget', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ install }),
+    }), store, { limiter, client });
+    for (let i = 0; i < 5; i += 1) assert.equal((await forget(INSTALL, '203.0.113.7')).status, 204);
+    const refused = await forget(INSTALL, '203.0.113.7');
+    assert.deepEqual([refused.status, refused.headers.get('retry-after'), await refused.json()], [429, '600', { error: 'too many requests' }]);
+    assert.equal(forgotten.length, 5);
+    // The same id from anywhere else is still limited; another id from another address is not.
+    assert.equal((await forget(INSTALL, '198.51.100.1')).status, 429);
+    const other = '6f0c6a52-3a1e-4f43-9a7e-1d2b3c4d5e6f';
+    assert.equal((await forget(other, '198.51.100.2')).status, 204);
+    // One address cannot spend the key on many ids.
+    for (let i = 0; i < 4; i += 1) await forget(other.replace(/.$/, String(i)), '192.0.2.9');
+    assert.equal((await forget(other.replace(/.$/, '9'), '192.0.2.9')).status, 204);
+    assert.equal((await forget(other.replace(/.$/, '8'), '192.0.2.9')).status, 429);
+    assert.equal(warn.mock.calls.at(-1).arguments[0], 'telemetry /v1/forget refused 429: too many requests');
+    at += 600_000;
+    assert.equal((await forget(INSTALL, '203.0.113.7')).status, 204);
+  } finally {
+    warn.mock.restore();
+  }
 });
 
 test('health fails without a setting, or with keys the service refuses, naming no more than a code', async () => {

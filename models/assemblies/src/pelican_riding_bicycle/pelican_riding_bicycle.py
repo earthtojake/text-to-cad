@@ -1,10 +1,10 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 import math
 from collections.abc import Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 DISPLAY_NAME = "Pelican riding a bicycle"
@@ -14,18 +14,18 @@ DISPLAY_NAME = "Pelican riding a bicycle"
 # X: rear-to-front bicycle direction, Y: wheel axle direction, +Z: up.
 
 COLORS = {
-    "rubber_black": (0.003, 0.003, 0.003, 1.0),
-    "rim_silver": (0.70, 0.72, 0.70, 1.0),
-    "spoke_steel": (0.82, 0.84, 0.82, 1.0),
-    "frame_blue": (0.05, 0.28, 0.75, 1.0),
-    "seat_brown": (0.28, 0.12, 0.05, 1.0),
-    "pelican_white": (0.96, 0.95, 0.88, 1.0),
-    "wing_gray": (0.66, 0.68, 0.64, 1.0),
-    "feather_dark": (0.08, 0.08, 0.075, 1.0),
-    "bill_yellow": (1.00, 0.78, 0.26, 1.0),
-    "pouch_orange": (0.95, 0.45, 0.12, 1.0),
-    "leg_orange": (0.98, 0.50, 0.12, 1.0),
-    "eye_black": (0.0, 0.0, 0.0, 1.0),
+    "rubber_black": "#0a0a0a",
+    "rim_silver": "#daddda",
+    "spoke_steel": "#eaecea",
+    "frame_blue": "#3f90e1",
+    "seat_brown": "#90613f",
+    "pelican_white": "#faf9f1",
+    "wing_gray": "#d4d7d1",
+    "feather_dark": "#50504d",
+    "bill_yellow": "#ffe58b",
+    "pouch_orange": "#f9b361",
+    "leg_orange": "#fdbc61",
+    "eye_black": "#000000",
 }
 
 Vector3 = tuple[float, float, float]
@@ -68,14 +68,14 @@ def _v_norm(a: Vector3) -> Vector3:
 
 def _style(shape: bd.Shape, label: str, color_name: str) -> bd.Shape:
     shape.label = label
-    shape.color = bd.Color(*COLORS[color_name])
+    shape.color = bd.Color(COLORS[color_name])
     return shape
 
 
 def _group(label: str, children: Sequence[bd.Shape], color_name: str | None = None) -> bd.Compound:
     compound = bd.Compound(obj=list(children), children=list(children), label=label)
     if color_name is not None:
-        compound.color = bd.Color(*COLORS[color_name])
+        compound.color = bd.Color(COLORS[color_name])
     return compound
 
 
@@ -133,19 +133,13 @@ def _oriented_box(
 
 
 def _cylinder_between(label: str, p1: Vector3, p2: Vector3, radius: float, color_name: str) -> bd.Shape:
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
-    from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt, gp_Trsf
     axis = _v_sub(p2, p1)
     length = _v_len(axis)
     if length <= 1e-6:
         return _style(bd.Sphere(radius).moved(bd.Location(p1)), label, color_name)
     direction = _v_norm(axis)
-    wrapped = BRepPrimAPI_MakeCylinder(
-        gp_Ax2(gp_Pnt(*p1), gp_Dir(*direction)),
-        radius,
-        length,
-    ).Shape()
-    return _style(bd.Shape(obj=wrapped), label, color_name)
+    cylinder = bd.Cylinder(radius, length, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    return _style(cylinder.moved(bd.Plane(origin=p1, z_dir=direction).location), label, color_name)
 
 
 def _cylinder_y(label: str, center: Vector3, radius: float, length: float, color_name: str) -> bd.Shape:
@@ -318,7 +312,7 @@ def _make_ground_shadow() -> bd.Compound:
     return _group("subtle_ground_shadow", [front_pad, rear_pad])
 
 
-@step(out="../../STEP/pelican_riding_bicycle/pelican_riding_bicycle.step")
+@model
 def pelican_riding_bicycle() -> bd.Compound:
     bicycle = _make_bicycle()
     pelican = _make_pelican()

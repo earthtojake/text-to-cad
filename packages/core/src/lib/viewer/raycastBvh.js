@@ -186,7 +186,6 @@ export function scheduleRuntimeRaycastBvh(runtime, {
   maxTriangles = DEFAULT_MAX_BVH_TRIANGLES,
   reserveBuild = null,
   finishBuild = null,
-  onBuildDenied = null,
   deferUntilRaycast = false,
   workerClient = defaultRaycastBvhWorkerClient(),
 } = {}) {
@@ -245,8 +244,7 @@ export function scheduleRuntimeRaycastBvh(runtime, {
     if (!workerClient) {
       const estimatedBytes = estimateGeometryBvhBytes(geometry);
       const reservation = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-      if (reservation.ok === false) onBuildDenied?.({ geometry, estimatedBytes, ...(reservation.detail || {}) });
-      else {
+      if (reservation.ok !== false) {
         buildGeometryBvh(geometry, maxTriangles);
         finishBuild?.(reservation.token, { geometry, builtBytes: builtGeometryBvhBytes(geometry) });
       }
@@ -267,10 +265,7 @@ export function scheduleRuntimeRaycastBvh(runtime, {
       if (!snapshot) { geometry.userData.__bvhSkipped = true; return null; }
       const estimatedBytes = estimateGeometryBvhBuildBytes(geometry);
       const admitted = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-      if (admitted.ok === false) {
-        onBuildDenied?.({ geometry, estimatedBytes, ...(admitted.detail || {}) });
-        return null;
-      }
+      if (admitted.ok === false) return null;
       reservation = admitted;
       if (!current() || !matchesGeometry(geometry, snapshot)) return null;
       return copiedGeometry(snapshot);
@@ -313,7 +308,6 @@ export function ensureFacePickBvh(runtime, selectorRuntime, options = null) {
     maxTriangles = DEFAULT_MAX_BVH_TRIANGLES,
     reserveBuild = null,
     finishBuild = null,
-    onBuildDenied = null,
   } = options || runtime?.raycastBvhOptions || {};
   const mesh = runtime?.facePickMesh;
   const proxy = selectorRuntime?.proxy;
@@ -343,10 +337,7 @@ export function ensureFacePickBvh(runtime, selectorRuntime, options = null) {
     }
     const estimatedBytes = estimateGeometryBvhBytes(geometry);
     const reservation = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-    if (reservation.ok === false) {
-      onBuildDenied?.({ geometry, estimatedBytes, ...(reservation.detail || {}) });
-      return;
-    }
+    if (reservation.ok === false) return;
     try {
       const bvh = new MeshBVH(geometry, BVH_OPTIONS);
       bvh.__builtFromIndexArray = proxy.faceIndices;

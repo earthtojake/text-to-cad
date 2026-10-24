@@ -25,26 +25,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UI_ROOT = REPO_ROOT / "packages" / "ui" / "src"
-CLIENT_ROOT = UI_ROOT / "renderers" / "step"
+# The renderer every STEP and engine document opens in: one family, matched by the registry.
+CLIENT_ROOT = UI_ROOT / "renderers" / "xbf"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
 #
-# 13 -> 0. Every check was the STEP renderer asking whether an entry was a STEP, inside a
-# renderer whose registry match already guarantees it. The file view asked eight times; the
-# STEP artifact helpers took a ``sourceFormat`` that only ever arrived as STEP (they existed
-# so a DXF, served by the same renderer then, would not get a STEP artifact card); the asset
-# loaders were allowlisted as "per-format" long after every other format had its own
-# renderer. At 0 this is a regression gate: one reappearing check fails it.
+# 13 -> 0. Every check was the retired STEP renderer asking whether an entry was a STEP,
+# inside a renderer whose registry match already guaranteed it. The renderer that shows a
+# STEP now, the engine document's, is held to the same: at 0 this is a regression gate, and
+# one reappearing check fails it.
 MAX_RENDER_FORMAT_CHECKS = 0
 MAX_FORMAT_PREDICATE_CALLS = 0
-
-# Files allowed to know about concrete formats, because deciding *which* format an entry
-# is, or loading it, is their whole job. Everything else must go through capabilities.
-ALLOWLIST = {
-    # The registry and the format enum themselves.
-    "workbench/constants.js",
-}
 
 RENDER_FORMAT_MEMBER = re.compile(
     r"RENDER_FORMAT\.(?:STEP|STL|THREE_MF|GLB|DXF|URDF|SRDF|SDF)\b"
@@ -58,9 +50,6 @@ def _client_sources() -> list[Path]:
         for path in CLIENT_ROOT.rglob(suffix):
             name = path.name
             if name.endswith((".test.js", ".test.jsx")):
-                continue
-            relative = path.relative_to(CLIENT_ROOT).as_posix()
-            if relative in ALLOWLIST:
                 continue
             paths.append(path)
     return sorted(paths)
@@ -123,31 +112,20 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         These are the shell: if they start branching on format identity again, every
         feature added to one format stops reaching the others.
         """
-        # The STEP scene and everything of it that lives in the kit's viewport
-        # (`CadViewer.js` and `CadRenderPane.js` before the renderer split). They show ONE
-        # family, so there is no format left for them to ask about. The sweep is asserted
-        # non-empty: a renamed directory would otherwise match nothing and pass in silence.
-        scene_sources = sorted(
-            path
-            for suffix in ("*.js", "*.jsx")
-            for path in (CLIENT_ROOT / "scene").glob(suffix)
-            if not path.name.endswith((".test.js", ".test.jsx"))
-        )
+        # The engine document's renderer, the one a STEP opens in: its surface, scene, tree
+        # and panels show ONE family, so there is no format left for them to ask about. The
+        # sweep is asserted non-empty: a renamed directory would otherwise match nothing and
+        # pass in silence.
+        renderer_sources = _client_sources()
         self.assertGreater(
-            len(scene_sources),
+            len(renderer_sources),
             5,
-            f"swept no scene sources under {CLIENT_ROOT / 'scene'} — did the directory move?",
+            f"swept no renderer sources under {CLIENT_ROOT} — did the directory move?",
         )
         for path in (
-            # The STEP surface itself, on the shell since the renderer split finished: it shows
-            # ONE family, so it has no format left to ask about either. (It replaced
-            # `file-view/CadFileView.js`, and STEP's own `FloatingToolBar.js` went with it.)
-            CLIENT_ROOT / "StepSurface.jsx",
-            *scene_sources,
-            # Status, alerts and the file list: every one of these was a per-format
-            # cascade, and each cascade was a place a new format inherited the wrong
-            # advice, the wrong icon or no spinner at all.
-            CLIENT_ROOT / "workbench/viewerAlerts.js",
+            *renderer_sources,
+            # The file list's icons: a per-format cascade was a place a new format inherited
+            # the wrong icon.
             UI_ROOT / "file-viewer/navigation/entryIconKind.js",
             # The file list, the SHARED explorer, and the file source that feeds it — drawn
             # by every app alike, so a format check in either is a format one app lists and

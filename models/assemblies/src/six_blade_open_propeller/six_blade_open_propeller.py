@@ -1,9 +1,9 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import cos, hypot, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Units: millimeters.
@@ -13,11 +13,10 @@ from cadgen import build123d as bd
 
 MODEL_LABEL = "six_blade_open_propeller_from_reference"
 
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-WARM_IVORY = (0.82, 0.78, 0.65, 1.0)
-WARM_TAUPE = (0.72, 0.70, 0.61, 1.0)
+# Plain RGB(A) tuples / sRGB hex strings: build123d's Shape.color setter
+# builds the Color on assignment.
+WARM_IVORY = "#eae5d3"
+WARM_TAUPE = "#dddacd"
 
 BLADE_COUNT = 6
 BLADE_ROOT_RADIUS = 10.8
@@ -351,7 +350,7 @@ def _make_hub_shell():
     )
 
 
-@step(out="../../STEP/six_blade_open_propeller/six_blade_open_propeller.step")
+@model
 def six_blade_open_propeller():
     parts = [_make_hub_shell()]
 

@@ -1,21 +1,15 @@
-"""F1 part model: power unit.
+"""F1 part: power unit.
 
-The geometry `lib/power_unit.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.13`; rebuild `f1.py`
-to pick up a change here.
+Built in car coordinates by `lib/power_unit.py`; `f1.py` calls it in the car's body,
+a `@memo` stage of its own.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import power_unit as power_unit_lib
 
 
-@step(out="../STEP/power_unit.step")
+@memo
 def power_unit():
-    return power_unit_lib.build_power_unit()
-
-
-if __name__ == "__main__":
-    power_unit()
+    built = power_unit_lib.build_power_unit()
+    return built

@@ -27,7 +27,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     build_parser(prog).parse_args(argv)
-    from cadgen.mcp.server import serve
+    from cadgen.mcp.shim import serve
 
     return serve()
 

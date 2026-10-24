@@ -80,6 +80,15 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     // leave the rest-pose box while the hierarchy and the framing box stay correct.
     if (object.isSkinnedMesh || object.morphTargetInfluences?.length) object.frustumCulled = false;
   });
+  // A sibling opens at the file's authored pose, even while this scene holds a routine's
+  // frame or an explosion. Keep values for every node (bones included), before either can
+  // write them; clip time zero need not be the authored pose.
+  const authoredPose = new Map();
+  document.scene.traverse(object => authoredPose.set(object, {
+    position: object.position.toArray(), quaternion: object.quaternion.toArray(), scale: object.scale.toArray(),
+    matrix: object.matrix.toArray(), matrixAutoUpdate: object.matrixAutoUpdate,
+    morphs: object.morphTargetInfluences?.slice() || null, visible: object.visible, renderOrder: object.renderOrder
+  }));
   // The authored materials, kept apart from the ones this scene's look will dress, for a sibling.
   const authored = new Map();
   document.scene.traverse((object) => {
@@ -215,16 +224,29 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
      */
     createSibling() {
       const copy = cloneSkinned(document.scene);
-      const sources = [];
-      document.scene.traverse(object => { if (object.isMesh) sources.push(object); });
-      let index = 0;
-      copy.traverse((object) => {
+      // Pair the current source and clone hierarchies first. Runtime overlays can have
+      // appeared since the baseline; remove their copies without shifting authored nodes.
+      const sources = [], copies = [];
+      document.scene.traverse(object => sources.push(object));
+      copy.traverse(object => copies.push(object));
+      sources.forEach((source, index) => {
+        const object = copies[index], pose = authoredPose.get(source);
+        if (!pose) { object.removeFromParent(); return; }
+        object.position.fromArray(pose.position);
+        object.quaternion.fromArray(pose.quaternion);
+        object.scale.fromArray(pose.scale);
+        object.matrix.fromArray(pose.matrix);
+        object.matrixAutoUpdate = pose.matrixAutoUpdate;
+        object.matrixWorldNeedsUpdate = true;
+        object.visible = pose.visible;
+        object.renderOrder = pose.renderOrder;
+        if (pose.morphs) object.morphTargetInfluences = pose.morphs.slice();
         if (!object.isMesh) return;
-        const source = sources[index++];
         object.geometry = shareGeometry(THREE, source.geometry);
         const materials = (authored.get(source) || materialList(source)).map(material => material && copyMaterial(material));
         object.material = Array.isArray(source.material) ? materials : materials[0];
       });
+      copy.updateMatrixWorld(true);
       return createGlbScene(THREE, { ...document, scene: copy }, { sibling: true });
     },
     dispose() {

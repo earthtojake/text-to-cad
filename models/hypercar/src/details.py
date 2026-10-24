@@ -1,21 +1,16 @@
-"""Hypercar system model: details — mirrors, badges, filler, vents, fasteners.
+"""Hypercar system: details — mirrors, badges, filler, vents, fasteners.
 
-A sub-assembly of the car: the group `lib/details.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.13`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/details.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import details as details_lib
 
 
-@step(out="../STEP/details.step")
+@memo
 def details():
-    return details_lib.build()
-
-
-if __name__ == "__main__":
-    details()
+    built = details_lib.build()
+    return built

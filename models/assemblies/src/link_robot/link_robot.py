@@ -1,15 +1,17 @@
 from __future__ import annotations
-from cadgen import step
-# A base with two arms and a spare pin: three links to two DIFFERENT children,
-# one of which (link_arm) links link_pin itself — the tree nests two deep.
+from cadgen import model
+# A base with two arms and a spare pin: the one model of the group. link_arm and
+# link_pin are plain functions it calls; the arm is placed twice and holds two
+# placements of the pin, so the pin's B-rep is one prototype placed five times,
+# two levels deep.
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from link_arm import link_arm
 from link_pin import link_pin
 
 
-@step(out="../../STEP/link_robot/link_robot.step")
+@model
 def link_robot():
     base = bd.Box(60.0, 30.0, 6.0)
     base.label = "base"

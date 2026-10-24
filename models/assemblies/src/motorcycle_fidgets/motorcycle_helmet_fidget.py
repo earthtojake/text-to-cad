@@ -24,13 +24,12 @@ Parts
 """
 
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import cos, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from cadgen import srgb
 
 from lib.mx_switch_socket import mx_socket_cutter
 
@@ -77,8 +76,7 @@ VENT_CENTER = (-15.39, 0.0, 13.08)
 VENT_ROT_DEG = -50.0
 
 
-# (sRGB hex, alpha) pairs: _part() turns them into Colors with srgb() at use, so
-# importing this module never loads the CAD kernel (srgb() builds a bd.Color).
+# (sRGB hex, alpha) pairs: a colour build123d takes as it is, which the engine reads as sRGB.
 COLORS = {
     "shell_red": ("#D01317", 1.0),
     "graphite": ("#2E3742", 1.0),
@@ -89,7 +87,7 @@ COLORS = {
 
 def _part(shape, name, *details, color):
     shape.label = ":".join([name, *(str(d) for d in details)])
-    shape.color = srgb(*color)
+    shape.color = color
     return shape
 
 
@@ -159,7 +157,7 @@ def _make_parts():
     return parts
 
 
-@step(out="../../STEP/motorcycle_fidgets/motorcycle_helmet_fidget.step")
+@model
 def motorcycle_helmet_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_helmet_fidget"

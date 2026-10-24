@@ -37,12 +37,7 @@ METHODS = ("read_text", "write_text")
 # branches that own them. This list may only SHRINK: fix the file, drop the
 # entry. The staleness test below fails once an entry has nothing left to fix,
 # so the list cannot outlive the work.
-PENDING = {
-    "tests/python/global/test_render_contract_sync.py",
-    "tests/python/packages/cadgen/test_kinematics_build.py",
-    "tests/python/packages/cadgen/test_step_export_reuse.py",
-    "tests/python/packages/cadgen/test_step_write_determinism.py",
-}
+PENDING: set[str] = set()
 
 
 def _bare_calls(path: Path) -> list[tuple[int, str]]:

@@ -1,5 +1,5 @@
 """Tests are self-contained: nothing under tests/ reads, builds or imports the
-models/ corpus, and nothing depends on the developer's default store.
+models/ corpus, and nothing depends on the developer's own engine daemon.
 
 The corpus is a fixture area for humans and skills, not for the test suite: its
 outputs are generated (gitignored, absent in CI), and a test that reaches into it
@@ -8,9 +8,9 @@ earlier. Each test writes the small model it
 needs (a `bd.Box` is enough for every contract that is not about geometry), or
 reads a tiny fixture committed with the tests.
 
-The runner gives every test file its own fresh store; a test that spawns a build
-should still set CADGEN_CACHE_DIR itself so a direct `python -m unittest` never
-reads the developer's ~/.cache/cadgen (that is a convention, not something this
+The runner gives every test file an engine daemon of its own; a test that spawns a
+build should still set CADGEN_ENGINE_DIR itself so a direct `python -m unittest`
+never builds on the developer's daemon (that is a convention, not something this
 guard can tell apart from a subprocess that merely runs Python).
 """
 

@@ -1,13 +1,11 @@
-"""The ``cadgen`` console script — a subcommand dispatcher over the distribution's CLIs.
+"""The ``cadgen`` console script -- a subcommand dispatcher over the distribution's CLIs.
 
 Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the friendly
 front door, not a second implementation. A subcommand's parser lives in its own module and
-owns its arguments, so the console and module entry points cannot drift.
-
-Commands in the ``<format> <verb>`` grammar (README law 6) go one step further:
-their module names only the public verb function, and the parser is DERIVED from that
-function's signature (``cadgen._internal.cli_from_function``). A flag and a parameter
-cannot drift, because there is only one of them.
+owns its arguments, so the console and module entry points cannot drift. The engine's verbs
+(``export``, ``snapshot``, ``serve``, ``inspect``, ``status``, ``stop``, ``server``) are
+``cadgen.engine.cli``'s, each run by its name; the robot validators' parsers are DERIVED from
+the verb function's signature (``cadgen._internal.cli_from_function``).
 
 **Dispatch is lazy on purpose.** Importing a CAD subcommand pulls in OCP/build123d, which
 costs seconds and needs the heavy dependency set installed. ``cadgen --help`` and an
@@ -28,35 +26,21 @@ import sys
 # ``cadgen --help`` stays a single readable column.
 #
 # Two-word names are intentional where a noun has several verbs. Dispatch joins
-# argv[0:2] before argv[0], so the two-word form wins where it exists and one-word
-# commands like `daemon` still work.
+# argv[0:2] before argv[0], so the two-word form wins where it exists.
 #
-# Generation has NO CLI (README law 7): a model script runs itself —
-# `python <model>.py` through the @step/@dxf decorators.
+# A model script builds by running it (``python <model>.py``): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
-    # STEP. `build` writes a NEW document (IN OUT); `compile` only makes an
-    # existing document's tree current and is INTERNAL — every door
-    # and the viewer compile on demand, so no skill documentation names it.
-    "step build": (
-        "cadgen.cli.step_build",
-        "re-emit a STEP as a new one; can add kinematics, materials, animation",
-    ),
-    "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
-    "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
-    # Mesh formats — one door each: `build` tessellates a STEP DOCUMENT into this
-    # format (the sibling default, or OUT) and reads no model declaration;
-    # `snapshot` renders a mesh file. One format, one door.
-    "stl build": ("cadgen.cli.stl_build", "write an STL mesh of a STEP document"),
-    "stl snapshot": ("cadgen.cli.stl_snapshot", "render an STL mesh to an image"),
-    "3mf build": ("cadgen.cli.threemf_build", "write a 3MF mesh of a STEP document"),
-    "3mf snapshot": ("cadgen.cli.threemf_snapshot", "render a 3MF mesh to an image"),
-    "glb build": ("cadgen.cli.glb_build", "write a GLB mesh of a STEP document"),
-    "glb snapshot": ("cadgen.cli.glb_snapshot", "render a GLB mesh to an image"),
-    # DXF. A drawing has no derived state a door must materialize: the file is
-    # the product, made by running its script (python <drawing>.py), and
-    # `dxf snapshot` meshes it on demand.
+    # The engine (cadgen.engine): documents exported, drawn and served, its server.
+    "export": ("cadgen.cli.export", "write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf"),
+    "snapshot": ("cadgen.cli.snapshot", "render any supported file to an image"),
+    "serve": ("cadgen.cli.serve", "serve a document over HTTP and print its URL"),
+    "inspect": ("cadgen.cli.inspect", "an xbf's build closure, or what made one element of it"),
+    "status": ("cadgen.cli.status", "show the engine server's workers and what it serves"),
+    "stop": ("cadgen.cli.stop", "stop the engine server"),
+    "server": ("cadgen.cli.server", "run the engine server in this process"),
+    # DXF and robot descriptions: each format's snapshot draws its own files alone (the engine's
+    # snapshot), and the robot validators check a description.
     "dxf snapshot": ("cadgen.cli.dxf_snapshot", "render a DXF to an image"),
-    # Robot descriptions
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
     "urdf snapshot": ("cadgen.cli.urdf_snapshot", "render a URDF to an image"),
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
@@ -64,20 +48,9 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),
-    # The store. `store why <model>` is the debugging surface STORE.md describes.
-    "store": ("cadgen.cli.store", "the store: info, why <model> (gate verdict), forget <target>, gc"),
-    "snapshot": ("cadgen.cli.snapshot", "render any supported input to an image"),
-    "daemon": ("cadgen.daemon", "run the warm build daemon"),
-    # The two-word entry is required, not cosmetic: dispatch matches argv[0:2] first, so
-    # without it `cadgen daemon status` falls through to one-word `daemon` and the
-    # supervisor treats "status" as a stray argument.
-    "daemon status": ("cadgen.cli.daemon_status", "show the warm daemon's workers"),
-    # The CAD Viewer. One-word `viewer` starts or reuses this machine's viewer (what the
-    # CAD skills teach); `viewer stop` asks it to exit, split into its own module for the
-    # same dispatch reason `daemon status` is.
-    "viewer": ("cadgen.cli.viewer", "start, or reuse, this machine's CAD Viewer"),
-    "viewer stop": ("cadgen.cli.viewer_stop", "ask the CAD Viewer on a port to exit"),
-    # CAD inside an agent host's panels. The host starts it, one process per thread.
+    # A page session on the installation engine; the launcher exits.
+    "viewer": ("cadgen.cli.viewer", "open a viewer page on the installation engine"),
+    # CAD inside an agent host's panels. The host starts a stateless stdio peer per session.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "telemetry": ("cadgen.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
@@ -104,44 +77,6 @@ def read_skill_pin(skill_path) -> str | None:
     return match.group("pin") if match else None
 
 
-# Commands the warm daemon can serve, mapped to its tool names. The daemon exists to
-# avoid paying the multi-second OCP/build123d import per invocation, so the handoff has to
-# happen BEFORE the command's module is imported -- which is why it lives here in dispatch
-# rather than inside each command.
-#
-# Snapshot orchestration stays in the caller. Its document compilation and
-# missing surfaces already use the build pool; rendering needs no kernel.
-#
-# ONE table: a tool's name is its command with the space dashed, and its module is
-# the command's own (`_COMMANDS`). The daemon derives what it may import from here
-# (`daemon_tool_modules`), so a door cannot be warm on one side and unknown on the other.
-_WARM_COMMANDS = ("step build", "step compile", "stl build", "3mf build", "glb build")
-_DAEMON_TOOLS = {command: command.replace(" ", "-") for command in _WARM_COMMANDS}
-
-
-def daemon_tool_modules() -> dict[str, str]:
-    """``{daemon tool name: parser module}`` for every warm-served door."""
-    return {tool: _COMMANDS[command][0] for command, tool in _DAEMON_TOOLS.items()}
-
-
-def _run_via_daemon(tool: str, rest: list[str], prog: str) -> int | None:
-    """Exit code when the daemon handled it, None to run in this process.
-
-    CADGEN_DAEMON_CHILD is set in the process the daemon serves from, so this cannot
-    recurse. A daemon that is not installed or not running just falls through.
-    """
-    # Warm by default; CADGEN_DAEMON=0 opts out. There are two gates on this path -- this
-    # one and the client's -- and only changing the client's left the default a no-op,
-    # which a live check caught rather than any test.
-    if os.environ.get("CADGEN_DAEMON") == "0" or os.environ.get("CADGEN_DAEMON_CHILD"):
-        return None
-    try:
-        from cadgen.daemon.client import run_via_daemon
-    except ModuleNotFoundError:
-        return None
-    return run_via_daemon(tool, rest, os.getcwd(), prog=prog)
-
-
 _USAGE_HEAD = "usage: cadgen <command> [args...]\n\ncommands:\n"
 _USAGE_TAIL = (
     "\nRun 'cadgen <command> --help' for a command's own options.\n"
@@ -159,7 +94,7 @@ def _usage() -> str:
 
 
 def _format_verbs(noun: str) -> list[str]:
-    """The two-word commands of one format noun (``step`` -> ``step build``, ...)."""
+    """The two-word commands of one format noun (``urdf`` -> ``urdf validate``, ...)."""
     return [name for name in _COMMANDS if name.split(" ")[0] == noun and " " in name]
 
 
@@ -169,35 +104,6 @@ def _format_usage(noun: str) -> str:
         + _command_lines(_format_verbs(noun))
         + f"\nRun 'cadgen {noun} <verb> --help' for a command's own options.\n"
     )
-
-
-# Law 8: every retired surface fails loudly with a teaching error naming its
-# replacement -- never an alias, never a shim. Matched on the leading words of argv;
-# `step inspect` keeps its own module (it is also reachable as `python -m`).
-_RETIRED: dict[tuple[str, ...], str] = {
-    ("gen",): (
-        "cadgen gen has been removed: generation has no CLI. A model script is a program "
-        "-- run it: python <model>.py (it gates, builds, and writes the STEP/DXF, the "
-        "sidecar and every declared mesh). Per-run flags ride the script's argv: "
-        "--force, --json, --verbose, --mesh-tolerance, --mesh-angular-tolerance."
-    ),
-    ("step", "export"): (
-        "cadgen step export has been removed: each mesh format is its own door. Use "
-        "cadgen stl build IN.step [OUT.stl], cadgen 3mf build IN.step [OUT.3mf] or "
-        "cadgen glb build IN.step [OUT.glb]; to write a new STEP document use "
-        "cadgen step build IN.step OUT.step. A model's maintained meshes are declared "
-        "with @stl/@threemf/@glb and written by python <model>.py."
-    ),
-    ("analytics",): (
-        "cadgen analytics has been renamed: use cadgen telemetry status|on|off. DO_NOT_TRACK=1 or "
-        "CADGEN_TELEMETRY=0 in an app's environment turns it off there."
-    ),
-    ("srdf", "snapshot"): (
-        "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
-        "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
-        "<file>.srdf [OUT.png], which routes it by suffix."
-    ),
-}
 
 
 def _harden_std_stream_errors() -> None:
@@ -220,12 +126,8 @@ def _harden_std_stream_errors() -> None:
     rather than to a question mark that destroys it.
 
     CLI ENTRY POINTS ONLY: these are process globals owned by whoever embedded
-    us, so a library import must never touch them, and a daemon worker -- whose
-    stdout is the pool's frame channel, pinned by the protocol at both ends --
-    is not a CLI boundary.
+    us, so a library import must never touch them.
     """
-    if os.environ.get("CADGEN_DAEMON_CHILD"):
-        return
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:  # a caller replaced it with a plain object
@@ -284,16 +186,7 @@ def _main(argv: list[str] | None) -> int:
         sys.stdout.write(f"cadgen {__version__}\n")
         return 0
 
-    if argv[:2] == ["step", "inspect"]:
-        from cadgen.cli.step_inspect.cli import main as retired_inspect
-
-        return retired_inspect(argv[2:])
-    for words, message in _RETIRED.items():
-        if tuple(argv[: len(words)]) == words:
-            sys.stderr.write(message + "\n")
-            return 2
-
-    # Longest match first, so `step build` beats a hypothetical `step`.
+    # Longest match first, so `dxf snapshot` is dispatched as one command.
     command, rest = " ".join(argv[:2]), argv[2:]
     entry = _COMMANDS.get(command)
     if entry is None:
@@ -332,8 +225,8 @@ def _main(argv: list[str] | None) -> int:
 
 
 def _report(error: Exception) -> None:
-    """A command that failed past its own reporting -- a crash of cadgen's -- handed to a running daemon
-    for telemetry (``cadgen.analytics.report``); the traceback is the person's, as ever."""
+    """A command that failed past its own reporting -- a crash of cadgen's -- kept for telemetry
+    (``cadgen.analytics.report``); the traceback is the person's, as ever."""
     try:
         from cadgen.analytics import report
     except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
@@ -342,8 +235,8 @@ def _report(error: Exception) -> None:
 
 
 # Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
-# reads; the daemon's supervisor, writing to its own log; and `telemetry`, which says it its own way.
-_UNTOLD = frozenset({"mcp", "daemon", "telemetry"})
+# reads; the engine's server, writing nowhere; and `telemetry`, which says it its own way.
+_UNTOLD = frozenset({"mcp", "server", "telemetry"})
 
 
 def _tell() -> None:
@@ -357,39 +250,22 @@ def _tell() -> None:
 
 
 def _run(command: str, module_name: str, rest: list[str]) -> int:
-    # Before the command's module is imported: the daemon exists to avoid paying the
-    # multi-second OCP/build123d import, so the handoff cannot wait until afterwards.
-    daemon_tool = _DAEMON_TOOLS.get(command)
-    if daemon_tool is not None:
-        exit_code = _run_via_daemon(daemon_tool, rest, f"cadgen {command}")
-        if exit_code is not None:
-            return exit_code
+    # The engine's verbs this command runs are counted as a command's (`cadgen/_internal/engine_telemetry.py`).
+    from cadgen._internal import engine_telemetry
 
+    engine_telemetry.command = command
+    return _run_module(command, module_name, rest)
+
+
+def _run_module(command: str, module_name: str, rest: list[str]) -> int:
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so
-    # `cadgen step build --help` says "cadgen step build".
-    # Not every command has a parser to name (the daemon owns its own), hence
-    # the signature check rather than a blanket keyword.
-    import inspect  # only the dispatcher needs it; `--help` and the daemon handoff do not.
+    # `cadgen urdf validate --help` says "cadgen urdf validate".
+    # Not every command takes a name for its parser, hence the signature check rather
+    # than a blanket keyword.
+    import inspect  # only the dispatcher needs it; `--help` does not.
 
     if "prog" in inspect.signature(module.main).parameters:
-        def run() -> int:
-            return int(module.main(rest, prog=f"cadgen {command}") or 0)
-    else:
-        def run() -> int:
-            return int(module.main(rest) or 0)
-    kind = None if daemon_tool is None or "-h" in rest or "--help" in rest else _build_kind(daemon_tool)
-    if kind is None:
-        return run()
-    from cadgen.daemon import telemetry
-
-    return telemetry.cold_build(kind, "command", run)  # no daemon answered it: counted here
-
-
-def _build_kind(tool: str) -> str | None:
-    try:
-        from cadgen.daemon.telemetry import command_kind
-    except Exception:  # noqa: BLE001 - counting never stops a command
-        return None
-    return command_kind(tool)
+        return int(module.main(rest, prog=f"cadgen {command}") or 0)
+    return int(module.main(rest) or 0)

@@ -30,7 +30,7 @@ export interface ViewReporter {
  * Codex's file handler (`surface: file`, `alone`) shows its file alone: the host's own file tree is
  * its navigation.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -56,8 +56,10 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   appSettings?: readonly AppSetting[];
   /** The update button, first in the navbar and on the home, while this install is behind. */
   update?: ReactNode;
-  /** Inline, the card's way to full size, where the host can show it so: in the navbar, before the view's controls, and last on the home. */
+  /** Inline, the card's way to full size, where the host can show it so: in the navbar, before the view's controls and Open in browser, over a file and on the home. */
   fullSize?: ReactNode;
+  /** The view's page in the person's browser, where the engine gives one: last in the navbar, over every file and on the home. */
+  openInBrowser?: ReactNode;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
   // has neither the home nor the explorer (a source that cannot list or search offers none).
@@ -129,6 +131,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // The file on screen joins the library every CAD view shares, with its picture.
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
-    library={library} appSettings={appSettings} colorScheme={theme} language={language} update={update} fullSize={fullSize} history={viewerHistory}
+    library={library} appSettings={appSettings} colorScheme={theme} language={language} update={update} fullSize={fullSize} openInBrowser={openInBrowser} history={viewerHistory}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

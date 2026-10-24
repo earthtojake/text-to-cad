@@ -1,28 +1,22 @@
-"""W16 system model: block — block casting + main caps + shells + block fasteners.
+"""W16 system: block — block casting + main caps + shells + block fasteners.
 
-A sub-assembly of the engine: the parts `lib/block.py` builds, as one model
-with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.1`; rebuild `w16.py` to pick up a change here.
+A stage of the engine: the parts `lib/block.py` builds, as one labelled group,
+which `w16.py` calls in its body. A `@memo` function: an edit that does not
+reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
+from cadgen import memo
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
 from lib import block as block_lib
 from lib import spec as S
-from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/block.step", materials=materials_for_system("block"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@memo
 def block():
     parts = block_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("block.build() produced no parts")
-    return material_compound(parts, "block")
-
-
-if __name__ == "__main__":
-    block()
+    group = bd.Compound(children=parts, label="block")
+    return group

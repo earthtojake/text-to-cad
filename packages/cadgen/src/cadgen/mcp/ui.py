@@ -6,7 +6,7 @@ resources by URI can never pair a new server with an old page. Any build's URI
 reads as the current page: a tab the host restores after an update gets the
 current app, which checks the protocol of the launch it was restored with.
 
-The page must not change while the host runs. Each thread's server reports the
+The page must not change while the host runs. Each MCP session reports the
 URI, and a host that sees it change drops the frames showing the old one. An
 installed wheel's page never changes; a build directory's changes with every
 rebuild, so serve a copy of it (``CADGEN_MCP_APP_DIR``) to a running host.
@@ -20,7 +20,7 @@ import os
 import threading
 from pathlib import Path
 
-from cadgen.assets import runtime_build_hint, runtime_root
+from cadgen.assets import checkout_root, runtime_build_hint, runtime_root
 
 MIME = "text/html;profile=mcp-app"
 _PREFIX, _SUFFIX = "ui://cad/", "/app.html"
@@ -41,12 +41,9 @@ def app_dir() -> Path:
     override = str(os.environ.get("CADGEN_MCP_APP_DIR") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    for parent in Path(__file__).resolve().parents:
-        app = parent / "apps" / "mcp"
-        if (app / "package.json").is_file():
-            if (app / "dist" / "index.html").is_file():
-                return app / "dist"
-            break
+    root = checkout_root()
+    if root is not None and (root / "apps" / "mcp" / "dist" / "index.html").is_file():
+        return root / "apps" / "mcp" / "dist"
     return runtime_root() / "mcp"
 
 

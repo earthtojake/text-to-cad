@@ -10,18 +10,21 @@ import { createDxfRenderer } from '../renderers/dxf/index.js';
 import { createGlbRenderer } from '../renderers/glb/index.js';
 import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
-import { createStepRenderer } from '../renderers/step/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
+import { createXbfRenderer } from '../renderers/xbf/index.js';
 import { createCadFileSource } from './catalog.js';
 
-/** The five CAD renderers over one client, reading the tab's preferences, bound to one live registry. */
+/**
+ * The CAD renderers over one client, reading the tab's preferences, bound to one live registry. A STEP
+ * is drawn as an `.xbf` is, from what the cadgen engine serves of it (`renderers/xbf`).
+ */
 export function cadRenderers(client: CadWorkspaceService, preferences: CadPreferenceSource, live: LiveRegistry['binding']) {
   return [
-    createStepRenderer({ client, preferences, live }),
     createDxfRenderer({ client, preferences, live }),
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),
+    createXbfRenderer({ client, preferences, live }),
   ];
 }
 

@@ -1,6 +1,6 @@
 # File renderers
 
-The viewer renderers, `cad` (STEP), `dxf`, `glb`, `mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and
+The viewer renderers, `xbf` (an `.xbf`, STEP, STP), `dxf`, `glb`, `mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and
 the kit and shell they are built on are in [CAD renderer](cad-renderer.md). They are
 this package's renderers because every host registers them.
 

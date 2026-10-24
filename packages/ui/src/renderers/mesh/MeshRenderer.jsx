@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
 import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { useExportView } from "../../export/context.js";
+import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
@@ -75,6 +77,13 @@ function MeshSurface({ view, data }) {
   const previewScene = usePreviewScene(scene, previewing);
   const previewView = useMemo(() => ({ scene: previewScene }), [previewScene]);
 
+  // Export converts the file shown to the other two mesh kinds: its path names it and the bytes on
+  // screen (their catalog hash) are its revision; the server refuses a file that has changed since.
+  const host = useViewerHost();
+  const exportView = useMemo(() => scene && loaded.revision && document.modelKey && !host.environment.compact ? {
+    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name, preview: previewing
+  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name, previewing]);
+  useExportView(exportView);
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: parted, clearParts: selection.clear });
   const selectActive = parted && !previewing && Boolean(scene) && shell.toolMode === MESH_TOOL.SELECT;
   // Select on every mesh file: an STL's picks nothing, the view's plain navigation.

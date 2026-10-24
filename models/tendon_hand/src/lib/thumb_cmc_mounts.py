@@ -6,7 +6,7 @@ frame names for motion. No routing controls are changed by these supports.
 """
 import numpy as np
 from functools import lru_cache
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import _finish,_bolt,_sweep
 from lib.thumb_cmc_transport import cmc_inlet_contract
 from lib.thumb_metacarpal import make_thumb_metacarpal

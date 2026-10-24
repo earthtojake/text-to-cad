@@ -1,8 +1,8 @@
 """The public ``urdf`` namespace: the verbs that operate on URDF descriptions.
 
-Unlike ``step``/``dxf``/``stl``, this namespace carries no decorator: a robot
-description is an AUTHORED file, not a document cadgen generates, so there is
-nothing to declare. It is a plain module.
+This namespace carries no decorator: a robot description is an AUTHORED file,
+not a document cadgen generates, so there is nothing to declare. It is a plain
+module. ``cadgen urdf snapshot`` draws one (``cadgen.engine.snapshot``).
 
 ``cadgen urdf validate`` is an ADAPTER over :func:`validate` rather than a
 generated mirror: ``--packages NAME=PATH`` is repeatable, and a repeatable
@@ -15,16 +15,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen._internal.snapshot_door import robot_snapshot_verb
 from cadgen.results import ValidationResult
 
-__all__ = ["snapshot", "validate"]
+__all__ = ["validate"]
 
 SUFFIX = ".urdf"
-
-#: ``cadgen urdf snapshot``'s verb: render the robot the browser assembles from
-#: this description's link meshes.
-snapshot = robot_snapshot_verb("urdf")
 
 
 def validate(

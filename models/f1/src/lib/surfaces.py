@@ -19,7 +19,7 @@ import copy
 import math
 from typing import Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec
 
@@ -715,7 +715,7 @@ def bbox(shape):
     """Exact bounding box WITHOUT tessellating the shape.
 
     `Shape.bounding_box()` triangulates, which mutates the shared TShape and
-    breaks cadgen's content-addressed component dedup. Always use this instead.
+    changes what every placement of it shares. Always use this instead.
     Returns ((xmin, ymin, zmin), (xmax, ymax, zmax)).
     """
     from OCP.Bnd import Bnd_Box

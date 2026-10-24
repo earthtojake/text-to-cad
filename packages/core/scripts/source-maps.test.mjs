@@ -32,8 +32,8 @@ test('a compiled module loads with the map that sends it back to its source, wit
 });
 
 test('a module the build copied as it is loads as its source, line for line and column for column', () => {
-  const source = path.join(src, 'common/stepTopology.mjs');
-  const { code, map } = loadWithMap(path.join(dist, 'common/stepTopology.mjs'), dist, src);
+  const source = path.join(src, 'lib/pathUtils.mjs');
+  const { code, map } = loadWithMap(path.join(dist, 'lib/pathUtils.mjs'), dist, src);
   assert.equal(code, fs.readFileSync(source, 'utf8'));
   const lines = code.trimEnd().split('\n');
   const last = [lines.length - 1, lines.at(-1).length - 1];

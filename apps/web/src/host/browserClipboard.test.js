@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { copyImageBlobToClipboard, copyTextToClipboard, readTextFromClipboard } from "./browserClipboard.js";
+import { copyImageBlobToClipboard, copyTextToClipboard } from "./browserClipboard.js";
 
 function replaceGlobal(name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -205,43 +205,6 @@ test("copyTextToClipboard reports unavailable clipboard when every strategy fail
 
   assert.deepEqual(fakeDocument.commands, ["copy"]);
   assert.equal(fakeDocument.appendedCount, 0);
-});
-
-test("readTextFromClipboard reads async clipboard text", async () => {
-  const restoreNavigator = replaceGlobal("navigator", {
-    clipboard: {
-      async readText() {
-        return '{"frame": 12.5}';
-      }
-    }
-  });
-
-  try {
-    assert.equal(await readTextFromClipboard(), '{"frame": 12.5}');
-  } finally {
-    restoreNavigator();
-  }
-});
-
-test("readTextFromClipboard reports blocked paste permissions", async () => {
-  const restoreNavigator = replaceGlobal("navigator", {
-    clipboard: {
-      async readText() {
-        const error = new Error("Permission denied");
-        error.name = "NotAllowedError";
-        throw error;
-      }
-    }
-  });
-
-  try {
-    await assert.rejects(
-      readTextFromClipboard(),
-      /Clipboard paste is blocked/
-    );
-  } finally {
-    restoreNavigator();
-  }
 });
 
 test("copyImageBlobToClipboard starts clipboard write before screenshot blob resolves", async () => {

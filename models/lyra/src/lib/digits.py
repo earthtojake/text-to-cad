@@ -27,7 +27,7 @@ washers, and the pivot pin; the child owns the bored tang barrel.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .chain import (
     SEGMENT_MM,

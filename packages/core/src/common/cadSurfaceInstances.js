@@ -78,7 +78,7 @@ function instancingCandidate(record) {
       !record.material.vertexColors && record.material.emissive.equals(record.material.color)
     )) &&
     record.effectVisible !== false &&
-    !record.tubeDeformationState &&
+    !record.tubeSkinState &&
     matrix?.determinant?.() >= 0
   );
 }

@@ -23,12 +23,12 @@ import {
   PART_SELECTED_HIGHLIGHT_BLEND,
   partHighlightSurfaceColor
 } from "../lib/viewer/partHighlight.js";
-import { applyRecordTubeDeformation, normalizeTubeDeformation } from "./tubeDeformation.js";
-import { loadTubeDeformation } from "./tubeDeformationChunk.js";
+import { applyRecordTubeSkin, attachTubeSkins, tubeSkinPose } from "./tubeSkin.js";
+import { MESH_EDGE_CLASSES } from "../lib/parts/tessellationCache.js";
+import { quadTubeTrack } from "./__tests__/tubeSkinsFixture.js";
 
-// `deformTube` needs the lazy tube runtime, which production loads through
-// compileAnimationSource. These clips are built by hand, so load it here.
-await loadTubeDeformation();
+/** The scene tests' quad, bent by a skin: stood at z = 2 and turned a quarter about +Z. */
+const quadBend = (sourceMesh, partId) => tubeSkinPose(quadTubeTrack(attachTubeSkins, MESH_EDGE_CLASSES, sourceMesh, partId), partId, 0, 0);
 import { applySceneState } from "./applySceneState.js";
 import { applyPartVisualState as applyViewerPartVisualState } from "../lib/viewer/partVisualState.js";
 import { syncRuntimeStepClipPlane } from "../lib/viewer/modelRuntime.js";
@@ -79,6 +79,14 @@ function sampleMeshData() {
   };
 }
 
+// Three leaves of an assembly whose tree puts the pin and the clip under one subassembly: each
+// an occurrence token (`o:` + 12 hex), which carries no hierarchy of its own.
+const NESTED_LEAVES = Object.freeze({
+  pin: "o:3f2a9c1d7e5b",
+  clip: "o:a1b2c3d4e5f6",
+  plate: "o:0f1e2d3c4b5a"
+});
+
 function nestedAssemblyMeshData() {
   return {
     vertices: new Float32Array([
@@ -110,8 +118,8 @@ function nestedAssemblyMeshData() {
     },
     parts: [
       {
-        id: "o1.2.1",
-        occurrenceId: "o1.2.1",
+        id: NESTED_LEAVES.pin,
+        occurrenceId: NESTED_LEAVES.pin,
         vertexOffset: 0,
         vertexCount: 3,
         triangleOffset: 0,
@@ -119,8 +127,8 @@ function nestedAssemblyMeshData() {
         bounds: { min: [0, 0, 0], max: [1, 1, 0] }
       },
       {
-        id: "o1.2.2",
-        occurrenceId: "o1.2.2",
+        id: NESTED_LEAVES.clip,
+        occurrenceId: NESTED_LEAVES.clip,
         vertexOffset: 3,
         vertexCount: 3,
         triangleOffset: 1,
@@ -128,8 +136,8 @@ function nestedAssemblyMeshData() {
         bounds: { min: [2, 0, 0], max: [3, 1, 0] }
       },
       {
-        id: "o1.3",
-        occurrenceId: "o1.3",
+        id: NESTED_LEAVES.plate,
+        occurrenceId: NESTED_LEAVES.plate,
         vertexOffset: 6,
         vertexCount: 3,
         triangleOffset: 2,
@@ -302,7 +310,7 @@ test("buildModel renders solid part records and updates theme without rebuilding
 });
 
 test("Render shadow receivers update in place for opaque meshes and surface instances", () => {
-  const scene = buildModel(THREE, composedPackage(surfComponentMeshData(), 4), {
+  const scene = buildModel(THREE, composedPackage(partMeshData(), 4), {
     renderPartsIndividually: true,
     receiveShadows: true
   });
@@ -451,16 +459,20 @@ test("buildModel keeps source-mesh color buffers immutable across material refre
   scene.dispose();
 });
 
-test("buildModel selection can focus and hide subassembly occurrence descendants", () => {
+test("buildModel selection focuses and hides the leaves a subassembly expands to", () => {
+  // A focus or hide selector names leaf occurrences by token: cadgen expands a subassembly to
+  // its leaves (and resolves a label) before a job reaches the page, so the page matches each
+  // selector against a part exactly and never reads hierarchy out of an id.
+  const subassembly = [NESTED_LEAVES.pin, NESTED_LEAVES.clip];
   const focused = buildModel(THREE, nestedAssemblyMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
     selection: {
-      focus: ["#o1.2"]
+      focus: subassembly.map((id) => `#${id}`)
     }
   });
 
-  assert.deepEqual(focused.displayRecords.map((record) => record.partId), ["o1.2.1", "o1.2.2"]);
+  assert.deepEqual(focused.displayRecords.map((record) => record.partId), subassembly);
   assert.deepEqual(focused.bounds, {
     min: [0, 0, 0],
     max: [3, 1, 0]
@@ -471,11 +483,11 @@ test("buildModel selection can focus and hide subassembly occurrence descendants
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
     selection: {
-      hide: ["o1.2"]
+      hide: subassembly
     }
   });
 
-  assert.deepEqual(hidden.displayRecords.map((record) => record.partId), ["o1.3"]);
+  assert.deepEqual(hidden.displayRecords.map((record) => record.partId), [NESTED_LEAVES.plate]);
   assert.deepEqual(hidden.bounds, {
     min: [10, 0, 0],
     max: [11, 1, 0]
@@ -483,8 +495,8 @@ test("buildModel selection can focus and hide subassembly occurrence descendants
   hidden.dispose();
 });
 
-// A surf component: indexed triangles plus CAD edge segments grouped by class.
-function surfComponentMeshData() {
+// A part's mesh data: indexed triangles plus CAD edge segments grouped by class.
+function partMeshData() {
   return {
     vertices: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]),
     indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
@@ -503,7 +515,7 @@ function surfComponentMeshData() {
       { classId: "degenerate", pointStart: 6, pointCount: 2, segmentStart: 4, segmentCount: 1 }
     ],
     bounds: { min: [0, 0, 0], max: [1, 1, 0] },
-    parts: [{ id: "surf:0", vertexOffset: 0, vertexCount: 4, triangleOffset: 0, triangleCount: 2, bounds: { min: [0, 0, 0], max: [1, 1, 0] } }]
+    parts: [{ id: "part:0", vertexOffset: 0, vertexCount: 4, triangleOffset: 0, triangleCount: 2, bounds: { min: [0, 0, 0], max: [1, 1, 0] } }]
   };
 }
 
@@ -521,8 +533,8 @@ function assertClose(actual, expected, message, epsilon = 1e-3) {
   }
 }
 
-test("buildModel draws a surf component's CAD edges as ONE instanced screen-space draw with per-class colour, opacity and thickness", () => {
-  const scene = buildModel(THREE, surfComponentMeshData(), {
+test("buildModel draws a part's CAD edges as ONE instanced screen-space draw with per-class colour, opacity and thickness", () => {
+  const scene = buildModel(THREE, partMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.SHADED_EDGES,
     renderPartsIndividually: true,
@@ -566,7 +578,7 @@ test("buildModel draws a surf component's CAD edges as ONE instanced screen-spac
 
   // Selection recolours every class to edges.highlightColor at full opacity and
   // moves the occurrence to the highlight pass; deselection restores the class styles.
-  scene.update({ selection: { selectedPartIds: ["surf:0"] } });
+  scene.update({ selection: { selectedPartIds: ["part:0"] } });
   let state = set.readSlot(slot);
   assertClose(state.color, linearRgb("#8dc5ff"), "selected edge colour");
   assert.equal(state.opacity, 1);
@@ -589,7 +601,7 @@ test("buildModel draws a surf component's CAD edges as ONE instanced screen-spac
   assert.equal(set.readSlot(slot).visible, true);
 
   // Show-through modes drop the depth test on the edge draw.
-  const transparent = buildModel(THREE, surfComponentMeshData(), {
+  const transparent = buildModel(THREE, partMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.TRANSPARENT,
     renderPartsIndividually: true
@@ -599,7 +611,7 @@ test("buildModel draws a surf component's CAD edges as ONE instanced screen-spac
   transparent.dispose();
 
   // Rendered mode draws no linework at all.
-  const rendered = buildModel(THREE, surfComponentMeshData(), { displayMode: CAD_DISPLAY_MODE.SHADED, renderPartsIndividually: true });
+  const rendered = buildModel(THREE, partMeshData(), { displayMode: CAD_DISPLAY_MODE.SHADED, renderPartsIndividually: true });
   assert.equal(rendered.displayRecords[0].edges, null);
   assert.equal(rendered.displayRecords[0].edgeInstance, null);
   rendered.dispose();
@@ -631,7 +643,7 @@ function composedPackage(sourceMesh, count) {
 }
 
 test("a component's occurrences share one surface draw and one instanced edge draw", () => {
-  const sourceMesh = surfComponentMeshData();
+  const sourceMesh = partMeshData();
   const first = buildModel(THREE, composedPackage(sourceMesh, 4), { renderPartsIndividually: true });
   const geometries = new Set();
   const buffers = new Set();
@@ -666,7 +678,7 @@ test("a component's occurrences share one surface draw and one instanced edge dr
 });
 
 test("surface instances follow transforms and keep the unaffected majority instanced through hover/selection", () => {
-  const sourceMesh = surfComponentMeshData();
+  const sourceMesh = partMeshData();
   const scene = buildModel(THREE, composedPackage(sourceMesh, 4), { renderPartsIndividually: true });
   const record = scene.displayRecords[2];
   const { set, slot } = record.surfaceInstance;
@@ -680,7 +692,7 @@ test("surface instances follow transforms and keep the unaffected majority insta
   assert.equal(matrix.elements[12], 20);
   assert.equal(matrix.elements[13], 6);
 
-  scene.update({ clip: { enabled: true, axis: "x", at: (scene.restBounds.min[0] + scene.restBounds.max[0]) / 2 } });
+  scene.update({ clip: { axis: "x" } });
   assert.equal(set.object.material.clippingPlanes.length, 1, "shared surface pass receives clipping");
   const originalRecords = [...scene.displayRecords];
   const originalMaterials = scene.displayRecords.map((item) => item.material);
@@ -778,8 +790,8 @@ test("instanced edge GPU budget: edge bytes stay under 10% of surface bytes and 
   scene.dispose();
 });
 
-test("a deformed tube leaves the instanced edge draw for a private, bendable line object; the component buffers stay shared", () => {
-  const sourceMesh = surfComponentMeshData();
+test("a bent tube leaves the instanced edge draw for a private line drawn from its skin; the component buffers stay shared", () => {
+  const sourceMesh = partMeshData();
   const savedPositions = sourceMesh.vertices.slice();
   const savedNormals = sourceMesh.normals.slice();
   const meshData = {
@@ -795,10 +807,8 @@ test("a deformed tube leaves the instanced edge draw for a private, bendable lin
   const set = record.edgeInstance.set;
   assert.equal(set.liveCount, 1);
   const savedEdgePositions = sourceMesh.cadEdgePositions.slice();
-  record.gpuTubeDeformationAllowed = false;
-  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
-  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
-  applyRecordTubeDeformation(THREE, record, normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 }));
+  record.gpuTubeSkinAllowed = false;
+  applyRecordTubeSkin(THREE, record, quadBend(sourceMesh, "tube"));
   assert.notEqual(record.geometry.getAttribute("normal").array, sourceMesh.normals);
   assert.notDeepEqual(record.geometry.getAttribute("position").array, savedPositions);
   assert.deepEqual(sourceMesh.vertices, savedPositions);
@@ -836,7 +846,7 @@ test("a deformed tube leaves the instanced edge draw for a private, bendable lin
 });
 
 test("appearance preserves CAD ink, geometry, instance slots and segment textures", () => {
-  const source = surfComponentMeshData();
+  const source = partMeshData();
   const scene = buildModel(THREE, source, {
     appearance: "light", displayMode: CAD_DISPLAY_MODE.SHADED_EDGES, renderPartsIndividually: true
   });
@@ -941,30 +951,6 @@ test("buildModel wireframe mode keeps a translucent surface and the CAD edges, n
 // Wireframe is "All CAD edges through the model": the lines every mode draws, so switching to
 // it builds nothing per triangle. It once built three's WireframeGeometry over every triangle
 // of every component on the main thread (10 s and a gigabyte on a large model).
-test("switching to Wireframe reuses the edges Solid built for the open model", () => {
-  const theme = cloneThemePresetSettings("workbench-light");
-  const options = (displayMode) => ({ theme, displayMode, renderPartsIndividually: true });
-
-  // A surf component: one cached segment texture, drawn by both modes' instance sets.
-  const component = surfComponentMeshData();
-  const solid = buildModel(THREE, component, options(CAD_DISPLAY_MODE.SHADED_EDGES));
-  const segments = solid.displayRecords[0].edgeInstance.set.segments;
-  solid.dispose();
-  const wire = buildModel(THREE, component, options(CAD_DISPLAY_MODE.WIREFRAME));
-  assert.equal(wire.displayRecords[0].edgeInstance.set.segments, segments, "the segment texture Solid built");
-  assert.equal(wire.displayRecords[0].edges, null, "no private line object");
-  wire.dispose();
-
-  // A baked mesh without CAD edge segments: one edge geometry per part, whatever the mode.
-  const baked = sampleMeshData();
-  const shaded = buildModel(THREE, baked, options(CAD_DISPLAY_MODE.SHADED_EDGES));
-  const geometry = shaded.displayRecords[0].edges.geometry;
-  shaded.dispose();
-  const bakedWire = buildModel(THREE, baked, options(CAD_DISPLAY_MODE.WIREFRAME));
-  assert.equal(bakedWire.displayRecords[0].edges.geometry, geometry, "the edge geometry Solid built");
-  bakedWire.dispose();
-});
-
 test("buildModel display modes control edges, transparency, and flat surfaces", () => {
   const theme = cloneThemePresetSettings("workbench-light");
   const renderedScene = buildModel(THREE, sampleMeshData(), {
@@ -1194,7 +1180,25 @@ test("buildModel can render silhouette contours without derived mesh edges", () 
   scene.dispose();
 });
 
-test("buildModel applies selection, clipping, and STEP parameter effects", () => {
+// The pose a scene plays: cadgen's articulation (one slider moving a part along x) at a
+// control vector.
+function slideRuntime(partId, distance) {
+  return {
+    articulation: {
+      schemaVersion: 2,
+      controls: [{ id: "slide", label: "slide", unit: "mm", min: 0, max: 100, default: 0 }],
+      joints: [{ id: "slide", parent: null, kind: "slider", origin: [0, 0, 0], axis: [1, 0, 0],
+        travel: { bias: 0, terms: [["slide", 1]] } }],
+      carries: { slide: [partId] },
+      handles: [],
+      poses: {},
+      opening: { slide: 0 }
+    },
+    values: { slide: distance }
+  };
+}
+
+test("buildModel applies selection, clipping, and the pose", () => {
   const scene = buildModel(THREE, sampleMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
@@ -1203,68 +1207,22 @@ test("buildModel applies selection, clipping, and STEP parameter effects", () =>
       hiddenPartIds: ["right"]
     },
     clip: {
-      enabled: true,
       axis: "x",
       at: 1.5
     },
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            if (ctx.params.hideLeft) {
-              ctx.effects.visible("left", false);
-            }
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      },
-      parameterValues: {
-        hideLeft: true
-      }
-    }
+    stepParameters: slideRuntime("left", 5)
   });
 
   const left = scene.displayRecords.find((record) => record.partId === "left");
   const right = scene.displayRecords.find((record) => record.partId === "right");
 
-  assert.equal(left.mesh.visible, false);
+  assert.equal(left.mesh.matrix.elements[12], 5, "the pose moved the record");
+  assert.equal(left.mesh.visible, true);
   assert.equal(right.mesh.visible, true);
   assert.equal(right.material.transparent, true);
   assert.equal(right.material.depthWrite, false);
   assert.equal(right.material.opacity, 0.035);
   assert.equal(left.material.clippingPlanes.length, 1);
-  assert.equal(scene.bounds.min[0], 2);
-  assert.equal(scene.bounds.max[0], 3);
-  scene.dispose();
-});
-
-test("buildModel can apply STEP parameter effects while deferring setup lifecycle", () => {
-  let setupCalls = 0;
-  const scene = buildModel(THREE, sampleMeshData(), {
-    theme: cloneThemePresetSettings("workbench-light"),
-    renderPartsIndividually: true,
-    parameterSetup: false,
-    stepParameters: {
-      definition: {
-        module: {
-          setup() {
-            setupCalls += 1;
-          },
-          render(ctx) {
-            ctx.effects.transform("left", { translate: [5, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
-  });
-
-  const left = scene.displayRecords.find((record) => record.partId === "left");
-
-  assert.equal(setupCalls, 0);
-  assert.equal(left.mesh.matrix.elements[12], 5);
   assert.equal(scene.bounds.min[0], 2);
   assert.equal(scene.bounds.max[0], 6);
   scene.dispose();
@@ -1273,23 +1231,12 @@ test("buildModel can apply STEP parameter effects while deferring setup lifecycl
 // A camera is grounded on the model's zero pose, so the scene has to keep that
 // box available while `bounds` follows whatever a mate, a parameter or an
 // animation frame has done to the records.
-test("buildModel keeps restBounds at the zero pose while bounds follow the parameter pose", () => {
+test("buildModel keeps restBounds at the zero pose while bounds follow the pose", () => {
   const scene = buildModel(THREE, sampleMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
-    parameterSetup: false,
-    clip: { enabled: true, axis: "x", at: 1.5 },
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            ctx.effects.transform("right", { translate: [12, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
+    clip: { axis: "x" },
+    stepParameters: slideRuntime("right", 12)
   });
 
   assert.deepEqual(scene.bounds.max, [15, 1, 0], "bounds follow the posed record");
@@ -1297,19 +1244,7 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
   assert.deepEqual(scene.restBounds.min, [0, 0, 0]);
   assert.deepEqual(scene.restBounds.max, [3, 1, 0]);
 
-  scene.update({
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            ctx.effects.transform("right", { translate: [40, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
-  });
+  scene.update({ stepParameters: slideRuntime("right", 40) });
   assert.deepEqual(scene.bounds.max, [43, 1, 0], "a new pose moves bounds");
   assert.deepEqual(scene.restBounds.max, [3, 1, 0], "and never moves restBounds");
   assert.equal(scene.runtime.activeClipPlane.constant, 1.5, "posing cannot move the clip plane");
@@ -1392,8 +1327,8 @@ function recordSnapshot(record) {
 }
 
 test("update({ source }) reconciles records across publishes into the state a one-shot build produces", () => {
-  const componentA = surfComponentMeshData();
-  const componentB = surfComponentMeshData();
+  const componentA = partMeshData();
+  const componentB = partMeshData();
   const settings = {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
@@ -1449,8 +1384,8 @@ test("update({ source }) reconciles records across publishes into the state a on
 });
 
 test("static revision adoption touches only changed immutable rows and preserves picking and resource ownership", () => {
-  const componentA = surfComponentMeshData();
-  const componentB = surfComponentMeshData();
+  const componentA = partMeshData();
+  const componentB = partMeshData();
   const descriptor = (moved = -1, material = null) => {
     const occurrences = Array.from({ length: 24 }, (_, index) => ({
       id: `o${index}`,
@@ -1535,7 +1470,7 @@ test("static revision adoption touches only changed immutable rows and preserves
 });
 
 test("exact source-part identity skips work only for rows owned by the current composer result", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const descriptor = {
     kind: "assembly-package",
     entryKind: "assembly",
@@ -1653,7 +1588,7 @@ test("mutable public mesh rows observe replacement parent geometry and topology"
 });
 
 test("in-place mutable settings changes are compared with the last applied snapshot", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const descriptor = {
     kind: "assembly-package",
     entryKind: "assembly",
@@ -1677,16 +1612,14 @@ test("in-place mutable settings changes are compared with the last applied snaps
   scene.dispose();
 });
 
-test("update({ source }) keeps a deformed tube's private geometry and deformation state", () => {
-  const component = surfComponentMeshData();
+test("update({ source }) keeps a bent tube's skin geometry and state", () => {
+  const component = partMeshData();
   const scene = buildModel(THREE, twoComponentPackage(component, component, [0]), { renderPartsIndividually: true });
   const record = scene.displayRecords[0];
-  record.gpuTubeDeformationAllowed = false;
-  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
-  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
-  const spec = normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 });
-  applyRecordTubeDeformation(THREE, record, spec);
-  const state = record.tubeDeformationState;
+  record.gpuTubeSkinAllowed = false;
+  const spec = quadBend(component, "o0");
+  applyRecordTubeSkin(THREE, record, spec);
+  const state = record.tubeSkinState;
   const privateGeometry = record.geometry;
   const edgeGeometry = record.edges.geometry;
   assert.ok(state.active);
@@ -1694,22 +1627,22 @@ test("update({ source }) keeps a deformed tube's private geometry and deformatio
 
   scene.update({ source: twoComponentPackage(component, component, [0, 2]) });
   assert.equal(scene.displayRecords[0], record);
-  assert.equal(record.tubeDeformationState, state, "deformation state survives the publish");
+  assert.equal(record.tubeSkinState, state, "the skin state survives the publish");
   assert.equal(record.geometry, privateGeometry, "so does its private geometry");
   assert.equal(record.edges.geometry, edgeGeometry);
   assert.equal(record.mesh.geometry, privateGeometry);
-  // Without a scene module the publish resets the pose; re-applying the same
-  // deformation reuses the retained state instead of refining the rest surface again.
-  applyRecordTubeDeformation(THREE, record, spec);
-  assert.equal(record.tubeDeformationState, state);
+  // Without a scene module the publish resets the pose; bending it again reuses the
+  // retained state instead of building the skin's geometry again.
+  applyRecordTubeSkin(THREE, record, spec);
+  assert.equal(record.tubeSkinState, state);
   assert.equal(record.geometry, privateGeometry);
   assert.ok(state.active);
   scene.dispose();
 });
 
-test("LOD publication preserves unaffected surface sets and retires only replaced geometry", () => {
-  const componentA = surfComponentMeshData();
-  const componentB = surfComponentMeshData();
+test("a republication preserves unaffected surface sets and retires only replaced geometry", () => {
+  const componentA = partMeshData();
+  const componentB = partMeshData();
   const order = [0, 1, 2, 3, 4, 5];
   const scene = buildModel(THREE, twoComponentPackage(componentA, componentB, order), { renderPartsIndividually: true });
   const a = scene.displayRecords[0];
@@ -1724,7 +1657,7 @@ test("LOD publication preserves unaffected surface sets and retires only replace
   const matrixVersion = aMatrix.version;
 
   for (let revision = 0; revision < 4; revision += 1) {
-    const replacement = surfComponentMeshData();
+    const replacement = partMeshData();
     const next = twoComponentPackage(componentA, replacement, [...order].reverse());
     scene.update({ source: next });
     assert.deepEqual(scene.displayRecords.map((item) => item.partId), [...order].reverse().map((id) => `o${id}`));
@@ -1738,14 +1671,14 @@ test("LOD publication preserves unaffected surface sets and retires only replace
     assert.equal(scene.runtime.cadSurfaceInstanceSets.size, 2);
     assert.equal(scene.displayRecords.find((item) => item.partId === "o1").geometry.attributes.position.array, replacement.vertices);
   }
-  assert.equal(bDisposes, 1, "the departed LOD set is released once");
+  assert.equal(bDisposes, 1, "the replaced component's set is released once");
   assert.equal(bSet.disposed, true);
   scene.dispose();
   assert.equal(aDisposes, 1, "the retained set releases its buffers at final scene disposal");
 });
 
 test("selection slots remain inactive across source publications and reactivate without rebuilding", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const scene = buildModel(THREE, composedPackage(component, 4), { renderPartsIndividually: true });
   const selected = scene.displayRecords[0];
   const { set, slot } = selected.surfaceInstance;
@@ -1780,18 +1713,14 @@ test("selection slots remain inactive across source publications and reactivate 
   scene.dispose();
 });
 
-test("a deformed occurrence leaves its surface slot inactive through progressive publications", () => {
-  const component = surfComponentMeshData();
+test("a bent occurrence leaves its surface slot inactive through progressive publications", () => {
+  const component = partMeshData();
   const scene = buildModel(THREE, composedPackage(component, 4), { renderPartsIndividually: true });
   const bent = scene.displayRecords[0];
   const { set, slot } = bent.surfaceInstance;
-  bent.gpuTubeDeformationAllowed = false;
-  const spec = normalizeTubeDeformation({
-    rest: { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] },
-    path: { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] },
-    maxSegmentLength: 1000
-  });
-  applyRecordTubeDeformation(THREE, bent, spec);
+  bent.gpuTubeSkinAllowed = false;
+  const spec = quadBend(component, "o0");
+  applyRecordTubeSkin(THREE, bent, spec);
   const privateGeometry = bent.geometry;
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const actual = new THREE.Matrix4();
@@ -1801,8 +1730,8 @@ test("a deformed occurrence leaves its surface slot inactive through progressive
     assert.equal(bent.geometry, privateGeometry);
     assert.equal(bent.material.visible, true);
     set.object.getMatrixAt(slot, actual);
-    assert.deepEqual(actual.elements, zero.elements, "the rest surface cannot duplicate the private deformation");
-    applyRecordTubeDeformation(THREE, bent, spec);
+    assert.deepEqual(actual.elements, zero.elements, "the rest surface cannot duplicate the bent skin");
+    applyRecordTubeSkin(THREE, bent, spec);
     applyDisplayRecordTransform(THREE, bent);
     set.object.getMatrixAt(slot, actual);
     assert.deepEqual(actual.elements, zero.elements);
@@ -1811,7 +1740,7 @@ test("a deformed occurrence leaves its surface slot inactive through progressive
 });
 
 test("source appearance and mirror changes invalidate only their surface pass membership", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const scene = buildModel(THREE, composedPackage(component, 4), { renderPartsIndividually: true });
   const initialSet = scene.displayRecords[0].surfaceInstance.set;
   const next = composedPackage(component, 4);
@@ -1830,7 +1759,7 @@ test("source appearance and mirror changes invalidate only their surface pass me
 });
 
 test("direct viewer effects and clip passes synchronize shared surfaces without a source update", () => {
-  const source = composedPackage(surfComponentMeshData(), 4);
+  const source = composedPackage(partMeshData(), 4);
   const theme = cloneThemePresetSettings("workbench-light");
   theme.materials.emissiveIntensity = 0;
   const scene = buildModel(THREE, source, { renderPartsIndividually: true, theme });
@@ -1839,21 +1768,20 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
   const { set, slot } = record.surfaceInstance;
   const matrix = new THREE.Matrix4();
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  const pass = ({ visible = true, opacity = 1, color = "#123abc", mirror = false, selection = {}, deform = false } = {}) => {
+  const turn = { articulation: { schemaVersion: 2,
+    controls: [{ id: "turn", label: "turn", unit: "deg", min: 0, max: 360, default: 0 }],
+    joints: [{ id: "turn", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [["turn", 1]] } }],
+    carries: { turn: ["o0"] }, handles: [], poses: {}, opening: { turn: 0 } }, values: { turn: 30 } };
+  const pass = ({ visible = true, opacity = 1, selection = {}, deform = false } = {}) => {
     applySceneState(THREE, {
       runtime, meshData: source,
-      stepParameterRuntime: { definition: { manifest: {}, module: { update(ctx) {
-        ctx.effects.style("o0", { color });
-        if (mirror) ctx.effects.transform("o0", { scale: [-1, 2, 1] });
-      } } } },
-      animation: { elapsedSec: 0, clip: { duration: 1, update(t, model) {
-        const handle = model.get("o0").visible(visible).opacity(opacity).translate([4, 2, 1]);
-        if (deform) handle.deformTube({
-          rest: { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] },
-          path: { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] },
-          maxSegmentLength: 1000
-        });
-      } } }
+      pose: turn,
+      animation: { elapsedSec: 0, clip: { id: "pass", label: "Pass", duration: 1, loop: true, tracks: [
+        { targets: ["o0"], times: [0], visible: [visible] },
+        { targets: ["o0"], times: [0], opacity: [opacity] },
+        { targets: ["o0"], times: [0], pivot: [0, 0, 0], transform: [[4, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]] },
+        ...(deform ? [quadTubeTrack(attachTubeSkins, MESH_EDGE_CLASSES, source.parts[0].sourceMesh, "o0")] : [])
+      ] } }
     });
     for (const item of runtime.displayRecords) applyDisplayRecordTransform(THREE, item);
     applyViewerPartVisualState(THREE, runtime.displayRecords, { showEdges: true, ...selection });
@@ -1862,17 +1790,16 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
     set.object.getMatrixAt(slot, matrix);
   };
   pass();
-  assert.deepEqual(matrix.elements, record.mesh.matrix.elements);
+  const uploaded = (elements) => elements.map((value) => Math.round(value * 1e5) / 1e5);
+  assert.deepEqual(uploaded(matrix.elements), uploaded(record.mesh.matrix.elements));
   assert.equal(record.material.visible, false);
-  const color = new THREE.Color();
-  set.object.getColorAt(slot, color);
-  assert.equal(color.getHexString(), "123abc", "pose color reaches the instance upload");
-  for (const settings of [{ visible: false }, { opacity: 0.4 }, { mirror: true }, { selection: { selectedPartIds: ["o0"] } }, { selection: { hiddenPartIds: ["o0"] } }]) {
+  assert.notDeepEqual(matrix.elements, new THREE.Matrix4().elements, "the pose's turn reaches the instance upload");
+  for (const settings of [{ visible: false }, { opacity: 0.4 }, { selection: { selectedPartIds: ["o0"] } }, { selection: { hiddenPartIds: ["o0"] } }]) {
     pass(settings);
     assert.deepEqual(matrix.elements, zero.elements);
     assert.equal(record.material.visible, true);
     pass();
-    assert.deepEqual(matrix.elements, record.mesh.matrix.elements, "reactivation uploads the current pose");
+    assert.deepEqual(uploaded(matrix.elements), uploaded(record.mesh.matrix.elements), "reactivation uploads the current pose");
   }
   for (const item of runtime.displayRecords) {
     applyViewerMaterialSettings(THREE, item, { ...scene.runtime.materialSettings, envMapIntensity: 3.25 });
@@ -1881,15 +1808,15 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
   assert.equal(record.surfaceInstance.set, set);
   assert.equal(set.object.material.envMapIntensity, 3.25, "material-only reflection changes reach the shared pass");
 
-  syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", at: scene.restBounds.min[0] + (scene.restBounds.max[0] - scene.restBounds.min[0]) * 0.25 });
+  syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", at: 0.25 });
   assert.equal(set.object.material.clippingPlanes.length, 1, "clip-only update reaches the shared draw");
   assert.equal(set.object.material.clippingPlanes[0].constant, record.material.clippingPlanes[0].constant);
   syncRuntimeStepClipPlane(runtime, { enabled: false });
   assert.equal(set.object.material.clippingPlanes, null);
 
-  record.gpuTubeDeformationAllowed = false;
+  record.gpuTubeSkinAllowed = false;
   pass({ deform: true });
-  assert.ok(record.tubeDeformationState.active);
+  assert.ok(record.tubeSkinState.active);
   assert.deepEqual(matrix.elements, zero.elements);
   assert.equal(record.material.visible, true);
   pass();
@@ -1900,7 +1827,7 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
 });
 
 test("update({ source }) rebuilds when the build settings change with it", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const scene = buildModel(THREE, twoComponentPackage(component, component, [0, 1]), { renderPartsIndividually: true });
   const before = scene.displayRecords[0];
   scene.update({ source: twoComponentPackage(component, component, [0, 1, 2]), displayMode: CAD_DISPLAY_MODE.WIREFRAME });
@@ -1913,8 +1840,8 @@ test("update({ source }) rebuilds when the build settings change with it", () =>
 });
 
 test("departed components free their GPU buffers, BVH and edge draw; a returning one re-uploads from the cache", () => {
-  const componentA = surfComponentMeshData();
-  const componentB = surfComponentMeshData();
+  const componentA = partMeshData();
+  const componentB = partMeshData();
   const scene = buildModel(THREE, twoComponentPackage(componentA, componentB, [0, 1, 3]), { renderPartsIndividually: true });
   const [o0, o1, o3] = scene.displayRecords;
   const geometryB = o1.geometry;
@@ -1959,8 +1886,8 @@ test("departed components free their GPU buffers, BVH and edge draw; a returning
 });
 
 test("shared component GPU resources survive another scene's removal and disposal", () => {
-  const componentA = surfComponentMeshData();
-  const componentB = surfComponentMeshData();
+  const componentA = partMeshData();
+  const componentB = partMeshData();
   const source = twoComponentPackage(componentA, componentB, [0, 1, 3]);
   const first = buildModel(THREE, source, { renderPartsIndividually: true });
   const second = buildModel(THREE, source, { renderPartsIndividually: true });
@@ -1990,7 +1917,7 @@ test("shared component GPU resources survive another scene's removal and disposa
 
 test("shared edge geometry is freed only after its last scene, and retained uploads can be released later", () => {
   // A component without CAD edge segments: its records draw a cached edge geometry.
-  const { cadEdgePositions: _p, cadEdgeIndices: _i, cadEdgeClassRanges: _r, ...component } = surfComponentMeshData();
+  const { cadEdgePositions: _p, cadEdgeIndices: _i, cadEdgeClassRanges: _r, ...component } = partMeshData();
   const source = twoComponentPackage(component, component, [0, 1]);
   const settings = { renderPartsIndividually: true, displayMode: CAD_DISPLAY_MODE.WIREFRAME };
   const first = buildModel(THREE, source, settings);
@@ -2014,8 +1941,8 @@ test("shared edge geometry is freed only after its last scene, and retained uplo
   assert.equal(edgeDisposals, 1);
 });
 
-test("a deformed tube's private edges keep per-class thickness", () => {
-  const sourceMesh = surfComponentMeshData();
+test("a bent tube's private edges keep per-class thickness", () => {
+  const sourceMesh = partMeshData();
   const meshData = {
     vertices: new Float32Array(0), indices: new Uint32Array(0),
     bounds: sourceMesh.bounds,
@@ -2029,10 +1956,8 @@ test("a deformed tube's private edges keep per-class thickness", () => {
   const record = scene.displayRecords[0];
   const set = record.edgeInstance.set;
   assert.equal(set.uniforms.cadClassWidth.value.x, 1, "instanced feature edges take the class width");
-  record.gpuTubeDeformationAllowed = false;
-  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
-  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
-  applyRecordTubeDeformation(THREE, record, normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 }));
+  record.gpuTubeSkinAllowed = false;
+  applyRecordTubeSkin(THREE, record, quadBend(sourceMesh, "tube"));
 
   // The private draw is one screen-space fat line PER DRAWN CLASS, at that
   // class's width — the thing a single vertex-coloured GL_LINES cannot do.
@@ -2047,7 +1972,7 @@ test("a deformed tube's private edges keep per-class thickness", () => {
   applyPartVisualState(THREE, [record], { edgeSettings: scene.runtime.edgeSettings });
   assert.deepEqual(record.edgeMaterials.map((material) => material.color.getHexString()), ["253443", "667788"], "ordinary visual updates preserve class colours");
   const privateGeometry = record.edges.children.map((line) => line.geometry);
-  // Deformation moves the fat lines' own endpoint attributes.
+  // The bend moves the fat lines' own endpoint attributes.
   const bent = record.edges.children[0].geometry.attributes.instanceStart;
   assert.ok(bent, "screen-space geometry carries instanceStart/instanceEnd");
   assert.notDeepEqual(Array.from(bent.data.array).slice(0, 3), [0, 0, 0]);
@@ -2055,7 +1980,7 @@ test("a deformed tube's private edges keep per-class thickness", () => {
   // Back at rest the private lines stay (see attachCadEdgeInstance: a publish
   // resets the pose, so rejoining there would rebuild them every publish) and
   // return to the component's own points at their class widths.
-  applyRecordTubeDeformation(THREE, record, null);
+  applyRecordTubeSkin(THREE, record, null);
   assert.equal(record.edges.isGroup, true);
   assert.deepEqual(record.edgeMaterials.map((material) => material.linewidth), [1, 0.65]);
   assert.deepEqual(Array.from(record.edges.children[0].geometry.attributes.instanceStart.data.array).slice(0, 3), [0, 0, 0]);
@@ -2066,7 +1991,7 @@ test("a deformed tube's private edges keep per-class thickness", () => {
 });
 
 test("failed surface-instance disposal retains reachability and retries only unfinished resources", () => {
-  const component = surfComponentMeshData();
+  const component = partMeshData();
   const scene = buildModel(THREE, twoComponentPackage(component, component, [0, 1, 2]), { renderPartsIndividually: true });
   const set = [...scene.runtime.cadSurfaceInstanceSets][0];
   assert.ok(set);
@@ -2086,7 +2011,7 @@ test("failed surface-instance disposal retains reachability and retries only unf
 });
 
 test("failed edge-instance disposal retains its set and another scene's shared segment texture", () => {
-  const component = surfComponentMeshData(), input = twoComponentPackage(component, component, [0, 1]);
+  const component = partMeshData(), input = twoComponentPackage(component, component, [0, 1]);
   const scene = buildModel(THREE, input, { renderPartsIndividually: true });
   const other = buildModel(THREE, input, { renderPartsIndividually: true });
   const set = scene.displayRecords[0].edgeInstance.set;

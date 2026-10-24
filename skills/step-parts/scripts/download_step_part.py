@@ -111,29 +111,51 @@ def selected_parts(args: argparse.Namespace) -> list[dict[str, Any]]:
     return [items[0]]
 
 
+def _safe_step_name(raw: str) -> str:
+    """A download's filename from a name the API chose: its basename only, with a .step/.stp
+    suffix. A separator, an absolute path, '.' or '..' never leaves the output directory."""
+    name = Path(str(raw).replace("\\", "/")).name
+    if not name or name in (".", ".."):
+        raise SystemExit(f"Unsafe download filename from the API: {raw!r}")
+    if Path(name).suffix.lower() not in (".step", ".stp"):
+        name += ".step"
+    return name
+
+
 def filename_for(part: dict[str, Any], requested_filename: str | None, allow_requested: bool) -> str:
+    # The user's own --filename is theirs to choose; a name the API supplies is reduced to a
+    # safe basename, so a crafted id or stepUrl cannot write outside --out-dir.
     if requested_filename and allow_requested:
         return requested_filename
     step_url = str(part.get("stepUrl") or "")
     name = Path(urllib.parse.urlparse(step_url).path).name
-    if name:
-        return name
-    return f"{part['id']}.step"
+    return _safe_step_name(name or str(part.get("id") or ""))
 
 
 def step_download_url(part: dict[str, Any], origin: str) -> str:
     step_url = part.get("stepUrl")
     if not step_url:
         raise SystemExit(f"Part {part.get('id', '<unknown>')} does not include stepUrl.")
-    return urllib.parse.urljoin(f"{origin_url(origin)}/", str(step_url))
+    base = origin_url(origin)
+    url = urllib.parse.urljoin(f"{base}/", str(step_url))
+    # Only an http(s) download. urlopen would also open file:, data: and ftp:, so a crafted
+    # stepUrl could read a local file into the output directory; allow plain http only when the
+    # origin itself is http (a local or dev mirror).
+    allowed = {"https"} | ({"http"} if urllib.parse.urlparse(base).scheme == "http" else set())
+    if urllib.parse.urlparse(url).scheme not in allowed:
+        raise SystemExit(f"Refusing a stepUrl with an unsupported scheme: {url}")
+    return url
 
 
 def write_download(part: dict[str, Any], args: argparse.Namespace, allow_requested_filename: bool) -> dict[str, Any]:
     step_url = step_download_url(part, args.origin)
 
-    out_dir = Path(args.out_dir)
+    out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / filename_for(part, args.filename, allow_requested_filename)
+    path = (out_dir / filename_for(part, args.filename, allow_requested_filename)).resolve()
+    user_named = bool(args.filename and allow_requested_filename)
+    if not user_named and path.parent != out_dir:
+        raise SystemExit(f"Refusing to write outside {out_dir}: {path}")
     if path.exists() and not args.overwrite:
         raise SystemExit(f"Refusing to overwrite existing file: {path}")
 

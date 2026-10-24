@@ -5,8 +5,7 @@ directory forgets them.
 
 The file is one JSON object with a section per feature, each owned by the module that uses it
 (``telemetry``: whether usage stats and crash reports are sent, and the install's random id,
-``cadgen/analytics.py``; ``features``: the CAD views' features a person turned off,
-``cadgen/features.py``; ``language``: the language a person chose for the CAD views,
+``cadgen/analytics.py``; ``language``: the language a person chose for the CAD views,
 ``cadgen/language.py``). A change reads,
 changes and writes its own section under one lock (``update_section``), so two apps changing
 settings at once never undo each other, whichever sections they touch.

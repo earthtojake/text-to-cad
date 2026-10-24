@@ -28,14 +28,11 @@ _STATIC_CONTENT_TYPES = {
     ".woff2": "font/woff2",
 }
 
-# CAD assets (/__cad/asset, /__cad/store). Unknown -> octet-stream.
+# CAD assets (/__cad/asset). Unknown -> octet-stream.
 #
-# Exactly the extensions those two routes can actually emit: the asset route
-# serves the cataloged formats (scanner.SOURCE_EXTENSIONS) plus the
-# `.step.json`/`.stp.json` sidecars, and the store tier holds `.surf`/`.brep`
-# component files (octet-stream by fallthrough) beside `assembly.json`.
+# Exactly the extensions that route can emit: the cataloged formats
+# (scanner.SOURCE_EXTENSIONS, scanner.is_served_cad_asset).
 _ASSET_CONTENT_TYPES = {
-    ".json": "application/json; charset=utf-8",
     ".glb": "model/gltf-binary",
     ".stl": "model/stl",
     ".3mf": "model/3mf",

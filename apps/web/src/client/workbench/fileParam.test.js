@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readFileParam, resolveFileParam, writeFileParam } from "./fileParam.js";
+import { readDocumentId, writeDocumentId } from "./fileParam.js";
 
-test("a link names its file absolutely; a developer's relative one resolves against where the viewer started", () => {
-  assert.equal(readFileParam("?file=/Users/me/arm%20parts/link%20%232.step"), "/Users/me/arm parts/link #2.step");
-  assert.equal(readFileParam(""), null);
-  assert.equal(resolveFileParam("/Users/me/a.step", "/work"), "/Users/me/a.step");
-  assert.equal(resolveFileParam("parts/../STEP/./a.step", "/work/models/"), "/work/models/STEP/a.step");
-  assert.equal(resolveFileParam("C:\\work\\a.step", "/x"), "C:/work/a.step");
-  assert.equal(resolveFileParam("a.step", "C:\\work"), "C:/work/a.step");
-  assert.equal(resolveFileParam("", "/work"), "");
+const ID = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab";
+
+test("a page names its document by id in its path, and every other path is the home", () => {
+  assert.equal(readDocumentId(`/${ID}`), ID);
+  assert.equal(readDocumentId(`/${ID}/`), ID);
+  assert.equal(readDocumentId("/"), null);
+  // The forms that are gone: a page session, a document named by query, a script.
+  assert.equal(readDocumentId("/s/abc/"), null);
+  assert.equal(readDocumentId("/Users/me/a.step"), null);
+  assert.equal(readDocumentId(`/${ID.toUpperCase()}`), null);
 });
 
-test("the URL names the file readably, pushes a step for a new file, and drops ?file= for the home", () => {
+test("the URL is /<id> for a document and / for the home, a step pushed for each", () => {
   const originalWindow = globalThis.window;
   const calls = [];
   globalThis.window = {
@@ -21,12 +23,13 @@ test("the URL names the file readably, pushes a step for a new file, and drops ?
     history: { pushState: (...args) => calls.push(["push", args[2]]), replaceState: (...args) => calls.push(["replace", args[2]]) },
   };
   try {
-    writeFileParam("/m/a.step", { history: "replace" });
-    writeFileParam("/m/arm parts/b+c #2.step");
-    writeFileParam("");
-    // The URL already names the file: nothing is written.
+    writeDocumentId(ID, { history: "replace" });
+    window.location = { pathname: `/${ID}`, search: "?debug=1", hash: "" };
+    writeDocumentId(ID);
+    writeDocumentId("");
+    // The URL already names the document: nothing is written.
     assert.deepEqual(calls, [
-      ["push", "/?file=/m/arm%20parts/b%2Bc%20%232.step&debug=1"],
+      ["replace", `/${ID}?debug=1`],
       ["push", "/?debug=1"],
     ]);
   } finally {

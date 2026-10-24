@@ -6,7 +6,7 @@ around the fixed dorsal MCP boss. All returned geometry is already fanned.
 """
 from collections import defaultdict
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import guide_end_registry,_finish,_rod,_sweep,_bolt
 from lib.layout import FINGERS,finger_fan_matrix,MCP_PALM_SUPPORT_PLANES
 

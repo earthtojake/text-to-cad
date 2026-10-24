@@ -1,0 +1,9 @@
+# Files written on request (cadgen export, exports.py): reproducible from the code. /STEP/
+# also holds the vendor inputs (STEP/imported/, tom-cad's read-only data, src/README.md).
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/tmp/
+__pycache__/

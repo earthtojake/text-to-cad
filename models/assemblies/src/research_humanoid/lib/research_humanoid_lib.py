@@ -1,10 +1,8 @@
-"""Shared code for the research_humanoid models (plain module: no @step here).
+"""Shared code for the research_humanoid model (a plain module: no model here).
 
-Everything the humanoid and its two hand models build from: the palette, the
-joint specs, the vector helpers, the part and actuator builders, the
-source-level mate helpers, and `build_hand(side)` — the factory behind
-`research_humanoid_hand_left.py` and `research_humanoid_hand_right.py`.
-Any edit here rebuilds every model that imports it.
+Everything the humanoid builds from: the palette, the joint specs, the vector
+helpers, the part and actuator builders, the joint helpers, and
+`build_hand(side)`, which the robot calls for each hand.
 """
 
 from __future__ import annotations
@@ -13,15 +11,13 @@ from dataclasses import dataclass
 from math import cos, radians, sin, sqrt
 from typing import Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from cadgen.assembly import AssemblyHelper, label_shape
 
 
 # restrained production-prototype palette
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
+# sRGB hex strings: build123d's Shape.color setter builds the Color on
+# assignment.
 ALUMINUM = "#AEB5BA"
 MACHINED_DARK = "#2A3035"
 CARBON = "#171B1E"
@@ -148,8 +144,22 @@ def _lerp(a: Point, b: Point, t: float) -> Point:
     )
 
 
+def _label_text(name: str, *details: object) -> str:
+    """A compact label such as ``clevis_ear:left_knee_pitch:negative``."""
+    return ":".join("_".join(str(token).strip().replace(":", "_").split()) for token in (name, *details))
+
+
 def _colored(shape: object, name: str, color: bd.Color, *details: object) -> object:
-    return label_shape(shape, name, *details, color=color)
+    shape.label = _label_text(name, *details)
+    shape.color = color
+    return shape
+
+
+def _module(parts: list, name: str, children: Sequence[object], *details: object) -> object:
+    """One labelled unit of the robot: a compound of its children, appended to ``parts``."""
+    module = bd.Compound(children=list(children), label=_label_text(name, *details))
+    parts.append(module)
+    return module
 
 
 def _chamfered_box(width: float, depth: float, height: float, edge: float = 1.2) -> object:
@@ -441,7 +451,7 @@ def _hand_joint_specs() -> tuple[JointSpec, ...]:
 HAND_JOINT_SPECS = _hand_joint_specs()
 
 
-def _add_actuator(assembly: AssemblyHelper, spec: JointSpec) -> object:
+def _add_actuator(parts: list, spec: JointSpec) -> object:
     """Build a layered motor/reduction/output stack with real fastening cues."""
 
     u, v, w = _basis(spec.axis)
@@ -529,10 +539,10 @@ def _add_actuator(assembly: AssemblyHelper, spec: JointSpec) -> object:
         ]
     )
 
-    return assembly.add_module(spec.name, children)
+    return _module(parts, spec.name, children)
 
 
-def _add_joint_yoke(assembly: AssemblyHelper, spec: JointSpec) -> object:
+def _add_joint_yoke(parts: list, spec: JointSpec) -> object:
     """Double-shear clevis around one actuator cartridge."""
 
     u, v, w = _basis(spec.axis)
@@ -611,11 +621,11 @@ def _add_joint_yoke(assembly: AssemblyHelper, spec: JointSpec) -> object:
             ),
         ]
     )
-    return assembly.add_module("joint_yoke", children, spec.name)
+    return _module(parts, "joint_yoke", children, spec.name)
 
 
 def _add_structural_link(
-    assembly: AssemblyHelper,
+    parts: list,
     name: str,
     start: Point,
     end: Point,
@@ -774,12 +784,12 @@ def _add_structural_link(
             )
         )
 
-    module = assembly.add_module(name, children)
+    module = _module(parts, name, children)
     module.design_length_mm = length
     return module
 
 
-def _add_foot(assembly: AssemblyHelper, side: str) -> object:
+def _add_foot(parts: list, side: str) -> object:
     sign = SIDES[side]
     ankle = ANKLES[side]
     toe_out = -5.5 * sign
@@ -810,10 +820,10 @@ def _add_foot(assembly: AssemblyHelper, side: str) -> object:
         for index, y_offset in enumerate((-82.0, -28.0, 32.0, 88.0), start=1):
             bolt_center = (foot_center[0] + row_sign * 35.0, foot_center[1] + y_offset, 36.0)
             children.extend(_bolt_stack(bolt_center, (0.0, 0.0, 1.0), name=f"{side}_foot_keel", index=f"{row_sign:+.0f}_{index}", head_radius=3.2, head_height=2.5))
-    return assembly.add_module("foot", children, side)
+    return _module(parts, "foot", children, side)
 
 
-def _add_pelvis(assembly: AssemblyHelper) -> object:
+def _add_pelvis(parts: list) -> object:
     children: list[object] = [
         _colored(_at(_chamfered_box(78.0, 116.0, 218.0, 3.0), (0.0, -8.0, 988.0)), "pelvis_spine", ALUMINUM),
         _colored(_at(_chamfered_box(210.0, 132.0, 42.0, 3.0), (0.0, 0.0, 1068.0)), "waist_bulkhead", ALUMINUM),
@@ -840,10 +850,10 @@ def _add_pelvis(assembly: AssemblyHelper) -> object:
         cable_end = (x_value * 0.82, -92.0, 1086.0)
         children.append(_colored(_rod_between(cable_start, cable_mid, 4.2), "battery_cable", COPPER, side_name, 1))
         children.append(_colored(_rod_between(cable_mid, cable_end, 4.2), "battery_cable", RUBBER, side_name, 2))
-    return assembly.add_module("pelvis", children)
+    return _module(parts, "pelvis", children)
 
 
-def _add_torso(assembly: AssemblyHelper) -> object:
+def _add_torso(parts: list) -> object:
     children: list[object] = [
         _colored(_at(_chamfered_box(68.0, 94.0, 338.0, 3.0), (0.0, -12.0, 1290.0)), "central_spine", ALUMINUM),
         _colored(_at(_chamfered_box(436.0, 76.0, 42.0, 3.0), (0.0, -2.0, 1412.0)), "shoulder_crossmember", ALUMINUM),
@@ -882,10 +892,10 @@ def _add_torso(assembly: AssemblyHelper) -> object:
         children.append(_colored(_rod_between(cable_mid, cable_end, 4.0), "torso_harness", RUBBER, trunk_name, 2))
     children.extend(_panel_fasteners((0.0, 108.0, 1290.0), (0.0, 1.0, 0.0), 206.0, 108.0, name="torso_front_panel"))
     children.extend(_panel_fasteners((0.0, 105.0, 1180.0), (0.0, 1.0, 0.0), 158.0, 64.0, name="power_panel"))
-    return assembly.add_module("torso", children)
+    return _module(parts, "torso", children)
 
 
-def _add_head(assembly: AssemblyHelper) -> object:
+def _add_head(parts: list) -> object:
     center = (0.0, 6.0, 1622.0)
     children: list[object] = [
         _colored(_at(_tapered_box(142.0, 108.0, 158.0, 118.0, 100.0, 5.0), center, (1.5, 0.0, 0.0)), "sensor_chassis", MACHINED_DARK),
@@ -927,7 +937,7 @@ def _add_head(assembly: AssemblyHelper) -> object:
                 _colored(_axis_cylinder((sign * 87.0, 16.0, z_value), (1.0, 0.0, 0.0), 2.0, 2.0), "microphone_port", FASTENER, side, mic_index)
             )
     children.extend(_panel_fasteners((0.0, -67.0, 1620.0), (0.0, -1.0, 0.0), 84.0, 68.0, name="head_rear_door"))
-    return assembly.add_module("sensor_head", children)
+    return _module(parts, "sensor_head", children)
 
 
 def _micro_joint_children(spec: JointSpec) -> list[object]:
@@ -959,42 +969,23 @@ def _micro_joint_children(spec: JointSpec) -> list[object]:
     return children
 
 
-def _relate_revolute(
-    assembly: AssemblyHelper,
-    fixed: object,
-    moving: object,
-    spec: JointSpec,
-) -> None:
-    """Author one coincident source-level revolute mate without changing pose."""
+def _relate_revolute(fixed: object, moving: object, spec: JointSpec) -> None:
+    """One revolute joint where the parts stand, without changing pose: build123d's
+    `RevoluteJoint` on the fixed part, a `RigidJoint` on the moving one, both
+    labelled by the joint, connected at 0."""
 
-    axis = bd.Axis(spec.center, spec.axis)
-    fixed_frame = assembly.revolute_frame(
-        fixed,
-        f"{spec.name}_parent",
-        axis,
-        angular_range=spec.limits_deg,
-    )
-    fixed_orientation = tuple(fixed.joints[fixed_frame.frame].location.orientation)
-    moving_frame = assembly.rigid_frame(
-        moving,
-        spec.name,
-        bd.Location(spec.center, fixed_orientation),
-    )
-    assembly.revolute(fixed_frame, moving_frame, angle=0.0, label=spec.name)
+    bd.RevoluteJoint(spec.name, fixed, axis=bd.Axis(spec.center, spec.axis), angular_range=spec.limits_deg)
+    fixed_orientation = tuple(fixed.joints[spec.name].location.orientation)
+    bd.RigidJoint(spec.name, moving, bd.Location(spec.center, fixed_orientation))
+    fixed.joints[spec.name].connect_to(moving.joints[spec.name], angle=0.0)
 
 
-def _relate_rigid(
-    assembly: AssemblyHelper,
-    fixed: object,
-    moving: object,
-    center: Point,
-    label: str,
-) -> None:
-    """Author a coincident carrier-to-link mount while preserving world pose."""
+def _relate_rigid(fixed: object, moving: object, center: Point, label: str) -> None:
+    """A coincident carrier-to-link mount, preserving world pose."""
 
-    fixed_frame = assembly.rigid_frame(fixed, f"{label}_fixed", bd.Location(center))
-    moving_frame = assembly.rigid_frame(moving, f"{label}_moving", bd.Location(center))
-    assembly.connect(fixed_frame, moving_frame, relation="rigid", label=label)
+    bd.RigidJoint(f"{label}_fixed", fixed, bd.Location(center))
+    bd.RigidJoint(f"{label}_moving", moving, bd.Location(center))
+    fixed.joints[f"{label}_fixed"].connect_to(moving.joints[f"{label}_moving"])
 
 
 def _finger_segment(
@@ -1059,15 +1050,13 @@ def _finger_segment(
 
 
 def build_hand(side: str) -> object:
-    """One dexterous hand as a labelled sub-assembly, in the robot frame.
-
-    The factory behind the `research_humanoid_hand_left` / `_right` models: each
-    hand is its own model (a reflection is new geometry, and a hand is a
-    functional unit worth its own STEP), and `research_humanoid.py` links both.
-    """
+    """One dexterous hand as a labelled sub-assembly, in the robot frame: its
+    15 axes are joints connected inside it, and its palm carries the mount
+    `<side>_hand_mount`. The right hand is the left's mirror image, new
+    geometry from the same factory."""
     sign = SIDES[side]
     palm = PALMS[side]
-    hand_assembly = AssemblyHelper(f"dexterous_hand_{side}")
+    hand_parts: list[object] = []
     palm_children: list[object] = [
         _colored(_at(_rect_frame(38.0, 94.0, 104.0, 12.0, 15.0), palm), "palm_frame", ALUMINUM, side),
         _colored(_at(_chamfered_box(12.0, 86.0, 92.0, 1.8), (palm[0] + sign * 24.0, palm[1], palm[2])), "dorsal_plate", ARMOR, side),
@@ -1110,59 +1099,63 @@ def build_hand(side: str) -> object:
         palm_children.append(_colored(_axis_cylinder(ferrule, (1.0, 0.0, 0.0), 2.3, 3.0), "tendon_ferrule", ALUMINUM, side, finger_name))
         palm_children.append(_colored(_rod_between(ferrule, _add(mcp_spec.center, (-sign * 3.0, 5.0, 0.0)), 0.9), "palm_tendon", COPPER, side, finger_name))
 
-    palm_module = hand_assembly.add_module("palm", palm_children, side)
+    palm_module = _module(hand_parts, "palm", palm_children, side)
+    # The hand's mount: the robot puts the same frame on the wrist carrier, and the
+    # label pairs the two (the palm sits inside the hand's own compound, where
+    # connect_to cannot place it).
+    bd.RigidJoint(f"{side}_hand_mount", palm_module, bd.Location(palm))
 
     for finger_name, mcp_spec, pip_spec, dip_spec, tip in finger_records:
-        proximal = hand_assembly.add_module(
+        proximal = _module(hand_parts,
             f"{finger_name}_proximal",
             _micro_joint_children(mcp_spec)
             + _finger_segment(mcp_spec.center, pip_spec.center, side=side, finger=finger_name, segment="proximal", width=13.5),
             side,
         )
-        middle = hand_assembly.add_module(
+        middle = _module(hand_parts,
             f"{finger_name}_middle",
             _micro_joint_children(pip_spec)
             + _finger_segment(pip_spec.center, dip_spec.center, side=side, finger=finger_name, segment="middle", width=12.0),
             side,
         )
-        distal = hand_assembly.add_module(
+        distal = _module(hand_parts,
             f"{finger_name}_distal",
             _micro_joint_children(dip_spec)
             + _finger_segment(dip_spec.center, tip, side=side, finger=finger_name, segment="distal", width=10.5)
             + [_colored(_at(_chamfered_box(11.0, 15.0, 10.0, 2.0), tip), "fingertip_pad", RUBBER, side, finger_name)],
             side,
         )
-        _relate_revolute(hand_assembly, palm_module, proximal, mcp_spec)
-        _relate_revolute(hand_assembly, proximal, middle, pip_spec)
-        _relate_revolute(hand_assembly, middle, distal, dip_spec)
+        _relate_revolute(palm_module, proximal, mcp_spec)
+        _relate_revolute(proximal, middle, pip_spec)
+        _relate_revolute(middle, distal, dip_spec)
 
     thumb_opposition = joint_by_name[f"{side}_thumb_opposition"]
     thumb_mcp = joint_by_name[f"{side}_thumb_mcp"]
     thumb_ip = joint_by_name[f"{side}_thumb_ip"]
     thumb_tip = (thumb_ip.center[0] - sign * 11.0, thumb_ip.center[1] + 4.0, thumb_ip.center[2] - 25.0)
-    thumb_metacarpal = hand_assembly.add_module(
+    thumb_metacarpal = _module(hand_parts,
         "thumb_metacarpal",
         _micro_joint_children(thumb_opposition)
         + _finger_segment(thumb_opposition.center, thumb_mcp.center, side=side, finger="thumb", segment="metacarpal", width=15.0),
         side,
     )
-    thumb_proximal = hand_assembly.add_module(
+    thumb_proximal = _module(hand_parts,
         "thumb_proximal",
         _micro_joint_children(thumb_mcp)
         + _finger_segment(thumb_mcp.center, thumb_ip.center, side=side, finger="thumb", segment="proximal", width=13.0),
         side,
     )
-    thumb_distal = hand_assembly.add_module(
+    thumb_distal = _module(hand_parts,
         "thumb_distal",
         _micro_joint_children(thumb_ip)
         + _finger_segment(thumb_ip.center, thumb_tip, side=side, finger="thumb", segment="distal", width=11.0)
         + [_colored(_at(_chamfered_box(12.0, 16.0, 11.0, 2.0), thumb_tip), "thumb_tip_pad", RUBBER, side)],
         side,
     )
-    _relate_revolute(hand_assembly, palm_module, thumb_metacarpal, thumb_opposition)
-    _relate_revolute(hand_assembly, thumb_metacarpal, thumb_proximal, thumb_mcp)
-    _relate_revolute(hand_assembly, thumb_proximal, thumb_distal, thumb_ip)
+    _relate_revolute(palm_module, thumb_metacarpal, thumb_opposition)
+    _relate_revolute(thumb_metacarpal, thumb_proximal, thumb_mcp)
+    _relate_revolute(thumb_proximal, thumb_distal, thumb_ip)
 
-    return hand_assembly.build()
+    return bd.Compound(children=hand_parts, label=f"dexterous_hand_{side}")
 
 

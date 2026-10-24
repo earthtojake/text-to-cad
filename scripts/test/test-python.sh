@@ -57,16 +57,6 @@ run_suite() {
 
 cd "$REPO_ROOT"
 
-ensure_packaged_runtime
-
-# Isolate the shared store from the
-# developer's real ~/.cache/cadgen: tests assert exact built/reused counts and
-# byte-level outputs, and a populated user store would satisfy builds the test
-# expects to run (and test runs would pollute the user's cache in return).
-CADGEN_TEST_CACHE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-test-store.XXXXXX")"
-trap 'rm -rf "$CADGEN_TEST_CACHE_DIR"' EXIT
-export CADGEN_CACHE_DIR="$CADGEN_TEST_CACHE_DIR"
-
 # The cadgen package suite includes the CAD Viewer backend (tests/python/packages/cadgen/viewer):
 # the server is cadgen.viewer, and this is the one runner that reaches every pull request.
 # Windows matters most of all for the viewer: path handling, locks, subprocesses and file

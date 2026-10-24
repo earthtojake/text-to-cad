@@ -6,7 +6,7 @@ run on carrier pins at radius3.00. Gear face width2.40. Nominal backlash is
 .025 mm per flank. No strength or lifetime claim is made at this scale.
 """
 from math import sin, cos, pi, sqrt, acos, tan, radians
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 

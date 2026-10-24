@@ -4,7 +4,6 @@ import test from "node:test";
 import { RENDER_FORMAT } from "./fileFormats.js";
 import {
   ASSET_KIND,
-  PARAMETER_SOURCE,
   RENDER_CAPABILITIES,
   assetKindForRenderFormat,
   hasCapability,
@@ -86,7 +85,6 @@ test("STEP keeps the full capability set", () => {
   const step = renderCapabilities(RENDER_FORMAT.STEP);
   assert.equal(step.parts, true);
   assert.equal(step.topology, true);
-  assert.equal(step.params, PARAMETER_SOURCE.SIDECAR);
   assert.equal(step.artifactManaged, true);
 });
 
@@ -95,7 +93,6 @@ test("a plain mesh is the minimal row", () => {
     const row = renderCapabilities(format);
     assert.equal(row.parts, false);
     assert.equal(row.topology, false);
-    assert.equal(row.params, null);
     assert.equal(row.artifactManaged, false);
   }
 });

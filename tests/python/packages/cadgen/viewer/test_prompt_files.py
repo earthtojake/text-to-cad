@@ -1,9 +1,12 @@
-"""Quick Edit writes replayable JSON synchronously, never starting a render."""
+"""Quick Edit writes replayable JSON synchronously, never starting a render.
+
+A packet is what ``cadgen snapshot`` reads: ``--annotation PACKET`` draws its ink, and
+``--camera authored`` draws the view the ink was drawn in, found in the packet's jobs by label
+(``cadgen.engine.snapshot``). Its readers are the replay asserted here.
+"""
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import http.client
 import json
 import shutil
@@ -11,18 +14,15 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
-from unittest import mock
 
-from cadgen.snapshot_cli import prepare_render_job_packet, read_job_file
-from cadgen.snapshot_core import SnapshotError
+from cadgen.engine.snapshot import _view_of, packet_visibility, parse_annotation, parse_measurements
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
 from cadgen.viewer.prompt_files import PromptFiles
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
-ANNOTATION = {"units": "mm", "marks": [
-    {"id": "1", "kind": "stroke", "points": [0, 0, 0, 1, 1, 1] * 128, "color": "#ff2d55", "width": 2}]}
+ANNOTATION = {"units": "mm", "parts": {}, "marks": [
+    {"id": "1", "kind": "stroke", "part": None, "points": [0, 0, 0, 1, 1, 1] * 128, "color": "#ff2d55", "width": 2}]}
 CAMERA = {"position": [10, -10, 10], "target": [0, 0, 0], "up": [0, 0, 1]}
 
 
@@ -32,6 +32,8 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.model = self.tmp / "part.stl"
         self.model.write_text("solid part\nendsolid part\n", encoding="utf-8")
+        self.notes = self.tmp / "notes.txt"
+        self.notes.write_text("not a model\n", encoding="utf-8")
         self.files = self.tmp / "prompt-files"
         app = create_cad_app(host="127.0.0.1", port=0)
         app.prompt_files = PromptFiles(directory=self.files)
@@ -60,17 +62,17 @@ class PromptFilesRouteTest(unittest.TestCase):
         ], **overrides}
 
     def test_a_prompt_writes_replayable_json_without_rendering_or_image_files(self) -> None:
-        with mock.patch("cadgen.snapshot_core.BatchSnapshotRenderer", side_effect=AssertionError("must not render")):
-            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
+        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
         answer = json.loads(body)
         snapshot_path = self.files / "part-1.snapshot.json"
         self.assertEqual((status, answer), (200, {"ok": True, "snapshot": str(snapshot_path)}))
         self.assertEqual([path.name for path in self.files.iterdir()], ["part-1.snapshot.json"])
-        # Replay from another folder: one file carries the shared ink and absolute dependencies.
-        packet = read_job_file(str(snapshot_path), cwd=self.tmp)
-        _, replayed = prepare_render_job_packet(packet, cwd=self.tmp)
-        self.assertEqual([entry.job["annotation"] for entry in replayed], [ANNOTATION, ANNOTATION])
-        self.assertEqual([entry.annotation_source for entry in replayed], [""] * 2)
+        # Replay from another folder: one file carries the ink and each view it was drawn in.
+        packet = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        self.assertEqual(parse_annotation(str(snapshot_path)), ANNOTATION)
+        view = _view_of(packet, "view 1")
+        self.assertEqual((view.camera, view.size), (CAMERA, (640, 480)))
+        self.assertEqual(_view_of(packet, "view 2").camera, "iso")
         common = {"output": {"padding": 0, "tightFrame": False}}
         self.assertEqual(packet, {"input": str(self.model), "annotation": ANNOTATION, "jobs": [
             {**common, "camera": CAMERA, "display": {"appearance": "dark"},
@@ -80,23 +82,53 @@ class PromptFilesRouteTest(unittest.TestCase):
         status, _, content_type = self.call("GET", "/__cad/prompt-files/part-1.snapshot.json")
         self.assertEqual((status, content_type), (200, "application/json; charset=utf-8"))
 
-    def test_a_drawings_view_is_its_plan_view_and_its_job_carries_ink(self) -> None:
-        """A DXF's Quick Edit: the window on screen as a plan-view camera, the ink on the sheet,
-        in a job `cadgen dxf snapshot` takes -- no 3D framing, no view name."""
+    def test_the_parts_hidden_where_the_ink_was_drawn_are_the_packets_and_each_views_own(self) -> None:
+        """Each view's display says what it hid and isolated (part refs, as ``--display`` takes them);
+        the packet's own are the view the last mark was drawn in, which ``--annotation`` reads."""
+        ink = {"units": "mm", "parts": {}, "marks": [{**ANNOTATION["marks"][0], "points": [0, 0, 0, 1, 1, 1], "view": "view 2"}]}
+        plain = {"mode": "solid", "grid": False}
+        hid = {**plain, "hidden": ["/w/kit.xbf#lid"], "isolated": ["/w/kit.xbf#hand"]}
+
+        def packet(annotation, *displays):
+            views = [{"label": f"view {at + 1}", "camera": CAMERA, "display": display} for at, display in enumerate(displays)]
+            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=annotation, views=views))
+            self.assertEqual(status, 200, body)
+            answer = json.loads(body)
+            return json.loads(answer["inline"] if "inline" in answer else Path(answer["snapshot"]).read_text(encoding="utf-8"))
+
+        drawn = packet(ink, plain, hid)
+        self.assertEqual([job["display"] for job in drawn["jobs"]], [plain, hid])
+        self.assertEqual((drawn["hidden"], packet_visibility(drawn)), (hid["hidden"], {"hidden": hid["hidden"], "isolated": hid["isolated"]}))
+        # Ink drawn where nothing was hidden leaves the packet nothing to hide; no ink, nothing at all.
+        self.assertEqual(packet_visibility(packet(ink, hid, plain)), {})
+        self.assertNotIn("hidden", packet(None, plain, hid))
+
+    def test_a_prompts_measurements_are_drawn_over_every_view_its_job_renders(self) -> None:
+        mark = {"start": [0, 0, 0], "end": [10, 0, 0], "label": "10.00 mm", "color": "#d59090"}
+        _, body, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None, measurements=[mark]))
+        packet = json.loads(json.loads(body)["inline"])
+        self.assertEqual(packet["measurements"], [mark])
+        self.assertTrue(all("measurements" not in job for job in packet["jobs"]))
+        self.assertEqual(parse_measurements(packet["measurements"]), [mark])
+
+    def test_a_drawings_view_is_its_plan_view_and_its_job_carries_ink_and_measurements(self) -> None:
+        """A DXF's Quick Edit: the window on screen as a plan-view camera, the ink on the sheet and the
+        measurements -- no 3D framing; its label, by which the ink names the view it was drawn in."""
         drawing = self.tmp / "panel.dxf"
         drawing.write_text("0\nSECTION\n", encoding="utf-8")
         plan = {"position": [50, 30, 120], "target": [50, 30, 0], "up": [0, 1, 0], "orthographicHalfHeight": 30}
+        mark = {"start": [0, 0, 0], "end": [100, 0, 0], "label": "100.00 mm", "color": "#d59090"}
         status, body, _ = self.call("POST", "/__cad/prompt-files", {
-            "name": "panel.dxf", "input": str(drawing), "annotation": ANNOTATION,
+            "name": "panel.dxf", "input": str(drawing), "annotation": ANNOTATION, "measurements": [mark],
             "views": [{"label": "view 1", "camera": plan, "width": 1600, "height": 900}]})
         self.assertEqual(status, 200, body)
         packet = json.loads((self.files / "panel-1.snapshot.json").read_text(encoding="utf-8"))
-        [prepared] = prepare_render_job_packet(packet, cwd=self.tmp)[1]
-        job = prepared.job
-        self.assertEqual(job["camera"], plan)
-        self.assertEqual(job["annotation"], ANNOTATION)
+        self.assertEqual(packet["jobs"][0]["camera"], plan)
+        self.assertEqual(parse_measurements(packet["measurements"]), [mark])
+        self.assertEqual(parse_annotation(packet), ANNOTATION)
         self.assertNotIn("output", packet["jobs"][0])
-        self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "panel-1-view-1.png"), "width": 1600, "height": 900}])
+        self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "panel-1-view-1.png"), "label": "view 1",
+                                                         "width": 1600, "height": 900}])
 
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
         _, first, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))
@@ -122,30 +154,42 @@ class PromptFilesRouteTest(unittest.TestCase):
             else:
                 self.assertNotIn("inline", answer)
                 self.assertTrue(Path(answer["snapshot"]).is_file())
-                packet = read_job_file(answer["snapshot"], cwd=self.tmp)
-            self.assertEqual(len(prepare_render_job_packet(packet, cwd=self.tmp)[1]), 1)
+                packet = json.loads(Path(answer["snapshot"]).read_text(encoding="utf-8"))
+            self.assertEqual(_view_of(packet, "current view").camera, CAMERA)
         self.assertEqual(len(list(self.files.glob("*.snapshot.json"))), 2)
 
     def test_inline_cutoff_counts_utf8_bytes_and_both_forms_are_replayable(self) -> None:
-        view = {"label": "a" * 48, "camera": CAMERA}  # the file name takes 48 characters of it, whatever follows
-        request = self.request(annotation=None, views=[view])
+        mark = {"start": [0, 0, 0], "end": [1, 0, 0], "label": "", "color": "#ffffff"}
+        request = self.request(annotation=None, measurements=[mark], views=[{"label": "current view", "camera": CAMERA}])
         status, body, _ = self.call("POST", "/__cad/prompt-files", request)
         self.assertEqual(status, 200, body)
         base = json.loads(body)["inline"]
-        view["label"] += "a" * (1024 - len(base.encode("utf-8")) - 2) + "é"
+        mark["label"] = "a" * (1024 - len(base.encode("utf-8")) - 2) + "é"
         status, body, _ = self.call("POST", "/__cad/prompt-files", request)
         inline = json.loads(body)["inline"]
         self.assertEqual(len(inline.encode("utf-8")), 1024)
         self.assertEqual(list(self.files.glob("*.json")), [])
-        self.assertEqual(len(prepare_render_job_packet(json.loads(inline), cwd=self.tmp)[1]), 1)
-        view["label"] += "a"
+        self.assertEqual(_view_of(json.loads(inline), "current view").camera, CAMERA)
+        mark["label"] += "a"
         status, body, _ = self.call("POST", "/__cad/prompt-files", request)
         self.assertEqual(status, 200, body)
         answer = json.loads(body)
         self.assertNotIn("inline", answer)
-        saved = read_job_file(answer["snapshot"], cwd=self.tmp)
-        self.assertEqual(len(prepare_render_job_packet(saved, cwd=self.tmp)[1]), 1)
-        self.assertEqual(saved["jobs"][0]["outputs"][0]["label"], view["label"])
+        saved = json.loads(Path(answer["snapshot"]).read_text(encoding="utf-8"))
+        self.assertEqual(_view_of(saved, "current view").camera, CAMERA)
+        self.assertEqual(parse_measurements(saved["measurements"])[0]["label"], mark["label"])
+
+    def test_a_packets_input_is_a_files_path_or_a_documents_id_and_never_a_script(self) -> None:
+        ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
+        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=ident, name="bracket"))
+        self.assertEqual(status, 200, body)
+        packet = json.loads(Path(json.loads(body)["snapshot"]).read_text(encoding="utf-8"))
+        self.assertEqual(packet["input"], ident)
+        script = self.tmp / "parts.py"
+        script.write_text("print(1)\n", encoding="utf-8")
+        for named in (str(script), f"{script}::cube"):
+            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=named))
+            self.assertEqual(status, 400, named)
 
     def test_a_request_snapshot_would_refuse_is_refused_before_anything_renders(self) -> None:
         for request, said in (
@@ -159,13 +203,16 @@ class PromptFilesRouteTest(unittest.TestCase):
             (self.request(views=[{"camera": "iso"}]), "views[0].label"),
             (self.request(views=[{"label": "a", "camera": "iso", "width": 0}]), "views[0].width"),
             (self.request(annotation={"marks": {}}), "annotation is null or an object"),
-            # snapshot's own preparation: a camera key it does not take, a pose a mesh does not have
-            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "display.camera"),
-            (self.request(views=[{"label": "a", "camera": "iso", "kinematics": {"x": 1}}]), "kinematics"),
-            # Quick Edit sends no measurements: the field is unknown like any other
-            (self.request(measurements=[]), "unknown field(s): measurements"),
-            # a routine's frame reaches snapshot's own check: a mesh has none
-            (self.request(views=[{"label": "a", "camera": "iso", "animation": {"clip": "spin", "time": 1}}]), "animation in its sidecar"),
+            # snapshot's own parsers: a camera key it does not take, a display it does not draw
+            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera has no projection"),
+            (self.request(views=[{"label": "a", "camera": "iso", "display": {"mode": "sketch"}}]), "no display mode"),
+            (self.request(views=[{"label": "a", "camera": "iso", "display": {"hidden": "lid"}}]), "display.hidden is a list of part refs"),
+            (self.request(views=[{"label": "a", "camera": "authored"}]), "the view's own camera"),
+            (self.request(measurements={}), "measurements is null or a list"),
+            # a measurement snapshot would not draw: its own check
+            (self.request(measurements=[{"start": [0, 0], "end": [1, 0, 0], "label": "", "color": "#ffffff"}]), "measurements[0].start"),
+            # a file snapshot does not draw
+            (self.request(input=str(self.notes)), "is no file cadgen snapshot draws"),
         ):
             status, body, _ = self.call("POST", "/__cad/prompt-files", request)
             self.assertEqual(status, 400, request)
@@ -173,19 +220,9 @@ class PromptFilesRouteTest(unittest.TestCase):
             self.assertIn(said, json.loads(body)["error"])
         self.assertEqual(sorted(path.name for path in self.files.iterdir()) if self.files.exists() else [], [])
 
-    def test_a_chips_copy_is_saved_as_the_file_snapshot_reads_and_answered_with_its_path(self) -> None:
-        status, body, _ = self.call("POST", "/__cad/prompt-files/save", {"name": "part.stl", "kind": "annotation", "data": ANNOTATION})
-        self.assertEqual((status, json.loads(body)), (200, {"ok": True, "path": str(self.files / "part-1.annotation.json")}))
-        self.assertEqual(json.loads((self.files / "part-1.annotation.json").read_text(encoding="utf-8")), ANNOTATION)
-        for request, said in (
-            ({"name": "part.stl", "kind": "image", "data": {}}, "kind is annotation"),
-            ({"name": "part.stl", "kind": "sketch", "data": ANNOTATION}, "kind is annotation"),
-            ({"name": "part.stl", "kind": "annotation", "data": {"marks": {}}}, "marks (a list)"),
-            ({"name": "part.stl", "kind": "measurement", "data": {}}, "kind is annotation"),
-        ):
-            status, body, _ = self.call("POST", "/__cad/prompt-files/save", request)
-            self.assertEqual((status, json.loads(body)["ok"]), (400, False), request)
-            self.assertIn(said, json.loads(body)["error"])
+    def test_retired_save_route_does_not_write(self):
+        self.assertEqual(self.call("POST", "/__cad/prompt-files/save", {"kind": "annotation", "data": ANNOTATION})[0], 404)
+        self.assertFalse(self.files.exists())
 
     def test_render_polling_is_not_an_endpoint(self) -> None:
         self.assertEqual(self.call("GET", "/__cad/prompt-files?id=nope")[0], 404)
@@ -198,68 +235,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         for name in ("..%2Fsecret.json", "../secret.json", "missing.png", "part-1.job.txt", ""):
             self.assertEqual(self.call("GET", f"/__cad/prompt-files/{name}")[0], 404, name)
         self.assertEqual(self.call("GET", "/__cad/prompt-files/part-1-current.png", guard=False)[0], 403)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=old", guard=False)[0], 403)
-
-
-class SnapshotOwnershipTest(unittest.TestCase):
-    """The real snapshot call chain borrows a session and owns a standalone render."""
-
-    def setUp(self) -> None:
-        temporary = tempfile.TemporaryDirectory(prefix="warm-snapshot-")
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name).resolve()
-        (self.root / "part.stl").write_text(
-            "solid part\nfacet normal 0 0 1\nouter loop\n"
-            "vertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\n"
-            "endloop\nendfacet\nendsolid part\n", encoding="utf-8")
-        self.renderers = []
-        owner = self
-
-        class Renderer:
-            def __init__(self, runtime_dir) -> None:
-                self.closed = 0
-                self.jobs = []
-                owner.renderers.append(self)
-
-            async def render(self, job):
-                owner.assertEqual(0, self.closed, "a borrowed renderer was closed between prompts")
-                owner.assertEqual("stl", job["resolved"]["kind"])
-                self.jobs.append(job)
-                if Path(job["outputs"][0]["path"]).stem == "bad":
-                    raise SnapshotError("render failed")
-                return {"ok": True, "mode": "view", "outputs": [
-                    {"path": output["path"], "mimeType": "image/png",
-                     "dataUrl": "data:image/png;base64," + base64.b64encode(PNG).decode("ascii")}
-                    for output in job["outputs"]
-                ]}
-
-            async def close(self) -> None:
-                self.closed += 1
-
-        patcher = mock.patch("cadgen.snapshot_core.BatchSnapshotRenderer", Renderer)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def job(self, name: str) -> Path:
-        path = self.root / f"{name}.job.json"
-        path.write_text(json.dumps({"input": "part.stl", "outputs": [{"path": f"{name}.png"}]}), encoding="utf-8")
-        return path
-
-    def test_real_pipeline_closes_its_own_renderer_on_success_and_failure(self) -> None:
-        from cadgen._internal.snapshot_door import ALL_KINDS
-        from cadgen.snapshot_cli import SnapshotOptions, run_snapshot_async
-
-        def render(name):
-            return asyncio.run(run_snapshot_async(
-                SnapshotOptions(job=str(self.job(name))), kinds=ALL_KINDS,
-                cwd=self.root, report=False))
-
-        self.assertTrue(render("owned").ok)
-        self.assertEqual((self.root / "owned.png").read_bytes(), PNG)
-        self.assertEqual(self.renderers[0].closed, 1)
-        with self.assertRaisesRegex(SnapshotError, "render failed"):
-            render("bad")
-        self.assertEqual([renderer.closed for renderer in self.renderers], [1, 1])
+        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=old", guard=False)[0], 404)
 
 
 if __name__ == "__main__":

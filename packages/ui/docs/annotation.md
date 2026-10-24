@@ -2,7 +2,7 @@
 
 The drawing tools — Pencil and Shapes — are the CAD viewer's own ink, with no drawing SDK behind it. A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
-were drawn from every angle, lying on the surface they were drawn on. The STEP, GLB, mesh, robot and DXF renderers offer them
+were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot and DXF renderers offer them
 ([Pencil and Shapes](cad-renderer.md#pencil-and-shapes)).
 
 ## Pieces
@@ -125,8 +125,7 @@ were drawn from every angle, lying on the surface they were drawn on. The STEP, 
     Explode, Position or hiding a part does to the model. Clip cuts it.
     `touches` says what it was drawn over, most first, the same for either placement: the faces and edges the
     renderer names under it (`ref`, a prompt reference, from the shell's
-    `inkTouches`; the STEP renderer's reads them whatever Select's filter picks),
-    each with its part; without it, the parts.
+    `inkTouches`), each with its part; without it, the parts.
   - The projected ink is plain data (`AnnotationItem`): an annotation mark
     (`@text-to-cad/core/common/annotation.js`), kept across scene rebuilds.
     `mountAnnotations` draws it in a viewer runtime and `update` draws only the
@@ -151,7 +150,8 @@ Quick Edit captures the current view and distinct views with remaining ink when
 Copy Prompt, Queue or Send is pressed (`host.promptFiles`). The snapshot packet
 includes shared annotation and measurements: up to 1 KiB of compact UTF-8 JSON
 travels inline, and larger packets are saved to a temporary `.snapshot.json`.
-No images are rendered at handoff. Save inline JSON to a file before running
-`cadgen snapshot --job <file>` to render those views over the model or an edit of it.
+No images are rendered at handoff. Save inline JSON to a file, then
+`cadgen snapshot <document> <out.png> --annotation <file> --camera authored` draws the
+view the ink was drawn in over the model, or over an edit of it.
 The Annotation chip does not copy references or save individual files.
 Queue and Send clear the annotation with the note; Copy Prompt keeps it.

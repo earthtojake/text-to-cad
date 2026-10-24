@@ -105,6 +105,15 @@ async function open(t, file) {
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+// What the view handed Export (the harness's ExportContext records it): the file it shows, named by
+// its path, at the bytes on screen (their catalog hash), which Export converts to the other mesh kinds.
+async function exported(page, file) {
+  await page.waitForFunction(() => window.cadHarness.exportViews.at(-1));
+  const shown = await page.evaluate(() => window.cadHarness.exportViews.at(-1));
+  assert.deepEqual(Object.keys(shown).sort(), ['doc', 'file', 'name', 'preview', 'revision']);
+  assert.deepEqual([shown.doc, shown.file, shown.name, shown.preview], [`/models/${file}`, `/models/${file}`, file, false]);
+  assert.ok(shown.revision.endsWith(`-${file}`), `the catalog hash of the bytes shown: ${shown.revision}`);
+}
 // A mesh file's strip: an STL's Select (in hand, picking nothing), Pencil, Shapes and Clip; a 3MF's Select (in hand),
 // Pencil, Shapes, Measure and Clip. Its view's controls end the strip, in Clip's section: Projection,
 // Display, then Preview.
@@ -215,6 +224,7 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   const { page, pane, errors } = await open(t, 'part.stl');
   await ready(pane);
   assert.deepEqual(errors, []);
+  await exported(page, 'part.stl');
 
   // An STL is one mesh in no unit: Select navigates and picks nothing, nothing to measure; it is drawn on and cut.
   await meshTools(pane, STL_TOOLS);
@@ -338,6 +348,7 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
 test('a 3MF is one mesh per object with its source colour; an uncoloured one takes the viewer\'s', async (t) => {
   const { page, pane, errors } = await open(t, 'pair.3mf');
   await ready(pane);
+  await exported(page, 'pair.3mf');
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await meshTools(pane, THREE_MF_TOOLS);
   // Display shut as it opens, the same dropdown an STL has, with Parts: a 3MF of two objects has two to colour.

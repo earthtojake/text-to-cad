@@ -3,7 +3,9 @@ import test from "node:test";
 
 import * as THREE from "three";
 
-import { buildModel } from "./cadScene.js";
+import {
+  buildModel
+} from "./cadScene.js";
 import { buildStepClipPlane } from "../lib/viewer/clipPlane.js";
 import {
   captureModel,
@@ -11,23 +13,17 @@ import {
   modelOptionsForRenderJob,
   projectedVisibleGeometryFrame,
   renderJobContext,
-  renderMeshJob,
   resolveOutputCameraProjection,
   resolveOutputCameraSpec,
   snapshotStudioSamples,
   stepParametersForSnapshotOutput
 } from "./renderMeshScene.js";
-import { PHOTOGRAPHIC_STUDIO_FRAME } from "./photographicStudioRig.js";
 import { evaluateAnimationClip, normalizeAnimationClips } from "./animationRuntime.js";
 import { resolveAnimationFrame } from "./animationClock.js";
-import { stepModuleFromKinematics } from "./kinematicsModule.js";
-import { normalizeStepModuleDefinition } from "./stepModule.js";
-import { normalizeStepParameterRenderValues } from "./stepParameters.js";
-import { stepParameterRuntime } from "./source.js";
-import { buildComposedPackageMeshData } from "../lib/assembly/meshData.js";
 import { applyExplodedViewProgress, computeExplodedViewLayout } from "../lib/viewer/explodedView.js";
 import { fitCameraDepthToBounds } from "./renderOptions.js";
 import { applyPhotographicStudio, disposePhotographicStudio } from "./photographicStudio.js";
+import { PHOTOGRAPHIC_STUDIO_FRAME } from "./photographicStudioRig.js";
 
 function twoPartMeshData() {
   return {
@@ -74,53 +70,6 @@ function twoPartMeshData() {
     ]
   };
 }
-
-test("component-only packages list selected placed occurrences", async () => {
-  const makeComponent = () => ({
-    vertices: new Float32Array([-1, 0, -1, 1, 0, 1, 0, 1, -1]),
-    indices: new Uint32Array([0, 1, 2]),
-    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
-    parts: [{ id: "triangle", vertexCount: 3, triangleCount: 1 }],
-    bounds: { min: [-1, 0, -1], max: [1, 1, 1] }
-  });
-  const mesh = buildComposedPackageMeshData({ occurrences: [
-    { id: "a", component: "a" },
-    { id: "b", component: "b", transform: [1, 0, 0, 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }
-  ], assembly: { root: { id: "root", nodeType: "assembly", children: [
-    { id: "a", nodeType: "part", children: [] }, { id: "b", nodeType: "part", children: [] }
-  ] } } }, { a: makeComponent(), b: makeComponent() });
-  assert.equal(mesh.indices.length, 0);
-  const list = await renderMeshJob(mesh, { mode: "list", selection: { focus: ["b"] } });
-  assert.deepEqual(list.parts.map((part) => part.ref), ["#b"]);
-
-});
-
-test("snapshot jobs reject unknown modes and removed fields before building a model", async () => {
-  await assert.rejects(() => renderMeshJob(null, { mode: "section" }), /Unsupported render mode: section\. Modes: list, view/);
-  await assert.rejects(() => renderMeshJob(null, { section: { plane: "XY" } }), /Unsupported snapshot field: section/);
-});
-
-test("renderMeshJob list capture uses buildModel selection", async () => {
-  const result = await renderMeshJob(twoPartMeshData(), {
-    mode: "list",
-    selection: {
-      focus: ["right"]
-    }
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.mode, "list");
-  // `ref` is the ONLY identifier a part carries: it pastes straight into --focus/--hide
-  // and inspect. `id` and `occurrenceId` were the same string again and again (identical
-  // in 600/600 parts on a real assembly) and are gone.
-  assert.deepEqual(result.parts.map((part) => part.ref), ["#right"]);
-  assert.deepEqual(Object.keys(result.parts[0]).sort(),
-    ["bounds", "name", "ref", "triangleCount", "vertexCount"]);
-  assert.deepEqual(result.bounds, {
-    min: [2, 0, 0],
-    max: [3, 1, 0]
-  });
-});
 
 test("render view focus preserves full assembly while hide still filters", () => {
   const focusedContext = renderJobContext(twoPartMeshData(), {
@@ -279,18 +228,16 @@ test("per-output views inherit the photographic lens without inheriting a confli
   });
 });
 
-test("Preview retains CAD runtimes and animation", () => {
+test("render display retains CAD runtimes and animation", () => {
   const stepAnimation = resolveAnimationFrame(SLIDE_CLIPS, { clip: "slide", time: 1.5 });
   const job = {
     kind: "step",
     preview: true,
     selectorRuntime: {},
-    displayEdgeRuntime: {},
     stepAnimation
   };
   const context = renderJobContext(twoPartMeshData(), job);
   assert.equal(context.selectorRuntime, job.selectorRuntime);
-  assert.equal(context.displayEdgeRuntime, job.displayEdgeRuntime);
   assert.equal(context.edgesVisible, false);
   const options = modelOptionsForRenderJob(context, job);
   assert.equal(options.callbacks.animation, stepAnimation);
@@ -358,44 +305,37 @@ function roundedPoint(matrix, point) {
   return new THREE.Vector3(...point).applyMatrix4(matrix).toArray().map((v) => Math.round(v * 1e6) / 1e6);
 }
 
-const SLIDE_CLIPS = normalizeAnimationClips({
-  slide: {
-    duration: 4,
-    update(t, m) {
-      // The animation runtime addresses parts by label (part.label || part.name).
-      m.get("Left").translate([t, 0, 0]);
-    }
-  }
-});
+// Left slides +X at 1 mm/s. A track names occurrence ids, and its two keys carry
+// that rate, so every moment between them is exact.
+const SLIDE_CLIPS = normalizeAnimationClips({ clips: [{
+  id: "slide", label: "Slide", duration: 4, loop: true,
+  tracks: [{ targets: ["left"], times: [0, 4], pivot: [0, 0, 0], transform: [
+    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+    [4, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+  ] }]
+}] });
 
+// The pose a job carries: cadgen's articulation (one slider lifting Left along z) at a
+// control vector cadgen validated.
 function liftRuntime(liftMm) {
-  // A one-mate kinematics block in the sidecar's RESOLVED form (world axis
-  // numbers), compiled the way loadKinematicsModuleDefinition compiles it.
-  const definition = normalizeStepModuleDefinition(
-    stepModuleFromKinematics({
-      mates: [{
-        name: "lift",
-        kind: "slider",
-        parent: "#Right",
-        child: "#Left",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] },
-        limits: { value: [0, 10] }
-      }]
-    }),
-    { url: "/__cad/asset?file=pair.step.json", cadPath: "pair.step" }
-  );
-  return stepParameterRuntime({
-    definition,
-    renderParameters: normalizeStepParameterRenderValues(definition, { lift: liftMm }),
-    selectorRuntime: null,
-    cadPath: "pair.step",
-    sourceUrl: "/__cad/asset?file=pair.step.json"
-  });
+  return {
+    articulation: {
+      schemaVersion: 1,
+      controls: [{ id: "lift", label: "lift", unit: "mm", min: 0, max: 10, default: 0 }],
+      joints: [{ id: "lift", parent: null, kind: "slider", origin: [0, 0, 0], axis: [0, 0, 1],
+        travel: { bias: 0, terms: [["lift", 1]] } }],
+      carries: { lift: ["left"] },
+      handles: [{ id: "lift", joint: "lift", dof: "travel", control: "lift", weight: 1, label: "lift", unit: "mm", min: 0, max: 10 }],
+      poses: {},
+      opening: { lift: 0 }
+    },
+    values: { lift: liftMm }
+  };
 }
 
 // The headless sequence: buildModel from the job's options (which carry the
 // frame on callbacks.animation), then the per-output `model.update({
-// stepParameters })` renderMeshJob performs before fitting each camera.
+// stepParameters })` captureModel performs before fitting each camera.
 function buildStepModel(job) {
   const meshData = twoPartMeshData();
   const context = renderJobContext(meshData, job);
@@ -430,7 +370,7 @@ test("a snapshot frame at time t is the clip evaluated at t, on the rendered rec
   try {
     const byId = new Map(model.displayRecords.map((record) => [record.partId, record]));
     // What the viewer's pass computes for the same clip and elapsedSec.
-    const expected = evaluateAnimationClip(THREE, model.meshData, SLIDE_CLIPS.slide, 1.5);
+    const expected = evaluateAnimationClip(THREE, SLIDE_CLIPS.slide, 1.5);
     assert.deepEqual(
       roundedPoint(byId.get("left").effectMatrix, [0, 0, 0]),
       roundedPoint(expected.matrices.get("left"), [0, 0, 0])
@@ -462,7 +402,7 @@ test("a snapshot frame layers over the kinematics pose in the viewer's order", (
     const left = composed.displayRecords.find((record) => record.partId === "left");
     // Pose first, choreography on top in world space: the clip's matrix
     // PREMULTIPLIES the pose (applyAnimationFrameToEffects), never the reverse.
-    const animMatrix = evaluateAnimationClip(THREE, composed.meshData, SLIDE_CLIPS.slide, 1.5).matrices.get("left");
+    const animMatrix = evaluateAnimationClip(THREE, SLIDE_CLIPS.slide, 1.5).matrices.get("left");
     const expected = new THREE.Matrix4().multiplyMatrices(animMatrix, poseMatrix);
     assert.deepEqual(
       left.effectMatrix.elements.map((v) => Math.round(v * 1e6) / 1e6),
@@ -474,7 +414,7 @@ test("a snapshot frame layers over the kinematics pose in the viewer's order", (
   }
 });
 
-test("Preview applies a non-rest kinematics transform", () => {
+test("photographic Render applies a non-rest kinematics transform", () => {
   const stepParameters = liftRuntime(4);
   const job = {
     mode: "view",
@@ -586,8 +526,6 @@ test("a locked frame fits the same camera on every frame of a clip", async () =>
 });
 
 // The renderer a photographic studio configures, with only what captureModel and the studio touch.
-// A renderer as the studio and its frame use one (`studioFrame.js` draws the scene into a target
-// of its own and passes over it): what it draws is counted, nothing is rasterized.
 function studioRendererStub() {
   const clearColor = new THREE.Color();
   let clearAlpha = 1;
@@ -740,9 +678,11 @@ test("an exploded snapshot radiates from the rest box the viewer explodes from, 
 test("a snapshot's Clip cuts and caps the model where the viewer's does, measured against the rest box", async () => {
   // The snapshot's renderer ignored every material's plane (three honours them only with local
   // clipping on), so `display.clip` drew the whole model, uncapped. The viewer measures the
-  // plane against the model at rest (`syncRuntimeStepClipPlane`), a declared box included.
-  const declaredBounds = { min: [0.5, 0, 0], max: [3, 0.5, 0] };
-  const clip = { enabled: true, axis: "x", at: 0.75 };
+  // plane against the model at rest (`syncRuntimeStepClipPlane`), a declared box included: with
+  // no coordinate it goes through that box's middle (x = 0.75, across the left part; the mesh's
+  // own box would put it at 1.5, between the parts).
+  const declaredBounds = { min: [0.25, 0, 0], max: [1.25, 0.5, 0] };
+  const clip = { axis: "x" };
   const job = { mode: "view", kind: "step", display: { mode: "solid", clip },
     outputs: [{ path: "clipped.png", width: 64, height: 64, camera: "iso" }] };
   const meshData = { ...twoPartMeshData(), declaredBounds };
@@ -806,7 +746,8 @@ test("capture diagnostics separate readiness, pose, tight framing, draw submissi
   assert.ok(stages.outputs.every((output) => !("prepareStudioMs" in output)), "no studio means no invented studio measurement");
 
   const listStages = {};
-  await captureModel({ model, context: { ...context, mode: "list" } }, { job, stageTimings: listStages });
+  const listing = { meshData: model.meshData, bounds: model.bounds, listParts: () => [] };
+  await captureModel({ model: listing, context: { ...context, mode: "list" } }, { job, stageTimings: listStages });
   assert.deepEqual(listStages, {}, "a list does not report image stages");
 });
 

@@ -1,43 +1,127 @@
 # f14d models
 
-| Script   | Artifact         | Description                                        |
-|----------|------------------|----------------------------------------------------|
-| f14d.py  | STEP/f14d.step   | Grumman F-14D Super Tomcat, whole aircraft, clean: the ten system models below, linked in occurrence order |
-| airframe.py | STEP/airframe.step | `o1.1` the one-piece blended skin, cut and detailed |
-| cockpit.py | STEP/cockpit.step | `o1.2` tub, panels, seats, HUD, canopy, windscreen |
-| wings.py | STEP/wings.step | `o1.3` panels, slats, flaps, spoilers, tip lights |
-| inlets.py | STEP/inlets.step | `o1.4` ramps, splitters, bleed slots, ducts |
-| nozzles.py | STEP/nozzles.step | `o1.5` C-D nozzles, petals, seals, actuator rings |
-| empennage.py | STEP/empennage.step | `o1.6` fins, rudders, stabilators, ventral fins |
-| aft.py | STEP/aft.step | `o1.7` speed brakes, beavertail, tailhook, dump mast |
-| nose_gear.py | STEP/nose_gear.step | `o1.8` leg, wheels, launch bar, doors, bay |
-| main_gear.py | STEP/main_gear.step | `o1.9` legs, wheels, brakes, doors, bays |
-| details.py | STEP/details.step | `o1.10` antennas, probes, lights, wicks, vents, panels |
+`models/f14d` on cadgen 0.8: a Grumman F-14D Super Tomcat, wings at 20 degrees,
+canopy closed, gear down, a clean airframe. `f14d.py` is the one model (`@model`; a run
+writes nothing):
 
-Build: `python src/f14d.py` builds the aircraft and every stale system beneath
-it (in parallel, one worker each) and links their results; unchanged models
-are no-op. `python src/<system>.py` builds one system alone — the aircraft does
-not pick it up until `f14d.py` is rerun. It is a long build cold (the
-airframe skin's structural cuts dominate, ~6 minutes on their own), so let it
-run; every other system is done long before the airframe is.
+| Script | Model | What it is |
+| --- | --- | --- |
+| `f14d.py` | `f14d` | The aircraft: the ten systems below, in occurrence order, and the staged teardown's `teardown` and `explodedHold` GLB animations |
+| `airframe.py` ... `details.py` (10) | nothing | One system each the aircraft calls in its body: nine `@memo` stages and `nozzles`, a plain function |
 
-`ANIMATION_JS` in `f14d.py` defines the `teardown` and `explodedHold` clips
-embedded in model metadata for the CAD Viewer.
+Build from this folder: `python f14d.py`.
 
-`lib/` is the shared part library: one module per aircraft system, each
-exporting `build()`, wrapped by the model of the same stem under `src/`.
-Nothing in `lib/` is runnable. The SYSTEMS list in `f14d.py` IS the occurrence
-order (`o1.1` airframe through `o1.10` details); read its docstring before
-adding or removing a system: a new group renumbers every occurrence after it
-and the embedded animation must be renumbered in the same commit. Which skin cutters
-the airframe applies (and which were dropped as too costly) is decided in
-`src/airframe.py`.
+```
+python f14d.py                                # prints the aircraft's id: and view:
+cadgen snapshot "$ID" f14d.png
+cadgen export "$ID" GLB/f14d.glb              # bakes the two animations into clips
+```
 
-Project tooling lives outside `src/` because it is not model code:
+## How it is built
 
-- `../validate.py` — bilateral-symmetry check plus `inspect validate` and
-  `inspect interfere`.
-- `../render/` — review-render helpers (`shot.py`, `gauntlet.py`, `part.py`,
-  `ab.py`, `subrefs.py`) and the committed presentation theme/display JSON.
-  `subrefs.py` regenerates the act-2 occurrence-id lists for `ANIMATION_JS` in `f14d.py`.
-  All of them write to `../tmp/`.
+`lib/` is the shared part library, one module per system, each exporting
+`build()`, unchanged but for `import build123d as bd` and four things:
+
+- `compound_from_instances` is `lib/context.py`'s (the instanced fastener, wick
+  and perforation rows, each a prototype placed N times as
+  `prototype.moved(location)`), where the original imported cadgen's. The old
+  `inlets.py` imported cadgen's under a `try` and dropped its bleed perforations
+  and fasteners when it failed; it imports `lib/context.py`'s now.
+- `lib/__init__.py` makes `lib` a package. As a namespace package (no
+  `__init__.py`, as in the original) it was never imported afresh: the engine
+  drops a build's first-party modules by their file, and a namespace package
+  has none, so `from lib import wings` handed the next build the previous
+  build's module, `lib/*.py` fell out of the model's closure, and an edit to one
+  went unseen.
+- `geometry._slopes` kept its tangents in a module-level dict keyed by `id()`,
+  which the model's closure digests: every build saw `lib/geometry.py` change and
+  re-ran nine bodies. It computes them each call now (a handful of floats).
+- `nozzles._revolve` revolves the profile's face: `bd.make_face` hands back a
+  sketch (a compound), which `Solid.revolve` cannot downcast, and the original
+  then ran OCCT's revol builder itself, past the engine's memo, so every call
+  after it ran uncached. The 366 nozzle parts come out the same (labels and
+  volumes).
+
+The order of `SYSTEMS` in `f14d.py` is the occurrence order:
+
+    airframe   cockpit   wings   inlets   nozzles
+    empennage   aft   nose_gear   main_gear   details
+
+Each system is a function in its own file (`wings.py`: `wings()` returns
+`lib/wings.py`'s group). Nine are `@memo` stages that an edit elsewhere replays
+from the worker's memory, each seconds of kernel work cold (load 25-70):
+`airframe` 574 s, `wings` 22 s, `empennage` 13 s, `nose_gear` 5.7 s, `details`
+5.4 s, `cockpit` 5.0 s, `main_gear` 3.4 s, `inlets` 3.3 s, `aft` 2.4 s; 31,686
+kernel calls in all. `nozzles` holds 0.5 s and is a plain function: whenever the
+aircraft's body runs, the kernel memo replays its calls.
+
+Which skin cutters the airframe applies is decided in `airframe.py`, as before: the
+diverter slots and the cockpit opening; the 41 cosmetic panel recesses stay dropped.
+
+## The staged teardown
+
+Nothing about the aircraft articulates, so it has no mechanism. The old `teardown` and
+`explodedHold` clips are GLB animations (`cadgen.gltf`) with their names and durations
+(60 s, 24 s), each out and back to the built aircraft so a player repeats it seamlessly
+(the old `loop: true`; an animation carries no loop). Both walk one master ramp, 0 built
+to 1 apart, sampled every 0.1 s:
+
+- **Act 1**, the ten systems, each a translation along its old vector, its window the
+  old stage window scaled into [0, 0.58] of the ramp. Every system moves, the airframe
+  too, which is the old clips' world-space motion exactly.
+- **Act 2**, ten part groups, each a translation inside its system, on top of the
+  system's travel, windows in [0.52, 1] of the ramp:
+
+| Group | System | Parts (old occurrence ids) | Vector, mm |
+| --- | --- | --- | --- |
+| `wing_spoilers` | wings | `wing_spoiler:*` (o1.3.1.21-24, o1.3.2.21-24) | 0, 0, 1100 |
+| `wing_slats` | wings | `wing_slat:*`, `slat_track:*`, `slat_actuator_fairing:*` (o1.3.1.3-15, o1.3.2.3-15) | -1300, 0, 250 |
+| `wing_flaps` | wings | `wing_flap:*`, `flap_track_fairing:*` (o1.3.1.16-20, o1.3.2.16-20) | 1500, 0, -450 |
+| `wingtip_port`, `wingtip_stbd` | wings | `wingtip_*:port` (o1.3.1.25-27), `wingtip_*:stbd` (o1.3.2.25-27) | 0, +-1500, 250 |
+| `speedbrake_dorsal` | aft | `speedbrake_dorsal_*` (o1.7.1-14) | 200, 0, 1500 |
+| `speedbrake_ventral_port`, `_stbd` | aft | `speedbrake_ventral_port_*` (o1.7.15-28), `speedbrake_ventral_stbd_*` (o1.7.29-42) | 200, +-1100, -1200 |
+| `beavertail_panels` | aft | `beavertail_access_panel:*` (o1.7.52-53) | 1600, 0, 0 |
+| `tailhook` | aft | `tailhook_*` (o1.7.54-65) | 800, 0, -1400 |
+
+The old clips named the act-2 parts by occurrence id, generated by
+`render/subrefs.py` from label patterns; the port kept the old tree's order, so the
+ids name the same parts, and `f14d.py` chooses them by the same patterns, checking
+each group's count against the old lists.
+
+`teardown` walks the ramp out and back on a raised cosine (`0.5 - 0.5 cos(2 pi t /
+60)`), so the loop point is the built aircraft; `explodedHold` opens over the first
+third, holds fully apart, and closes over the last (the old 0.33/0.67 trapezoid,
+smoothstepped). `cadgen export "$ID" GLB/f14d.glb` bakes both into clips. One
+deliberate difference: the old clips faded the airframe skin to 0.22 opacity over the
+first 0.45 of the ramp so the internals read while it cleared them; a GLB has no
+opacity channel, so the skin stays opaque as it travels its 5.4 m.
+
+## Measured
+
+On 2026-10-22, one machine (10 cores), its load 25-70 from other work:
+
+| Build | Time | What ran |
+| --- | --- | --- |
+| cold | 644 s | every body; the airframe skin's cut 574 s; the worker peaked near 16 GB during it |
+| no-op | 0.9-1.5 s | 10 bodies replayed; the xbf kept |
+| edit: `lib/empennage.py` `RUDDER_GAP` 16 -> 18 | 3.8 s | `empennage` and the aircraft's body (3,034 kernel calls, 45 misses), 8 stages replayed |
+| revert | 3.0 s | the same, every call a hit |
+| edit: the teardown's joints and motions in `f14d.py` (2026-10-22, load ~200) | 3.6 s | the aircraft's body alone, 9 stages replayed; `cadgen export` to a GLB with both clips: 98 s, 70.7 MB |
+
+The reverted xbf holds the cold build's structure, names, colours and geometry
+keys, part for part, and is the cold file's size; 639 bytes of its BRep data
+differ from the cold file's: what the edit ran again on the memo's hits (the
+empennage, and the nozzles in the aircraft's body) writes some BRep entries in
+another order than its cold run did.
+
+## Not ported
+
+- The skin's fade in `teardown` and `explodedHold` (the airframe from opacity 1 to
+  0.22 over the first 0.45 of the ramp): a GLB has no opacity channel, so the skin
+  stays opaque as it lifts away (see "The staged teardown").
+- `../validate.py` (the symmetry check and the old `inspect validate` /
+  `inspect interfere` calls) and `../render/` (the old snapshot jobs, the
+  presentation theme and display): tooling of the old pipeline. An xbf is drawn in
+  the engine's one look.
+- Materials: the original had none (colours only, the paint chips of the
+  Tactical Paint Scheme), so none were added.

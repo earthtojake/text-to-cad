@@ -1,6 +1,6 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+from cadgen import materials, model
+import build123d as bd
 
 
 OUTER_LENGTH = 100.0
@@ -22,7 +22,7 @@ STANDOFF_LOCATIONS = (
 )
 
 
-@step(out="../STEP/electronics_enclosure_base.step")
+@model
 def electronics_enclosure_base():
     """Return a single solid open-top electronics enclosure base in millimeters."""
     inner_length = OUTER_LENGTH - 2.0 * WALL_THICKNESS
@@ -67,6 +67,7 @@ def electronics_enclosure_base():
 
     part = enclosure.part
     part.label = "electronics_enclosure_base"
+    part.material = materials("ABS")  # a moulded enclosure, its colour the catalogue's
     return part
 
 

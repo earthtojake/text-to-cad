@@ -123,4 +123,3 @@ export function ExplodeControls({ viewSettings, onViewSettingsPatch, className =
     onValueChange={([amount]) => onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: amount > 0 } })}
     className={className} />;
 }
-

@@ -1,9 +1,7 @@
 """Material palette for the F-14D.
 
-COLOUR SPACE.  The render pipeline treats build123d ``Color`` channels as
-LINEAR RGB and converts to sRGB for display, so ``Color(0.5,0.5,0.5)`` shows as
-about ``#BCBCBC``.  Every colour here is authored as the sRGB hex you want to
-SEE and converted by :func:`srgb`.  Never hand-write float triples.
+COLOUR SPACE.  Every colour here is the sRGB hex you want to SEE; a shape takes
+it as it is (``shape.color = "#6E757B"``), and the engine stores it linear.
 
 COLOUR ON A GROUP IS IGNORED.  Only leaf occurrences carry colour into the
 render package.  Use :func:`style` on every leaf.
@@ -17,21 +15,7 @@ would fight it.  The greys are the real FS numbers.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-
-
-def _to_linear(channel_8bit):
-    c = channel_8bit / 255.0
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-
-def srgb(hex_string, alpha=1.0):
-    """Build a Color from the sRGB hex you want to SEE on screen."""
-    h = hex_string.lstrip("#")
-    if len(h) == 3:
-        h = "".join(ch * 2 for ch in h)
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return bd.Color(_to_linear(r), _to_linear(g), _to_linear(b), alpha)
+import build123d as bd
 
 
 # --- airframe: Tactical Paint Scheme ---------------------------------------
@@ -118,5 +102,5 @@ GLASS_ALPHA = 0.30
 def style(shape, label, hex_string, alpha=1.0):
     """Label + colour a LEAF shape.  Returns the shape so it can be inlined."""
     shape.label = label
-    shape.color = srgb(hex_string, alpha)
+    shape.color = (hex_string, alpha)
     return shape

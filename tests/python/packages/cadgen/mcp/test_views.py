@@ -96,29 +96,18 @@ class ViewRegistryTest(unittest.TestCase):
 
 
 class SidebarViewsTest(unittest.TestCase):
-    def test_a_gone_views_inbox_an_orphan_inbox_and_a_late_reply_are_swept(self) -> None:
-        import os
-        import shutil
-        import tempfile
-        from pathlib import Path
-
-        from cadgen.mcp.sidebar_views import SidebarViews
-
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        serving, asking = SidebarViews(root), SidebarViews(root)
-        for view_id in ("gone", "here"):
-            serving.publish(view_id, model=None, state=None, touched=True)
-            asking.post(view_id, {"type": "show"})
-        (root / "orphan.inbox").mkdir()
-        (root / "replies").mkdir()
-        (root / "replies" / "late.json").write_text("{}", encoding="utf-8")
-        old = time.time() - views.LIVE_SECONDS - 60
-        for leftover in (root / "gone.json", root / "orphan.inbox", root / "replies" / "late.json"):
-            os.utime(leftover, (old, old))
-        self.assertEqual([view.id for view in asking.live()], ["here"])
-        self.assertEqual(sorted(path.name for path in root.iterdir()), ["here.inbox", "here.json", "replies"])
-        self.assertEqual(list((root / "replies").iterdir()), [])
+    def test_expired_sidebar_and_its_queued_events_are_forgotten(self):
+        from cadgen.mcp.sidebar import SidebarViews
+        now = [0.0]
+        registry = views.ViewRegistry(clock=lambda: now[0])
+        serving, asking = SidebarViews(registry), SidebarViews(registry)
+        serving.publish('gone', model=None, state=None, touched=True)
+        asking.post('gone', {'type': 'show'})
+        now[0] += views.LIVE_SECONDS + 1
+        serving.publish('here', model=None, state=None, touched=True)
+        self.assertEqual([view.id for view in asking.live()], ['here'])
+        self.assertEqual(serving.take('gone'), [])
+        self.assertFalse(asking.answer('expired-request', {'png': 'late'}))
 
 
 if __name__ == "__main__":

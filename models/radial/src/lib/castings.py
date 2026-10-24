@@ -12,7 +12,7 @@ shop:
                   `palette.MACHINED` so the eye reads the material change.
 
 Conventions
-  * build123d algebra mode; `from cadgen import build123d as bd`.
+  * build123d algebra mode; `import build123d as bd`.
   * Every primitive is returned in its OWN local frame with the base at z=0 and
     +Z up.  The caller places it — with `locate()`, or `bd.Pos`/`bd.Rot`.
   * Millimetres.  Casting radii 3-8 mm on the block/heads/sump, 1-2 mm on small
@@ -53,7 +53,7 @@ import math
 import sys
 from typing import Callable, Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Run BRepAlgoAPI_Check as part of is_sound(). Costs real time on big
@@ -157,7 +157,7 @@ def _is_closed(shape) -> bool:
         return False
 
 
-def is_sound(shape) -> bool:
+def is_sound(shape, bop_check: bool | None = None) -> bool:
     """True when `shape` is a real solid body: non-null, `is_valid`, closed,
     every solid of positive volume, and (unless `BOP_CHECK` is off) passing
     `BRepAlgoAPI_Check`.
@@ -185,7 +185,7 @@ def is_sound(shape) -> bool:
                 return False
         if not _is_closed(shape):
             return False
-        if BOP_CHECK and not BRepAlgoAPI_Check(wrapped).IsValid():
+        if (BOP_CHECK if bop_check is None else bop_check) and not BRepAlgoAPI_Check(wrapped).IsValid():
             return False
     except Exception:
         return False
@@ -202,7 +202,7 @@ def _ladder(value: float, floor: float):
         value *= LADDER_STEP
 
 
-def safe_fillet(part, edges, r: float, min_r: float = 0.3):
+def safe_fillet(part, edges, r: float, min_r: float = 0.3, bop_check: bool | None = None):
     """Fillet `edges` at `r`, retrying at 0.75x steps down to `min_r`.
 
     A result is accepted only if `is_sound()` passes it, so a BOP-faulty
@@ -218,7 +218,7 @@ def safe_fillet(part, edges, r: float, min_r: float = 0.3):
             result = bd.fillet(edge_list, radius=radius)
         except Exception:
             continue
-        if is_sound(result):
+        if is_sound(result, bop_check):
             return result, radius
     return part, None
 

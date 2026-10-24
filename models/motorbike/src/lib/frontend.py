@@ -8,7 +8,7 @@ narrow enough to sit between the fork sliders.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import lib as L
 from lib import spec as S
@@ -41,11 +41,11 @@ def build_front_fork():
         _leg_center(380.0, 0.0), (0, 1, 0), 11.0, 2 * S.FORK_LEG_OFFSET_Y,
     )
     fork = stem.fuse(*stanchions, *sliders, brace)
-    fork = L.paint(fork, "front_fork", "telescopic", color=S.FRAME_BLACK)
+    fork = L.paint(fork, "front_fork", "telescopic", color=S.FRAME_BLACK, material=S.PAINTED_STEEL)
 
     axle = L.paint(
         L.axis_cylinder(S.FRONT_AXLE, (0, 1, 0), S.AXLE_DIAMETER / 2, 160.0),
-        "front_axle", color=S.CHROME,
+        "front_axle", color=S.CHROME, material=S.CHROMED_STEEL,
     )
     return [fork, axle]
 
@@ -66,7 +66,7 @@ def build_handlebar():
     bar = collar.fuse(
         L.tube(left_half + bar_pts_right[1:], S.BAR_TUBE_OD)
     )
-    bar = L.paint(bar, "handlebar", "steel", color=S.FRAME_BLACK)
+    bar = L.paint(bar, "handlebar", "steel", color=S.FRAME_BLACK, material=S.PAINTED_STEEL)
 
     # grips along the outer bar tangent, mirrored per side
     end_prev = bd.Vector(bar_pts_right[-2])
@@ -85,7 +85,7 @@ def build_handlebar():
         grips.append(
             L.paint(
                 L.axis_cylinder(center, axis, S.GRIP_OD / 2, S.GRIP_LEN),
-                "grip", label, color=S.RUBBER,
+                "grip", label, color=S.RUBBER, material=S.GRIP_RUBBER,
             )
         )
 
@@ -96,7 +96,8 @@ def build_handlebar():
         lever = L.axis_cylinder(
             base, (1.0, -sign * 0.12, 0.10), 5.0, 92.0,
         )
-        levers.append(L.paint(lever, "brake_lever", label, color=S.STEEL))
+        levers.append(L.paint(lever, "brake_lever", label, color=S.STEEL,
+                              material=S.FORGED_ALUMINIUM))
     return [bar, *grips, *levers]
 
 
@@ -107,4 +108,4 @@ def build_front_fender():
         S.FRONT_FENDER_R1 - S.FRONT_FENDER_R0, S.FRONT_FENDER_HALF_WIDTH,
         S.FRONT_FENDER_ANGLES[0], S.FRONT_FENDER_ANGLES[1],
     )
-    return L.paint(band, "front_fender", color=S.CREAM)
+    return L.paint(band, "front_fender", color=S.CREAM, material=S.PAINTED_ABS)

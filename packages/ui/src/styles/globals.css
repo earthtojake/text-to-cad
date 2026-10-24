@@ -188,3 +188,7 @@
 .cad-library-error { margin-bottom: 16px; color: var(--destructive); }
 .cad-library-error p { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .cad-library-card, .cad-library-actions button, .cad-library-row .cad-library-open { transition: none; } .cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: none; } }
+/* The home's launch folder, under the recent files: its rows hold an icon and a name. */
+.cad-library-folder { margin-top: 40px; }
+.cad-library-folder .cad-library-row .cad-library-open { padding: 8px 12px; }
+.cad-library-crumb { color: inherit; background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }

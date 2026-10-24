@@ -10,14 +10,17 @@
 # pip installs the Python; it cannot build the JavaScript that ships beside it.
 # packages/cadgen/src/cadgen/_runtime is gitignored and produced by
 # `scripts/bundle/bundle.sh`, so run that once after installing this file --
-# without it, mesh exports, DXF previews, snapshots and the packaged Viewer have
-# no runtime to execute, and no build can see what it reads; cadgen names this
-# command when it finds none. zig, from this wheel, compiles the native file
-# tracer for every platform the one cadgen wheel ships to.
-ziglang==0.16.0
+# without it the packaged Viewer and the CAD app have no client to serve; cadgen
+# names this command when it finds none.
 
-# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, playwright,
-# shapely) come with the editable install above.
+# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, matplotlib,
+# numpy, pillow, shapely) come with the editable install above.
+
+# The viewer's browser checks drive a headless Chromium through Python Playwright (the
+# launch smoke test, scripts/test/test-viewer-launch.sh), as does the manual parity bench
+# (scripts/bench/occt_parity.py). Dev tooling only: nothing in the wheel imports it.
+# Pinned exactly: each Playwright release fetches its own browser build.
+playwright==1.63.0
 # - skills/dfam-check/requirements.txt
 rtree
 scipy
@@ -28,6 +31,3 @@ lxml
 pyrefly==1.3.2
 pytest
 trimesh
-# The daemon's workers start in an environment uv creates, as uvx runs cadgen
-# (test_daemon_heartbeat.py).
-uv==0.12.18

@@ -1,28 +1,22 @@
-"""W16 system model: heads — two heads, plugs, core plugs, head bolts.
+"""W16 system: heads — two heads, plugs, core plugs, head bolts.
 
-A sub-assembly of the engine: the parts `lib/heads.py` builds, as one model
-with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.4`; rebuild `w16.py` to pick up a change here.
+A stage of the engine: the parts `lib/heads.py` builds, as one labelled group,
+which `w16.py` calls in its body. A `@memo` function: an edit that does not
+reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
+from cadgen import memo
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
 from lib import heads as heads_lib
 from lib import spec as S
-from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/heads.step", materials=materials_for_system("heads"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@memo
 def heads():
     parts = heads_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("heads.build() produced no parts")
-    return material_compound(parts, "heads")
-
-
-if __name__ == "__main__":
-    heads()
+    group = bd.Compound(children=parts, label="heads")
+    return group

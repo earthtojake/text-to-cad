@@ -4,6 +4,11 @@
  * The page asks the host for things (`tools/call` to CAD's server, `ui/update-model-context`,
  * `ui/open-link`) and the host tells the page things: the result of the tool that opened it,
  * changes to its context (theme, insets, the composer's model context) and teardown.
+ *
+ * Only the host is heard: a message whose `source` is not the host's window is dropped, as the
+ * MCP Apps SDK's own transport drops it (the host, or the sandbox frame it relays through, is the
+ * page's parent). And the page's request ids start at a random number, so no other frame can
+ * answer a request it did not see.
  */
 
 export interface HostContext {
@@ -18,6 +23,7 @@ export interface HostContext {
 }
 
 export interface ToolResult {
+  _meta?: Record<string, unknown>;
   content?: Array<{ type: string; text?: string; [key: string]: unknown }>;
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
@@ -46,12 +52,18 @@ interface Pending { resolve(value: unknown): void; reject(error: Error): void; c
 
 const PROTOCOL_VERSION = '2026-01-26';
 
+/** A random first request id: 52 bits, so every id stays a safe integer for hosts that want numbers. */
+function firstId(): number {
+  const [high, low] = crypto.getRandomValues(new Uint32Array(2));
+  return (high & 0xfffff) * 2 ** 32 + low + 1;
+}
+
 export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): Bridge & {
   /** Greet the host. `displayModes` are the ones this page offers: a host that shows tabs is offered only fullscreen. */
   initialize(appInfo: { name: string; version: string }, options?: { displayModes?: string[] }): Promise<void>;
   dispose(): void;
 } {
-  let nextId = 1;
+  let nextId = firstId();
   const pending = new Map<string | number, Pending>();
   const results = new Set<(result: ToolResult) => void>();
   const contexts = new Set<(context: HostContext) => void>();
@@ -92,6 +104,7 @@ export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Windo
   }
 
   function receive(event: MessageEvent) {
+    if ((event.source as unknown) !== host) return; // another frame, or the page itself: not the host
     const message = event.data as Message;
     if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0') return;
     if (message.method === undefined) {

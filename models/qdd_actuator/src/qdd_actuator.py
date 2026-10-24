@@ -20,16 +20,23 @@ Coordinate convention:
 The same parameterized builder produces the assembled model (explode=0) and an
 exploded technical layout (explode=1) used by qdd_actuator_exploded.py. The
 exploded translations are documented per-part static Locations along +/-Z.
+
+The assembled model carries the mechanism: every mount a rigid fastening, every
+turning member a revolute joint geared by the `drive` coupling, its two
+configurations, and the old `drive` clip as a motion. The old `inspect` and
+`teardown` clips, which run the drive while the stack opens to its stations, are
+GLB animations (`cadgen.gltf`).
 """
 
 from __future__ import annotations
 
+from cadgen import Material, materials, model
+from cadgen.ap242 import configuration_sequence, gear_pair, mechanism_state
+from cadgen.gltf import animation
+
 import math
 
-from cadgen import build123d as bd
-import cadgen
-from cadgen import step
-from cadgen.assembly import AssemblyHelper
+import build123d as bd
 
 # ---------------------------------------------------------------------------
 # Gear stage parameters (module-1.0 concept teeth, trapezoidal with backlash)
@@ -277,32 +284,69 @@ PLANET_EXPLODE_RADIAL = 14.0
 # ---------------------------------------------------------------------------
 # Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
 # Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-AL_BODY = (0.13, 0.135, 0.15)  # black-anodized housing
-AL_COVER = (0.115, 0.12, 0.13)  # black-anodized rear cover
-AL_BRIGHT = (0.78, 0.79, 0.81)  # machined aluminum (flange, carrier)
-AL_RETAINER = (0.85, 0.20, 0.01)  # saturated anodized-orange accent ring
-STEEL = (0.62, 0.63, 0.66)
-STEEL_POLISHED = (0.76, 0.77, 0.79)
-STEEL_RACE = (0.24, 0.25, 0.29)  # dark bearing-steel races vs aluminum
-STEEL_ROLLER = (0.85, 0.86, 0.88)
-LAMINATION = (0.30, 0.31, 0.34)
-COPPER = (0.80, 0.45, 0.18)
-ROTOR_DARK = (0.24, 0.25, 0.28)
-MAGNET_N = (0.10, 0.10, 0.12)  # alternating pole colors: dark / nickel
-MAGNET_S = (0.68, 0.69, 0.71)
-FERRITE = (0.25, 0.08, 0.10)
-PCB_GREEN = (0.05, 0.30, 0.14)
-IC_BLACK = (0.08, 0.08, 0.09)
-CAP_GRAY = (0.22, 0.24, 0.30)
-PLASTIC_BLACK = (0.07, 0.07, 0.08)
-GUNMETAL = (0.34, 0.35, 0.38)  # connector coupling nuts
-PIN_GOLD = (0.80, 0.64, 0.25)  # connector contacts
-BLACK_OXIDE = (0.20, 0.20, 0.22)  # socket-head fasteners
-RUBBER = (0.04, 0.04, 0.04)
-TITANIUM = (0.60, 0.59, 0.64)
-GAUGE_GOLD = (0.85, 0.72, 0.35)
-TUBE_BLACK = (0.32, 0.33, 0.35)  # dark gunmetal, reads against the cover
+# bd.Color(...) would import the CAD kernel when the module loads.
+AL_BODY = "#65676c"  # black-anodized housing
+AL_COVER = "#5f6165"  # black-anodized rear cover
+AL_BRIGHT = "#e5e6e8"  # machined aluminum (flange, carrier)
+AL_RETAINER = "#ed7c19"  # saturated anodized-orange accent ring
+STEEL = "#ced0d4"
+STEEL_POLISHED = "#e2e3e6"
+STEEL_RACE = "#868993"  # dark bearing-steel races vs aluminum
+STEEL_ROLLER = "#edeff1"
+LAMINATION = "#95979e"
+COPPER = "#e7b376"
+ROTOR_DARK = "#868990"
+MAGNET_N = "#595961"  # alternating pole colors: dark / nickel
+MAGNET_S = "#d7d8db"
+FERRITE = "#895059"
+PCB_GREEN = "#3f9569"
+IC_BLACK = "#505055"
+CAP_GRAY = "#818695"
+PLASTIC_BLACK = "#4b4b50"
+GUNMETAL = "#9ea0a6"  # connector coupling nuts
+PIN_GOLD = "#e7d189"  # connector contacts
+BLACK_OXIDE = "#7c7c81"  # socket-head fasteners
+RUBBER = "#383838"
+TITANIUM = "#cbcad1"
+GAUGE_GOLD = "#eddda0"
+TUBE_BLACK = "#999ba0"  # dark gunmetal, reads against the cover
+
+# ---------------------------------------------------------------------------
+# Concept materials: what each part is made of, in the finish its colour above
+# names. Catalogue entries (the project's own where the catalogue has none),
+# each with color=None, so the palette stays the colour that shows and the
+# material adds the finish.
+# ---------------------------------------------------------------------------
+ANODIZED_AL = materials.aluminium_6061.but(  # housing, retainer, rear cover: bead-blasted, anodised
+    color=None, roughness=0.6, anisotropy=0.0, description="Bead-blasted 6061-T6, hard-anodised")
+MACHINED_AL = materials.aluminium_7075.but(color=None)  # carrier, output flange: stressed, machined
+TUBE_AL = materials.aluminium_6063.but(  # hollow-shaft cable tube
+    color=None, roughness=0.45, anisotropy=0.0, description="Extruded tube, dark anodised")
+SCREW_STEEL = materials.steel_4140.but(  # socket-head screws, 12.9
+    color=None, roughness=0.55, description="Alloy steel, black oxide")
+GEAR_STEEL = materials.steel_4140.but(color=None, roughness=0.3, description="Hardened and ground gear steel")
+BEARING_STEEL = materials.steel_4140.but(  # races, balls, rollers
+    color=None, roughness=0.12, description="Through-hardened bearing steel, ground")
+LAMINATION_STEEL = materials.steel_1018.but(  # stator stack
+    color=None, roughness=0.5, coat=0.3, coat_roughness=0.3, description="Laminated electrical steel, varnished")
+ROTOR_STEEL = materials.steel_1018.but(color=None, description="Rotor bell and back iron")
+MAGNET_WIRE = materials.copper_c110.but(  # windings
+    color=None, roughness=0.25, coat=1.0, coat_roughness=0.1, description="Enamelled magnet wire")
+NDFEB = materials.neodymium.but(color=None)  # rotor magnets, the pole colours above
+FERRITE_MAGNET = Material(  # encoder magnet ring
+    "Ferrite magnet", 4900, family="other", source="typical: sintered strontium ferrite",
+    description="Diametric encoder magnet ring", roughness=0.7)
+FR4_BOARD = materials.fr4.but(color=None)  # driver and encoder boards, under solder mask
+IC_PACKAGE = materials.abs.but(color=None)  # FETs, MCU, encoder IC
+CAPACITOR_AL = materials.aluminium_5052.but(color=None, description="Drawn aluminium capacitor can")
+CONNECTOR_NYLON = materials.nylon_pa6.but(color=None)  # connector bodies
+COLLAR_STEEL = materials.steel_1018.but(color=None, description="Connector coupling nut")
+O_RING_NBR = materials.nbr_70a.but(color=None)
+CONTACT_BRASS = materials.brass_c360.but(color=None, roughness=0.2, description="Gold-plated contacts")
+FLEXURE_TI = materials.titanium_grade5.but(color=None)  # torque-sensing flexure
+GAUGE_FOIL = Material(  # strain gauges
+    "Polyimide film", 1420, family="plastic", source="typical: polyimide (Kapton HN) film",
+    description="Foil strain gauge on a polyimide carrier", roughness=0.3, coat=0.5, coat_roughness=0.1)
 
 # ---------------------------------------------------------------------------
 # Consistency checks (concept-level fit, not tolerance engineering)
@@ -704,101 +748,270 @@ def make_cable_tube() -> bd.Part:
     return _tube_z(TUBE_OUTER_R, TUBE_INNER_R, TUBE_Z)
 
 
+
+# ---------------------------------------------------------------------------
+# Kinematics: the 4.5:1 planetary drive train's rates (the joints' limits)
+# ---------------------------------------------------------------------------
+# The drive is measured in INPUT REVOLUTIONS of the rotor. 4.5 input
+# revolutions return the carrier to exactly 360 deg, and every rotating member
+# is 180-deg symmetric (28 alternating magnets = 14 pole pairs, 24/30 tooth
+# gears, 6x lightening + 4x coupling holes), so the cycle closes at tooth/pole
+# phase. Each planet's joint is on the CARRIER, so its angle is the
+# mesh-relative spin. Each revolute joint's range is the closed cycle at its
+# member's rate; the gearing between them is the `drive` coupling, a
+# constraint: one control, in input revolutions (0..4.5, the rotor's limits
+# over its rate), and no member that turns alone.
+
+_INPUT_TURNS = REDUCTION_RATIO  # 4.5 input revolutions = 1 carrier revolution
+_ROTOR_DEG = 360.0
+_CARRIER_DEG = 360.0 / REDUCTION_RATIO
+# External sun/planet mesh reverses the relative rotation:
+#   -(Ns/Np) * (rotor - carrier)
+_PLANET_DEG = -(SUN_TEETH / PLANET_TEETH) * (_ROTOR_DEG - _CARRIER_DEG)
+# Rotor-bearing ball cage runs near half the inner-race speed; 4/9 (~0.444 vs
+# the physical ~0.452 for this geometry) lands the 10-ball ring exactly on its
+# 36-deg symmetry at the end of the drive cycle.
+_BALL_CAGE_DEG = _ROTOR_DEG * (4.0 / 9.0)
+# Cross-roller cage: outer race fixed, inner race at carrier speed -> cage at
+# half carrier speed; 16 alternating-tilt rollers repeat every 45 deg.
+_ROLLER_CAGE_DEG = _CARRIER_DEG * 0.5
+
+# The drive train: each revolute joint's degrees per input revolution.
+_RATES = {
+    "rotor_spin": _ROTOR_DEG,
+    "output": _CARRIER_DEG,
+    "rear_cage": _BALL_CAGE_DEG,
+    "front_cage": _BALL_CAGE_DEG,
+    "roller_cage": _ROLLER_CAGE_DEG,
+    **{f"planet{i}_spin": _PLANET_DEG for i in range(1, PLANET_COUNT + 1)},
+}
+
+_Z = (0.0, 0.0, 1.0)
+
+
+def _planet_center(psi_deg: float) -> tuple[float, float, float]:
+    psi = math.radians(psi_deg)
+    return (
+        PLANET_CENTER_R * math.cos(psi),
+        PLANET_CENTER_R * math.sin(psi),
+        (GEAR_Z[0] + GEAR_Z[1]) / 2.0,
+    )
+
+
+def _turns(deg_per_turn: float) -> tuple[float, float]:
+    """Revolute limits spanning the full closed cycle at this member's rate."""
+    span = deg_per_turn * _INPUT_TURNS
+    return (min(0.0, span), max(0.0, span))
+
+
+# ---------------------------------------------------------------------------
+# The clips' explode: the old ANIMATION_JS stations, as a GLB animation
+# ---------------------------------------------------------------------------
+# The old clips moved every module along Z to its EXPLODE_OFFSETS station times
+# `explode`, rebased by FLOOR_LIFT so the lowest station (the connectors) stays at
+# 0: the connectors are the one world-fixed thing and the housing rises 82 mm.
+# `inspect` lifted the ring, sun and planets as one meshed cluster at GEAR_CLUSTER
+# so the tooth engagement stays watchable, while the drive ran; `teardown` gave each
+# its own station and spread the planets PLANET_EXPLODE_RADIAL out, the drive still.
+# Each module is a reference of its own in the actuator's tree, so each takes its own
+# translation, after the drive's pose.
+FLOOR_LIFT = -min(EXPLODE_OFFSETS.values())  # 82: the connectors' station rebased to 0
+GEAR_CLUSTER = 210.0  # inspect's meshed ring, sun and planets
+_GEARS = ("ring_gear", "sun_gear", "planet_gear")
+# Each module's reference in the actuator and the station it takes.
+_STATIONS = {
+    "housing": "housing", "front_retainer": "front_retainer", "retainer_screws": "retainer_screws",
+    "rear_cover": "rear_cover", "connector:power": "connector_power", "connector:signal": "connector_signal",
+    "driver_pcb": "driver_pcb", "encoder_pcb": "encoder_pcb", "encoder_magnet_ring": "encoder_magnet_ring",
+    "stator": "stator", "rotor": "rotor", "rotor_bearing:rear": "rotor_bearing_rear",
+    "rotor_bearing:front": "rotor_bearing_front", "sun_gear": "sun_gear", "ring_gear": "ring_gear",
+    **{f"planet_gear:p{i}": "planet_gear" for i in range(1, len(PLANET_ANGLES_DEG) + 1)},
+    "planet_carrier": "planet_carrier", "cross_roller_bearing": "cross_roller_bearing",
+    "torque_sensor": "torque_sensor", "output_flange": "output_flange", "cable_tube": "cable_tube",
+}
+_KEY_STEP = 0.1  # s between the sampled keys of an explode's channels
+
+
+def _offset(ref: str, explode: float, keep_mesh: bool) -> tuple[float, float, float]:
+    """A module's offset (mm) at ``explode`` (0..1): its station, rebased, along Z, and a
+    planet's radial spread when the gears do not stay meshed."""
+    station = _STATIONS[ref]
+    lift = (GEAR_CLUSTER if keep_mesh and station in _GEARS else EXPLODE_OFFSETS[station]) + FLOOR_LIFT
+    x = y = 0.0
+    if station == "planet_gear" and not keep_mesh:
+        psi = math.radians(PLANET_ANGLES_DEG[int(ref.rsplit("p", 1)[1]) - 1])
+        x, y = PLANET_EXPLODE_RADIAL * math.cos(psi), PLANET_EXPLODE_RADIAL * math.sin(psi)
+    return (x * explode, y * explode, lift * explode)
+
+
+def _explode_animation(actuator: bd.Compound, name: str, duration: float, keep_mesh: bool, drive: bool) -> None:
+    """The old clip ``name``: the stack opens on ``sin(pi * phase)`` and closes, each module
+    sampled every ``_KEY_STEP`` as LINEAR keys, while ``drive`` runs one closed cycle (or the
+    train stays as built)."""
+    show = animation(actuator, name, duration=duration)
+    if drive:
+        show.pose(at={0: {"drive": 0.0}, duration: {"drive": _INPUT_TURNS}}, interpolation="LINEAR")
+    count = round(duration / _KEY_STEP)
+    times = [duration * i / count for i in range(count + 1)]
+    explodes = [math.sin(math.pi * t / duration) for t in times]
+    for ref in _STATIONS:
+        if not any(_offset(ref, 1.0, keep_mesh)):
+            continue  # the connectors: the world-fixed station
+        keys = [(t, _offset(ref, e, keep_mesh)) for t, e in zip(times, explodes)]
+        show.channel(ref, path="translation", keys=keys, interpolation="LINEAR")
+
+
+# ---------------------------------------------------------------------------
+# Assembly: native build123d labels, compounds and joints
+# ---------------------------------------------------------------------------
+# The port's stand-ins for cadgen's (deprecated) AssemblyHelper: a label and a
+# colour on the shape, a module as a labelled Compound, and every mount as a pair
+# of build123d joints with `connect_to` placing the moving side. Every datum is
+# world-coincident, so each connection places a part where it was authored.
+
+
+def _label(shape, name: str, *details: object, color=None, material=None):
+    """``name:detail``, a colour and a material on the shape (the old ``asm.add``/``feature``)."""
+    shape.label = ":".join(str(token) for token in (name, *details))
+    if color is not None:
+        shape.color = color
+    if material is not None:
+        shape.material = material
+    return shape
+
+
+def _module(name: str, children: list, *details: object) -> bd.Compound:
+    """A labelled sub-assembly (the old ``asm.add_module``)."""
+    return bd.Compound(children=children, label=":".join(str(token) for token in (name, *details)))
+
+
+def _fasten(fixed, fixed_frame: str, moving, moving_frame: str, location: bd.Location) -> None:
+    """A mount (the old ``rigid_frame`` pair + ``face_to_face``, and the old
+    ``cadgen.fastened`` mate): a RigidJoint on each side at one world datum; the moving side
+    placed by ``connect_to``."""
+    bd.RigidJoint(fixed_frame, fixed, location)
+    bd.RigidJoint(moving_frame, moving, location)
+    fixed.joints[fixed_frame].connect_to(moving.joints[moving_frame])
+
+
+def _spin(name: str, parent, child, origin, limits: tuple[float, float]) -> None:
+    """A revolute mate about +Z through ``origin`` (the old ``cadgen.revolute``): a
+    RevoluteJoint on the parent with the mate's limits, a RigidJoint on the child at the
+    joint's own frame, the child placed at angle 0 -- its as-built pose."""
+    bd.RevoluteJoint(name, parent, axis=bd.Axis(origin, _Z), angular_range=limits)
+    bd.RigidJoint(name, child, bd.Plane(origin=origin, z_dir=_Z).location)
+    parent.joints[name].connect_to(child.joints[name], angle=0.0)
+
+
 def build_actuator(explode: float = 0.0) -> bd.Compound:
     """Build the labeled actuator assembly.
 
-    explode=0 returns the assembled model with source mate frames/joints.
+    explode=0 returns the assembled model with its joints, coupling,
+    configurations and motions.
     explode>0 translates each part along Z by EXPLODE_OFFSETS * explode as a
     documented static exploded layout (joints are omitted in that mode).
     """
-    asm = AssemblyHelper("qdd_actuator")
+    children = []
 
-    housing = asm.add(make_housing(), "housing", color=AL_BODY)
-    retainer = asm.add(make_front_retainer(), "front_retainer", color=AL_RETAINER)
-    cover = asm.add(make_rear_cover(), "rear_cover", color=AL_COVER)
+    housing = _label(make_housing(), "housing", color=AL_BODY, material=ANODIZED_AL)
+    retainer = _label(make_front_retainer(), "front_retainer", color=AL_RETAINER, material=ANODIZED_AL)
+    cover = _label(make_rear_cover(), "rear_cover", color=AL_COVER, material=ANODIZED_AL)
+    children += [housing, retainer, cover]
 
     screws = make_retainer_screws()
-    retainer_screws = asm.add(
-        bd.Compound(children=screws), "retainer_screws", color=BLACK_OXIDE
-    )
+    retainer_screws = _label(bd.Compound(children=screws), "retainer_screws", color=BLACK_OXIDE, material=SCREW_STEEL)
+    children.append(retainer_screws)
 
     connectors = {}
     for kind in CONNECTOR_ANGLES:
         body, collar, o_ring, pins = make_connector(kind)
-        asm.feature(body, "connector_body", kind, color=PLASTIC_BLACK)
-        asm.feature(collar, "connector_collar", kind, color=GUNMETAL)
-        asm.feature(o_ring, "connector_o_ring", kind, color=RUBBER)
-        asm.feature(pins, "connector_pins", kind, color=PIN_GOLD)
-        connectors[kind] = asm.add_module("connector", [body, collar, o_ring, pins], kind)
+        _label(body, "connector_body", kind, color=PLASTIC_BLACK, material=CONNECTOR_NYLON)
+        _label(collar, "connector_collar", kind, color=GUNMETAL, material=COLLAR_STEEL)
+        _label(o_ring, "connector_o_ring", kind, color=RUBBER, material=O_RING_NBR)
+        _label(pins, "connector_pins", kind, color=PIN_GOLD, material=CONTACT_BRASS)
+        connectors[kind] = _module("connector", [body, collar, o_ring, pins], kind)
+        children.append(connectors[kind])
 
     drv = make_driver_pcb()
-    asm.feature(drv["board"], "driver_board", color=PCB_GREEN)
+    _label(drv["board"], "driver_board", color=PCB_GREEN, material=FR4_BOARD)
     for i, fet in enumerate(drv["fets"], start=1):
-        asm.feature(fet, "fet", f"q{i}", color=IC_BLACK)
+        _label(fet, "fet", f"q{i}", color=IC_BLACK, material=IC_PACKAGE)
     for i, cap in enumerate(drv["caps"], start=1):
-        asm.feature(cap, "bus_capacitor", f"c{i}", color=CAP_GRAY)
-    asm.feature(drv["mcu"], "mcu", color=IC_BLACK)
-    driver_pcb = asm.add_module(
-        "driver_pcb", [drv["board"], *drv["fets"], *drv["caps"], drv["mcu"]]
-    )
+        _label(cap, "bus_capacitor", f"c{i}", color=CAP_GRAY, material=CAPACITOR_AL)
+    _label(drv["mcu"], "mcu", color=IC_BLACK, material=IC_PACKAGE)
+    driver_pcb = _module("driver_pcb", [drv["board"], *drv["fets"], *drv["caps"], drv["mcu"]])
+    children.append(driver_pcb)
 
     enc = make_encoder_pcb()
-    asm.feature(enc["board"], "encoder_board", color=PCB_GREEN)
-    asm.feature(enc["chip"], "encoder_ic", color=IC_BLACK)
-    encoder_pcb = asm.add_module("encoder_pcb", [enc["board"], enc["chip"]])
+    _label(enc["board"], "encoder_board", color=PCB_GREEN, material=FR4_BOARD)
+    _label(enc["chip"], "encoder_ic", color=IC_BLACK, material=IC_PACKAGE)
+    encoder_pcb = _module("encoder_pcb", [enc["board"], enc["chip"]])
+    children.append(encoder_pcb)
 
-    enc_magnet = asm.add(
+    enc_magnet = _label(
         _tube_z(ENC_MAGNET_R[1], ENC_MAGNET_R[0], ENC_MAGNET_Z),
         "encoder_magnet_ring",
         color=FERRITE,
+        material=FERRITE_MAGNET,
     )
+    children.append(enc_magnet)
 
     st = make_stator()
-    asm.feature(st["stack"], "lamination_stack", color=LAMINATION)
-    winding_compound = asm.feature(bd.Compound(children=st["windings"]), "windings", color=COPPER)
-    stator = asm.add_module("stator", [st["stack"], winding_compound])
+    _label(st["stack"], "lamination_stack", color=LAMINATION, material=LAMINATION_STEEL)
+    winding_compound = _label(bd.Compound(children=st["windings"]), "windings", color=COPPER, material=MAGNET_WIRE)
+    stator = _module("stator", [st["stack"], winding_compound])
+    children.append(stator)
 
     rt = make_rotor()
-    asm.feature(rt["body"], "rotor_bell", color=ROTOR_DARK)
-    mag_n = asm.feature(bd.Compound(children=rt["magnets_north"]), "magnets_north", color=MAGNET_N)
-    mag_s = asm.feature(bd.Compound(children=rt["magnets_south"]), "magnets_south", color=MAGNET_S)
-    rotor = asm.add_module("rotor", [rt["body"], mag_n, mag_s])
+    _label(rt["body"], "rotor_bell", color=ROTOR_DARK, material=ROTOR_STEEL)
+    mag_n = _label(bd.Compound(children=rt["magnets_north"]), "magnets_north", color=MAGNET_N, material=NDFEB)
+    mag_s = _label(bd.Compound(children=rt["magnets_south"]), "magnets_south", color=MAGNET_S, material=NDFEB)
+    rotor = _module("rotor", [rt["body"], mag_n, mag_s])
+    children.append(rotor)
 
     bearings = {}
+    races = {}
+    balls_by_side = {}
     for name, z in (("rear", ROTOR_BRG_REAR_Z), ("front", ROTOR_BRG_FRONT_Z)):
         brg = make_ball_bearing(z)
-        asm.feature(brg["inner"], "inner_race", name, color=STEEL_POLISHED)
-        asm.feature(brg["outer"], "outer_race", name, color=STEEL_POLISHED)
-        balls = asm.feature(bd.Compound(children=brg["balls"]), "balls", name, color=STEEL_ROLLER)
-        bearings[name] = asm.add_module(
-            "rotor_bearing", [brg["inner"], brg["outer"], balls], name
-        )
+        races[name] = _label(brg["inner"], "inner_race", name, color=STEEL_POLISHED, material=BEARING_STEEL)
+        _label(brg["outer"], "outer_race", name, color=STEEL_POLISHED, material=BEARING_STEEL)
+        balls = _label(bd.Compound(children=brg["balls"]), "balls", name, color=STEEL_ROLLER, material=BEARING_STEEL)
+        balls_by_side[name] = balls
+        bearings[name] = _module("rotor_bearing", [brg["inner"], brg["outer"], balls], name)
+        children.append(bearings[name])
 
-    sun = asm.add(make_sun_gear(), "sun_gear", color=STEEL)
-    ring = asm.add(bd.Pos(0, 0, GEAR_Z[0]) * _internal_ring_gear(), "ring_gear", color=STEEL)
+    sun = _label(make_sun_gear(), "sun_gear", color=STEEL, material=GEAR_STEEL)
+    ring = _label(bd.Pos(0, 0, GEAR_Z[0]) * _internal_ring_gear(), "ring_gear", color=STEEL, material=GEAR_STEEL)
+    children += [sun, ring]
 
     planet_proto = make_planet_gear()
     planets = []
     for i, psi in enumerate(PLANET_ANGLES_DEG, start=1):
         planet = planet_location(psi) * planet_proto
-        planets.append(asm.add(planet, "planet_gear", f"p{i}", color=STEEL))
+        planets.append(_label(planet, "planet_gear", f"p{i}", color=STEEL, material=GEAR_STEEL))
+    children += planets
 
-    carrier = asm.add(make_carrier(), "planet_carrier", color=AL_BRIGHT)
+    carrier = _label(make_carrier(), "planet_carrier", color=AL_BRIGHT, material=MACHINED_AL)
+    children.append(carrier)
 
     xr = make_cross_roller_bearing()
-    asm.feature(xr["inner"], "inner_ring", color=STEEL_RACE)
-    asm.feature(xr["outer"], "outer_ring", color=STEEL_RACE)
-    rollers = asm.feature(bd.Compound(children=xr["rollers"]), "rollers", color=STEEL_ROLLER)
-    xroller = asm.add_module("cross_roller_bearing", [xr["inner"], xr["outer"], rollers])
+    inner_ring = _label(xr["inner"], "inner_ring", color=STEEL_RACE, material=BEARING_STEEL)
+    _label(xr["outer"], "outer_ring", color=STEEL_RACE, material=BEARING_STEEL)
+    rollers = _label(bd.Compound(children=xr["rollers"]), "rollers", color=STEEL_ROLLER, material=BEARING_STEEL)
+    xroller = _module("cross_roller_bearing", [xr["inner"], xr["outer"], rollers])
+    children.append(xroller)
 
     ts = make_torque_sensor()
-    asm.feature(ts["flexure"], "flexure_disc", color=TITANIUM)
+    _label(ts["flexure"], "flexure_disc", color=TITANIUM, material=FLEXURE_TI)
     for i, gauge in enumerate(ts["gauges"], start=1):
-        asm.feature(gauge, "strain_gauge", f"g{i}", color=GAUGE_GOLD)
-    torque_sensor = asm.add_module("torque_sensor", [ts["flexure"], *ts["gauges"]])
+        _label(gauge, "strain_gauge", f"g{i}", color=GAUGE_GOLD, material=GAUGE_FOIL)
+    torque_sensor = _module("torque_sensor", [ts["flexure"], *ts["gauges"]])
+    children.append(torque_sensor)
 
-    flange = asm.add(make_output_flange(), "output_flange", color=AL_BRIGHT)
-    tube = asm.add(make_cable_tube(), "cable_tube", color=TUBE_BLACK)
+    flange = _label(make_output_flange(), "output_flange", color=AL_BRIGHT, material=MACHINED_AL)
+    tube = _label(make_cable_tube(), "cable_tube", color=TUBE_BLACK, material=TUBE_AL)
+    children += [flange, tube]
 
     by_name = {
         "housing": housing,
@@ -833,403 +1046,106 @@ def build_actuator(explode: float = 0.0) -> bd.Compound:
             dy = PLANET_EXPLODE_RADIAL * explode * math.sin(math.radians(psi))
             planet.move(bd.Location((dx, dy, EXPLODE_OFFSETS["planet_gear"] * explode)))
     else:
-        # Source mate frames + rigid connections (all identity by construction;
-        # connect() re-derives placement from the named datums and records the
-        # relationships for the exported topology).
-        seat = asm.rigid_frame(housing, "stator_seat", bd.Location((0, 0, STATOR_STACK_Z[0])))
-        asm.face_to_face(seat, asm.rigid_frame(stator, "stack_rear", bd.Location((0, 0, STATOR_STACK_Z[0]))))
+        _connect(housing, retainer, cover, retainer_screws, connectors, driver_pcb, encoder_pcb,
+                 stator, rotor, sun, ring, enc_magnet, carrier, torque_sensor, flange, xroller,
+                 tube, races, bearings, balls_by_side, rollers, inner_ring, planets)
 
-        ring_seat = asm.rigid_frame(housing, "ring_gear_seat", bd.Location((0, 0, GEAR_Z[0])))
-        asm.face_to_face(ring_seat, asm.rigid_frame(ring, "rim_rear", bd.Location((0, 0, GEAR_Z[0]))))
+    actuator = bd.Compound(children=children, label="qdd_actuator")
+    if not explode:
+        _drive(actuator)
+        _clips(actuator)
+    return actuator
 
-        cover_seat = asm.rigid_frame(housing, "cover_seat", bd.Location((0, 0, BARREL_Z[0])))
-        asm.face_to_face(cover_seat, asm.rigid_frame(cover, "lip_face", bd.Location((0, 0, BARREL_Z[0]))))
 
-        retainer_seat = asm.rigid_frame(housing, "retainer_seat", bd.Location((0, 0, RETAINER_Z[0])))
-        asm.face_to_face(
-            retainer_seat, asm.rigid_frame(retainer, "ring_rear", bd.Location((0, 0, RETAINER_Z[0])))
-        )
-        screw_seat = asm.rigid_frame(retainer, "screw_seats", bd.Location((0, 0, RETAINER_Z[1])))
-        asm.face_to_face(
-            screw_seat,
-            asm.rigid_frame(retainer_screws, "head_seats", bd.Location((0, 0, RETAINER_Z[1]))),
-        )
+def _connect(housing, retainer, cover, retainer_screws, connectors, driver_pcb, encoder_pcb,
+             stator, rotor, sun, ring, enc_magnet, carrier, torque_sensor, flange, xroller,
+             tube, races, bearings, balls_by_side, rollers, inner_ring, planets) -> None:
+    """Every joint of the assembled actuator. All identity by construction: each
+    ``connect_to`` re-derives a placement from named datums."""
+    # --- mounts (the original source mate frames) ------------------------------
+    _fasten(housing, "stator_seat", stator, "stack_rear", bd.Location((0, 0, STATOR_STACK_Z[0])))
+    _fasten(housing, "ring_gear_seat", ring, "rim_rear", bd.Location((0, 0, GEAR_Z[0])))
+    _fasten(housing, "cover_seat", cover, "lip_face", bd.Location((0, 0, BARREL_Z[0])))
+    _fasten(housing, "retainer_seat", retainer, "ring_rear", bd.Location((0, 0, RETAINER_Z[0])))
+    _fasten(retainer, "screw_seats", retainer_screws, "head_seats", bd.Location((0, 0, RETAINER_Z[1])))
 
-        for kind, module in connectors.items():
-            az = math.radians(CONNECTOR_ANGLES[kind])
-            mount = bd.Location(
-                (
-                    CONNECTOR_CIRCLE_R * math.cos(az),
-                    CONNECTOR_CIRCLE_R * math.sin(az),
-                    COVER_PLATE_Z[0],
-                )
+    for kind, module in connectors.items():
+        az = math.radians(CONNECTOR_ANGLES[kind])
+        mount = bd.Location(
+            (
+                CONNECTOR_CIRCLE_R * math.cos(az),
+                CONNECTOR_CIRCLE_R * math.sin(az),
+                COVER_PLATE_Z[0],
             )
-            pad = asm.rigid_frame(cover, f"{kind}_pad", mount)
-            asm.face_to_face(pad, asm.rigid_frame(module, "mount_face", mount))
-
-        for name, module, z_seat in (
-            ("driver_pcb", driver_pcb, DRV_STANDOFF_Z[0]),
-            ("encoder_pcb", encoder_pcb, ENC_STANDOFF_Z[0]),
-        ):
-            seat_frame = asm.rigid_frame(housing, f"{name}_seat", bd.Location((0, 0, z_seat)))
-            asm.face_to_face(
-                seat_frame, asm.rigid_frame(module, "mount_plane", bd.Location((0, 0, z_seat)))
-            )
-
-        coupling = asm.rigid_frame(rotor, "sun_coupling", bd.Location((0, 0, ROTOR_FLANGE_Z[1])))
-        asm.face_to_face(
-            coupling, asm.rigid_frame(sun, "flange_rear", bd.Location((0, 0, ROTOR_FLANGE_Z[1])))
         )
-        magnet_seat = asm.rigid_frame(rotor, "encoder_magnet_seat", bd.Location((0, 0, ENC_MAGNET_Z[0])))
-        asm.face_to_face(
-            magnet_seat,
-            asm.rigid_frame(enc_magnet, "ring_rear", bd.Location((0, 0, ENC_MAGNET_Z[0]))),
-        )
+        _fasten(cover, f"{kind}_pad", module, "mount_face", mount)
 
-        sensor_seat = asm.rigid_frame(carrier, "sensor_seat", bd.Location((0, 0, FLEXURE_HUB_Z[0])))
-        asm.face_to_face(
-            sensor_seat,
-            asm.rigid_frame(torque_sensor, "hub_rear", bd.Location((0, 0, FLEXURE_HUB_Z[0]))),
-        )
-        rim_face = asm.rigid_frame(torque_sensor, "rim_face", bd.Location((0, 0, FLEXURE_RIM_Z[1])))
-        asm.face_to_face(
-            rim_face, asm.rigid_frame(flange, "mount_rear", bd.Location((0, 0, FLEXURE_RIM_Z[1])))
-        )
+    for name, module, z_seat in (
+        ("driver_pcb", driver_pcb, DRV_STANDOFF_Z[0]),
+        ("encoder_pcb", encoder_pcb, ENC_STANDOFF_Z[0]),
+    ):
+        _fasten(housing, f"{name}_seat", module, "mount_plane", bd.Location((0, 0, z_seat)))
 
-        xr_seat = asm.rigid_frame(housing, "bearing_seat", bd.Location((0, 0, XROLLER_Z[0])))
-        asm.face_to_face(
-            xr_seat, asm.rigid_frame(xroller, "outer_ring_rear", bd.Location((0, 0, XROLLER_Z[0])))
-        )
+    _fasten(rotor, "sun_coupling", sun, "flange_rear", bd.Location((0, 0, ROTOR_FLANGE_Z[1])))
+    _fasten(rotor, "encoder_magnet_seat", enc_magnet, "ring_rear", bd.Location((0, 0, ENC_MAGNET_Z[0])))
+    _fasten(carrier, "sensor_seat", torque_sensor, "hub_rear", bd.Location((0, 0, FLEXURE_HUB_Z[0])))
+    # The flange's face on the flexure rim, a datum pair left unconnected: the flange
+    # rides the carrier on `flange_mount` (the old fastened mate), and a second seat on
+    # the torque sensor would close a loop.
+    bd.RigidJoint("rim_face", torque_sensor, bd.Location((0, 0, FLEXURE_RIM_Z[1])))
+    bd.RigidJoint("mount_rear", flange, bd.Location((0, 0, FLEXURE_RIM_Z[1])))
+    _fasten(housing, "bearing_seat", xroller, "outer_ring_rear", bd.Location((0, 0, XROLLER_Z[0])))
+    # The rotor bearings' outer races stay in the sleeve bore: each bearing module is
+    # fastened to the housing (its inner race and ball ring ride their own joints).
+    _fasten(housing, "rear_bearing_seat", bearings["rear"], "outer_race_face", bd.Location((0, 0, ROTOR_BRG_REAR_Z[0])))
+    _fasten(housing, "front_bearing_seat", bearings["front"], "outer_race_face",
+          bd.Location((0, 0, ROTOR_BRG_FRONT_Z[0])))
+    _fasten(cover, "tube_bore", tube, "rear_end", bd.Location((0, 0, COVER_PLATE_Z[0])))
 
-        tube_bore = asm.rigid_frame(cover, "tube_bore", bd.Location((0, 0, COVER_PLATE_Z[0])))
-        asm.face_to_face(
-            tube_bore, asm.rigid_frame(tube, "rear_end", bd.Location((0, 0, COVER_PLATE_Z[0])))
-        )
-
-        # Motion datums (joint frames only; static pose is authored explicitly):
-        asm.revolute_frame(housing, "rotor_axis", bd.Axis((0, 0, 0), (0, 0, 1)))
-        asm.revolute_frame(housing, "output_axis", bd.Axis((0, 0, XROLLER_Z[1]), (0, 0, 1)))
-
-    return asm.build()
-
-
-# ---------------------------------------------------------------------------
-# Kinematics: the 4.5:1 planetary drive train as typed mates
-# ---------------------------------------------------------------------------
-# One virtual DOF, `drive`, measured in INPUT REVOLUTIONS of the rotor. 4.5
-# input revolutions return the carrier to exactly 360 deg, and every rotating
-# member is 180-deg symmetric (28 alternating magnets = 14 pole pairs, 24/30
-# tooth gears, 6x lightening + 4x coupling holes), so the cycle closes at
-# tooth/pole phase.
-#
-# The mate tree carries the ratios structurally: each planet's parent is the
-# CARRIER, so its declared angle is the mesh-relative spin and the orbit rides
-# for free. Everything bolted to a rotating member is `fastened` because the
-# instance tree makes them siblings, not children.
-
-_INPUT_TURNS = REDUCTION_RATIO  # 4.5 input revolutions = 1 carrier revolution
-_ROTOR_DEG = 360.0
-_CARRIER_DEG = 360.0 / REDUCTION_RATIO
-# External sun/planet mesh reverses the relative rotation:
-#   -(Ns/Np) * (rotor - carrier)
-_PLANET_DEG = -(SUN_TEETH / PLANET_TEETH) * (_ROTOR_DEG - _CARRIER_DEG)
-# Rotor-bearing ball cage runs near half the inner-race speed; 4/9 (~0.444 vs
-# the physical ~0.452 for this geometry) lands the 10-ball ring exactly on its
-# 36-deg symmetry at the end of the drive cycle.
-_BALL_CAGE_DEG = _ROTOR_DEG * (4.0 / 9.0)
-# Cross-roller cage: outer race fixed, inner race at carrier speed -> cage at
-# half carrier speed; 16 alternating-tilt rollers repeat every 45 deg.
-_ROLLER_CAGE_DEG = _CARRIER_DEG * 0.5
-
-_Z = (0.0, 0.0, 1.0)
+    # --- the old KINEMATICS mates as joints ------------------------------------
+    # Fastened mates the mounts above do not already state (sun_coupling,
+    # encoder_target and sensor_mount are the seats above): each rider turns with
+    # the member it rides.
+    _fasten(rotor, "rear_race", races["rear"], "rear_race", bd.Location())
+    _fasten(rotor, "front_race", races["front"], "front_race", bd.Location())
+    _fasten(carrier, "flange_mount", flange, "flange_mount", bd.Location())
+    _fasten(carrier, "xroller_inner", inner_ring, "xroller_inner", bd.Location())
+    # Revolute mates, their limits the closed drive cycle at each member's rate. Each
+    # spin hub connects while its carrier is still pristine (planets before the
+    # carrier's own joint). Every cage turns on the module that carries its outer race,
+    # and the carrier on the cross-roller bearing's outer ring.
+    for i, (psi, planet) in enumerate(zip(PLANET_ANGLES_DEG, planets), start=1):
+        _spin(f"planet{i}_spin", carrier, planet, _planet_center(psi), _turns(_PLANET_DEG))
+    _spin("rotor_spin", housing, rotor, (0, 0, 0), _turns(_ROTOR_DEG))
+    _spin("rear_cage", bearings["rear"], balls_by_side["rear"], (0, 0, 0), _turns(_BALL_CAGE_DEG))
+    _spin("front_cage", bearings["front"], balls_by_side["front"], (0, 0, 0), _turns(_BALL_CAGE_DEG))
+    _spin("output", xroller, carrier, (0, 0, 0), _turns(_CARRIER_DEG))
+    _spin("roller_cage", xroller, rollers, (0, 0, 0), _turns(_ROLLER_CAGE_DEG))
+    # The old motion datums rotor_axis/output_axis are the rotor_spin/output joints.
 
 
-def _planet_center(psi_deg: float) -> tuple[float, float, float]:
-    psi = math.radians(psi_deg)
-    return (
-        PLANET_CENTER_R * math.cos(psi),
-        PLANET_CENTER_R * math.sin(psi),
-        (GEAR_Z[0] + GEAR_Z[1]) / 2.0,
-    )
+def _drive(actuator: bd.Compound) -> None:
+    """The drive train: one control in input revolutions gearing the rotor, the
+    carrier, the cages and the planets at 4.5:1 (the old ``drive`` coupling), a
+    constraint, as a gear train is: its joints turn only through it; and the old poses
+    as its configurations ("rest" is as built)."""
+    gear_pair(actuator, "drive", **_RATES)
+    mechanism_state(actuator, "quarter_output", drive=_INPUT_TURNS / 4.0)
+    mechanism_state(actuator, "full_output", drive=_INPUT_TURNS)
 
 
-def _turns(deg_per_turn: float) -> tuple[float, float]:
-    """Revolute limits spanning the full closed cycle at this member's rate."""
-    span = deg_per_turn * _INPUT_TURNS
-    return (min(0.0, span), max(0.0, span))
+def _clips(actuator: bd.Compound) -> None:
+    """The old ANIMATION_JS clips, by name (each looped there; a player repeats them):
+    `drive` (12 s), a motion, sweeps the coupling over one closed cycle; `inspect` (12 s),
+    an animation, runs the same cycle while the stack explodes with sin(pi * phase), the
+    gears meshed at GEAR_CLUSTER; `teardown` (10 s), an animation, explodes every module to
+    its own station and spreads the planets, no drive."""
+    configuration_sequence(actuator, "drive", sweep={"drive": (0.0, _INPUT_TURNS)}, duration=12, ease="linear")
+    _explode_animation(actuator, "inspect", 12, keep_mesh=True, drive=True)
+    _explode_animation(actuator, "teardown", 10, keep_mesh=False, drive=False)
 
 
-KINEMATICS = {
-    "mates": [
-        # --- input: rotor bell + everything bolted to it ---------------------
-        cadgen.revolute("rotor_spin", parent="#housing", child="#rotor",
-                        origin=(0, 0, 0), direction=_Z, limits=_turns(_ROTOR_DEG)),
-        cadgen.fastened("sun_coupling", parent="#rotor", child="#sun_gear"),
-        cadgen.fastened("encoder_target", parent="#rotor", child="#encoder_magnet_ring"),
-        cadgen.fastened("rear_race", parent="#rotor", child="#inner_race:rear"),
-        cadgen.fastened("front_race", parent="#rotor", child="#inner_race:front"),
-        # --- ball cages: their own slower orbit ------------------------------
-        cadgen.revolute("rear_cage", parent="#housing", child="#balls:rear",
-                        origin=(0, 0, 0), direction=_Z, limits=_turns(_BALL_CAGE_DEG)),
-        cadgen.revolute("front_cage", parent="#housing", child="#balls:front",
-                        origin=(0, 0, 0), direction=_Z, limits=_turns(_BALL_CAGE_DEG)),
-        # --- output: carrier and everything it drives ------------------------
-        cadgen.revolute("output", parent="#housing", child="#planet_carrier",
-                        origin=(0, 0, 0), direction=_Z, limits=_turns(_CARRIER_DEG)),
-        cadgen.fastened("sensor_mount", parent="#planet_carrier", child="#torque_sensor"),
-        cadgen.fastened("flange_mount", parent="#planet_carrier", child="#output_flange"),
-        cadgen.fastened("xroller_inner", parent="#planet_carrier", child="#inner_ring"),
-        cadgen.revolute("roller_cage", parent="#housing", child="#rollers",
-                        origin=(0, 0, 0), direction=_Z, limits=_turns(_ROLLER_CAGE_DEG)),
-        # --- planets: mesh-relative spin ON the carrier ----------------------
-        *[
-            cadgen.revolute(
-                f"planet{i}_spin",
-                parent="#planet_carrier",
-                child=f"#planet_gear:p{i}",
-                origin=_planet_center(psi),
-                direction=_Z,
-                limits=_turns(_PLANET_DEG),
-            )
-            for i, psi in enumerate(PLANET_ANGLES_DEG, start=1)
-        ],
-    ],
-    "couplings": [
-        cadgen.couple(
-            "drive",
-            {
-                "rotor_spin": _ROTOR_DEG,
-                "output": _CARRIER_DEG,
-                "rear_cage": _BALL_CAGE_DEG,
-                "front_cage": _BALL_CAGE_DEG,
-                "roller_cage": _ROLLER_CAGE_DEG,
-                **{f"planet{i}_spin": _PLANET_DEG for i in (1, 2, 3)},
-            },
-            limits=(0.0, _INPUT_TURNS),
-        )
-    ],
-    "poses": {
-        "rest": {"drive": 0.0},
-        "quarter_output": {"drive": _INPUT_TURNS / 4.0},
-        "full_output": {"drive": _INPUT_TURNS},
-    },
-}
-
-
-ANIMATION_JS = r'''// Choreography for the QDD actuator.
-//
-// Two clips: the drive train running at its 4.5:1 reduction, and the same
-// cycle while the stack separates into its documented exploded stations.
-// Choreography is deliberately independent of the model's mates: the ratios
-// below re-describe the same gear train in a few lines of arithmetic.
-
-const Z = [0, 0, 1];
-const ORIGIN = [0, 0, 0];
-
-const SUN_TEETH = 24;
-const PLANET_TEETH = 30;
-const RING_TEETH = 84;
-const REDUCTION_RATIO = 1 + RING_TEETH / SUN_TEETH; // 4.5:1, fixed ring
-const PLANET_CENTER_R = 27;
-const PLANET_Z = 14.5;
-const PLANET_ANGLES_DEG = [90, 210, 330];
-
-// 4.5 sun revolutions per cycle returns the carrier to exactly 360 deg. The
-// rotor/sun end 180 deg from start, which is invisible: every rotating part is
-// 180-deg symmetric, so the loop is seamless at tooth/pole phase.
-const DRIVE_CYCLE_DEG = REDUCTION_RATIO * 360;
-const BALL_CAGE_RATIO = 4 / 9;
-const ROLLER_CAGE_RATIO = 0.5;
-
-// Documented axial explosion stations (mm along Z at explode = 1), from the
-// model's own EXPLODE_OFFSETS, verified pairwise non-overlapping there.
-const STATION = {
-  connectorPower: -82,
-  connectorSignal: -82,
-  rearCover: -64,
-  driverPcb: -46,
-  encoderPcb: -32,
-  housing: 0,
-  encoderMagnetRing: 70,
-  rearBearing: 78,
-  stator: 94,
-  rotor: 128,
-  frontBearing: 154,
-  ringGear: 168,
-  sunGear: 196,
-  planetGear: 222,
-  carrier: 250,
-  crossRollerBearing: 280,
-  frontRetainer: 298,
-  retainerScrews: 312,
-  torqueSensor: 330,
-  outputFlange: 348,
-  cableTube: 360,
-};
-
-// Rebase so the lowest station is 0: every part explodes upward or stays put,
-// relative spacing unchanged, and nothing sinks through the viewer floor.
-const FLOOR_LIFT = -Math.min(...Object.values(STATION));
-
-// "Keep gear mesh" station: ring, sun, and planets lift together as one meshed
-// cluster so the tooth engagement stays watchable; the carrier still lifts to
-// its own station so its plate does not cover the mesh.
-const GEAR_CLUSTER = 210;
-const PLANET_RADIAL = 14;
-
-// Occurrence targets. Parts are named by label; groups (subassemblies) must be
-// named by occurrence id, which is what the label vocabulary cannot reach.
-const T = {
-  housing: "housing",
-  frontRetainer: "front_retainer",
-  retainerScrews: "#o1.4",
-  rearCover: "rear_cover",
-  connectorPower: "#o1.5",
-  connectorSignal: "#o1.6",
-  driverPcb: "#o1.7",
-  encoderPcb: "#o1.8",
-  encoderMagnetRing: "encoder_magnet_ring",
-  stator: "#o1.10",
-  rotor: "#o1.11",
-  rearInner: "inner_race:rear",
-  rearOuter: "outer_race:rear",
-  rearBalls: "#o1.12.3",
-  frontInner: "inner_race:front",
-  frontOuter: "outer_race:front",
-  frontBalls: "#o1.13.3",
-  sunGear: "sun_gear",
-  ringGear: "ring_gear",
-  carrier: "planet_carrier",
-  xrollerInner: "inner_ring",
-  xrollerOuter: "outer_ring",
-  xrollerRollers: "#o1.20.3",
-  torqueSensor: "#o1.21",
-  outputFlange: "output_flange",
-  cableTube: "cable_tube",
-};
-
-function planetCenter(angleDeg) {
-  const a = (angleDeg * Math.PI) / 180;
-  return [PLANET_CENTER_R * Math.cos(a), PLANET_CENTER_R * Math.sin(a), PLANET_Z];
-}
-
-function radialUnit(angleDeg) {
-  const a = (angleDeg * Math.PI) / 180;
-  return [Math.cos(a), Math.sin(a), 0];
-}
-
-/**
- * One frame of the drive train.
- *
- * @param m       the occurrence handle factory
- * @param drive   rotor/sun input angle in degrees
- * @param explode 0..1 axial explosion
- * @param keepMesh explode the planetary stage as one meshed cluster
- */
-function frame(m, drive, explode, keepMesh) {
-  const carrier = drive / REDUCTION_RATIO;
-  // Mesh-consistent planet spin about its own moving axis, relative to the
-  // carrier frame: the external sun/planet mesh reverses the relative rotation.
-  const planetSpin = -(SUN_TEETH / PLANET_TEETH) * (drive - carrier);
-  const ballOrbit = drive * BALL_CAGE_RATIO;
-  const rollerOrbit = carrier * ROLLER_CAGE_RATIO;
-
-  const lift = (key) => (STATION[key] + FLOOR_LIFT) * explode;
-  const gearLift = (key) => (keepMesh ? (GEAR_CLUSTER + FLOOR_LIFT) * explode : lift(key));
-  const planetRadial = keepMesh ? 0 : PLANET_RADIAL;
-
-  // Input group: rotor bell + magnets, encoder target ring, sun gear.
-  m.get(T.rotor).rotate(Z, drive, ORIGIN).translate([0, 0, lift("rotor")]);
-  m.get(T.encoderMagnetRing)
-    .rotate(Z, drive, ORIGIN)
-    .translate([0, 0, lift("encoderMagnetRing")]);
-  m.get(T.sunGear).rotate(Z, drive, ORIGIN).translate([0, 0, gearLift("sunGear")]);
-
-  // Rotor support bearings: inner races spin with the hub, ball rings orbit at
-  // cage speed, outer races stay seated in the housing sleeve.
-  for (const [inner, balls, outer, key] of [
-    [T.rearInner, T.rearBalls, T.rearOuter, "rearBearing"],
-    [T.frontInner, T.frontBalls, T.frontOuter, "frontBearing"],
-  ]) {
-    m.get(inner).rotate(Z, drive, ORIGIN).translate([0, 0, lift(key)]);
-    m.get(balls).rotate(Z, ballOrbit, ORIGIN).translate([0, 0, lift(key)]);
-    m.get(outer).translate([0, 0, lift(key)]);
-  }
-
-  // Planets: spin about their own axis, separate radially when exploded, then
-  // orbit the sun axis with the carrier. Successive calls PREMULTIPLY, so the
-  // spin and the radial offset both ride the orbit.
-  for (let i = 0; i < PLANET_ANGLES_DEG.length; i += 1) {
-    const psi = PLANET_ANGLES_DEG[i];
-    const radial = radialUnit(psi);
-    m.get(`planet_gear:p${i + 1}`)
-      .rotate(Z, planetSpin, planetCenter(psi))
-      .translate([
-        radial[0] * planetRadial * explode,
-        radial[1] * planetRadial * explode,
-        gearLift("planetGear"),
-      ])
-      .rotate(Z, carrier, ORIGIN);
-  }
-
-  // Output group at carrier speed; the roller ring orbits at cage speed.
-  m.get(T.carrier).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("carrier")]);
-  m.get(T.torqueSensor).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("torqueSensor")]);
-  m.get(T.outputFlange).rotate(Z, carrier, ORIGIN).translate([0, 0, lift("outputFlange")]);
-  m.get(T.xrollerInner)
-    .rotate(Z, carrier, ORIGIN)
-    .translate([0, 0, lift("crossRollerBearing")]);
-  m.get(T.xrollerRollers)
-    .rotate(Z, rollerOrbit, ORIGIN)
-    .translate([0, 0, lift("crossRollerBearing")]);
-  m.get(T.xrollerOuter).translate([0, 0, lift("crossRollerBearing")]);
-
-  // Static members take their exploded station only.
-  m.get(T.housing).translate([0, 0, lift("housing")]);
-  m.get(T.ringGear).translate([0, 0, gearLift("ringGear")]);
-  m.get(T.stator).translate([0, 0, lift("stator")]);
-  m.get(T.frontRetainer).translate([0, 0, lift("frontRetainer")]);
-  m.get(T.retainerScrews).translate([0, 0, lift("retainerScrews")]);
-  m.get(T.rearCover).translate([0, 0, lift("rearCover")]);
-  m.get(T.connectorPower).translate([0, 0, lift("connectorPower")]);
-  m.get(T.connectorSignal).translate([0, 0, lift("connectorSignal")]);
-  m.get(T.driverPcb).translate([0, 0, lift("driverPcb")]);
-  m.get(T.encoderPcb).translate([0, 0, lift("encoderPcb")]);
-  m.get(T.cableTube).translate([0, 0, lift("cableTube")]);
-}
-
-export const clips = {
-  drive: {
-    label: "Drive 4.5:1 reduction",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      frame(m, ((t / 12) % 1) * DRIVE_CYCLE_DEG, 0, true);
-    },
-  },
-  inspect: {
-    label: "Exploded drive inspection",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      const phase = (t / 12) % 1;
-      frame(m, phase * DRIVE_CYCLE_DEG, Math.sin(phase * Math.PI), true);
-    },
-  },
-  teardown: {
-    label: "Full teardown",
-    duration: 10,
-    loop: true,
-    update(t, m) {
-      const phase = (t / 10) % 1;
-      frame(m, 0, Math.sin(phase * Math.PI), false);
-    },
-  },
-};
-'''
-
-
-@step(out="../STEP/qdd_actuator.step", kinematics=KINEMATICS, animation=ANIMATION_JS)
+@model
 def qdd_actuator():
     return build_actuator(explode=0.0)
 

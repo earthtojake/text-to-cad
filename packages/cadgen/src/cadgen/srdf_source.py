@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 import xml.etree.ElementTree as ET
 
-from cadgen.findings import FindingsReport, format_findings
+from cadgen.findings import FindingsReport
 from cadgen.xml_common import duplicate_values, display_path
 
 SRDF_SUFFIX = ".srdf"
@@ -27,10 +27,6 @@ KNOWN_ROBOT_CHILDREN = {
 }
 KNOWN_GROUP_CHILDREN = {"joint", "link", "chain", "group"}
 _UNKNOWN_ELEMENT_HINT = "Unknown elements are silently ignored by MoveIt; check for typos."
-
-
-class SrdfSourceError(ValueError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -90,30 +86,6 @@ class SrdfSource:
     disabled_collision_pairs: tuple[SrdfDisabledCollisionPair, ...]
     virtual_joints: tuple[SrdfVirtualJoint, ...] = ()
     passive_joints: tuple[str, ...] = ()
-
-
-def file_ref_from_srdf_path(srdf_path: Path) -> str:
-    resolved = srdf_path.resolve()
-    if resolved.suffix.lower() != SRDF_SUFFIX:
-        raise SrdfSourceError(f"{resolved} is not an SRDF source file")
-    return display_path(resolved)
-
-
-def read_srdf_source(srdf_path: Path) -> SrdfSource:
-    """Compatibility wrapper: raise on the first structural validation error."""
-    source, result = parse_srdf_file(srdf_path)
-    if result.errors:
-        raise SrdfSourceError(format_findings(result.errors))
-    assert source is not None
-    return source
-
-
-def parse_srdf_xml(xml_text: str, *, source_path: Path) -> SrdfSource:
-    source, result = parse_srdf_text(xml_text, source_path=source_path)
-    if result.errors:
-        raise SrdfSourceError(format_findings(result.errors))
-    assert source is not None
-    return source
 
 
 def parse_srdf_file(srdf_path: Path) -> tuple[SrdfSource | None, FindingsReport]:

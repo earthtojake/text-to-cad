@@ -3,19 +3,22 @@ motion works + chronograph works, all authored in the shared MOVEMENT local
 frame (see `lib/spec.py`), so composition is identity — no re-posing here.
 """
 
+from cadgen import model
+
 import chrono_works
 import keyless_works
 import movement_base
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
-# Composition is by FUNCTION: importing a sibling model links it (import never
-# builds), and calling it inside this body builds it if stale — on its own
-# worker, in parallel with its siblings — or loads it. An edit that does not
-# reach a child's files skips that child's Python and kernel work entirely.
+# Composition is by FUNCTION: each layer is a `@memo` function of a sibling file,
+# and calling it inside this body runs it in the same build as a sub-assembly.
+# An edit that does not reach a layer's code replays it from the worker's memory;
+# inside a layer the groups of parts (`lib/mvt_*.py`, `_*_parts`) are plain
+# functions: a marker per group saved nothing beyond the layers. Only this model
+# and `case.py` write a file.
 
 
-@step(out="../STEP/movement.step")
+@model
 def movement():
     children = []
 

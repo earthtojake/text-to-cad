@@ -1,6 +1,8 @@
-/** Portable identity: a file by its absolute path; delivery addresses (HTTP/blob URLs) do not identify files. */
+/** Portable identity: a file by its absolute path, a model by its document id; delivery addresses (HTTP/blob URLs) do not identify files. */
 export type ResourceRef =
   | { kind: 'workspace-file'; path: string; revision?: string }
+  /** A document the engine holds by its id alone (a model's): `path` is the id, never a filesystem path. */
+  | { kind: 'cad-model'; path: string; revision?: string }
   | { kind: 'url'; url: string; revision?: string };
 /** Zero-based UTF-16 coordinates; text ranges have an exclusive end. */
 export interface TextPosition { line: number; character: number }

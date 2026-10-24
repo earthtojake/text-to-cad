@@ -50,7 +50,9 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd, compound_from_instances
+import build123d as bd
+
+from lib.context import compound_from_instances
 
 from lib import geometry as G
 from lib import sections as SEC

@@ -16,7 +16,6 @@ import {
   viewerOriginUrl,
 } from "./origin.js";
 import { cadApiUrl } from "./client.js";
-import { resolvePackageAssetUrl } from "./assetUrl.js";
 
 const REMOTE = "http://127.0.0.1:3250";
 
@@ -31,7 +30,7 @@ test("normalizeViewerOrigin keeps the same-origin default empty", () => {
 
 test("viewerOriginUrl leaves root-relative URLs alone at the same origin", () => {
   assert.equal(viewerOriginUrl("", "/__cad/catalog"), "/__cad/catalog");
-  assert.equal(viewerOriginUrl("", "/__tess_cache/batch"), "/__tess_cache/batch");
+  assert.equal(viewerOriginUrl("", "/__cad/xbf/api/look"), "/__cad/xbf/api/look");
 });
 
 test("viewerOriginUrl prefixes a remote origin exactly once", () => {
@@ -78,7 +77,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
     hash: "h1",
     url: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step&v=h1",
     poseUrl: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.json",
-    renderModuleUrl: "/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.js",
     relations: {
       glb: { url: "/__cad/asset?file=%2Fabs%2Fpkg&v=h2", hash: "h2", bytes: 3 },
       none: { hash: "h3" },
@@ -91,7 +89,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
   assert.notEqual(rebased, entry, "a rebase never mutates the catalog entry");
   assert.equal(rebased.url, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step&v=h1`);
   assert.equal(rebased.poseUrl, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.json`);
-  assert.equal(rebased.renderModuleUrl, `${REMOTE}/__cad/asset?file=%2Fabs%2Fmodels%2Farm.step.js`);
   assert.equal(rebased.relations.glb.url, `${REMOTE}/__cad/asset?file=%2Fabs%2Fpkg&v=h2`);
   assert.equal(rebased.relations.glb.hash, "h2");
   assert.deepEqual(rebased.relations.none, { hash: "h3" });
@@ -103,20 +100,4 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
   assert.equal(applyViewerOriginToEntries([entry], "")[0], entry);
   assert.equal(applyViewerOriginToEntries([entry], REMOTE)[0].url, rebased.url);
   assert.deepEqual(applyViewerOriginToEntries(null, REMOTE), []);
-});
-
-test("package sub-asset URLs keep the shape of the package URL they came from", () => {
-  const localPackage = "/__cad/asset?file=%2Fabs%2Fpkg.step&v=abc";
-  assert.equal(
-    resolvePackageAssetUrl(localPackage, "assembly.json"),
-    "/__cad/asset?file=%2Fabs%2Fpkg.step%2Fassembly.json&v=abc",
-  );
-  assert.equal(
-    resolvePackageAssetUrl(`${REMOTE}${localPackage}`, "assembly.json"),
-    `${REMOTE}/__cad/asset?file=%2Fabs%2Fpkg.step%2Fassembly.json&v=abc`,
-  );
-  assert.equal(
-    resolvePackageAssetUrl(`${REMOTE}${localPackage}`, "components/7e4f.glb"),
-    `${REMOTE}/__cad/asset?file=%2Fabs%2Fpkg.step%2Fcomponents%2F7e4f.glb&v=abc`,
-  );
 });

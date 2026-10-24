@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import geo
 from lib import kin

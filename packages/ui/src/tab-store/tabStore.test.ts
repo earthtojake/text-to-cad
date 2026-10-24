@@ -18,7 +18,7 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
     expect(readTabRecord(raw), JSON.stringify(raw)).toEqual(defaultTabRecord());
   }
   const record = readTabRecord({ version: 2, settings: {
-    fileTree: { width: 300 },
+    fileTree: { width: 300 }, quickEdit: false, features: { quickEdit: false },
     toolStack: { panels: { tree: { width: 12 } }, collapsed: { tree: true, 'Not an id': true }, closed: { tree: true, sdf: 'no' } },
     orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic', library: { layout: 'shelf' },
   }, files: { [tabFileKey('/models/a.step', 'step')]: view(1), '["root","b.step","step"]': view(2), 'junk': view(3), [tabFileKey('/models/c.step', 'step')]: 'not a view' } });

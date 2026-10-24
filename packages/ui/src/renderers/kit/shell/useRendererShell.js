@@ -485,11 +485,14 @@ export function useRendererShell({
   // The file a prompt's views render: the one shown, by its absolute path.
   const promptFile = useCallback(() => {
     const shown = liveResourceRef.current?.() || resourceRef.current;
-    return shown?.kind === "workspace-file" ? shown.path : null;
+    return shown?.kind === "workspace-file" || shown?.kind === "cad-model" ? shown.path : null;
   }, []);
   // Quick Edit captures the current view and annotation views; the host prepares JSON at the press.
+  const replayUnavailable = useRef("");
+  replayUnavailable.current = String(load.replayUnavailable || "");
   const quickEditPrompt = useMemo(() => ({
-    views: () => (host.promptFiles && promptFile() ? promptViews(currentView(), annotationRef.current.views, annotationRef.current.items) : []),
+    unavailable: () => replayUnavailable.current,
+    views: () => (!replayUnavailable.current && host.promptFiles && promptFile() ? promptViews(currentView(), annotationRef.current.views, annotationRef.current.items) : []),
     files: views => {
       const input = promptFile();
       if (!host.promptFiles || !input || !views.length) return null;

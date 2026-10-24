@@ -1,21 +1,16 @@
-"""F-14D system model: main_gear — legs, wheels, brakes, doors, bays.
+"""F-14D system: main_gear — legs, wheels, brakes, doors, bays.
 
-The group `lib/main_gear.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.9`; rebuild `f14d.py` to pick up a change here.
+A stage of the aircraft: the group `lib/main_gear.py` builds, already on its gear
+stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
+not reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import main_gear as main_gear_lib
 
 
-@step(out="../STEP/main_gear.step")
+@memo
 def main_gear():
-    return main_gear_lib.build()
-
-
-if __name__ == "__main__":
-    main_gear()
+    group = main_gear_lib.build()
+    return group

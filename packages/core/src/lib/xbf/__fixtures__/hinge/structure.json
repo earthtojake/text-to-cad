@@ -1,0 +1,257 @@
+{
+ "name": "hinge",
+ "path": "hinge.xbf",
+ "version": "1-1",
+ "units": "mm",
+ "prototypes": [
+  {
+   "index": 0,
+   "key": "c7ce4f240ebb2289197f0a4c723e73bb",
+   "name": "base",
+   "color": null,
+   "faceNames": {
+    "1": "f:hinge.make_box1.1",
+    "2": "f:hinge.make_box1.2",
+    "3": "f:hinge.make_box1.3",
+    "4": "f:hinge.make_box1.4",
+    "5": "f:hinge.make_box1.5",
+    "6": "f:hinge.make_box1.6"
+   },
+   "edgeNames": {
+    "1": "e:hinge.make_box1.1",
+    "2": "e:hinge.make_box1.2",
+    "3": "e:hinge.make_box1.3",
+    "4": "e:hinge.make_box1.4",
+    "5": "e:hinge.make_box1.5",
+    "6": "e:hinge.make_box1.6",
+    "7": "e:hinge.make_box1.7",
+    "8": "e:hinge.make_box1.8",
+    "9": "e:hinge.make_box1.9",
+    "10": "e:hinge.make_box1.10",
+    "11": "e:hinge.make_box1.11",
+    "12": "e:hinge.make_box1.12"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  },
+  {
+   "index": 1,
+   "key": "1d2a2de1de63d2d75bbe490a0b5a7c39",
+   "name": "arm",
+   "color": null,
+   "faceNames": {
+    "1": "f:hinge.make_box1.1",
+    "2": "f:hinge.make_box1.2",
+    "3": "f:hinge.make_box1.3",
+    "4": "f:hinge.make_box1.4",
+    "5": "f:hinge.make_box1.5",
+    "6": "f:hinge.make_box1.6"
+   },
+   "edgeNames": {
+    "1": "e:hinge.make_box1.1",
+    "2": "e:hinge.make_box1.2",
+    "3": "e:hinge.make_box1.3",
+    "4": "e:hinge.make_box1.4",
+    "5": "e:hinge.make_box1.5",
+    "6": "e:hinge.make_box1.6",
+    "7": "e:hinge.make_box1.7",
+    "8": "e:hinge.make_box1.8",
+    "9": "e:hinge.make_box1.9",
+    "10": "e:hinge.make_box1.10",
+    "11": "e:hinge.make_box1.11",
+    "12": "e:hinge.make_box1.12"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  }
+ ],
+ "instances": [
+  {
+   "prototype": 0,
+   "path": "hinge/base",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 1,
+   "path": "hinge/arm",
+   "matrix": [
+    0.49999999999999994,
+    0.0,
+    0.8660254037844387,
+    0.0,
+    0.8660254037844387,
+    0.0,
+    -0.49999999999999994,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    40.0,
+    0.0,
+    20.0,
+    1.0
+   ],
+   "color": null
+  }
+ ],
+ "tree": {
+  "name": "hinge",
+  "children": [
+   {
+    "name": "base",
+    "prototype": 0,
+    "instance": 0
+   },
+   {
+    "name": "arm",
+    "prototype": 1,
+    "instance": 1
+   }
+  ]
+ },
+ "kinematics": {
+  "schema": "cadgen.kinematics/2",
+  "name": "hinge",
+  "ground": 0,
+  "links": [
+   {
+    "name": "base",
+    "instances": [
+     0
+    ],
+    "matrix": [
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "name": "arm",
+    "instances": [
+     1
+    ],
+    "matrix": [
+     0.49999999999999994,
+     0.0,
+     0.8660254037844387,
+     0.0,
+     0.8660254037844387,
+     0.0,
+     -0.49999999999999994,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     40.0,
+     0.0,
+     20.0,
+     1.0
+    ]
+   }
+  ],
+  "pairs": [
+   {
+    "label": "elbow",
+    "type": "revolute",
+    "links": [
+     0,
+     1
+    ],
+    "frames": [
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      40.0,
+      0.0,
+      20.0,
+      1.0
+     ],
+     [
+      1.0,
+      4.0636983087920376e-17,
+      0.0,
+      0.0,
+      -4.0636983087920376e-17,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      3.552713678800501e-15,
+      0.0,
+      1.0
+     ]
+    ],
+    "limits": [
+     [
+      -10.0,
+      120.0
+     ]
+    ],
+    "units": [
+     "deg"
+    ]
+   }
+  ],
+  "asBuilt": {
+   "elbow": 30.0
+  },
+  "configurations": {
+   "flat": {
+    "elbow": 0.0
+   },
+   "raised": {
+    "elbow": 90.0
+   }
+  },
+  "loop": null
+ }
+}

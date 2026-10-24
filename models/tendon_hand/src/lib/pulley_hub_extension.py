@@ -6,7 +6,7 @@ existing drum and child eye capture them axially. The outboard face stops at
 3.65 mm, before the independent DIP reaction liners at axial ±4.2 mm. External rounds are drawn
 in the lathe section, with no coincident union cleanup.
 """
-from cadgen import build123d as bd
+import build123d as bd
 from lib.finish import finish
 from lib.layout import JOINT_BY_NAME,FINGERS,finger_fan_matrix
 from lib.assembly import joint_location,matrix_location,Body

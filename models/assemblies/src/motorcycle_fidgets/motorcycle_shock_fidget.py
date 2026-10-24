@@ -21,13 +21,12 @@ Parts (z map)
 """
 
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import cos, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from cadgen import srgb
 
 from lib.mx_switch_socket import MX_PLATE, mx_socket_cutter
 
@@ -83,8 +82,7 @@ FLAT_BOTTOM_Z = 68.0
 FLAT_TOP_Z = PLATE_TOP_Z - MX_PLATE
 
 
-# (sRGB hex, alpha) pairs: _part() turns them into Colors with srgb() at use, so
-# importing this module never loads the CAD kernel (srgb() builds a bd.Color).
+# (sRGB hex, alpha) pairs: a colour build123d takes as it is, which the engine reads as sRGB.
 COLORS = {
     "titanium": ("#3A4750", 1.0),
     "graphite": ("#2E3742", 1.0),
@@ -96,7 +94,7 @@ COLORS = {
 
 def _part(shape, name, *details, color):
     shape.label = ":".join([name, *(str(d) for d in details)])
-    shape.color = srgb(*color)
+    shape.color = color
     return shape
 
 
@@ -194,7 +192,7 @@ def _make_parts():
     return parts
 
 
-@step(out="../../STEP/motorcycle_fidgets/motorcycle_shock_fidget.step")
+@model
 def motorcycle_shock_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_shock_fidget"

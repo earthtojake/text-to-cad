@@ -33,17 +33,26 @@ test("a file:// mesh is its absolute path", () => {
 });
 
 test("a link mesh that fails to load names its link, the mesh as written, and the server's reason", async () => {
-  const meshUrl = resolveCadAssetMeshUrl("../meshes/upper_arm.stl", SOURCE);
-  const description = { links: [
-    { name: "base", visuals: [] },
-    { name: "upper_arm", visuals: [{ filename: "../meshes/upper_arm.stl", meshUrl }] }
-  ] };
+  // The payload cadgen resolved: a link's facts carry the filename as written, its visual the URL minted for it.
+  const meshUrl = "/__cad/asset?file=%2Fw%2Fso101_description%2Fmeshes%2Fupper_arm.stl&v=7";
+  const robot = {
+    links: [
+      { name: "base", visuals: [] },
+      { name: "upper_arm", visuals: [{ type: "box", filename: "" }, { type: "mesh", filename: "../meshes/upper_arm.stl" }] }
+    ],
+    visuals: [
+      { id: "upper_arm:v1", link: "upper_arm", label: "box", mesh: { format: "glb", url: "/__cad/object/box" } },
+      { id: "upper_arm:v2", link: "upper_arm", label: "upper_arm.stl", mesh: { format: "stl", url: meshUrl } }
+    ]
+  };
   const reason = "No file at /w/so101_description/meshes/upper_arm.stl";
   const resources = createHttpCadResourceProvider({
     origin: "http://cad.local",
     fetch: async () => new Response(JSON.stringify({ error: reason }), { status: 404 })
   });
-  await assert.rejects(loadRobotMeshes(robotMeshUrls(description), { description, resources }), (error) => {
+  // Only the failing mesh is loaded; the box before it is still its link's first visual.
+  const urls = new Map([...robotMeshUrls(robot)].filter(([url]) => url === meshUrl));
+  await assert.rejects(loadRobotMeshes(urls, { robot, resources }), (error) => {
     assert.equal(error.message, `Link “upper_arm” mesh “../meshes/upper_arm.stl”: ${reason}`);
     assert.equal(error.status, 404);
     return true;

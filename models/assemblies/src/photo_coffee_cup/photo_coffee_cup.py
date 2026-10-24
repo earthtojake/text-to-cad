@@ -1,9 +1,9 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import degrees, cos, sin, sqrt
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Units: millimeters.
@@ -11,16 +11,15 @@ from cadgen import build123d as bd
 
 MODEL_LABEL = "photo_reference_takeaway_coffee_cup"
 
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-PAPER = (0.86, 0.78, 0.64, 1.0)
-PAPER_EDGE = (0.90, 0.82, 0.69, 1.0)
-LID_WHITE = (0.96, 0.94, 0.90, 1.0)
-LID_HIGHLIGHT = (1.0, 0.985, 0.955, 1.0)
-LID_SHADOW = (0.82, 0.80, 0.76, 1.0)
-BLUE_LOGO = (0.00, 0.62, 0.78, 1.0)
-DARK_OPENING = (0.08, 0.075, 0.065, 1.0)
+# Plain RGB(A) tuples / sRGB hex strings: build123d's Shape.color setter
+# builds the Color on assignment.
+PAPER = "#efe5d1"
+PAPER_EDGE = "#f3ead8"
+LID_WHITE = "#faf8f3"
+LID_HIGHLIGHT = "#fffdfa"
+LID_SHADOW = "#eae7e2"
+BLUE_LOGO = "#00cee5"
+DARK_OPENING = "#504d48"
 
 BODY_HEIGHT = 108.0
 BODY_BOTTOM_RADIUS = 30.0
@@ -506,7 +505,7 @@ def _make_surface_decal_box(
     return _set_metadata(box, label, color)
 
 
-@step(out="../../STEP/photo_coffee_cup/photo_coffee_cup.step")
+@model
 def photo_coffee_cup():
     """Return a photo-inspired takeaway coffee cup model in millimeters."""
     parts: list[object] = [

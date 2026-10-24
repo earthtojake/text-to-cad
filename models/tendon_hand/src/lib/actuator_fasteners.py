@@ -7,7 +7,7 @@ M0.8 flanged steel inserts occupy each face's staggered frame holes; their
 share factory-built prototypes. No shaft, route or actuator datum is changed.
 """
 from math import sin,cos,radians
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 from .layout import TENDONS
 from .forearm_frame import WRIST_FRAME_EYES,REAR_FLANGE_BORES

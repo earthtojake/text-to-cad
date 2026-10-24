@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
@@ -36,7 +36,7 @@ function cadClient() {
   };
 }
 const ports = (client: ReturnType<typeof cadClient>, extra: object = {}) => ({ files: createCadFileSource(client as never),
-  clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+  clipboard: { writeText: async () => {}, writeImage: async () => {} },
   promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, ...extra });
 const library = { list: async () => [], change: async () => [], thumbnail: async () => null, open: async () => {} };
 const props = () => viewer.props!;
@@ -50,7 +50,8 @@ test('the CAD viewer shows one file by its absolute path, the home with none, an
     library={homed ? library : undefined} onShow={next => shows.push(next)} onShown={next => shown.push(next)} />;
   const { rerender } = render(view('C:\\models\\a.step'));
   // One renderer per file family, every one reading the tab's settings.
-  expect(props().renderers.map(renderer => renderer.id)).toEqual(['step', 'dxf', 'glb', 'mesh', 'robot']);
+  // A STEP opens as an .xbf does, in the engine document's renderer: the STEP renderer is not registered.
+  expect(props().renderers.map(renderer => renderer.id)).toEqual(['dxf', 'glb', 'mesh', 'robot', 'xbf']);
   // The file in the viewer's one spelling, which the host hears of once the catalog has it.
   expect([props().file, shown]).toEqual(['C:/models/a.step', [null]]);
   await act(async () => client.publish([{ file: 'C:/models/a.step' }]));
@@ -125,16 +126,23 @@ test('the failure states read in the language the host names, and follow it when
   back.unmount();
 });
 
-test('the home pictures a card out of sight, in a viewer of its own, from what is already built, and never builds one', async () => {
-  const client = { ...cadClient(), requestArtifactStatus: vi.fn(async (file: string) => ({ state: file === '/models/a.stl' ? 'compiled' : 'not-compiled' })) };
+test('the home pictures a card out of sight, in a viewer of its own, and never starts the engine reading a STEP', async () => {
+  const client = { ...cadClient(), engineHolds: vi.fn(async (file: string) => file === '/models/held.step') };
   const host = ports(client);
   const view = (file: string) => <CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file={file}
     library={library} onThumbnail={async () => {}} onShow={() => {}} />;
   const { rerender } = render(view(''));
   const picture = (props().presentation!.home as { props: { picture(model: { path: string }): Promise<boolean> } }).props.picture;
-  // A model whose display is not built keeps its placeholder: its status is read, and that is all.
+  // A STEP the engine does not hold keeps its placeholder: the engine is asked, and that is all.
   await expect(picture({ path: '/models/b.step' })).resolves.toBe(false);
+  expect(client.engineHolds).toHaveBeenCalledWith('/models/b.step');
   expect(viewer.hidden).toBeNull();
+  // One it holds is drawn.
+  let held!: Promise<boolean>;
+  await act(async () => { held = picture({ path: '/models/held.step' }); });
+  expect(viewer.hidden!.file).toBe('/models/held.step');
+  act(() => viewer.hidden!.onError!(new Error('unreadable')));
+  await expect(held).resolves.toBe(false);
   // One that is built is drawn in a view of its own: compact, with renderers of its own, reaching no prompt.
   let drawn!: Promise<boolean>;
   await act(async () => { drawn = picture({ path: '/models/a.stl' }); });
@@ -164,4 +172,33 @@ test("the person's settings go to the app menu over every file; the home shows t
   const home = render(props().presentation!.home as ReactElement);
   const row = await home.findByRole('navigation', { name: 'CAD links' });
   expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Discord', 'X']);
+});
+
+test('a document named by its id is its row, joined by id: the host hears its file and its id, and one the engine does not hold says why', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const base = cadClient();
+  const client = { ...base, entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries
+    .find(entry => entry.id === path || entry.file === path) ?? null };
+  const shown: [string | null, string | null][] = [];
+  render(<CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()}
+    file={id} library={library} onShow={() => {}} onShown={(file, ident) => shown.push([file, ident])} />);
+  // A symlink's target and its link are one document, one row: the file is heard by the row's own path.
+  await act(async () => client.publish([{ id, file: '/models/real/a.step' }]));
+  expect(shown.at(-1)).toEqual(['/models/real/a.step', id]);
+  const missing = render(<>{props().presentation!.error!({ message: `no document ${id} is held: bracket is no longer in memory; run \`python /m/parts.py\` to build it again`, missing: true })}</>);
+  expect(missing.getByText('This model is no longer held')).toBeTruthy();
+  expect(missing.getByText(/run `python \/m\/parts.py` to build it again/)).toBeTruthy();
+});
+
+test('the home shows the folder of the most recent launch, and a file in it opens', async () => {
+  const client = cadClient();
+  client.folder.mockImplementation(async (path: string) => ({ path, entries: [{ name: 'parts', kind: 'directory' }, { name: 'a.step', kind: 'file' }], truncated: false }));
+  const shows: string[] = [];
+  render(<CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()}
+    file="" start="/work/c" library={library} onShow={next => shows.push(next)} />);
+  const home = render(props().presentation!.home as ReactElement);
+  const folder = await home.findByRole('region', { name: 'Launch folder' });
+  expect(client.folder).toHaveBeenCalledWith('/work/c', expect.anything());
+  fireEvent.click(await within(folder).findByText('a.step'));
+  expect(shows).toEqual(['/work/c/a.step']);
 });

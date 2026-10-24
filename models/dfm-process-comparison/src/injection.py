@@ -1,10 +1,14 @@
-from cadgen import step, stl
+from cadgen import materials, model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/injection.step")
-@stl(out="../STL/injection.stl")
+
+@model
 def injection():
-    return tray("injection")
+    part = tray("injection")
+    # moulded: ABS, the common injection-moulding resin
+    part.material = materials.abs_plastic
+    return part
+
 
 if __name__ == "__main__":
     injection()

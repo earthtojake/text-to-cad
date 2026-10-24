@@ -6,7 +6,7 @@ inputs:
     description: Install requirements-dev.txt.
     default: "true"
   playwright:
-    description: Install Python Playwright's snapshot browser (requires python).
+    description: Install Python Playwright's headless Chromium, which the viewer's launch smoke test drives (requires python).
     default: "true"
   ui-browser:
     description: Install the npm Playwright Chromium used by the shared UI, web and desktop browser tests.
@@ -23,8 +23,15 @@ runs:
       uses: actions/setup-python@v7
       with:
         python-version: "3.12"
-        cache: pip
-        cache-dependency-path: requirements-dev.txt
+
+    # uv installs requirements-dev.txt into that interpreter: pip took 99 s of every
+    # Windows job even from its cache. uv's own cache is keyed on the same file.
+    - name: Set up uv
+      if: inputs.python == 'true'
+      uses: astral-sh/setup-uv@v10.2.0
+      with:
+        enable-cache: true
+        cache-dependency-glob: requirements-dev.txt
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
@@ -36,29 +43,14 @@ runs:
     - name: Install Python dependencies
       if: inputs.python == 'true'
       shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements-dev.txt
+      run: uv pip install --system --python python -r requirements-dev.txt
 
-    # zig compiles each target's C runtime once and keeps it in its global cache; the
-    # Windows one is most of a cold tracer build. Keyed on the pinned zig version.
-    - name: Cache zig's compiled C runtimes
-      if: inputs.python == 'true'
-      uses: actions/cache@v6
-      with:
-        path: ${{ runner.temp }}/zig-cache
-        key: zig-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
-
-    - name: Point zig at the cache
-      if: inputs.python == 'true'
-      shell: bash
-      run: echo "ZIG_GLOBAL_CACHE_DIR=${{ runner.temp }}/zig-cache" >> "$GITHUB_ENV"
-
-    - name: Install the snapshot browser
+    - name: Install the launch smoke test's browser
       if: inputs.python == 'true' && inputs.playwright == 'true'
       shell: bash
       run: |
-        # The headless shell is all a snapshot launches; the full Chromium would be ~350 MB more.
+        # The headless shell is all the viewer's launch smoke test drives; the full Chromium
+        # would be ~350 MB more.
         if [ "$RUNNER_OS" = "Linux" ]; then
           python -m playwright install --with-deps --only-shell chromium
         else

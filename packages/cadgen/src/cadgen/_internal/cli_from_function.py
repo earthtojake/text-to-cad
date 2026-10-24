@@ -16,21 +16,15 @@ an argument-parsing framework:
 * The allowed annotation set is ``str, int, float, bool, Path`` and ``X | None``
   over those. Anything richer DISQUALIFIES the function from mirror status: it
   must be an ADAPTER instead — a hand-written parser plus an explicit
-  signature-sync allowlist (tests/python/packages/cadgen/test_public_surface.py).
+  signature-sync allowlist.
 * The docstring's summary paragraph becomes the ``--help`` description, and
   ``name: description`` lines in its body become per-argument help. A plain
   convention, so no docstring-parser dependency rides in the runtime.
 * The return value is a dataclass: ``--json`` serializes it to one line,
   otherwise it prints human lines. A raised exception becomes
   ``{"ok": false, "error": ...}`` + exit 1.
-* A flag the verb USED to take is declared on the function as
-  ``__cadgen_retired_options__`` (see :func:`retired_options`). It is the one
-  thing in a generated parser that is not a parameter, because a deleted
-  parameter leaves nothing behind to derive from: without it a hard cutover
-  reaches the user as argparse's ``unrecognized arguments``, which names no
-  reason and no replacement, and law 8 ("every retired surface fails loudly
-  with a teaching error naming its replacement") is not satisfied by an error
-  that happens to exist.
+* A flag the signature does not take is argparse's ``unrecognized arguments``:
+  the parser holds the signature and nothing else.
 
 Stdlib only, and light: building a parser at dispatch costs microseconds, and
 nothing here may pull the CAD stack in — ``cadgen <verb> --help`` must stay off
@@ -45,7 +39,6 @@ import dataclasses
 import importlib
 import inspect
 import json
-import os
 import re
 import sys
 import types
@@ -71,48 +64,6 @@ _SCALARS: dict[Any, Callable[[str], Any]] = {
 
 class NotDerivable(TypeError):
     """The function is outside the mirror subset; it must be an adapter."""
-
-
-# The attribute a verb declares its retired flags on: ``{"--flag": "why it is
-# gone and what to do instead"}``. Metadata rather than a parameter, because
-# the whole point is that the parameter is gone.
-RETIRED_ATTRIBUTE = "__cadgen_retired_options__"
-
-
-class RetiredOption(Exception):
-    """A flag this command used to take, refused by name.
-
-    Raised out of :meth:`argparse.ArgumentParser.parse_args` the moment the
-    option string is seen, so the flag is REFUSED rather than accepted and
-    ignored. :func:`run_cli` turns it into the message alone on stderr and exit
-    2 -- the same shape as a retired COMMAND (``cadgen.cli._RETIRED``), minus
-    the usage dump that buries the teaching in a wall of live flags.
-    """
-
-
-class _RetiredOptionAction(argparse.Action):
-    """The hidden parser entry that exists only to raise :class:`RetiredOption`.
-
-    ``nargs="?"`` so every spelling the flag ever had reaches it -- ``--camera
-    iso``, ``--camera=iso`` and a bare ``--view-labels`` alike -- and the
-    refusal is the flag's OWN message rather than argparse's report of how many
-    arguments it expected.
-    """
-
-    def __call__(self, parser, namespace, values, option_string=None):  # noqa: ANN001
-        del namespace, values
-        raise RetiredOption(f"{parser.prog} no longer takes {option_string}: {self.const}")
-
-
-def retired_options(func: Callable[..., Any]) -> dict[str, str]:
-    """``{flag: teaching message}`` this verb declares, by its hard-cutover name.
-
-    The message says what the flag meant, why this command has no such thing,
-    and what to do instead; the flag and the command name are added by the
-    action, so a declaration never repeats them.
-    """
-    declared = getattr(func, RETIRED_ATTRIBUTE, None) or {}
-    return {str(flag): str(message) for flag, message in dict(declared).items()}
 
 
 def _scalar(annotation: Any, *, where: str) -> Any:
@@ -293,27 +244,6 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
             options["nargs"] = "?"
             options["default"] = parameter.default
         parser.add_argument(name, **options)
-    # Retired flags are metadata on the verb, not parameters: they stay out of
-    # `--help` and out of `parser_dests` (so the signature-sync policy test
-    # still sees exactly the signature), they can never invoke the function,
-    # and they exist only so a hard cutover names its own replacement.
-    live = {"--" + name.replace("_", "-") for name in inspect.signature(func).parameters}
-    for flag, message in retired_options(func).items():
-        if not flag.startswith("--"):
-            raise NotDerivable(f"{where}: retired option {flag!r} must be a --long spelling")
-        if flag in live:
-            raise NotDerivable(
-                f"{where}: {flag} is declared retired but the signature still takes it -- "
-                "a flag is either a parameter or a retirement, never both"
-            )
-        parser.add_argument(
-            flag,
-            action=_RetiredOptionAction,
-            const=message,
-            nargs="?",
-            dest=argparse.SUPPRESS,
-            help=argparse.SUPPRESS,
-        )
     parser.add_argument(
         "--json",
         dest=JSON_FLAG_DEST,
@@ -399,6 +329,13 @@ def result_lines(result: Any) -> list[str]:
     ]
 
 
+def result_warning_lines(result: Any) -> list[str]:
+    """What the human rendering says on stderr: the Result's own ``warning_lines()`` when
+    it has one -- its warnings, which are not its answer."""
+    renderer = getattr(result, "warning_lines", None)
+    return [str(line) for line in renderer()] if callable(renderer) else []
+
+
 def report_failure(
     exc: BaseException,
     *,
@@ -409,27 +346,23 @@ def report_failure(
     stdout: Any | None = None,
     stderr: Any | None = None,
 ) -> int:
-    """The ONE failure envelope of every cadgen command, and its exit code (1).
+    """The ONE failure envelope of every generated command, and its exit code (1).
 
     Under ``--json`` a failure is ``{"ok": false, "error": ...}`` on STDOUT -- the
     result channel, so a caller parsing the last stdout line always finds an
     answer; otherwise it is the one-line ``[tool] FAILED: ...`` report on stderr.
-    Shared by the generated doors (:func:`emit`) and the model-script runner
-    (``cadgen.cli._run_model``), which prints its own success lines and so cannot
-    go through :func:`emit` itself.
 
     A failure that is a mistake in cadgen's own code, not the person's or one cadgen
-    raised on purpose, is also a crash telemetry reports (``cadgen.analytics.report``):
-    a build worker's goes to the daemon with its exit frame, a command's is handed to a
-    running daemon. Reporting it changes nothing here. In a build, why it failed is decided here too
-    (``cadgen.analytics.build_failure``), for the build's count (``cadgen.daemon.telemetry.job_failed``).
+    raised on purpose, is also a crash telemetry reports (``cadgen.analytics.report``,
+    kept with the command's counts). Reporting it changes nothing here.
     """
     _report_crash(exc)
+    from cadgen._internal.cli_errors import failure_text, report_cli_error
+
     if as_json:
         out = stdout if stdout is not None else sys.stdout
-        print(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")), file=out)
+        print(json.dumps({"ok": False, "error": failure_text(exc)}, separators=(",", ":")), file=out)
         return 1
-    from cadgen._internal.cli_errors import report_cli_error
 
     return report_cli_error(
         exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
@@ -439,12 +372,8 @@ def report_failure(
 def _report_crash(exc: BaseException) -> None:
     try:
         from cadgen import analytics
-        from cadgen.daemon import telemetry
 
-        building = bool(os.environ.get("CADGEN_DAEMON_CHILD")) or telemetry.building()
-        analytics.report(exc, "build" if building else "command", bugs_only=True)
-        if telemetry.building():
-            telemetry.job_failed(analytics.build_failure(exc))
+        analytics.report(exc, "command", bugs_only=True)
     except Exception:  # noqa: BLE001 - a crash report never fails a command's own report
         pass
 
@@ -463,8 +392,9 @@ def emit(
 
     Every command in the schema prints through here, generated or not, so a
     hand-written ADAPTER cannot end up serializing differently from a mirror:
-    one JSON line under ``--json``, the Result's human lines otherwise, and
-    ``{"ok": false, "error": ...}`` + exit 1 for an exception.
+    one JSON line under ``--json``, the Result's human lines otherwise (and its
+    warning lines on stderr), and ``{"ok": false, "error": ...}`` + exit 1 for an
+    exception.
     """
     out = stdout if stdout is not None else sys.stdout
     try:
@@ -474,14 +404,13 @@ def emit(
             exc, prog=prog, as_json=as_json, verbose=verbose, verbose_hint=verbose_hint,
             stdout=out, stderr=stderr,
         )
-    from cadgen.daemon import telemetry
-
-    telemetry.job_result(result)  # in a build worker: whether what it made was the store's already
     if as_json:
         print(json.dumps(result_payload(result), separators=(",", ":")), file=out)
     else:
         for line in result_lines(result):
             print(line, file=out)
+        for line in result_warning_lines(result):
+            print(line, file=stderr if stderr is not None else sys.stderr)
     return 0 if getattr(result, "ok", True) else 1
 
 
@@ -516,15 +445,7 @@ def run_cli(
     """Parse ``argv`` against ``func``'s generated parser, call it, print the result."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
     parser = cli_from_function(func, prog=prog)
-    try:
-        args = parser.parse_args(tokens)
-    except RetiredOption as retired:
-        # The message and nothing else. A usage line here would answer a
-        # question the caller did not ask ("what else does this take?") above
-        # the one they did ("why not this?"), and the flags it lists are the
-        # ones that survived -- which is what `--help` is for.
-        print(str(retired), file=sys.stderr)
-        return 2
+    args = parser.parse_args(tokens)
     positional, keywords = _call_arguments(
         func,
         args,

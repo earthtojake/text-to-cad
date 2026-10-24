@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "instructions": "CAD shows local CAD models (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -27,6 +27,9 @@
  },
  "launches": {
   "cad_file": {
+   "_meta": {
+    "dev.texttocad/httpToken": "<app-token>"
+   },
    "content": [
     {
      "text": "bracket.stl is open in CAD.",
@@ -40,13 +43,16 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 9,
      "surface": "file",
      "version": "<version>"
     }
    }
   },
   "cad_home": {
+   "_meta": {
+    "dev.texttocad/httpToken": "<app-token>"
+   },
    "content": [
     {
      "text": "CAD is open.",
@@ -60,7 +66,7 @@
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 9,
      "recents": [],
      "surface": "sidebar",
      "version": "<version>"
@@ -68,6 +74,9 @@
    }
   },
   "cad_open": {
+   "_meta": {
+    "dev.texttocad/httpToken": "<app-token>"
+   },
    "content": [
     {
      "text": "<tmp>/project/parts/bracket.stl is open in a new CAD tab. From now on, use cad_show to show models in it.",
@@ -81,7 +90,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 9,
      "surface": "agent",
      "version": "<version>"
     }
@@ -108,6 +117,9 @@
    }
   },
   "cad_tab": {
+   "_meta": {
+    "dev.texttocad/httpToken": "<app-token>"
+   },
    "content": [
     {
      "text": "CAD is open.",
@@ -121,7 +133,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 9,
      "surface": "tab",
      "version": "<version>"
     }
@@ -285,7 +297,8 @@
         ".step",
         ".stl",
         ".stp",
-        ".urdf"
+        ".urdf",
+        ".xbf"
        ],
        "type": "file"
       }
@@ -355,7 +368,7 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Open a NEW CAD viewer tab beside the chat showing a local model (STEP, STL, GLB, 3MF, DXF, URDF, SDF). Every call opens another tab, so call it only when cad_show reports that no viewer is open, and never again after a rebuild: open viewers refresh by themselves.",
+   "description": "Open a NEW CAD viewer tab beside the chat showing a local model (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF). Every call opens another tab, so call it only when cad_show reports that no viewer is open, and never again after a rebuild: open viewers refresh by themselves.",
    "icons": [
     {
      "mimeType": "image/svg+xml",
@@ -369,7 +382,7 @@
     "additionalProperties": false,
     "properties": {
      "path": {
-      "description": "A CAD file's absolute path.",
+      "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints).",
       "type": "string"
      }
     },
@@ -401,7 +414,7 @@
     "additionalProperties": false,
     "properties": {
      "path": {
-      "description": "A CAD file's absolute path.",
+      "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints).",
       "type": "string"
      },
      "view": {
@@ -473,11 +486,11 @@
   {
    "annotations": {
     "destructiveHint": false,
-    "idempotentHint": true,
+    "idempotentHint": false,
     "openWorldHint": true,
     "readOnlyHint": false
    },
-   "description": "Report whether cadgen sends usage stats (counts of tool calls, view activity, files shown, builds and snapshots) and crash reports (where cadgen's own code failed, never a message), tagged with a random ID and never file names, paths, contents or prompts, or turn them off. Call with action off only when the user asks.",
+   "description": "Read CAD telemetry status with method GET and url /__cad/analytics. Only when the user asks to opt out, POST to that URL with base64 body eyJzaGFyZSI6ZmFsc2V9 (JSON {\"share\":false}). Opt-out removes the installation ID and requests deletion of previously sent data; saved:false means the choice could not be persisted. Agents cannot opt in or access other routes. CAD app requests carry a session capability. Replies contain HTTP status, headers and a base64 body; agent replies also include readable JSON text.",
    "icons": [
     {
      "mimeType": "image/svg+xml",
@@ -490,18 +503,31 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
-     "action": {
-      "enum": [
-       "status",
-       "off"
-      ],
+     "body": {
+      "description": "Base64-encoded request body.",
+      "type": "string"
+     },
+     "headers": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "method": {
+      "type": "string"
+     },
+     "url": {
       "type": "string"
      }
     },
+    "required": [
+     "method",
+     "url"
+    ],
     "type": "object"
    },
-   "name": "cad_telemetry",
-   "title": "CAD telemetry"
+   "name": "cad_http",
+   "title": "CAD HTTP request"
   },
   {
    "_meta": {
@@ -520,6 +546,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "app": {
+      "description": "The view's capability, from its launch's metadata.",
+      "type": "string"
+     },
      "closed": {
       "type": "boolean"
      },
@@ -549,13 +579,6 @@
          "string",
          "null"
         ]
-       },
-       "previews": {
-        "items": {
-         "type": "string"
-        },
-        "maxItems": 4,
-        "type": "array"
        }
       },
       "type": "object"
@@ -563,7 +586,8 @@
     },
     "required": [
      "view",
-     "surface"
+     "surface",
+     "app"
     ],
     "type": "object"
    },
@@ -587,6 +611,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "app": {
+      "description": "The view's capability, from its launch's metadata.",
+      "type": "string"
+     },
      "error": {
       "type": "string"
      },
@@ -598,7 +626,8 @@
      }
     },
     "required": [
-     "requestId"
+     "requestId",
+     "app"
     ],
     "type": "object"
    },
@@ -606,46 +635,676 @@
    "title": "Answer CAD"
   },
   {
-   "_meta": {
-    "ui": {
-     "visibility": [
-      "app"
-     ]
-    }
-   },
    "annotations": {
-    "destructiveHint": false,
-    "openWorldHint": false,
-    "readOnlyHint": true
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true,
+    "readOnlyHint": false
    },
-   "description": "One request to the CAD viewer's routes, bodies base64.",
+   "description": "Export a document to explicit absolute destinations on the engine host (.xbf/.step/.glb/.stl/.3mf/.dxf). The source is an absolute CAD file path or a document id (a model's, which running its script prints); a document id is exported as the engine holds it. A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only, each holding what its format carries. Reuses the Python export operation. Viewer downloads instead choose a destination in the user's browser and use temporary artifacts. Start requires requestId. Returns an asynchronous operation: call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
    "inputSchema": {
     "additionalProperties": false,
-    "properties": {
-     "body": {
-      "type": "string"
-     },
-     "headers": {
-      "additionalProperties": {
-       "type": "string"
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "start"
+        ],
+        "type": "string"
+       },
+       "destinations": {
+        "items": {
+         "minLength": 1,
+         "type": "string"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "type": "array"
+       },
+       "requestId": {
+        "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "source": {
+        "minLength": 1,
+        "type": "string"
+       }
       },
+      "required": [
+       "requestId",
+       "source",
+       "destinations"
+      ],
       "type": "object"
      },
-     "method": {
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "status",
+         "cancel"
+        ],
+        "type": "string"
+       },
+       "afterSequence": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "epoch": {
+        "description": "Session epoch returned by start; required for status/cancel.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "operationId": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "waitMs": {
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "action",
+       "operationId",
+       "epoch"
+      ],
+      "type": "object"
+     }
+    ],
+    "properties": {
+     "action": {
+      "default": "start",
+      "enum": [
+       "start",
+       "status",
+       "cancel"
+      ],
       "type": "string"
      },
-     "url": {
+     "afterSequence": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "destinations": {
+      "items": {
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+     },
+     "epoch": {
+      "description": "Session epoch returned by start; required for status/cancel.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "operationId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "source": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "waitMs": {
+      "maximum": 25000,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "cad_export",
+   "outputSchema": {
+    "properties": {
+     "cancellable": {
+      "type": "boolean"
+     },
+     "epoch": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     },
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "operation": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "result": {
+      "type": "object"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "stage": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "succeeded",
+       "failed",
+       "cancelled",
+       "rejected"
+      ],
       "type": "string"
      }
     },
     "required": [
-     "method",
-     "url"
+     "state"
     ],
     "type": "object"
    },
-   "name": "cad_http",
-   "title": "CAD viewer request"
+   "title": "Export CAD"
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true,
+    "readOnlyHint": false
+   },
+   "description": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged. Start requires requestId. Returns an asynchronous operation: call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "start"
+        ],
+        "type": "string"
+       },
+       "annotation": {
+        "type": [
+         "object",
+         "array",
+         "string"
+        ]
+       },
+       "camera": {
+        "type": [
+         "object",
+         "array",
+         "string"
+        ]
+       },
+       "display": {
+        "type": [
+         "object",
+         "array",
+         "string"
+        ]
+       },
+       "grid": {
+        "type": "boolean"
+       },
+       "height": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "measurements": {
+        "type": [
+         "object",
+         "array",
+         "string"
+        ]
+       },
+       "output": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "packet": {
+        "type": [
+         "object",
+         "array",
+         "string"
+        ]
+       },
+       "pose": {
+        "type": [
+         "object",
+         "string"
+        ]
+       },
+       "preview": {
+        "type": "boolean"
+       },
+       "requestId": {
+        "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "size_profile": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "source": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "width": {
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "requestId"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "status",
+         "cancel"
+        ],
+        "type": "string"
+       },
+       "afterSequence": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "epoch": {
+        "description": "Session epoch returned by start; required for status/cancel.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "operationId": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "waitMs": {
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "action",
+       "operationId",
+       "epoch"
+      ],
+      "type": "object"
+     }
+    ],
+    "properties": {
+     "action": {
+      "default": "start",
+      "enum": [
+       "start",
+       "status",
+       "cancel"
+      ],
+      "type": "string"
+     },
+     "afterSequence": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "annotation": {
+      "type": [
+       "object",
+       "array",
+       "string"
+      ]
+     },
+     "camera": {
+      "type": [
+       "object",
+       "array",
+       "string"
+      ]
+     },
+     "display": {
+      "type": [
+       "object",
+       "array",
+       "string"
+      ]
+     },
+     "epoch": {
+      "description": "Session epoch returned by start; required for status/cancel.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "grid": {
+      "type": "boolean"
+     },
+     "height": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "measurements": {
+      "type": [
+       "object",
+       "array",
+       "string"
+      ]
+     },
+     "operationId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "output": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "packet": {
+      "type": [
+       "object",
+       "array",
+       "string"
+      ]
+     },
+     "pose": {
+      "type": [
+       "object",
+       "string"
+      ]
+     },
+     "preview": {
+      "type": "boolean"
+     },
+     "requestId": {
+      "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "size_profile": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "source": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "waitMs": {
+      "maximum": 25000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "width": {
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "cad_snapshot",
+   "outputSchema": {
+    "properties": {
+     "cancellable": {
+      "type": "boolean"
+     },
+     "epoch": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     },
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "operation": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "result": {
+      "type": "object"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "stage": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "succeeded",
+       "failed",
+       "cancelled",
+       "rejected"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "type": "object"
+   },
+   "title": "Snapshot CAD"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Read closure, geometry (requires ref), or build metadata of an existing CAD file or a document id. Never builds a model or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again. Defaults to geometry with a ref, otherwise closure. Start requires requestId. Returns an asynchronous operation: call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "start"
+        ],
+        "type": "string"
+       },
+       "query": {
+        "enum": [
+         "closure",
+         "geometry",
+         "build"
+        ],
+        "type": "string"
+       },
+       "ref": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "requestId": {
+        "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "source": {
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "required": [
+       "requestId",
+       "source"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "status",
+         "cancel"
+        ],
+        "type": "string"
+       },
+       "afterSequence": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "epoch": {
+        "description": "Session epoch returned by start; required for status/cancel.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "operationId": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "waitMs": {
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "action",
+       "operationId",
+       "epoch"
+      ],
+      "type": "object"
+     }
+    ],
+    "properties": {
+     "action": {
+      "default": "start",
+      "enum": [
+       "start",
+       "status",
+       "cancel"
+      ],
+      "type": "string"
+     },
+     "afterSequence": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "epoch": {
+      "description": "Session epoch returned by start; required for status/cancel.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "operationId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "query": {
+      "enum": [
+       "closure",
+       "geometry",
+       "build"
+      ],
+      "type": "string"
+     },
+     "ref": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "source": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "waitMs": {
+      "maximum": 25000,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "cad_inspect",
+   "outputSchema": {
+    "properties": {
+     "cancellable": {
+      "type": "boolean"
+     },
+     "epoch": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     },
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "operation": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "result": {
+      "type": "object"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "stage": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "succeeded",
+       "failed",
+       "cancelled",
+       "rejected"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "type": "object"
+   },
+   "title": "Inspect CAD"
   }
  ]
 }

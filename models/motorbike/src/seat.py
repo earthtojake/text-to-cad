@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import bodywork as B
 
 
-@step(out="../STEP/seat.step")
+@model
 def seat():
     built = B.build_seat()
     if isinstance(built, list):

@@ -20,7 +20,7 @@ The rim is the design event:
 * a BRONZE centre-lock nut sitting at the bottom of that bowl -- the warm
   jewel on an otherwise cool wheel.
 
-Spokes are placed with ``cadgen.compound_from_instances`` (36 occurrences over
+Spokes are placements of one blade per axle (36 occurrences over
 two prototypes) so nine blades per corner cost two lofts, not thirty-six.
 
 The module also owns the ARCH FLARE at each corner -- the haunch that swells
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 from lib import surfaces as S
@@ -717,69 +717,27 @@ def _corners():
     return out
 
 
-def _bake(shape):
-    """Bake a shape's location into its geometry, leaving an identity location.
-
-    This matters for more than tidiness.  A part positioned by a TopLoc
-    location keeps its geometry at the origin and carries the placement ONLY in
-    the render package's per-occurrence transform.  The CAD Viewer drops those
-    transforms when the STEP parameter module is switched off, which collapses
-    all four wheels onto the prototype under the middle of the car -- and since
-    the tyres are the only thing touching Z=0, the car then looks like it is
-    floating.  Every other part module builds directly in world space, so the
-    wheels were the only ones affected.
-
-    Baking makes each wheel real world-space geometry, so it renders the same
-    with the module on or off.  The cost is that the four wheels stop sharing a
-    content-addressed component and become four unique ones.
-    """
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
-    from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_SOLID
-    from OCP.TopLoc import TopLoc_Location
-    from build123d.topology.shape_core import downcast
-    occt = shape.wrapped
-    loc = occt.Location()
-    if loc.IsIdentity():
-        return shape
-    transformed = BRepBuilderAPI_Transform(
-        occt.Located(TopLoc_Location()), loc.Transformation(), True
-    )
-    out = downcast(transformed.Shape())
-    kind = out.ShapeType()
-    if kind == TopAbs_COMPOUND:
-        return bd.Compound(out)
-    if kind == TopAbs_SOLID:
-        return bd.Solid(out)
-    return bd.Part(out)
-
-
 def build():
-    """Four independently placed wheels.
+    """Four placed wheels: each corner places its axle's wheel prototype.
 
-    These were originally one ``compound_from_instances`` set: four wheels and
-    36 spokes sharing two prototypes, placed by per-occurrence transforms.  That
-    is much cheaper to build, but it makes every wheel a shared component whose
-    position lives ONLY in the occurrence transform -- and when the viewer
-    renders without the STEP module applied, those transforms collapse and all
-    four wheels stack on the prototype, which sits flat under the middle of the
-    car.  The tyres are also the only thing touching Z=0, so losing them makes
-    the whole car look like it is floating.
-
-    Placing each wheel as real, separately located geometry costs build time and
-    package size and removes that entire failure mode.
+    Every leaf of a wheel is the axle's prototype placed at its corner (``base *
+    leaf``), and the nine blades are one blade placed nine times, so the four
+    wheels are two prototypes' parts placed, not four copies of geometry. (The
+    old pipeline baked each wheel into world-space geometry, because its viewer
+    dropped occurrence transforms; an xbf places a prototype as it is.)
     """
     corner_groups = []
     for sp, name, base in _corners():
         proto = _wheel_prototype(sp)
         kids = []
         for leaf in list(proto.children):
-            placed = _bake(base * leaf)
+            placed = base * leaf
             placed.label = f"{leaf.label.split(':')[0]}:{name}"
             placed.color = leaf.color
             kids.append(placed)
         for k in range(sp.n_spokes):
             spin = bd.Location((0, 0, 0), (0, 0, 360.0 * k / sp.n_spokes))
-            blade = _bake((base * spin) * _blade(sp))
+            blade = (base * spin) * _blade(sp)
             kids.append(style(blade, f"spoke:{name}_{k}", P.ALUMINIUM_DARK))
         corner_groups.append(group(f"wheel:{name}", kids))
 

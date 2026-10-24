@@ -47,6 +47,8 @@ Good URI choices include:
 
 Mesh assets themselves are owned by the CAD/mesh workflow: one asset per link, exported in the link's own frame, with source units recorded. If a mesh is wrong, fix the export, not the SDF poses.
 
+SDF lengths are meters, and `<mesh><scale>` converts a mesh's numbers to them. An STL carries no unit and a 3MF is read as the numbers it holds (its `unit` attribute is not applied): `cadgen` writes both in millimeters, which take `<scale>0.001 0.001 0.001</scale>`. A GLB is meters by the glTF specification (`cadgen` writes GLB in meters), so it takes no `<scale>`.
+
 ## Inertials and physics
 
 For dynamic models, inertial data is simulation-critical. If inertials are estimated, record the approximation method. Do not copy visual origins into inertial origins unless that is physically justified.
@@ -65,7 +67,7 @@ For plugins and sensors, record:
 
 Do not invent plugin parameters. Incorrect plugin XML can pass lightweight validation and still fail at simulator load time.
 
-CAD Viewer reviews SDF files as static model/world structure through live viewer links. Do not add a `cad-viewer-input-motion` plugin to get motion out of it — the Viewer recognizes that plugin only to report that it is ignored. Use simulator-native controllers, plugins, or test harnesses for simulator behavior.
+CAD Viewer reviews SDF files as static model/world structure through live viewer links. It lists a plugin and never runs one, so no plugin gets motion out of it: pose joints by hand in the Viewer, or with `--pose` in a snapshot. Use simulator-native controllers, plugins, or test harnesses for simulator behavior.
 
 ## Existing SDF inspection
 

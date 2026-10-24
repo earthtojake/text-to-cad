@@ -1,15 +1,16 @@
 """``cadgen doctor`` — report the installed cadgen and check a skill's version pin.
 
 The one check a skill teaches: run it with the skill's launch command, pointed at the skill
-(its directory or SKILL.md), and it says which installation is running -- its folder, which
-names the warm daemon it shares -- and whether that is the cadgen the skill's docs were written
+(its directory or SKILL.md), and it says which installation is running -- its folder, and the
+engine server it shares -- and whether that is the cadgen the skill's docs were written
 against: the version its launch command pins (``uvx ... --from cadgen==<version>``).
 
 It also proves the CAD kernel loads. ``OCP`` is imported in a fresh interpreter
 (never in this one, so the report itself stays stdlib-only and fast to reach),
 and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
-says (``cadgen._internal.kernel_load_hint``).
+says (``cadgen._internal.kernel_load_hint``). And it says where the engine's server,
+where every build runs, keeps its socket and whether one is running, without starting one.
 
 Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
 3 = pin mismatch; 4 = the kernel is installed but cannot be loaded (the report
@@ -47,14 +48,21 @@ def _resolve_skill(target: str | None) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _daemon_name() -> str | None:
-    """The name of the warm daemon this installation shares, or ``None`` if it cannot tell."""
+def _server() -> str:
+    """The engine server this installation shares (``cadgen.engine.daemon``): where its socket is,
+    and whether one is running -- asked, never started."""
     try:
-        from cadgen.daemon.client import daemon_identity
+        from cadgen.engine import daemon as engine_daemon
+        from cadgen.engine.client import request
 
-        return daemon_identity()
-    except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
-        return None
+        where = engine_daemon.port_path() if engine_daemon.WINDOWS else engine_daemon.socket_path()
+        answer = request({"op": "status"}, start=False)
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return f"unknown ({type(error).__name__}: {error})"
+    if not isinstance(answer, dict):
+        return f"not running ({where}); the first build starts it"
+    workers = len(answer.get("workers") or [])
+    return f"running, pid {answer.get('pid')}, {workers} worker{'' if workers == 1 else 's'} ({where})"
 
 
 def _sharing() -> str | None:
@@ -105,8 +113,10 @@ def _probe_kernel() -> tuple[str, str]:
     try:
         # Both ends name utf-8: the child's stdio would otherwise be the ANSI code page
         # on Windows, which cannot carry every path or every localized loader error.
+        # ``-P``, as every child cadgen starts: the kernel the installation imports, never a
+        # module of that name in the folder the command was run from.
         result = subprocess.run(
-            [sys.executable, "-c", "import OCP; print(OCP.__file__)"],
+            [sys.executable, "-P", "-c", "import OCP; print(OCP.__file__)"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -147,10 +157,8 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     sys.stdout.write(f"cadgen {installed}\n")
     sys.stdout.write(f"  python   {sys.version.split()[0]} ({sys.executable})\n")
     sys.stdout.write(f"  install  {location}\n")
-    daemon = _daemon_name()
-    if daemon:
-        # Named after the installation's folder: the same name means the same warm daemon.
-        sys.stdout.write(f"  daemon   {daemon}\n")
+    # One per installation: the same socket means the same warm daemon.
+    sys.stdout.write(f"  server   {_server()}\n")
     sharing = _sharing()
     if sharing:
         # Whether CAD's apps send usage stats, as `cadgen telemetry` says it.
@@ -160,6 +168,7 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
 
     kernel_state, detail = _probe_kernel()
     kernel_loaded = kernel_state != KERNEL_FAILED
+    status = 0 if kernel_loaded else 4
     if kernel_state == KERNEL_OK:
         sys.stdout.write(f"  kernel   OK — OCP at {detail}\n")
     elif kernel_state == KERNEL_MISSING:
@@ -177,16 +186,16 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     skill = _resolve_skill(args.skill)
     if skill is None:
         sys.stdout.write("  pin      none found (no SKILL.md to check)\n")
-        return 0 if kernel_loaded else 4
+        return status
 
     pin = read_skill_pin(skill)
     if pin is None:
         # No pinned launch command (a development install points it at a checkout): nothing to enforce.
         sys.stdout.write(f"  pin      unpinned in {skill}\n")
-        return 0 if kernel_loaded else 4
+        return status
     if pin == installed:
         sys.stdout.write(f"  pin      OK — cadgen=={pin} ({skill})\n")
-        return 0 if kernel_loaded else 4
+        return status
     sys.stderr.write(
         f"  pin      MISMATCH — {skill} pins cadgen=={pin}, "
         f"but cadgen {installed} is installed.\n"

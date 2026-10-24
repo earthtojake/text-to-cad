@@ -1,8 +1,9 @@
-from cadgen import step
+from cadgen import model
+
 from lib.logo_shape import make_logo
 
 
-@step(out="../STEP/logo_c.step")
+@model
 def logo_c():
     return make_logo("C")
 

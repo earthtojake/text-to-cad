@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import threading
+
+from cadgen.engine import executables
 
 TIMEOUT_SECONDS = 600
 
@@ -60,19 +61,19 @@ class PickerFailed(Exception):
 
 
 def _command() -> tuple[list[str], dict[str, str], bool]:
-    """The chooser's argv, extra environment, and whether it answers in JSON."""
+    """The chooser's argv, extra environment, and whether it answers in JSON. Every chooser by its
+    absolute path (``executables.find``), never one a PATH entry relative to the working folder names."""
     if sys.platform == "darwin":
-        osascript = shutil.which("osascript") or "/usr/bin/osascript"
-        return [osascript, "-l", "JavaScript", "-e", _MAC_SCRIPT], {}, True
+        return ["/usr/bin/osascript", "-l", "JavaScript", "-e", _MAC_SCRIPT], {}, True
     if sys.platform == "win32":
-        shell = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+        shell = executables.find("powershell.exe") or executables.find("pwsh.exe")
         if shell:
             return [shell, "-NoProfile", "-STA", "-NonInteractive", "-Command", _WINDOWS_SCRIPT], {}, True
     elif os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
-        if shutil.which("zenity"):
-            return ["zenity", "--file-selection", "--title=Open"], {}, False
-        if shutil.which("kdialog"):
-            return ["kdialog", "--title", "Open", "--getopenfilename", os.path.expanduser("~")], {}, False
+        if zenity := executables.find("zenity"):
+            return [zenity, "--file-selection", "--title=Open"], {}, False
+        if kdialog := executables.find("kdialog"):
+            return [kdialog, "--title", "Open", "--getopenfilename", os.path.expanduser("~")], {}, False
     raise PickerFailed("This computer has no file chooser CAD can open (macOS needs osascript, Windows PowerShell, Linux zenity or kdialog on a desktop).")
 
 

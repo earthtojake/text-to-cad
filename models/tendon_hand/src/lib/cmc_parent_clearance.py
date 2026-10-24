@@ -1,7 +1,7 @@
 """Machined clearances for the recorded wrist motion next to the CMC bank."""
 import json
 from pathlib import Path
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import _finish
 from lib.transport_guide import path_wire
 DATA=json.loads(Path(__file__).with_name('cmc_parent_reliefs.json').read_text())

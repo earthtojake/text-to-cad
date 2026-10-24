@@ -126,13 +126,6 @@ function blockedClipboardError(error) {
   return error instanceof Error ? error : new Error("Clipboard image copy failed");
 }
 
-function blockedClipboardTextReadError(error) {
-  if (isClipboardPermissionError(error)) {
-    return new Error("Clipboard paste is blocked in this browser");
-  }
-  return error instanceof Error ? error : new Error("Clipboard paste failed");
-}
-
 export async function copyImageBlobToClipboard(blobOrPromise, { type = "image/png" } = {}) {
   const clipboard = globalThis.navigator?.clipboard;
   const ClipboardItemCtor = globalThis.ClipboardItem;
@@ -208,16 +201,4 @@ export async function copyTextToClipboard(text) {
     throw clipboardError;
   }
   throw new Error("Clipboard is unavailable");
-}
-
-export async function readTextFromClipboard() {
-  const clipboard = globalThis.navigator?.clipboard;
-  if (typeof clipboard?.readText !== "function") {
-    throw new Error("Clipboard paste is unavailable");
-  }
-  try {
-    return await clipboard.readText();
-  } catch (error) {
-    throw blockedClipboardTextReadError(error);
-  }
 }

@@ -1,9 +1,9 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import atan2, cos, degrees, hypot, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 DISPLAY_NAME = "Cutaway miniature turbofan jet engine"
@@ -224,7 +224,7 @@ def _make_intake_lip() -> object:
                 rotation=(0.0, 90.0, 0.0),
             )
     part = lip.part.rotate(bd.Axis.X, -175.0)
-    return _label(part, "rounded_intake_lip_5mm_radius", bd.Color(0.74, 0.77, 0.78, 1.0))
+    return _label(part, "rounded_intake_lip_5mm_radius", bd.Color("#dfe3e5"))
 
 
 def _make_nacelle_shell() -> bd.Compound:
@@ -235,7 +235,7 @@ def _make_nacelle_shell() -> bd.Compound:
             x_end=NACELLE_LENGTH,
             outer_radius=NACELLE_OUTER_RADIUS,
             inner_radius=NACELLE_INNER_RADIUS,
-            color=bd.Color(0.73, 0.76, 0.78, 1.0),
+            color=bd.Color("#dee2e5"),
             fillet_cut_edges=2.0,
         ),
         _make_intake_lip(),
@@ -247,7 +247,7 @@ def _make_nacelle_shell() -> bd.Compound:
             inner_start_radius=39.0,
             outer_end_radius=46.0,
             inner_end_radius=37.0,
-            color=bd.Color(0.62, 0.65, 0.67, 1.0),
+            color=bd.Color("#ced3d6"),
         ),
     ]
     return _make_compound("nacelle_shell", parts)
@@ -363,7 +363,7 @@ def _make_fan_rotor() -> bd.Compound:
             x_start=19.0,
             x_end=37.0,
             radius=13.0,
-            color=bd.Color(0.31, 0.38, 0.43, 1.0),
+            color=bd.Color("#97a6af"),
         )
     ]
     for index in range(24):
@@ -381,7 +381,7 @@ def _make_fan_rotor() -> bd.Compound:
                 twist_tip_deg=15.0,
                 attachment_radius=13.0 - BLADE_ROOT_OVERLAP,
                 axial_sweep=3.0,
-                color=bd.Color(0.77, 0.82, 0.86, 1.0),
+                color=bd.Color("#e3eaef"),
             )
         )
     return _make_compound("fan_rotor", parts)
@@ -397,7 +397,7 @@ def _make_compressor_rotor() -> bd.Compound:
                 x_start=x_center - 2.0,
                 x_end=x_center + 2.0,
                 radius=21.0,
-                color=bd.Color(0.45, 0.50, 0.54, 1.0),
+                color=bd.Color("#b3bcc2"),
             )
         )
         phase = radians(stage_index * 10.0)
@@ -417,7 +417,7 @@ def _make_compressor_rotor() -> bd.Compound:
                     twist_tip_deg=12.0 + stage_angle_offset,
                     attachment_radius=21.0 - BLADE_ROOT_OVERLAP,
                     axial_sweep=1.2,
-                    color=bd.Color(0.69, 0.73, 0.76, 1.0),
+                    color=bd.Color("#d8dee2"),
                 )
             )
     return _make_compound("compressor_rotor_four_stages", parts)
@@ -441,7 +441,7 @@ def _make_stator_vanes() -> bd.Compound:
                     twist_root_deg=-30.0,
                     twist_tip_deg=-18.0,
                     axial_sweep=-0.8,
-                    color=bd.Color(0.79, 0.65, 0.37, 1.0),
+                    color=bd.Color("#e6d3a4"),
                 )
             )
     return _make_compound("stator_vanes_three_rings", parts)
@@ -456,7 +456,7 @@ def _make_turbine_rotor() -> bd.Compound:
                 x_start=x_center - 2.5,
                 x_end=x_center + 2.5,
                 radius=23.0,
-                color=bd.Color(0.49, 0.45, 0.41, 1.0),
+                color=bd.Color("#bab3ac"),
             )
         )
         phase = radians(stage_index * 12.0)
@@ -475,7 +475,7 @@ def _make_turbine_rotor() -> bd.Compound:
                     twist_tip_deg=-8.0,
                     attachment_radius=23.0 - BLADE_ROOT_OVERLAP,
                     axial_sweep=2.2,
-                    color=bd.Color(0.74, 0.59, 0.42, 1.0),
+                    color=bd.Color("#dfcaad"),
                 )
             )
     return _make_compound("turbine_rotor_two_stages", parts)
@@ -498,7 +498,7 @@ def _make_exhaust_cone() -> object:
             ),
         ]
     )
-    return _label(part, "exhaust_cone_taper_d36_to_d14", bd.Color(0.38, 0.40, 0.42, 1.0))
+    return _label(part, "exhaust_cone_taper_d36_to_d14", bd.Color("#a6aaad"))
 
 
 def _make_support_strut(index: int, angle_deg: float, *, trimmed: bool = False) -> object:
@@ -522,7 +522,7 @@ def _make_support_strut(index: int, angle_deg: float, *, trimmed: bool = False) 
         )
     part = bd.loft(faces, ruled=True)
     suffix = "_trimmed" if trimmed else ""
-    return _label(part, f"support_strut_{index}_{int(angle_deg)}deg{suffix}", bd.Color(0.33, 0.36, 0.38, 1.0))
+    return _label(part, f"support_strut_{index}_{int(angle_deg)}deg{suffix}", bd.Color("#9ba2a6"))
 
 
 def _make_support_struts() -> bd.Compound:
@@ -553,7 +553,7 @@ def _make_mounting_pylon() -> object:
         ],
         ruled=False,
     )
-    return _label(part, "mounting_pylon_swept_aero_support", bd.Color(0.46, 0.49, 0.50, 1.0))
+    return _label(part, "mounting_pylon_swept_aero_support", bd.Color("#b5babc"))
 
 
 def _make_display_base() -> object:
@@ -599,10 +599,10 @@ def _make_display_base() -> object:
         ):
             outer_edges.append(edge)
     part = _safe_fillet(part, outer_edges, 3.0)
-    return _label(part, "display_base_rounded_rectangle_countersunk_holes", bd.Color(0.22, 0.24, 0.25, 1.0))
+    return _label(part, "display_base_rounded_rectangle_countersunk_holes", bd.Color("#818689"))
 
 
-@step(out="../../STEP/cutaway_turbofan_engine/cutaway_turbofan_engine.step")
+@model
 def cutaway_turbofan_engine():
     """Return a labeled multi-body cutaway turbofan display model."""
     bodies = [
@@ -615,7 +615,7 @@ def cutaway_turbofan_engine():
             x_start=15.0,
             x_end=165.0,
             radius=4.0,
-            color=bd.Color(0.18, 0.20, 0.22, 1.0),
+            color=bd.Color("#767c81"),
         ),
         _make_stator_vanes(),
         _make_exhaust_cone(),

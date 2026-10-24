@@ -4,7 +4,8 @@ Four slender curved machined load paths surround a broad uninterrupted window.
 The distal fixed bearing eyes run along Z rather than the X pin eyes used by
 ordinary phalanges. No member crosses the central six-liner corridor.
 """
-from cadgen import build123d as bd, srgb
+import build123d as bd
+
 from .phalanx import _drive_bore
 
 LENGTH=36.
@@ -61,6 +62,6 @@ def make_thumb_metacarpal(label='thumb_metacarpal'):
     for z in (PALMAR_SUPPORT_Z,DORSAL_SUPPORT_Z):
         shape=shape-(bd.Pos(0,LENGTH,z)*bd.Cylinder(2.53,4.5))
     shape.label=label
-    shape.color=srgb('#a9b7c1')
+    shape.color='#a9b7c1'
     if not shape.is_valid or shape.volume<=0:raise ValueError(f'{label}: invalid solid')
     return shape

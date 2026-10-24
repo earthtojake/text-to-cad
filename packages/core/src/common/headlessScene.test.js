@@ -5,17 +5,16 @@
 // robot is posed, and that a family scene never takes a CAD model's steps.
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import * as THREE from "three";
 
-import { writeGlb } from "../lib/glb/writeGlb.js";
 import { deformedGlb } from "../lib/render/__tests__/deformedGlb.js";
 import { buildGlbDocumentFromBuffer, buildMeshDataFromGlbBuffer } from "../lib/render/glbMeshData.js";
 import { buildMeshDataFromStlBuffer } from "../lib/render/stlMeshData.js";
-import { parseArmSrdf, parseArmUrdf, robotOf } from "../lib/urdf/__tests__/robotFixtures.js";
-import { robotOpeningPose } from "../lib/urdf/motion.js";
-import { solveUrdfLinkWorldTransforms } from "../lib/urdf/kinematics.js";
-import { headlessSceneDress, headlessSceneFamily, headlessSceneModel, refuseUnexplodable } from "./headlessScene.js";
+import { ARM, ARM_SRDF, robotOf } from "../lib/urdf/__tests__/robotFixtures.js";
+import { jointDeltas } from "./articulation.js";
+import { headlessSceneDress, headlessSceneFamily, headlessSceneModel } from "./headlessScene.js";
 import { captureModel, projectedVisibleGeometryFrame, renderJobContext } from "./renderMeshScene.js";
 import { resolveSceneSurfaceLook, resolveViewSceneSettings } from "./sceneSettings.js";
 import { EDGELESS_VIEW_FEATURES } from "./viewSettings.js";
@@ -28,12 +27,11 @@ function box([x, y, z], size) {
   const faces = [[0, 2, 1, 0, 3, 2], [4, 5, 6, 4, 6, 7], [0, 1, 5, 0, 5, 4], [2, 3, 7, 2, 7, 6], [1, 2, 6, 1, 6, 5], [3, 0, 4, 3, 4, 7]];
   return new Float32Array(faces.flat().flatMap(index => corners[index]));
 }
-function glbBytes() {
-  const glb = writeGlb({ primitives: [
-    { name: "base", node: "base", occurrenceId: "o1.1", positions: box([0, 0, 0], 0.02), color: "#d02020", material: { roughness: 0.05, metalness: 1 } },
-    { name: "rider", node: "rider", occurrenceId: "o1.2", positions: box([0.03, 0, 0], 0.01), color: "#2040d0" }
-  ] }, { preset: "export" });
-  return glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength);
+// cadgen's exports of two boxes, a polished red base and a blue rider (`fixtures/README.md`):
+// `pair.glb` static, and `pair.slide.glb` with the rider's clip, one named node per occurrence.
+function glbBytes(name = "pair.glb") {
+  const bytes = readFileSync(new URL(`../lib/render/fixtures/${name}`, import.meta.url));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 // A binary STL of two separate boxes: 24 triangles, one object.
 function stlBytes() {
@@ -47,7 +45,6 @@ function stlBytes() {
   }
   return buffer;
 }
-// What a job asks for: a display, and Preview's look (`preview`) or not. The scene has parts for Parts to colour.
 const settingsFor = (look, kind = "stl") => renderJobContext({ bounds: { min: [0, 0, 0], max: [1, 1, 1] }, partCount: 2 }, job(kind, look)).sceneSettings;
 const DISPLAYS = {
   "solid light": { display: { mode: "solid", appearance: "light" } },
@@ -80,16 +77,16 @@ test("every file family the snapshot CLI draws reaches its viewer builder; a STE
   assert.deepEqual([glb.object3D.name, glb.document === document, document.scene.parent === glb.object3D], ["glb-document", true, true]);
   const mesh = headlessSceneFamily(job("stl")).build(THREE, await buildMeshDataFromStlBuffer(stlBytes()), job("stl"));
   assert.deepEqual([mesh.object3D.name, mesh.meshCount], ["mesh-document", 1]);
-  const robot = headlessSceneFamily(job("urdf")).build(THREE, robotOf(parseArmUrdf()), job("urdf"));
-  assert.deepEqual([robot.object3D.name, typeof robot.setJointValues, robot.links.has("turret")], ["robot", "function", true]);
+  const robot = headlessSceneFamily(job("urdf")).build(THREE, robotOf(ARM), job("urdf", { resolved: { kind: "urdf", robot: ARM, controls: {} } }));
+  assert.deepEqual([robot.object3D.name, typeof robot.setControlValues, robot.linkFrames().has("turret")], ["robot", "function", true]);
   for (const scene of [glb, mesh, robot]) scene.dispose();
 });
 
 test("a family scene on the headless stage wears exactly the look the viewer's viewport puts on it", async () => {
   const meshData = await buildMeshDataFromStlBuffer(stlBytes());
   const family = headlessSceneFamily(job("stl"));
-  for (const [name, look] of Object.entries(DISPLAYS)) {
-    const sceneSettings = settingsFor(look);
+  for (const [name, display] of Object.entries(DISPLAYS)) {
+    const sceneSettings = settingsFor(display);
     const headless = headlessSceneModel(THREE, family.build(THREE, meshData, job("stl")), headlessSceneDress(sceneSettings));
     // The viewport's own dressing (ShellViewport): the look it resolves, then every mesh takes shadows or none.
     const viewer = family.build(THREE, meshData, job("stl"));
@@ -103,9 +100,9 @@ test("a family scene on the headless stage wears exactly the look the viewer's v
 });
 
 test("the look is really worn: Inspect's finish in Solid, a GLB's authored finish in Render, shadows only under the lights", async () => {
-  const solid = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes())),
+  const solid = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes("pair.slide.glb"))),
     headlessSceneDress(settingsFor(DISPLAYS["solid light"], "glb")));
-  const render = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes())),
+  const render = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes("pair.slide.glb"))),
     headlessSceneDress(settingsFor(DISPLAYS.preview, "glb")));
   const base = model => model.displayRecords.find(({ mesh }) => mesh.parent?.name === "base" || mesh.name === "base").mesh;
   const inspect = settingsFor(DISPLAYS["solid light"], "glb").theme.materials;
@@ -118,27 +115,37 @@ test("the look is really worn: Inspect's finish in Solid, a GLB's authored finis
   render.dispose();
 });
 
-test("a robot opens on the headless stage where the viewer opens it, with the requested joints on top, through its joint matrices", () => {
+// A robot job carries the payload cadgen resolved and the control vector it validated.
+const robotJob = (kind, robot, controls) => job(kind, { resolved: { kind, url: `/__render_asset/part.${kind}`, inputPath: `/models/part.${kind}`, robot, controls } });
+
+test("a robot opens on the headless stage at the control vector cadgen resolved for the job, through its joint matrices", async () => {
   const family = headlessSceneFamily(job("srdf"));
-  const robot = robotOf(parseArmSrdf());
-  const opened = family.build(THREE, robot, job("srdf"));
-  assert.ok(Math.abs(opened.jointValue("pitch") - (-0.5 * 180 / Math.PI)) < 1e-9, "the SRDF's home state is where it opens");
-  const posed = family.build(THREE, robot, job("srdf", { jointValues: { yaw: 40, lift: 0.2 } }));
-  const pose = { ...robotOpeningPose(robot.description), yaw: 40, lift: 0.2 };
-  assert.deepEqual([posed.jointValue("yaw"), posed.jointValue("lift"), posed.jointValue("pitch")], [40, 0.2, opened.jointValue("pitch")]);
-  const solved = solveUrdfLinkWorldTransforms(robot.description, pose);
+  const robot = robotOf(ARM_SRDF);
+  const home = -0.5 * 180 / Math.PI;
+  const opened = family.build(THREE, robot, robotJob("srdf", ARM_SRDF, ARM_SRDF.articulation.opening));
+  assert.ok(Math.abs(opened.jointRow("pitch").turn - home) < 1e-9, "the SRDF's home state is where it opens");
+  const controls = { ...ARM_SRDF.articulation.opening, yaw: 40, lift: 0.2 };
+  const posed = family.build(THREE, robot, robotJob("srdf", ARM_SRDF, controls));
+  assert.deepEqual([posed.jointRow("yaw").turn, posed.jointRow("lift").travel, posed.jointRow("pitch").turn], [40, 0.2, home]);
+  // Every link is where the player's delta over its rest placement puts it.
+  const deltas = jointDeltas(THREE, ARM_SRDF.articulation, controls);
+  const carrier = new Map(Object.entries(ARM_SRDF.articulation.carries).flatMap(([joint, links]) => links.map(link => [link, joint])));
   for (const [link, frame] of posed.linkFrames()) {
-    frame.forEach((value, index) => assert.ok(Math.abs(value - solved.get(link)[index]) < 1e-9, `${link}[${index}]`));
+    const expected = new THREE.Matrix4().set(...ARM_SRDF.links.find(entry => entry.name === link).placement);
+    if (carrier.has(link)) expected.premultiply(deltas.get(carrier.get(link)));
+    const rowMajor = expected.transpose().toArray();
+    frame.forEach((value, index) => assert.ok(Math.abs(value - rowMajor[index]) < 1e-9, `${link}[${index}]`));
   }
+  await assert.rejects(family.load(job("urdf"), { resources: null }), /resolved\.robot/, "a job without the payload is refused, never parsed on the page");
   opened.dispose();
   posed.dispose();
 });
 
 test("a posed robot keeps its REST box for the ground while its live box follows the pose", () => {
   const family = headlessSceneFamily(job("urdf"));
-  const robot = robotOf(parseArmUrdf());
-  const rest = headlessSceneModel(THREE, family.build(THREE, robot, job("urdf")), headlessSceneDress(settingsFor(DISPLAYS.preview, "urdf")));
-  const posed = headlessSceneModel(THREE, family.build(THREE, robot, job("urdf", { jointValues: { pitch: -90, lift: 0.5 } })),
+  const robot = robotOf(ARM);
+  const rest = headlessSceneModel(THREE, family.build(THREE, robot, robotJob("urdf", ARM, {})), headlessSceneDress(settingsFor(DISPLAYS.preview, "urdf")));
+  const posed = headlessSceneModel(THREE, family.build(THREE, robot, robotJob("urdf", ARM, { pitch: -90, lift: 0.5 })),
     headlessSceneDress(settingsFor(DISPLAYS.preview, "urdf")));
   assert.notDeepEqual(posed.bounds, rest.bounds, "the arm stands up");
   assert.deepEqual(posed.restBounds, rest.restBounds, "renderModel sizes the grid, stage and studio floor from this box");
@@ -149,10 +156,8 @@ test("a posed robot keeps its REST box for the ground while its live box follows
 });
 
 test("a GLB with clips is framed and grounded on the box sampled over every clip, as the viewer frames it", async () => {
-  const glb = writeGlb({ primitives: [{ name: "rider", node: "rider", positions: box([0, 0, 0], 0.01), color: "#2040d0" }] },
-    { preset: "export", animations: [{ name: "slide", times: new Float32Array([0, 1]),
-      channels: [{ node: "rider", translation: new Float32Array([0, 0, 0, 0.1, 0, 0]) }] }] });
-  const document = await buildGlbDocumentFromBuffer(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength));
+  // The rider slides 60 mm along +X.
+  const document = await buildGlbDocumentFromBuffer(glbBytes("pair.slide.glb"));
   const model = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, document), headlessSceneDress(settingsFor(DISPLAYS["solid light"], "glb")));
   assert.deepEqual(model.restBounds, document.animatedBounds);
   assert.ok(model.restBounds.max[0] > document.restBounds.max[0] + 50, "the clip's travel is inside the ground's box");
@@ -177,15 +182,15 @@ test("two scenes over one decode share its arrays and release only their own buf
   assert.equal(released, 1, "its owner frees them, once");
 
   // A robot's link geometries wrap the loader's arrays the same way.
-  const robot = robotOf(parseArmUrdf());
+  const robot = robotOf(ARM);
   const robotFamily = headlessSceneFamily(job("urdf"));
-  const [first, second] = [0, 1].map(() => robotFamily.build(THREE, robot, job("urdf")));
+  const [first, second] = [0, 1].map(() => robotFamily.build(THREE, robot, robotJob("urdf", ARM, {})));
   const disposals = [];
   second.object3D.traverse((object) => { if (object.isMesh) object.geometry.addEventListener("dispose", () => disposals.push(object.name)); });
   first.dispose();
   assert.deepEqual(disposals, []);
   second.dispose();
-  assert.ok(disposals.length >= robot.parts.length - 2, "each part geometry once (two finger visuals share one)");
+  assert.equal(disposals.length, robot.parts.length, "each part geometry once");
 });
 
 test("a document whose scene cannot be built is released, not leaked", async () => {
@@ -211,7 +216,7 @@ test("the still's tight frame fits a skinned and morphed GLB where it is drawn; 
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld(true);
   const frame = projectedVisibleGeometryFrame(model.displayRecords, camera);
-  // The L the GPU draws: x from -1000 to 100, z from -500 to 1100 (DEFORMED_EXTENT in CAD mm).
+  // The L the GPU draws (`deformedGlb.js`, in CAD mm): x from -1000 to 100, z from -500 to 1100.
   assert.ok(Math.abs(frame.spanX - 1100) < 1e-3 && Math.abs(frame.spanY - 1600) < 1e-3, JSON.stringify(frame));
   assert.deepEqual(model.bounds.min.map(Math.round), [-1000, -100, -500]);
   const flattened = await buildMeshDataFromGlbBuffer(bytes.slice(0));
@@ -233,8 +238,8 @@ test("a family scene has no CAD edges, a one-part GLB no Explode, and --mode lis
   assert.equal(model.runtime, undefined, "no CAD runtime: captureModel skips the exploded view, topology edges and line widths");
   const listed = await captureModel({ model, context: { ...context, mode: "list" } }, { job: job("glb") });
   assert.deepEqual(listed.parts.map(({ ref, name, triangleCount, vertexCount }) => [ref, name, triangleCount, vertexCount]),
-    [["#n0", "base", 12, 24], ["#n1", "rider", 12, 24]], "a GLB's parts by the nodes a reference names (`model.glb#n0`)");
-  assert.deepEqual(listed.parts[1].bounds, { min: [30, -10, 0], max: [40, 0, 10] }, "placed in CAD millimetres, as drawn");
+    [["#n0", "pair", 12, 24], ["#n1", "pair", 12, 24]], "a GLB's parts by the nodes a reference names (`model.glb#n0`)");
+  assert.deepEqual(listed.parts[1].bounds, { min: [0, -20, 0], max: [20, 0, 20] }, "placed in CAD millimetres, as drawn");
   model.dispose();
 
   const stl = headlessSceneModel(THREE, headlessSceneFamily(job("stl")).build(THREE, await buildMeshDataFromStlBuffer(stlBytes()), job("stl")),
@@ -243,24 +248,9 @@ test("a family scene has no CAD edges, a one-part GLB no Explode, and --mode lis
   stl.dispose();
 
   // A robot lists down its tree, root first: a link, then the links it carries (as the file has them).
-  const robot = headlessSceneModel(THREE, headlessSceneFamily(job("urdf")).build(THREE, robotOf(parseArmUrdf()), job("urdf")),
+  const robot = headlessSceneModel(THREE, headlessSceneFamily(job("urdf")).build(THREE, robotOf(ARM), job("urdf")),
     headlessSceneDress(context.sceneSettings));
   assert.deepEqual(robot.listParts().map(({ id }) => id),
-    ["base:v1", "turret:v1", "arm:v1", "tool:v1", "finger_link:v1", "finger_mirror_link:v1", "wheel_link:v1"]);
+    ["base:v1", "turret:v1", "arm:v1", "tool:v1", "wheel_link:v1"]);
   robot.dispose();
-});
-
-test("a family scene takes what a Quick Edit's view of it says: a robot's hidden parts, by their ids; a GLB of one node no Explode", async () => {
-  const hidden = job("urdf", { selection: { hide: ["arm:v1"] } });
-  const robot = headlessSceneFamily(hidden).build(THREE, robotOf(parseArmUrdf()), hidden);
-  assert.equal(robot.object3D.getObjectByName("arm:v1"), undefined, "the hidden visual is not drawn");
-  assert.ok(robot.object3D.getObjectByName("tool:v1"), "the rest are");
-  robot.dispose();
-  const unknown = job("urdf", { selection: { hide: ["no_such:v1"] } });
-  assert.throws(() => headlessSceneFamily(unknown).build(THREE, robotOf(parseArmUrdf()), unknown), /selection\.hide names no part of .*: no_such:v1\. Its parts: base:v1/);
-
-  const exploded = { display: { exploded: { enabled: true, amount: 0.5 } }, resolved: { inputPath: "/models/one.glb" } };
-  assert.throws(() => refuseUnexplodable({ explodeParts: 0 }, exploded), /one\.glb has fewer than two rigid nodes that draw, so there is nothing to explode/);
-  assert.doesNotThrow(() => refuseUnexplodable({ explodeParts: 2 }, exploded));
-  assert.doesNotThrow(() => refuseUnexplodable({ explodeParts: 0 }, { display: { exploded: { enabled: true, amount: 0 } } }), "Explode at nought asks for nothing");
 });

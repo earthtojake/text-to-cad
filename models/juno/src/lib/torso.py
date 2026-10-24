@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math  # noqa: F401  (kept for parity with sibling part modules)
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .juno_lib import (
     ALU,

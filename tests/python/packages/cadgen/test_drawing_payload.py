@@ -1,20 +1,14 @@
-"""``cadgen.drawing_payload``: what a DXF becomes, and what it costs twice.
+"""``cadgen.drawing_payload``: what a DXF becomes.
 
-Every fixture here is generated with ezdxf into a fresh temporary directory —
-nothing reads the sample corpus, and nothing shares a store with another test
-file. The drawings are deliberately tiny and deliberately varied: the module's
-whole claim is that it does not need a case per entity type, and the only way
-to hold it to that is to feed it one of each.
-
-The store side gets its own ``CADGEN_CACHE_DIR`` per test class, and the
-"does not re-run ezdxf" property is checked by COUNTING renders rather than by
-timing one, because a timing assertion is a flake waiting for a busy machine.
+Every fixture here is generated with ezdxf into a fresh temporary directory --
+nothing reads the sample corpus. The drawings are deliberately tiny and
+deliberately varied: the module's whole claim is that it does not need a case
+per entity type, and the only way to hold it to that is to feed it one of each.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -31,7 +25,6 @@ from cadgen.drawing_payload import (  # noqa: E402
     DRAWING_PAYLOAD_SCHEMA_VERSION,
     DrawingReadError,
     build_drawing_payload,
-    drawing_payload_bytes,
     encode_drawing_payload,
 )
 
@@ -41,7 +34,7 @@ PRIMITIVE_TYPES = frozenset(
 
 
 class DrawingFixture(unittest.TestCase):
-    """A temp directory and a private store for one test class."""
+    """A temp directory for one test class."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -51,21 +44,6 @@ class DrawingFixture(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
-
-    def setUp(self) -> None:
-        # A store PER TEST, not per class. These drawings are tiny and several
-        # of them render to byte-identical payloads, which is one object in the
-        # store: a test that damages it on purpose would otherwise decide what
-        # the next test sees.
-        self._previous_cache = os.environ.get("CADGEN_CACHE_DIR")
-        self.cache = self.tmp / "store" / self.id().rsplit(".", 1)[-1]
-        os.environ["CADGEN_CACHE_DIR"] = str(self.cache)
-
-    def tearDown(self) -> None:
-        if self._previous_cache is None:
-            os.environ.pop("CADGEN_CACHE_DIR", None)
-        else:
-            os.environ["CADGEN_CACHE_DIR"] = self._previous_cache
 
     def write_drawing(self, name: str, build, *, setup: bool = True) -> Path:
         """Save a drawing built by ``build(document, modelspace)``."""
@@ -455,6 +433,31 @@ class UnreadableDrawings(DrawingFixture):
         payload = build_drawing_payload(path)
         self.assertTrue(payload["primitives"])
 
+    def test_bytes_read_already_draw_what_their_file_draws(self) -> None:
+        """The viewer renders the bytes it read (``data``): an ASCII drawing with text, an R12
+        one whose header names a code page, a binary one, and a damaged one, recovered."""
+        def notes(doc, msp) -> None:
+            msp.add_line((0, 0), (10, 0))
+            msp.add_text("ÄÖÜ ß", height=2).set_placement((0, 2))
+
+        paths = [self.write_drawing("ascii.dxf", notes)]
+        for name, version, fmt in (("r12.dxf", "R12", "asc"), ("binary.dxf", "R2010", "bin")):
+            document = ezdxf.new(version)
+            notes(document, document.modelspace())
+            document.saveas(str(self.tmp / name), fmt=fmt)
+            paths.append(self.tmp / name)
+        damaged = self.write_drawing("broken.dxf", lambda doc, msp: msp.add_line((0, 0), (10, 10)))
+        damaged.write_text(damaged.read_text(encoding="utf-8").replace("\nENDSEC\n  0\nEOF\n", "\n"),
+                           encoding="utf-8")
+        for path in [*paths, damaged]:
+            with self.subTest(path=path.name):
+                self.assertEqual(build_drawing_payload(path, path.read_bytes()), build_drawing_payload(path))
+        r12 = build_drawing_payload(paths[1], paths[1].read_bytes())
+        self.assertIn("ÄÖÜ ß", json.dumps(r12, ensure_ascii=False), "decoded in the code page its header names")
+        garbage = b"this is not a DXF\n" * 20
+        with self.assertRaisesRegex(DrawingReadError, "garbage.dxf.*audit"):
+            build_drawing_payload(self.tmp / "garbage.dxf", garbage)
+
     def test_an_unknown_primitive_type_is_a_loud_failure_not_a_dropped_shape(self) -> None:
         path = self.write_drawing("kind.dxf", lambda doc, msp: msp.add_line((0, 0), (1, 1)))
         with mock.patch.object(
@@ -465,97 +468,6 @@ class UnreadableDrawings(DrawingFixture):
             with self.assertRaises(DrawingReadError) as caught:
                 build_drawing_payload(path)
         self.assertIn("hologram", str(caught.exception))
-
-
-class TheStoreAnswersTheSecondTime(DrawingFixture):
-    def drawing(self, name: str) -> Path:
-        def build(doc, msp):
-            doc.layers.add("CUT", color=1)
-            for index in range(20):
-                msp.add_line((index, 0), (index, 5), dxfattribs={"layer": "CUT"})
-
-        return self.write_drawing(name, build)
-
-    def test_unchanged_bytes_do_not_re_enter_ezdxf(self) -> None:
-        path = self.drawing("cached.dxf")
-        with mock.patch.object(
-            drawing_payload, "_render", wraps=drawing_payload._render
-        ) as render:
-            first = drawing_payload_bytes(path)
-            second = drawing_payload_bytes(path)
-            third = drawing_payload_bytes(path)
-        self.assertEqual(render.call_count, 1, "the store did not answer the repeat requests")
-        self.assertEqual(first, second)
-        self.assertEqual(second, third)
-
-    def test_the_cached_bytes_are_the_payload_and_not_something_near_it(self) -> None:
-        path = self.drawing("cached_shape.dxf")
-        cached = json.loads(drawing_payload_bytes(path))
-        self.assertEqual(cached, build_drawing_payload(path))
-
-    def test_changed_bytes_are_a_different_entry(self) -> None:
-        path = self.drawing("changing.dxf")
-        before = drawing_payload_bytes(path)
-        document = ezdxf.readfile(str(path))
-        document.modelspace().add_circle((50, 50), 4)
-        document.saveas(str(path))
-        with mock.patch.object(
-            drawing_payload, "_render", wraps=drawing_payload._render
-        ) as render:
-            after = drawing_payload_bytes(path)
-        self.assertEqual(render.call_count, 1)
-        self.assertNotEqual(before, after)
-
-    def test_the_entry_lives_in_the_drawing_index_and_points_at_an_object(self) -> None:
-        from cadgen.store import drawings as drawing_index
-        from cadgen.store.index import read_entry
-        from cadgen.store.objects import read_verified_object
-        from cadgen.store.paths import index_dir
-
-        path = self.drawing("indexed.dxf")
-        data = drawing_payload_bytes(path)
-        keys = sorted(entry.name for entry in index_dir("drawing").iterdir())
-        self.assertTrue(keys)
-        entry = read_entry("drawing", keys[0])
-        self.assertEqual(entry["schemaVersion"], drawing_index.DRAWING_ENTRY_SCHEMA_VERSION)
-        self.assertEqual(read_verified_object(entry["object"]), data)
-
-    def test_the_key_changes_with_the_extraction_scheme(self) -> None:
-        from cadgen.store import drawings as drawing_index
-
-        document_hash = "a" * 64
-        first = drawing_index.drawing_input_key(document_hash, scheme="one")
-        second = drawing_index.drawing_input_key(document_hash, scheme="two")
-        self.assertNotEqual(first, second)
-        self.assertEqual(
-            first, drawing_index.drawing_input_key(document_hash.upper(), scheme="one")
-        )
-
-    def test_a_damaged_object_reads_as_a_miss_rather_than_as_a_payload(self) -> None:
-        from cadgen.store import drawings as drawing_index
-        from cadgen.store.index import read_entry
-        from cadgen.store.objects import object_path
-        from cadgen.store.paths import index_dir
-
-        path = self.drawing("damaged_object.dxf")
-        expected = drawing_payload_bytes(path)
-        key = next(entry.name for entry in index_dir("drawing").iterdir())
-        object_path(read_entry("drawing", key)["object"]).write_bytes(b"{}")
-        self.assertIsNone(drawing_index.read(key))
-        self.assertEqual(drawing_payload_bytes(path), expected)
-
-    def test_the_sweeper_keeps_a_cached_payload_reachable(self) -> None:
-        from cadgen.store.gc import reachable_objects
-        from cadgen.store.index import read_entry
-        from cadgen.store.paths import index_dir
-
-        drawing_payload_bytes(self.drawing("swept.dxf"))
-        key = next(entry.name for entry in index_dir("drawing").iterdir())
-        self.assertIn(read_entry("drawing", key)["object"], reachable_objects())
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class EntitiesNameWhatDrew(DrawingFixture):
@@ -603,3 +515,7 @@ class EntitiesNameWhatDrew(DrawingFixture):
         self.assertGreater(len(payload["primitives"]), 1)
         self.assertEqual([row["handle"] for row in payload["entities"]], [handles["dimension"]])
         self.assertEqual(payload["entities"][0]["type"], "DIMENSION")
+
+
+if __name__ == "__main__":
+    unittest.main()

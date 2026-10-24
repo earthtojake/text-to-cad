@@ -7,18 +7,15 @@ plate's bridge-side surface; these parts hang on the dial side (z < -1.5)
 around the stem axis at 3 o'clock.
 """
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import memo
 
 from lib import materials
 from lib import mvt_keyless as K
 
 
-@step(out="../STEP/keyless_works.step", materials=materials.materials_for_model("keyless_works"))
+@memo
 def keyless_works():
-    compound = bd.Compound(children=K.build_keyless(), label="keyless_works")
+    parts = materials.apply_materials(K.build_keyless(), "keyless_works")
+    compound = bd.Compound(children=parts, label="keyless_works")
     return compound
-
-
-if __name__ == "__main__":
-    keyless_works()

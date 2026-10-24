@@ -7,7 +7,7 @@ flexures and the inner riser. This is an authored compliant geometry, not a
 calibrated force transducer. Strain calibration/strength remain unspecified.
 """
 from math import cos, sin, radians
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 CARTRIDGE_RADIUS = 8.20

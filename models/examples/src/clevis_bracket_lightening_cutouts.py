@@ -1,8 +1,8 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import materials, model
 from math import cos, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib.part_common import rounded_triangle_points, safe_fillet
 
@@ -109,7 +109,7 @@ def _subtract_rounded_triangle(vertices: list[tuple[float, float]]):
     bd.extrude(cutout.sketch, amount=BASE_THICKNESS + 2.0, mode=bd.Mode.SUBTRACT)
 
 
-@step(out="../STEP/clevis_bracket_lightening_cutouts.step")
+@model
 def clevis_bracket_lightening_cutouts():
     """Return the clevis bracket model in millimeters."""
     positive_lug_y_min = LUG_GAP_Y / 2.0 + LUG_THICKNESS_Y
@@ -151,6 +151,7 @@ def clevis_bracket_lightening_cutouts():
     part = bracket.part
     part = safe_fillet(part, _lug_base_edges(part), radius=LUG_FILLET)
     part.label = "aerospace_clevis_bracket_lightening_cutouts"
+    part.material = materials.aluminium_7075
     return part
 
 

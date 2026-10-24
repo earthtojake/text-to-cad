@@ -3,10 +3,8 @@ import * as THREE from "three";
 import { Box, MousePointer2 } from "lucide-react";
 import { PositionIcon } from "../kit/tools/ChangedDot.jsx";
 import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
-import { URDF_JOINT_VALUE_EPSILON } from "@text-to-cad/core/lib/urdf/jointValues.js";
-import { resolveLocalAssetFileRef } from "@text-to-cad/core/lib/urdf/meshAssetUrl.js";
+const URDF_JOINT_VALUE_EPSILON = 1e-9;
 import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
-import { srdfGroupNamesByLink } from "@text-to-cad/core/lib/urdf/parseSrdf.js";
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -25,7 +23,7 @@ import { positionValuesAreDefault } from "../kit/inspector/kinematicsControls.js
 import { useRobotReferences } from "./robotReferences.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
-import { prepareRobotJointHandles, robotJointHandles, robotPosableJoints } from "./jointHandles.js";
+import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
 import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 import { useLinkSelection } from "./useLinkSelection.js";
@@ -64,29 +62,29 @@ function PositionSection({ pose, previewPose, revision }) {
 
 function RobotSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useRobotDocument({ entry: document.entry, resources: document.client.resources });
+  const loaded = useRobotDocument({ entry: document.entry, client: document.client, resources: document.client.resources });
   const robot = loaded.robot;
   const kind = String(document.entry?.kind || "").toLowerCase();
 
   // ---- pose: outside React ------------------------------------------------------------
-  // The pose slice of the file's view (`kit/shell/fileView.js`): the joint values,
-  // written against the description's revision, so a reopened file takes its pose back only
-  // if it is the same robot. The selection and the tree's disclosure are not in it.
+  // The pose slice of the file's view (`kit/shell/fileView.js`): the control values, written
+  // against the payload's revision, so a reopened file takes its pose back only if it is the
+  // same robot. The selection and the tree's disclosure are not in it.
   const [stored] = useState(() => view.state);
   const poseRef = useRef(null);
   const pose = useMemo(() => {
     if (!robot) return null;
     // A new revision of the file keeps the pose it was left in, and the named pose it was chosen
-    // as, while what poses it — its joints and named poses — is unchanged; when that changed it
-    // opens at its own opening pose: the old pose is never fitted onto other joints. The first
+    // as, while what poses it — its controls and named poses — is unchanged; when that changed it
+    // opens at its own opening pose: the old pose is never fitted onto other controls. The first
     // load takes the stored pose, written against this very revision.
     const previous = poseRef.current;
     if (previous) {
       const { values, groupStateId } = previous.getSnapshot();
-      return previous.logic === poseLogic(robot.description)
-        ? createPoseStore(robot.description, values, groupStateId) : createPoseStore(robot.description);
+      return previous.logic === poseLogic(robot.robot)
+        ? createPoseStore(robot.robot, values, groupStateId) : createPoseStore(robot.robot);
     }
-    return createPoseStore(robot.description, readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null);
+    return createPoseStore(robot.robot, readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null);
   }, [robot, stored]);
   poseRef.current = pose;
   const robotRef = useRef(robot);
@@ -107,7 +105,7 @@ function RobotSurface({ view, data }) {
   useLayoutEffect(() => {
     if (!robot || !pose) { setScene(null); return undefined; }
     const next = createRobotScene(THREE, robot);
-    next.setJointValues(pose.getSnapshot().values);
+    next.setControlValues(pose.getSnapshot().values);
     setScene(next);
     // Its owner releases it: the viewport only ever detaches a scene.
     return () => next.dispose();
@@ -124,7 +122,7 @@ function RobotSurface({ view, data }) {
   const shellRef = useRef(null);
   // A highlight recolours links and casts no new shadow: its frame keeps the shadow maps.
   const requestHighlightFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
-  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame });
+  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame, shown: true });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const live = useMemo(() => ({
@@ -133,7 +131,7 @@ function RobotSurface({ view, data }) {
     state: () => ({
       selectedLinks: [...selectionRef.current.selectedLinkNames],
       selectedPartIds: (robotRef.current?.parts || []).filter(part => (selectionRef.current.selectedLinkNames.length
-        ? selectionRef.current.selectedLinkNames.includes(part.linkName) : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
+        ? selectionRef.current.selectedLinkNames.includes(part.link) : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
     })
   }), []);
   const escape = useMemo(() => ({
@@ -149,13 +147,18 @@ function RobotSurface({ view, data }) {
     }
   }), [selection.active, measure.drafting, measure.selected.length]);
 
+  // ---- visibility: React state, the scene told ---------------------------------------------
+  // A hidden visual leaves the render and the pick; the bounds (lighting, floor) follow, and the
+  // view's record is saved with the ids.
   const requestVisibilityRender = useCallback(() => {
     shellRef.current?.requestRender();
     shellRef.current?.syncSceneBounds();
     shellRef.current?.scheduleStateSave();
   }, []);
-  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored });
-  // Pose is read when saved; visibility is immutable React state, scoped to this file revision.
+  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored, shown: true });
+  // The slices are read when the view is WRITTEN: the pose lives outside React; the hidden ids
+  // are React state, both against the payload's revision. Until the robot has loaded there is
+  // nothing to say, and what was stored is kept.
   const rendererState = useMemo(() => (robot && pose ? {
     signatures: { pose: robot.revision, visibility: robot.revision },
     read: () => ({ pose: { jointValues: pose.getSnapshot().values }, visibility: { hiddenPartIds } })
@@ -205,12 +208,12 @@ function RobotSurface({ view, data }) {
   // Preview's own robot and pose: the robot as it opens, each time Preview opens, moved by the
   // Preview's Position section and gone as it closes — the tools view's robot and pose are never touched.
   const previewScene = usePreviewScene(scene, previewing);
-  const previewPose = useMemo(() => (previewing && robot ? createPoseStore(robot.description) : null), [previewing, robot]);
+  const previewPose = useMemo(() => (previewing && robot ? createPoseStore(robot.robot) : null), [previewing, robot]);
   useLayoutEffect(() => {
     if (!previewScene || !previewPose) return undefined;
     let boundsFrame = 0;
     const present = () => {
-      if (!previewScene.setJointValues(previewPose.getSnapshot().values)) return;
+      if (!previewScene.setControlValues(previewPose.getSnapshot().values)) return;
       const view = shellRef.current?.frame.previewViewRef.current;
       view?.requestRender?.();
       boundsFrame ||= window.requestAnimationFrame(() => { boundsFrame = 0; shellRef.current?.frame.previewViewRef.current?.syncSceneBounds?.(); });
@@ -224,11 +227,11 @@ function RobotSurface({ view, data }) {
   previewSceneRef.current = previewScene;
   useLayoutEffect(() => {
     if (!scene || !pose || !robot) { handlesRef.current = NO_HANDLES; return undefined; }
-    const prepared = prepareRobotJointHandles(THREE, robot.description, scene);
+    const prepared = prepareRobotJointHandles(THREE, robot.robot, scene);
     let boundsFrame = 0;
     const readHandles = () => { handlesRef.current = robotJointHandles(THREE, prepared, scene, pose.getSnapshot().values, pose.write); };
     const present = () => {
-      if (!scene.setJointValues(pose.getSnapshot().values)) return;
+      if (!scene.setControlValues(pose.getSnapshot().values)) return;
       readHandles();
       shellRef.current?.requestRender();
       // Lighting, shadows and the floor follow the posed robot: once per frame, however many writes landed in it.
@@ -244,7 +247,7 @@ function RobotSurface({ view, data }) {
   }, [scene, pose, robot]);
 
   // Read-only debug/test seams: where the Pose knobs are (CSS pixels, with each joint's
-  // value), where every link group IS (so a test asserts what is drawn, not what was asked
+  // value), where every link IS (so a test asserts what is drawn, not what was asked
   // for), and what posing costs.
   const surfaceRenders = useRef(0);
   surfaceRenders.current += 1;
@@ -263,8 +266,8 @@ function RobotSurface({ view, data }) {
   }, [scene]);
 
   // ---- tools -------------------------------------------------------------------------------
-  // Pose exists where something can be driven: a turning or sliding joint that is not a mimic follower.
-  const posable = useMemo(() => robotPosableJoints(robot?.description).length > 0, [robot]);
+  // Pose exists where something can be driven: a control of the articulation.
+  const posable = Boolean(pose?.controls.length);
   const { toolMode, selectTool } = shell;
   // What Select picks: Links and Position, each on its own; another file starts with both.
   const [selectFilter, setSelectFilter] = useState(ROBOT_SELECT_DEFAULT);
@@ -287,13 +290,7 @@ function RobotSurface({ view, data }) {
   const pickSelection = selection.pick;
   const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) toSelect(); }, [pickSelection, toSelect]);
 
-  // A mesh the description names, by the absolute path the host opens. It resolves against the
-  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it), a
-  // `package://` one against the folder named for its package above the file.
   const modelKey = document.modelKey;
-  const hostPath = String(document.entry?.file || "").trim() || modelKey;
-  const meshPath = useCallback((filename) => resolveLocalAssetFileRef(hostPath, filename), [hostPath]);
-  const groupNamesByLink = useMemo(() => (robot?.description?.srdf ? srdfGroupNamesByLink(robot.description) : null), [robot]);
 
   // Select, its filter the chevron's menu: Position offered where a control can be driven (until
   // the robot has loaded that is not known, and it is offered meanwhile); then Annotate, Measure and Clip.
@@ -308,10 +305,10 @@ function RobotSurface({ view, data }) {
   // The file sidebar, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
   const sidebarShown = !shell.previewing;
   const sidebar = <>
-    <LinksSection key={modelKey} active={sidebarShown} description={robot?.description || null} components={robot?.components}
-      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} />
+    <LinksSection key={modelKey} active={sidebarShown} robot={robot?.robot || null} components={robot?.components}
+      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} onOpenFile={view.onOpenFile} />
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed>
-      <SdfSection info={robot?.description?.sdf || null} />
+      <SdfSection info={robot?.robot?.sdf || null} />
     </ToolPanel> : null}
     {/* Headed "Position"; its Pose row's Default puts the joints back. */}
     {posable && pose ? <PositionSection pose={pose} previewPose={previewPose} revision={robot.revision} /> : null}
@@ -319,8 +316,8 @@ function RobotSurface({ view, data }) {
 
   // What is selected, for Quick Edit: each link (an object by its link) as a reference into the
   // description, and as a chip whose card says what the description says of it.
-  const { references, chips: referenceChips } = useRobotReferences({ robot: robot?.description || null, components: robot?.components,
-    selection, resource: shell.frame.resource, onOpenFile: view.onOpenFile, meshPath, groupNamesByLink });
+  const { references, chips: referenceChips } = useRobotReferences({ robot: robot?.robot || null, components: robot?.components,
+    selection, resource: shell.frame.resource, onOpenFile: view.onOpenFile });
 
   // A link pasted into Quick Edit's note, by its name and the solid's glyph (as its chip shows it),
   // where it is one of this file's.

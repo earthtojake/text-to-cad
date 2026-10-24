@@ -1,22 +1,32 @@
-"""Full motorbike assembly: every part model composed by CALLING it.
+"""Full motorbike assembly: the one model here, every part composed by CALLING it.
 
-Children are sibling models: calling one inside this body builds it if stale
-(on its own worker, in parallel with its siblings) or loads it, and the
-assembly LINKS to the child's geometry rather than copying it. Every child
-authors its parts in the BIKE frame (see `lib/spec.py`), so the assembly
-composes at identity and still records the functional relationships as native
-build123d joints on world-coincident datum frames:
+Each part is a plain function in a sibling file, called inside this body: the
+bike is one body and one xbf, and the kernel memo caches the parts' kernel calls
+(a `@memo` per part saves under 0.1 s, so none carries one). Every part is
+authored in the BIKE frame (see `lib/spec.py`), so the assembly composes at
+identity and still
+records the functional relationships as native build123d joints on
+world-coincident datum frames:
 
 - steering: frame head tube <-> fork (revolute, raked axis through the axle)
 - front spin: fork axle <-> front wheel (revolute)
 - engine swing: frame pivot plates <-> engine (revolute)
 - rear spin: engine output hub <-> rear wheel (revolute)
+- center stand: frame bracket <-> stand pivot tubes (revolute)
 - everything else: rigid mounts at named, parameterized datums.
 
-Two children are instanced twice: `turn_signal_left()` is the front-left signal
-and, PLACED with `Pos`, the rear-left one; `turn_signal_right()` the same on the
-right. The right-hand signals and mirror are the left models' mirror images —
-new geometry, not a placement — so each is its own model built from the same
+Each revolute joint carries the range the old typed mate declared, and the old
+`KINEMATICS` poses are configurations on those joints: `stand_down` (the stand
+deployed to the floor), `turned_left` (the bars 32 degrees left) and `bump` (the
+engine swung up 12 degrees); `ride`, which set nothing, is the bike as built. One
+motion: `steer`, the bars swung 20 degrees each way and back, which a GLB export
+bakes into a clip of that name.
+
+Two parts are instanced twice: `turn_signal_left()` is the front-left signal
+and, PLACED with `Pos`, the rear-left one (a second call in one build is a new
+placement of the first's result); `turn_signal_right()` the same on the
+right. The right-hand signals and mirror are the left parts' mirror images —
+new geometry, not a placement — so each is its own function built from the same
 `lib/trim.py` factory, and the assembly links all four signals and both mirrors.
 
 OCCURRENCE ORDER IS FROZEN — top to bottom below.
@@ -24,11 +34,10 @@ OCCURRENCE ORDER IS FROZEN — top to bottom below.
 
 from __future__ import annotations
 
-import cadgen
-from cadgen import build123d as bd
-from cadgen import step
+from cadgen import model
+from cadgen.ap242 import configuration_sequence, mechanism_state
 
-from cadgen.assembly import AssemblyHelper
+import build123d as bd
 
 from center_stand import center_stand
 from engine import engine
@@ -55,111 +64,68 @@ from under_seat_body import under_seat_body
 from lib import spec as S
 
 
-def _revolute_mate(asm, fixed_part, moving_part, point, direction,
-                   fixed_name, moving_name, label):
+def _label(shape, name, *details):
+    """``name:detail`` on the shape (the old ``asm.add``)."""
+    shape.label = ":".join(str(token) for token in (name, *details))
+    return shape
+
+
+def _revolute_mate(fixed_part, moving_part, point, direction,
+                   fixed_name, moving_name, limits):
     """Native revolute relationship at a world datum. The moving side must be
     a rigid frame (this build123d version's connect_to contract); its Plane
     orientation matches the RevoluteJoint's own frame convention so a static
-    angle-0 pose keeps the as-authored placement exactly."""
-    fixed = asm.revolute_frame(fixed_part, fixed_name, bd.Axis(point, direction))
-    moving = asm.rigid_frame(
-        moving_part, moving_name, bd.Plane(origin=point, z_dir=direction).location,
-    )
-    asm.revolute(fixed, moving, angle=0.0, label=label)
+    angle-0 pose keeps the as-authored placement exactly. ``limits``: the range
+    the old typed mate declared."""
+    bd.RevoluteJoint(fixed_name, fixed_part, axis=bd.Axis(point, direction), angular_range=limits)
+    bd.RigidJoint(moving_name, moving_part, bd.Plane(origin=point, z_dir=direction).location)
+    fixed_part.joints[fixed_name].connect_to(moving_part.joints[moving_name], angle=0.0)
 
 
-# --- typed mates: the DECLARED motion the viewer poses and a bake exports ----
-#
-# The native joints above place the children (angle 0 = the as-authored bike);
-# these are the same pivots restated as pure data on the instance tree, from
-# the same S.* hardpoints, so nothing can drift between the two.
-#
-# Refs name instance-tree nodes: `#frame` is a part occurrence, `#front_fork`
-# and `#engine` are subassemblies, and mating a group carries its whole subtree.
-# Only SIBLINGS need a `fastened` mate — the handlebar, front fender and mirrors
-# are separate top-level children, so without one they would not follow the
-# steering. Everything bolted to the frame (leg shield, apron trim, tail, seat)
-# is already at rest relative to the root and needs no mate.
-#
-# The rear shock is deliberately NOT mated: its two eyes tie the frame to the
-# swinging engine, which is a closed loop, and cadgen evaluates pure forward
-# kinematics by design. It stays put while the engine swings.
-_STEER_AXIS = S.steer_point((S.HEAD_TUBE_BOT_T + S.HEAD_TUBE_TOP_T) / 2)
-_STAND_AXIS = (S.STAND_PIVOT[0], 0.0, S.STAND_PIVOT[2])
-
-KINEMATICS = {
-    "mates": [
-        cadgen.revolute("steering", parent="#frame", child="#front_fork",
-                        origin=_STEER_AXIS, direction=S.STEER_DIR,
-                        limits=(-40.0, 40.0)),
-        cadgen.fastened("handlebar_clamp", parent="#front_fork", child="#handlebar"),
-        cadgen.fastened("front_fender_mount", parent="#front_fork", child="#front_fender"),
-        cadgen.fastened("mirror_left_mount", parent="#handlebar", child="#mirror:left"),
-        cadgen.fastened("mirror_right_mount", parent="#handlebar", child="#mirror:right"),
-        cadgen.revolute("front_wheel_spin", parent="#front_fork", child="#front_wheel",
-                        origin=S.FRONT_AXLE, direction=(0, 1, 0),
-                        limits=(-3600.0, 3600.0)),
-        cadgen.revolute("engine_swing", parent="#frame", child="#engine",
-                        origin=S.ENGINE_PIVOT, direction=(0, 1, 0),
-                        limits=(-5.0, 12.0)),
-        cadgen.fastened("exhaust_mount", parent="#engine", child="#exhaust"),
-        cadgen.revolute("rear_wheel_spin", parent="#engine", child="#rear_wheel",
-                        origin=S.REAR_AXLE, direction=(0, 1, 0),
-                        limits=(-3600.0, 3600.0)),
-        # Negative deploys: about +Y the stowed foot swings down and forward.
-        # -76.2 deg is where the foot reaches z = 0 (pivot 250.3 mm above the
-        # foot arc, 240 mm off the ground), so the limit stops at the floor.
-        cadgen.revolute("center_stand_pivot", parent="#frame", child="#center_stand",
-                        origin=_STAND_AXIS, direction=(0, 1, 0),
-                        limits=(-76.2, 0.0)),
-    ],
-    "poses": {
-        "ride": {},
-        "stand_down": {"center_stand_pivot": -76.2},
-        "turned_left": {"steering": 32.0},
-        "bump": {"engine_swing": 12.0},
-    },
-}
+def _rigid_mate(fixed_part, fixed_name, moving_part, moving_name, location):
+    """A rigid mount (the old ``rigid_frame`` pair + ``connect``)."""
+    bd.RigidJoint(fixed_name, fixed_part, location)
+    bd.RigidJoint(moving_name, moving_part, location)
+    fixed_part.joints[fixed_name].connect_to(moving_part.joints[moving_name])
 
 
-@step(out="../STEP/motorbike.step", kinematics=KINEMATICS)
+@model
 def motorbike():
-    asm = AssemblyHelper("motorbike")
     fx, fy, fz = S.FRONT_SIGNAL_POS
     rx, ry, rz = S.REAR_SIGNAL_POS
 
     # --- fixed root + front body ------------------------------------------
-    chassis = asm.add(frame(), "frame")
-    shroud = asm.add(steering_cover(), "steering_cover")
-    shield = asm.add(leg_shield(), "leg_shield")
+    chassis = _label(frame().shape, "frame")
+    shroud = _label(steering_cover().shape, "steering_cover")
+    shield = _label(leg_shield().shape, "leg_shield")
 
     # --- steering front end -------------------------------------------------
-    fork = asm.add(front_fork(), "front_fork")
-    bars = asm.add(handlebar(), "handlebar")
-    fender_front = asm.add(front_fender(), "front_fender")
-    wheel_front = asm.add(front_wheel(), "front_wheel")
-    lamp = asm.add(headlight(), "headlight")
-    signal_fl = asm.add(turn_signal_left(), "turn_signal", "front_left")
-    signal_fr = asm.add(turn_signal_right(), "turn_signal", "front_right")
+    fork = _label(front_fork().shape, "front_fork")
+    bars = _label(handlebar().shape, "handlebar")
+    fender_front = _label(front_fender().shape, "front_fender")
+    wheel_front = _label(front_wheel().shape, "front_wheel")
+    lamp = _label(headlight().shape, "headlight")
+    signal_fl = _label(turn_signal_left().shape, "turn_signal", "front_left")
+    signal_fr = _label(turn_signal_right().shape, "turn_signal", "front_right")
 
     # --- powertrain ---------------------------------------------------------
-    motor = asm.add(engine(), "engine")
-    pipe = asm.add(exhaust(), "exhaust")
-    shock = asm.add(rear_shock(), "rear_shock")
-    wheel_rear = asm.add(rear_wheel(), "rear_wheel")
+    motor = _label(engine().shape, "engine")
+    pipe = _label(exhaust().shape, "exhaust")
+    shock = _label(rear_shock().shape, "rear_shock")
+    wheel_rear = _label(rear_wheel().shape, "rear_wheel")
 
     # --- rear body + trim ---------------------------------------------------
-    body = asm.add(under_seat_body(), "under_seat_body")
-    fender_rear = asm.add(rear_fender(), "rear_fender")
-    saddle = asm.add(seat(), "seat")
-    lamp_rear = asm.add(tail_light(), "tail_light")
-    signal_rl = asm.add(bd.Pos(rx - fx, ry - fy, rz - fz) * turn_signal_left(),
-                        "turn_signal", "rear_left")
-    signal_rr = asm.add(bd.Pos(rx - fx, -(ry - fy), rz - fz) * turn_signal_right(),
-                        "turn_signal", "rear_right")
-    mirror_l = asm.add(mirror_left(), "mirror", "left")
-    mirror_r = asm.add(mirror_right(), "mirror", "right")
-    stand = asm.add(center_stand(), "center_stand")
+    body = _label(under_seat_body().shape, "under_seat_body")
+    fender_rear = _label(rear_fender().shape, "rear_fender")
+    saddle = _label(seat().shape, "seat")
+    lamp_rear = _label(tail_light().shape, "tail_light")
+    signal_rl = _label(bd.Pos(rx - fx, ry - fy, rz - fz) * turn_signal_left().shape,
+                       "turn_signal", "rear_left")
+    signal_rr = _label(bd.Pos(rx - fx, -(ry - fy), rz - fz) * turn_signal_right().shape,
+                       "turn_signal", "rear_right")
+    mirror_l = _label(mirror_left().shape, "mirror", "left")
+    mirror_r = _label(mirror_right().shape, "mirror", "right")
+    stand = _label(center_stand().shape, "center_stand")
 
     # --- joints: motion ------------------------------------------------------
     # Order matters: connect_to() repositions the moving part, and a part that
@@ -167,100 +133,78 @@ def motorbike():
     # revolute (its axis relativization picks up the located state). So each
     # spin hub connects to its carrier while the carrier is still pristine,
     # before that carrier is itself moved by its parent relation.
-    _revolute_mate(asm, fork, wheel_front, S.FRONT_AXLE, (0, 1, 0),
-                   "front_axle_hub", "front_axle", "front_wheel_spin")
-    _revolute_mate(asm, motor, wheel_rear, S.REAR_AXLE, (0, 1, 0),
-                   "rear_axle_hub", "rear_axle", "rear_wheel_spin")
+    _revolute_mate(fork, wheel_front, S.FRONT_AXLE, (0, 1, 0),
+                   "front_axle_hub", "front_axle", (-3600.0, 3600.0))
+    _revolute_mate(motor, wheel_rear, S.REAR_AXLE, (0, 1, 0),
+                   "rear_axle_hub", "rear_axle", (-3600.0, 3600.0))
     steer_mid = S.steer_point((S.HEAD_TUBE_BOT_T + S.HEAD_TUBE_TOP_T) / 2)
-    _revolute_mate(asm, chassis, fork, steer_mid, S.STEER_DIR,
-                   "head_tube_axis", "steering_axis", "steering")
-    _revolute_mate(asm, chassis, motor, S.ENGINE_PIVOT, (0, 1, 0),
-                   "engine_pivot", "swing_pivot", "engine_swing")
-    _revolute_mate(asm, chassis, stand, (S.STAND_PIVOT[0], 0.0, S.STAND_PIVOT[2]),
-                   (0, 1, 0), "stand_bracket", "pivot_tubes", "center_stand_pivot")
+    _revolute_mate(chassis, fork, steer_mid, S.STEER_DIR,
+                   "head_tube_axis", "steering_axis", (-40.0, 40.0))
+    _revolute_mate(chassis, motor, S.ENGINE_PIVOT, (0, 1, 0),
+                   "engine_pivot", "swing_pivot", (-5.0, 12.0))
+    # Negative deploys: about +Y the stowed foot swings down and forward;
+    # -76.2 deg is where the foot reaches z = 0.
+    _revolute_mate(chassis, stand, (S.STAND_PIVOT[0], 0.0, S.STAND_PIVOT[2]),
+                   (0, 1, 0), "stand_bracket", "pivot_tubes", (-76.2, 0.0))
 
     # --- joints: rigid mounts ------------------------------------------------
     stem_top = S.steer_point(S.STEM_TOP_T)
-    stem = asm.rigid_frame(fork, "stem_clamp", bd.Location(stem_top))
-    bar_stem = asm.rigid_frame(bars, "stem", bd.Location(stem_top))
-    asm.connect(stem, bar_stem, relation="rigid", label="handlebar_clamp")
+    _rigid_mate(fork, "stem_clamp", bars, "stem", bd.Location(stem_top))
 
     fender_at = S.steer_point(150.0)
-    fork_leg = asm.rigid_frame(fork, "fork_leg_mount", bd.Location(fender_at))
-    fender_mount = asm.rigid_frame(fender_front, "fork_mount", bd.Location(fender_at))
-    asm.connect(fork_leg, fender_mount, relation="rigid", label="front_fender_mount")
+    _rigid_mate(fork, "fork_leg_mount", fender_front, "fork_mount", bd.Location(fender_at))
 
     shroud_at = S.steer_point(S.HEAD_TUBE_TOP_T)
-    head_shroud = asm.rigid_frame(chassis, "head_shroud", bd.Location(shroud_at))
-    cover_mount = asm.rigid_frame(shroud, "head_tube_mount", bd.Location(shroud_at))
-    asm.connect(head_shroud, cover_mount, relation="rigid", label="steering_cover_mount")
+    _rigid_mate(chassis, "head_shroud", shroud, "head_tube_mount", bd.Location(shroud_at))
 
     apron_at = bd.Location((S.LEG_SHIELD_SECTIONS[2][0], 0.0, S.LEG_SHIELD_SECTIONS[2][1]))
-    apron = asm.rigid_frame(chassis, "apron_mount", apron_at)
-    shield_mount = asm.rigid_frame(shield, "frame_mount", apron_at)
-    asm.connect(apron, shield_mount, relation="rigid", label="leg_shield_mount")
+    _rigid_mate(chassis, "apron_mount", shield, "frame_mount", apron_at)
 
-    lamp_at = bd.Location(S.HEADLIGHT_CENTER)
-    shield_lamp = asm.rigid_frame(shield, "headlight_mount", lamp_at)
-    lamp_mount = asm.rigid_frame(lamp, "apron_mount", lamp_at)
-    asm.connect(shield_lamp, lamp_mount, relation="rigid", label="headlight_mount")
+    _rigid_mate(shield, "headlight_mount", lamp, "apron_mount", bd.Location(S.HEADLIGHT_CENTER))
 
-    fl_mount = asm.rigid_frame(shield, "signal_mount_left", bd.Location((fx, fy, fz)))
-    fl_eye = asm.rigid_frame(signal_fl, "apron_mount", bd.Location((fx, fy, fz)))
-    asm.connect(fl_mount, fl_eye, relation="rigid", label="front_left_signal")
-    fr_mount = asm.rigid_frame(shield, "signal_mount_right", bd.Location((fx, -fy, fz)))
-    fr_eye = asm.rigid_frame(signal_fr, "apron_mount", bd.Location((fx, -fy, fz)))
-    asm.connect(fr_mount, fr_eye, relation="rigid", label="front_right_signal")
+    _rigid_mate(shield, "signal_mount_left", signal_fl, "apron_mount", bd.Location((fx, fy, fz)))
+    _rigid_mate(shield, "signal_mount_right", signal_fr, "apron_mount", bd.Location((fx, -fy, fz)))
 
-    flange_at = bd.Location(S.EXHAUST_FLANGE)
-    head_port = asm.rigid_frame(motor, "exhaust_port", flange_at)
-    pipe_flange = asm.rigid_frame(pipe, "head_flange", flange_at)
-    asm.connect(head_port, pipe_flange, relation="rigid", label="exhaust_mount")
+    _rigid_mate(motor, "exhaust_port", pipe, "head_flange", bd.Location(S.EXHAUST_FLANGE))
 
-    upper_at = bd.Location(S.SHOCK_UPPER)
-    frame_shock = asm.rigid_frame(chassis, "shock_upper_lug", upper_at)
-    shock_upper = asm.rigid_frame(shock, "upper_eye", upper_at)
-    asm.connect(frame_shock, shock_upper, relation="coaxial", label="shock_upper_mount")
-    lower_at = bd.Location(S.SHOCK_LOWER)
-    engine_shock = asm.rigid_frame(motor, "shock_lower_boss", lower_at)
-    shock_lower = asm.rigid_frame(shock, "lower_eye", lower_at)
-    asm.connect(engine_shock, shock_lower, relation="coaxial", label="shock_lower_mount")
+    # The shock's two eyes tie the frame to the swinging engine: a closed loop,
+    # which the old kinematics left unmated (the shock stays put while the
+    # engine swings). Only its upper eye is mounted, to the frame: a rigid
+    # lower eye too would weld the engine to the frame and lock engine_pivot.
+    _rigid_mate(chassis, "shock_upper_lug", shock, "upper_eye", bd.Location(S.SHOCK_UPPER))
 
     seat_frame_at = bd.Location((-480.0, 0.0, 560.0))
-    frame_seat = asm.rigid_frame(chassis, "seat_frame_mount", seat_frame_at)
-    body_mount = asm.rigid_frame(body, "frame_mount", seat_frame_at)
-    asm.connect(frame_seat, body_mount, relation="rigid", label="under_body_mount")
+    _rigid_mate(chassis, "seat_frame_mount", body, "frame_mount", seat_frame_at)
 
     seat_rail_at = bd.Location((-550.0, 0.0, 705.0))
-    body_seat = asm.rigid_frame(body, "seat_rail", seat_rail_at)
-    seat_mount = asm.rigid_frame(saddle, "body_mount", seat_rail_at)
-    asm.connect(body_seat, seat_mount, relation="rigid", label="seat_mount")
+    _rigid_mate(body, "seat_rail", saddle, "body_mount", seat_rail_at)
 
     fender_at2 = bd.Location((S.REAR_AXLE[0], 0.0, S.REAR_AXLE[2] + 245.0))
-    body_fender = asm.rigid_frame(body, "rear_fender_mount", fender_at2)
-    rfender_mount = asm.rigid_frame(fender_rear, "body_mount", fender_at2)
-    asm.connect(body_fender, rfender_mount, relation="rigid", label="rear_fender_mount")
+    _rigid_mate(body, "rear_fender_mount", fender_rear, "body_mount", fender_at2)
 
-    tail_at = bd.Location(S.TAILLIGHT_CENTER)
-    body_tail = asm.rigid_frame(body, "tail_light_mount", tail_at)
-    tail_mount = asm.rigid_frame(lamp_rear, "body_mount", tail_at)
-    asm.connect(body_tail, tail_mount, relation="rigid", label="tail_light_mount")
+    _rigid_mate(body, "tail_light_mount", lamp_rear, "body_mount", bd.Location(S.TAILLIGHT_CENTER))
 
-    rl_mount = asm.rigid_frame(body, "signal_mount_left", bd.Location((rx, ry, rz)))
-    rl_eye = asm.rigid_frame(signal_rl, "body_mount", bd.Location((rx, ry, rz)))
-    asm.connect(rl_mount, rl_eye, relation="rigid", label="rear_left_signal")
-    rr_mount = asm.rigid_frame(body, "signal_mount_right", bd.Location((rx, -ry, rz)))
-    rr_eye = asm.rigid_frame(signal_rr, "body_mount", bd.Location((rx, -ry, rz)))
-    asm.connect(rr_mount, rr_eye, relation="rigid", label="rear_right_signal")
+    _rigid_mate(body, "signal_mount_left", signal_rl, "body_mount", bd.Location((rx, ry, rz)))
+    _rigid_mate(body, "signal_mount_right", signal_rr, "body_mount", bd.Location((rx, -ry, rz)))
 
-    bar_left = asm.rigid_frame(bars, "mirror_mount_left", bd.Location(MIRROR_MOUNT_LEFT))
-    mirror_left_mount = asm.rigid_frame(mirror_l, "bar_mount", bd.Location(MIRROR_MOUNT_LEFT))
-    asm.connect(bar_left, mirror_left_mount, relation="rigid", label="mirror_left_mount")
-    bar_right = asm.rigid_frame(bars, "mirror_mount_right", bd.Location(MIRROR_MOUNT_RIGHT))
-    mirror_right_mount = asm.rigid_frame(mirror_r, "bar_mount", bd.Location(MIRROR_MOUNT_RIGHT))
-    asm.connect(bar_right, mirror_right_mount, relation="rigid", label="mirror_right_mount")
+    _rigid_mate(bars, "mirror_mount_left", mirror_l, "bar_mount", bd.Location(MIRROR_MOUNT_LEFT))
+    _rigid_mate(bars, "mirror_mount_right", mirror_r, "bar_mount", bd.Location(MIRROR_MOUNT_RIGHT))
 
-    return asm.build()
+    bike = bd.Compound(children=[
+        chassis, shroud, shield,
+        fork, bars, fender_front, wheel_front, lamp, signal_fl, signal_fr,
+        motor, pipe, shock, wheel_rear,
+        body, fender_rear, saddle, lamp_rear, signal_rl, signal_rr, mirror_l, mirror_r, stand,
+    ], label="motorbike")
+    # The old typed mates' poses, by the joints that carry them now (steering is
+    # head_tube_axis, engine_swing engine_pivot, center_stand_pivot stand_bracket;
+    # same axes, same senses). "ride" set nothing: it is the bike as built.
+    mechanism_state(bike, "stand_down", stand_bracket=-76.2)
+    mechanism_state(bike, "turned_left", head_tube_axis=32.0)
+    mechanism_state(bike, "bump", engine_pivot=12.0)
+    # The bars swung from 20 degrees right to 20 left and back, 2 s each way.
+    return configuration_sequence(bike, "steer", [(0, {"head_tube_axis": -20}), (2, {"head_tube_axis": 20}),
+                                  (4, {"head_tube_axis": -20})])
 
 
 if __name__ == "__main__":

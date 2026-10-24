@@ -12,48 +12,13 @@ if [ -z "${PYTHON_BIN:-}" ]; then
     PYTHON_BIN="python3"
   fi
 fi
-export PYTHON_BIN  # the bundler builds the file tracer with this interpreter's zig
+export PYTHON_BIN
 
 # The paths a run is narrowed to: test-python.sh and test-global.sh take them as arguments,
 # and only the test files at or under one of them run. Empty, the default, runs every file.
 # CI passes what scripts/github-workflows/select_checks.py selected for a change.
 TEST_PATHS=()
 SELECTED_TEST_FILES=0
-
-# The packaged runtime (packages/cadgen/src/cadgen/_runtime) is BUILT, never committed,
-# so a fresh checkout has none of it -- the snapshot suites drive the browser bundle, the
-# policy suite reads the emitted Node builders, and every build loads the file tracer.
-# Building it is idempotent and fast once the pinned toolchains are in place, but it is
-# not free, so this only runs when an output is missing (or the tracer's source is newer).
-#
-# The stages are asked for by name rather than going through bundle.sh: the tests read
-# exactly these, and the viewer stage is a vite build of apps/web that needs that app's
-# node_modules -- which a Python-only checkout has no reason to install.
-ensure_packaged_runtime() {
-  local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
-  local name
-  # PYTHON_TEST_RUNTIME=0: the selected tests read none of it, and the interpreter may lack
-  # what building it takes. A test that does read it then fails on the missing file.
-  if [ "${PYTHON_TEST_RUNTIME:-1}" = "0" ]; then
-    return 0
-  fi
-  for name in node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
-    if [ ! -f "$runtime/$name" ]; then
-      section "Building cadgen's packaged runtime (missing $name)"
-      "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser
-      break
-    fi
-  done
-  # Every build loads the file tracer, so every suite that builds needs the one this
-  # interpreter loads, rebuilt when its source is newer.
-  local tracer
-  tracer="$runtime/native/$(PYTHONPATH="$REPO_ROOT/packages/cadgen/src" "$PYTHON_BIN" -c \
-    "from cadgen._internal.filetrace import _library_name; print(_library_name())")"
-  if [ ! -f "$tracer" ] || [ "$REPO_ROOT/packages/cadgen/native/filetrace.c" -nt "$tracer" ]; then
-    section "Building cadgen's file tracer"
-    "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --native-host
-  fi
-}
 
 section() {
   # A log line, not a result: --print-weights writes the per-file costs to stdout.
@@ -101,9 +66,10 @@ run_python_unittest() {
   # `_FailedTest.test_cli`. unittest_files.py loads each file under its full dotted
   # path relative to the repo root and names an import failure by that path + file.
   #
-  # Each test FILE runs in its own interpreter with its own fresh store, CADGEN_TEST_JOBS
-  # at a time (default: the machine's cores). Modules cannot see one another's builds,
-  # and a module that spawns workers or a daemon does not hold the rest of the suite.
+  # Each test FILE runs in its own interpreter, CADGEN_TEST_JOBS at a time (default: the
+  # machine's cores), with an engine directory of its own: a build it asks for without naming
+  # a daemon runs on one of that file's alone, stopped when the file ends, so a module that
+  # starts workers or a daemon does not hold the rest of the suite.
   # PYTHON_TEST_PRINT_WEIGHTS is how --print-weights reaches the runner without every
   # caller growing a flag.
   local extra=()

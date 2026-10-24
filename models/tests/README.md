@@ -1,36 +1,46 @@
 # Manual validation models
 
-**CI tests must NEVER read, import, build, or depend on anything in `models/`, including this folder.** Automated tests belong under `tests/` (or the package test suites) and must create small, self-contained fixtures in fresh temporary directories with isolated cache stores. Do not use these models as a shortcut for automated test data.
+`models/tests` on cadgen 0.8: the three cases its README listed. **CI
+tests must never read, import, build, or depend on anything here**: automated tests
+make their own small fixtures in fresh temporary directories.
 
-Agents may use these models for manual browser reviews, reproducing edge cases, checking exports, and debugging new features. They are intentionally small and quick to rebuild. Commit useful source scripts and concise reproduction instructions only; generated CAD files, snapshots, logs, and cache data stay untracked.
+Agents may use these models for manual browser reviews, reproducing edge cases,
+checking exports and debugging new features. They are small and quick to rebuild.
+Each case is a `@model`; a run writes nothing, and prints the document's id and page.
 
 ## Cases
 
-| Folder | Manual checks |
-| --- | --- |
-| `render_floor/` | Three colored blocks above, across, and below Z=0. Render's default floor stays at the authored origin; aligning to the lowest point is an explicit option. |
-| `viewer_concurrency/` | A 32-part drilled-plate assembly. Change `REVISION` and rebuild while the viewer is loading to check update handoffs, progress, and replacement geometry. |
-| `unified_annotations/` | An 11-part assembly with named materials, a pose, and embedded animation. Check Materials assignments/reset, motion in both view modes, metadata-only edits, snapshots, and animated GLB exports. The arm's intrinsic green color has alpha 0.6; its blue paint override multiplies opacity by 0.5, yielding 0.3. Assigning a material without `baseColor` restores its intrinsic green. |
+| Folder | Model | Manual checks |
+| --- | --- | --- |
+| `render_floor/` | `floor_positions` | Three coloured blocks above, across and below Z=0. Render's floor stays at the authored origin; aligning to the lowest point is an explicit option. |
+| `viewer_concurrency/` | `assembly` | A 32-part drilled-plate assembly. Change `REVISION` and rebuild while the viewer is loading to check update handoffs, progress and replacement geometry. |
+| `unified_annotations/` | `annotation_fixture` | An 11-part assembly: brushed steel on the base and shaft (each keeping its own colour), a blue paint on the arm (its own colour green at alpha 0.6; the paint's blue at opacity 0.5 is what shows), the arm's `swing` joint and the shaft's `lift`, a configuration (`open`: swing 45) and a motion (`demo`: the shaft 8 mm up, 8 mm down and home over 4 s, ending where it starts, so a player repeats it as the old looping clip ran). Check materials, Position, motion in both view modes, a motion-only edit (the mechanism rewritten, no prototype converted), snapshots and the GLB clip. |
 
 ## Run manually
 
-From the repository root, using the development environment:
+From each case's folder, with the engine's environment (`cadgen` on the path):
 
 ```bash
-# Keep manual runs separate from other projects and their active builds.
-export CADGEN_CACHE_DIR="$(mktemp -d /tmp/cadgen-manual-store.XXXXXX)"
-export CADGEN_DAEMON_STATE_DIR="$(mktemp -d /tmp/cadgen-manual-daemon.XXXXXX)"
-.venv/bin/python models/tests/render_floor/source.py
-.venv/bin/python models/tests/viewer_concurrency/source.py
-.venv/bin/python models/tests/unified_annotations/annotation_fixture.py
-(cd models/tests && ../../.venv/bin/cadgen viewer)
+# Keep manual runs on a daemon of their own.
+export CADGEN_ENGINE_DIR="$(mktemp -d /tmp/cadgen-manual-engine.XXXXXX)"
+python source.py                     # render_floor/, viewer_concurrency/
+python annotation_fixture.py         # unified_annotations/
+cadgen snapshot "$ID" /tmp/open.png --pose open     # ID: the id: line the run printed
+cadgen export "$ID" /tmp/annotations.glb            # demo, baked as a clip
 ```
 
-Artifacts are written next to each case's script and ignored by Git. Use the viewer's file picker to open them. For a CLI check:
+## The port
 
-```bash
-.venv/bin/cadgen step snapshot models/tests/unified_annotations/annotation_fixture.step /tmp/annotations.png --render light --kinematics open --animation demo --time 1
-.venv/bin/cadgen glb build models/tests/unified_annotations/annotation_fixture.step /tmp/annotations.glb --animation demo
-```
+- `@step(out=...)` -> `@model`: a case writes nothing; export a file of it on request.
+- `unified_annotations`: the sidecar's `materials=` are `Material` values on the parts
+  (steel the catalogue's, in the old finish, `color=None`; the paint its own, with its
+  colour); the `swing` mate is a build123d revolute joint and the `open` pose a
+  configuration; the clip, which moved the shaft by hand, is a motion of a new prismatic
+  joint, `lift` (-8 to 8 mm). The old viewer multiplied the paint's opacity into the
+  arm's (0.3); a part with a material wears the material's colour, so it shows 0.5.
 
-Animation moves the shaft; the `open` pose rotates the arm independently. Material, animation, and literal kinematics edits should refresh the JSON sidecar without rewriting STEP geometry. Computed annotations and geometry changes may require ordinary source execution.
+## Not ported
+
+- `joint_playground/joint_playground.urdf`: an authored URDF of primitives, no model,
+  and no doc names it. It is kept in `unported/`, and the engine's snapshot draws it as
+  it is (`cadgen urdf snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png`).

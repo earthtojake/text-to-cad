@@ -44,7 +44,7 @@ for (const group of ['floor', 'background']) {
     const scope = {
       runtimeRef: { current: runtime }, studioScene: () => null,
       renderMode: true, renderConfiguration: { lighting: { enabled: false }, backdrop: { ground: group === 'floor' } },
-      photographicLighting: false, scene: { keepsAuthoredFinish: true }, INSPECT_ENVIRONMENT_ID: 'neutral',
+      photographicLighting: false, scene: { keepsAuthoredFinish: true }, sceneRig: null, INSPECT_ENVIRONMENT_ID: 'neutral',
       createInspectEnvironmentResource: () => ({ texture }),
       applyActivePhotographicStudio: () => { events.push(group); applyPhotographicStudio(THREE, runtime, scope.renderConfiguration); },
       applySceneBackground: () => { throw new Error('the studio owns the configured backdrop'); },

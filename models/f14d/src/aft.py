@@ -1,21 +1,16 @@
-"""F-14D system model: aft — speed brakes, beavertail, tailhook, dump mast.
+"""F-14D system: aft — speed brakes, beavertail, tailhook, dump mast.
 
-The group `lib/aft.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.7`; rebuild `f14d.py` to pick up a change here.
+A stage of the aircraft: the group `lib/aft.py` builds, already on its gear
+stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
+not reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import aft as aft_lib
 
 
-@step(out="../STEP/aft.step")
+@memo
 def aft():
-    return aft_lib.build()
-
-
-if __name__ == "__main__":
-    aft()
+    group = aft_lib.build()
+    return group

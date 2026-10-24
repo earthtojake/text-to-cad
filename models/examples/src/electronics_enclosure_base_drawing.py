@@ -1,16 +1,14 @@
 """Engineering drawing of the electronics enclosure base.
 
-Documents the STEP that `electronics_enclosure_base.py` writes, beside it in this
-project: run that model first (`python electronics_enclosure_base.py`), then this
-script. Every view and measured value follows that artifact, and every constant a
-dimension references is imported from the model, so moving a standoff in the model
+Documents the model `electronics_enclosure_base.py` defines, beside it in this
+project: the drawing calls it, so the engine builds it (a replay when it is current) and
+hands back its shape. Every view and measured value follows that model, and every
+constant a dimension references is imported from it, so moving a standoff in the model
 moves the dimension here.
 """
 
-from pathlib import Path
-
-import cadgen
 from cadgen.eng_drawing import Sheet, eng_drawing
+
 from electronics_enclosure_base import (
     FLOOR_THICKNESS,
     OUTER_HEIGHT,
@@ -21,14 +19,13 @@ from electronics_enclosure_base import (
     STANDOFF_HOLE_DIAMETER,
     STANDOFF_LOCATIONS,
     WALL_THICKNESS,
+    electronics_enclosure_base,
 )
-
-STEP = Path(__file__).parent / "../STEP/electronics_enclosure_base.step"
 
 
 @eng_drawing(out="../PDF/electronics_enclosure_base_drawing.pdf")
 def electronics_enclosure_base_drawing():
-    part = cadgen.read_step(STEP)
+    part = electronics_enclosure_base().shape
     sheet = Sheet(
         "A3", title="ELECTRONICS ENCLOSURE BASE", part_number="ENC-001", material="ABS",
         revision="A", author="text-to-cad", general_tolerance="ISO 2768-m",

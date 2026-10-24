@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xbf document</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f4f2; --fg: #1c1c1c; --panel: rgba(255,255,255,0.88); --muted: #666; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #18191b; --fg: #e8e8e6; --panel: rgba(30,31,34,0.9); --muted: #9a9a9a; } }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+               font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #bar { position: fixed; left: 12px; top: 12px; right: 12px; display: flex; gap: 12px; align-items: baseline;
+         pointer-events: none; }
+  #title { font-weight: 600; }
+  #status { color: var(--muted); }
+  #hover { position: fixed; left: 12px; bottom: 12px; max-width: calc(100% - 24px); padding: 8px 10px;
+           background: var(--panel); border-radius: 6px; font-family: ui-monospace, Menlo, monospace;
+           font-size: 12px; overflow-wrap: anywhere; display: none; }
+  #hover b { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #pose { position: fixed; right: 12px; top: 40px; width: 220px; padding: 8px 10px; background: var(--panel);
+          border-radius: 6px; display: none; }
+  #pose label { display: block; margin-top: 6px; color: var(--muted); }
+  #pose input[type=range] { width: 100%; }
+  #pose select, #pose button { font: inherit; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="bar"><span id="title">xbf</span><span id="status">loading</span></div>
+<div id="hover"></div>
+<div id="pose" aria-label="Position"></div>
+<script type="module" src="/page/viewer.js"></script>
+</body>
+</html>

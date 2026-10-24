@@ -94,5 +94,38 @@ class WriteDownloadChecksumTests(unittest.TestCase):
         self.assertFalse(result["checksumVerified"])
 
 
+class ApiNameContainmentTests(unittest.TestCase):
+    """A name or stepUrl the API supplies is reduced to a safe basename, and a non-http(s)
+    stepUrl is refused, so a crafted catalog record cannot write outside --out-dir or read a
+    local file."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory(prefix="step-parts-contain-")
+        self.addCleanup(tmp.cleanup)
+        self.out_dir = Path(tmp.name)
+
+    def test_an_api_id_or_steppath_cannot_escape_out_dir(self) -> None:
+        for part in (make_part(id="../escaped", stepUrl="/?file=x"),
+                     make_part(id="/abs/elsewhere/absdrop", stepUrl="/?file=x"),
+                     make_part(id="p1", stepUrl="/a/b/../../../../etc/passwd")):
+            args = make_args(self.out_dir, filename=None)
+            with mock.patch.object(download_step_part, "request", return_value=b"STEPDUMMY"):
+                download_step_part.write_download(part, args, True)
+        written = sorted(p.name for p in self.out_dir.iterdir())
+        for name in written:
+            self.assertTrue(name.endswith((".step", ".stp")), name)
+        # Nothing landed above the out-dir.
+        self.assertFalse((self.out_dir.parent / "escaped.step").exists())
+        self.assertFalse(Path("/abs/elsewhere/absdrop.step").exists())
+
+    def test_a_non_http_stepurl_is_refused(self) -> None:
+        for scheme in ("file:///etc/hosts", "data:text/plain,hi", "ftp://host/x.step"):
+            with self.assertRaises(SystemExit):
+                download_step_part.step_download_url(make_part(stepUrl=scheme), "https://api.step.parts")
+        # A normal relative stepUrl against the https origin is still accepted.
+        url = download_step_part.step_download_url(make_part(stepUrl="/v1/parts/p1/step"), "https://api.step.parts")
+        self.assertTrue(url.startswith("https://api.step.parts/"))
+
+
 if __name__ == "__main__":
     unittest.main()

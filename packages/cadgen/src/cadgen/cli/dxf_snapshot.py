@@ -1,16 +1,8 @@
-"""``cadgen dxf snapshot`` — draw a ``.dxf`` flat, as the CAD Viewer draws it.
+"""``cadgen dxf snapshot`` -- draw a drawing (``.dxf``) into a PNG, as the CAD Viewer's DXF
+pane draws it.
 
-A GENERATED CLI over :func:`cadgen.dxf.snapshot`. There is no parser here on
-purpose: everything the command accepts is derived from the verb function's
-signature by :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift
-from a parameter (README law 6). Which input kinds the door accepts
-is declared once, beside the verb, in
-:data:`cadgen._internal.snapshot_door.DOOR_KINDS`.
-
-A drawing is not a scene, so this door binds the narrowest shape of the seven
-(:func:`cadgen._internal.snapshot_door.drawing_snapshot_verb`): where, how big,
-and light or dark. Everything that describes a camera, a surface or a light is
-absent from the signature and therefore from the command.
+``cadgen snapshot`` (``cadgen.engine.snapshot``) for a ``.dxf`` alone: the same parser and the
+same picture, by OCCT; any other file is refused by name before anything renders.
 """
 
 from __future__ import annotations
@@ -18,18 +10,20 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from cadgen._internal.cli_from_function import generated_main, generated_parser
-
 DEFAULT_PROG = "cadgen dxf snapshot"
-VERB = ("cadgen.dxf", "snapshot")
+SUFFIXES = (".dxf",)
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    return generated_parser(VERB, prog=prog)
+    from cadgen.engine.snapshot import build_parser as snapshot_parser
+
+    return snapshot_parser(prog)
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    return generated_main(VERB, argv, prog=prog)
+    from cadgen.engine.snapshot import main as snapshot
+
+    return snapshot(list(argv) if argv is not None else None, prog=prog, suffixes=SUFFIXES)
 
 
 if __name__ == "__main__":

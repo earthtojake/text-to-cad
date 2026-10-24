@@ -8,11 +8,12 @@ import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createRobotRenderer } from '../../../dist/renderers/robot/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/robot/RobotRenderer.js';
+import { fixtureGlb, fixturePayload } from './__tests__/robotFixtures.js';
 
 
 // The robot renderer's tools and tool stack, mounted the way a host mounts it: the FileViewer over the
 // real robot registration, a real CAD client whose backend is a fetch answering what cadgen answers
-// (the saved URDF text and the meshes it names), the
+// (the resolved robot payload and the stored meshes it names), the
 // real robot loader and the real robot scene graph (three.js objects need no WebGL). What is stood in
 // for is the WebGL viewport alone — `ShellViewport` is a box that hands the renderer's overlay its
 // viewport — and the two overlays that only draw into it: the Position knobs (present or not is the
@@ -20,12 +21,23 @@ import '../../../dist/renderers/robot/RobotRenderer.js';
 // through the real scene.
 
 const FILE = '/models/arm.urdf';
-const description = () => `<robot name="arm">
-  <link name="base"><visual><origin xyz="0 0 0.05"/><geometry><box size="0.4 0.4 0.1"/></geometry></visual></link>
-  <link name="upper_arm"><visual><origin xyz="0.3 0 0"/><geometry><box size="0.6 0.08 0.08"/></geometry></visual></link>
-  <joint name="shoulder" type="revolute"><parent link="base"/><child link="upper_arm"/><origin xyz="0 0 0.2"/>
-    <axis xyz="0 1 0"/><limit lower="-1.5708" upper="1.5708" effort="1" velocity="1"/></joint>
-</robot>`;
+// The checked-in native payload, narrowed to the two links and one control this tool flow uses.
+// Its primitive GLBs are the exact objects cadgen wrote for the fixture description.
+const robotPayload = () => {
+  const robot = fixturePayload('arm.urdf');
+  robot.root = 'base';
+  robot.links = robot.links.filter((link: any) => ['base', 'upper_arm'].includes(link.name));
+  robot.joints = robot.joints.filter((joint: any) => joint.name === 'shoulder');
+  robot.visuals = robot.visuals.filter((visual: any) => ['base', 'upper_arm'].includes(visual.link));
+  robot.articulation.controls = robot.articulation.controls.filter((control: any) => control.id === 'shoulder');
+  robot.articulation.joints = robot.articulation.joints.filter((joint: any) => joint.id === 'shoulder')
+    .map((joint: any) => ({ ...joint, parent: null }));
+  robot.articulation.carries = { shoulder: ['upper_arm'] };
+  robot.articulation.handles = robot.articulation.handles.filter((handle: any) => handle.id === 'shoulder');
+  robot.articulation.opening = { shoulder: 0 };
+  return robot;
+};
+let nextRobot = 0;
 
 // ---- the WebGL stand-ins ------------------------------------------------------------------------
 const picks = vi.hoisted(() => ({ latest: null as null | { enabled: boolean; scene: any; onPick: (hit: unknown, modifiers: { multiSelect: boolean }) => void } }));
@@ -73,15 +85,22 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 async function openRobot({ phone = false } = {}) {
   // The file as the catalog lists it now: a save is a new revision, under a new version of its URL,
-  // and the loader reads the URDF text of that revision.
-  const served = { revision: 1, description: description() };
+  // and the loader reads cadgen's resolved payload for that revision.
+  const id = ++nextRobot;
+  const served = { revision: 1, robot: robotPayload() };
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'http://viewer.test');
     if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`, hash: `one-arm-${served.revision}`, bytes: 1 }] });
+      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`, hash: `tools-arm-${id}-${served.revision}`, bytes: 1 }] });
     }
     if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/arm.urdf')) return new Response(served.description, { headers: { 'content-type': 'application/xml' } });
+    if (url.pathname.endsWith('/__cad/robot')) {
+      expect(url.searchParams.get('file')).toBe(FILE);
+      return json(served.robot);
+    }
+    if (/\/primitives\/[^/]+\.glb$/.test(url.pathname)) {
+      return new Response(fixtureGlb(url.pathname), { headers: { 'content-type': 'model/gltf-binary' } });
+    }
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -95,7 +114,7 @@ async function openRobot({ phone = false } = {}) {
     },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light' },
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async () => {}, writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => noop, deliver: async () => ({ status: 'added', partIds: [] }) },
   };
   // The tab's state, held as a host holds it.
@@ -112,9 +131,9 @@ async function openRobot({ phone = false } = {}) {
   const robot = {
     pane, client,
     /** Save the file again, as cadgen now resolves it, and let the catalog say so: the robot on screen loads the new revision. */
-    async publish(next: string) {
+    async publish(next: ReturnType<typeof robotPayload>) {
       served.revision += 1;
-      served.description = next;
+      served.robot = next;
       await act(async () => { await client.refresh(); });
     },
     tool: (name: string) => within(tools()).getByRole('button', { name }),
@@ -288,16 +307,24 @@ it('a new revision of the robot keeps its pose while its controls and named pose
   const scene = () => picks.latest!.scene;
   const before = scene();
 
-  // Saved again with the same articulation (the upper arm grew): the pose stays, and Select's filter with it.
-  const longer = description().replace('0.6 0.08 0.08', '1 0.08 0.08');
-  await robot.publish(longer);
+  // Saved again with the same articulation (the upper arm's visual moved): the pose stays,
+  // and Select's filter with it. The primitive's stored mesh is unchanged.
+  const shifted = robotPayload();
+  shifted.links.find((link: any) => link.name === 'upper_arm').visuals[0].origin.xyz[0] += 0.2;
+  shifted.visuals.find((visual: any) => visual.link === 'upper_arm').placement[3] += 0.2;
+  await robot.publish(shifted);
   await waitFor(() => expect(scene()).not.toBe(before));
   expect(robot.jointField('shoulder').value).toBe('25°');
   expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Selection filter: Position', 1]);
 
   // The shoulder's range changed: the robot opens at its opening pose, though 25° would still fit.
   const kept = scene();
-  const narrower = description().replace('lower="-1.5708" upper="1.5708"', 'lower="-1" upper="1"');
+  const narrower = robotPayload();
+  narrower.joints[0].limit = { ...narrower.joints[0].limit, lower: -1, upper: 1 };
+  for (const control of [...narrower.articulation.controls, ...narrower.articulation.handles]) {
+    control.min = -180 / Math.PI;
+    control.max = 180 / Math.PI;
+  }
   await robot.publish(narrower);
   await waitFor(() => expect(scene()).not.toBe(kept));
   expect(robot.jointField('shoulder').value).toBe('0°');

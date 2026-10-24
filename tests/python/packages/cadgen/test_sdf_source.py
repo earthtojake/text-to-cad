@@ -3,7 +3,7 @@ from pathlib import Path
 
 from tests.python.support.tmp_root import generated_cad_directory
 
-from cadgen.sdf_source import SdfSourceError, parse_sdf_xml, read_sdf_source
+from cadgen.sdf_source import SdfSource, SdfSourceError, parse_sdf_xml
 
 
 class SdfSourceTests(unittest.TestCase):
@@ -28,7 +28,11 @@ class SdfSourceTests(unittest.TestCase):
         sdf_path.write_text(body.strip() + "\n", encoding="utf-8")
         return sdf_path
 
-    def test_read_sdf_source_accepts_minimal_model(self) -> None:
+    def _parse(self, path: Path) -> SdfSource:
+        """The file at ``path`` parsed as ``cadgen sdf validate`` parses it."""
+        return parse_sdf_xml(path.read_text(encoding="utf-8"), source_path=path, base_dir=path.parent)
+
+    def test_accepts_minimal_model(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -40,7 +44,7 @@ class SdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_sdf_source(source_path)
+        source = self._parse(source_path)
 
         self.assertEqual(self._file_ref("robot"), Path(source.file_ref).resolve())
         self.assertEqual("1.12", source.version)
@@ -48,6 +52,34 @@ class SdfSourceTests(unittest.TestCase):
         self.assertEqual((), source.world_names)
         self.assertEqual(("base_link",), source.links)
         self.assertEqual(0, len(source.joints))
+
+    def test_reads_nested_models_under_scoped_names(self) -> None:
+        source_path = self._write_sdf(
+            "nested",
+            """
+            <sdf version="1.9">
+              <model name="rig">
+                <link name="base" />
+                <model name="arm">
+                  <link name="upper" />
+                  <link name="lower" />
+                  <joint name="elbow" type="revolute"><parent>upper</parent><child>lower</child></joint>
+                  <model name="hand"><link name="palm" /></model>
+                </model>
+                <joint name="shoulder" type="revolute"><parent>base</parent><child>arm::upper</child></joint>
+              </model>
+            </sdf>
+            """,
+        )
+
+        source = self._parse(source_path)
+
+        self.assertEqual(("rig",), source.model_names)
+        self.assertEqual(("base", "arm::upper", "arm::lower", "arm::hand::palm"), source.links)
+        self.assertEqual(
+            [("shoulder", "base", "arm::upper"), ("arm::elbow", "arm::upper", "arm::lower")],
+            [(joint.name, joint.parent_link, joint.child_link) for joint in source.joints],
+        )
 
     def test_parse_sdf_xml_validates_without_existing_output_file(self) -> None:
         output_path = self.temp_root / "generated" / "robot.sdf"
@@ -68,7 +100,7 @@ class SdfSourceTests(unittest.TestCase):
         self.assertEqual(("sample",), source.model_names)
         self.assertFalse(output_path.exists())
 
-    def test_read_sdf_source_accepts_local_mesh_references(self) -> None:
+    def test_accepts_local_mesh_references(self) -> None:
         mesh_path = self._write_mesh("base.stl")
         source_path = self._write_sdf(
             "robot",
@@ -96,13 +128,13 @@ class SdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_sdf_source(source_path)
+        source = self._parse(source_path)
 
         self.assertEqual((mesh_path.resolve(), mesh_path.resolve()), source.mesh_paths)
         self.assertEqual((mesh_path.resolve(),), source.visual_mesh_paths)
         self.assertEqual((mesh_path.resolve(),), source.collision_mesh_paths)
 
-    def test_read_sdf_source_accepts_external_mesh_uri_without_resolution(self) -> None:
+    def test_accepts_external_mesh_uri_without_resolution(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -122,11 +154,11 @@ class SdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_sdf_source(source_path)
+        source = self._parse(source_path)
 
         self.assertEqual((), source.mesh_paths)
 
-    def test_read_sdf_source_accepts_world_models(self) -> None:
+    def test_accepts_world_models(self) -> None:
         source_path = self._write_sdf(
             "world",
             """
@@ -140,12 +172,12 @@ class SdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_sdf_source(source_path)
+        source = self._parse(source_path)
 
         self.assertEqual(("sample_world",), source.world_names)
         self.assertEqual(("sample",), source.model_names)
 
-    def test_read_sdf_source_accepts_world_only_scene(self) -> None:
+    def test_accepts_world_only_scene(self) -> None:
         source_path = self._write_sdf(
             "world_only",
             """
@@ -159,12 +191,12 @@ class SdfSourceTests(unittest.TestCase):
             """,
         )
 
-        source = read_sdf_source(source_path)
+        source = self._parse(source_path)
 
         self.assertEqual(("sample_world",), source.world_names)
         self.assertEqual((), source.model_names)
 
-    def test_read_sdf_source_rejects_missing_root(self) -> None:
+    def test_rejects_missing_root(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -175,9 +207,9 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "root element must be <sdf>"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
-    def test_read_sdf_source_rejects_missing_version(self) -> None:
+    def test_rejects_missing_version(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -190,9 +222,9 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "version is required"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
-    def test_read_sdf_source_rejects_missing_model_name(self) -> None:
+    def test_rejects_missing_model_name(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -205,9 +237,9 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "model name is required"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
-    def test_read_sdf_source_rejects_duplicate_links(self) -> None:
+    def test_rejects_duplicate_links(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -221,9 +253,9 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "duplicates"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
-    def test_read_sdf_source_rejects_missing_joint_child_link(self) -> None:
+    def test_rejects_missing_joint_child_link(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -241,7 +273,7 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "missing link"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
     def test_empty_required_text_is_missing_not_the_name_none(self) -> None:
         # An empty element's text is None. The validator rejects it before this reader
@@ -261,7 +293,7 @@ class SdfSourceTests(unittest.TestCase):
             "arm",
         )
 
-    def test_read_sdf_source_rejects_duplicate_joints(self) -> None:
+    def test_rejects_duplicate_joints(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -283,9 +315,9 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "duplicates"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
-    def test_read_sdf_source_rejects_missing_local_mesh(self) -> None:
+    def test_rejects_missing_local_mesh(self) -> None:
         source_path = self._write_sdf(
             "robot",
             """
@@ -306,7 +338,7 @@ class SdfSourceTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SdfSourceError, "missing mesh file"):
-            read_sdf_source(source_path)
+            self._parse(source_path)
 
 
 if __name__ == "__main__":

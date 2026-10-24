@@ -22,7 +22,7 @@ function SelectValue({
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
-const SelectTrigger = React.forwardRef(function SelectTrigger({
+const SelectTrigger = React.forwardRef(/** @param {React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {size?: string; showIcon?: boolean}} props */ function SelectTrigger({
   className,
   size = "default",
   showIcon = true,
@@ -53,7 +53,7 @@ const SelectTrigger = React.forwardRef(function SelectTrigger({
 // A listbox leaves at once when it closes: one still fading out would keep the focus, and
 // take the next Escape meant for the popover it was opened from.
 function SelectContent({
-  className,
+  className = undefined,
   children,
   position = "popper",
   ...props
@@ -101,7 +101,7 @@ function SelectLabel({
 }
 
 function SelectItem({
-  className,
+  className = undefined,
   children,
   icon = null,
   ...props

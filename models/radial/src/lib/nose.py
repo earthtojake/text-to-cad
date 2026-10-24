@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import castings as C
 from lib import fasteners as F
@@ -837,12 +837,7 @@ def _lug_fillets(case, rev):
             continue
         if all(sh.distance_to(e @ t) < 1e-3 for t in (0.15, 0.5, 0.85)):
             cand.append(e)
-    bop = C.BOP_CHECK
-    C.BOP_CHECK = False
-    try:
-        res, got = C.safe_fillet(case, cand, 3.0, min_r=1.0)
-    finally:
-        C.BOP_CHECK = bop
+    res, got = C.safe_fillet(case, cand, 3.0, min_r=1.0, bop_check=False)
     print(f"[nose] lug roots: {len(cand)} edges -> r {got}")
     return res if got is not None else case
 
@@ -868,12 +863,7 @@ def _spoke_fillets(case, srcs):
         if any(all(sh.distance_to(e @ t) < 1e-3 for t in (0.15, 0.5, 0.85)) for sh in shells) and not (
                 e.geom_type == bd.GeomType.CIRCLE and math.hypot(e.arc_center.X, e.arc_center.Z) < 1e-3):
             cand.append(e)
-    bop = C.BOP_CHECK
-    C.BOP_CHECK = False
-    try:
-        res, got = C.safe_fillet(case, cand, 5.0, min_r=1.5)
-    finally:
-        C.BOP_CHECK = bop
+    res, got = C.safe_fillet(case, cand, 5.0, min_r=1.5, bop_check=False)
     print(f"[nose] spoke roots: {len(cand)} edges -> r {got}")
     return res if got is not None else case
 
@@ -907,22 +897,17 @@ def _root_fillets(case, shell_src):
                 return True
         return False
 
-    bop = C.BOP_CHECK
-    C.BOP_CHECK = False
-    try:
-        cand = [e for e in case.edges() if root(e) and not near_idler(e) and not near_bottom(e)]
-        res, got = C.safe_fillet(case, cand, 4.0, min_r=1.5)
-        print(f"[nose] root fillet: {len(cand)} edges -> r {got}")
+    cand = [e for e in case.edges() if root(e) and not near_idler(e) and not near_bottom(e)]
+    res, got = C.safe_fillet(case, cand, 4.0, min_r=1.5, bop_check=False)
+    print(f"[nose] root fillet: {len(cand)} edges -> r {got}")
+    case = res if got is not None else case
+    for spec_ in (DRAIN, BREATHER):
+        cand = [e for e in case.edges() if root(e) and near_bottom(e, spec_)]
+        res, got = C.safe_fillet(case, cand, 3.0, min_r=1.0, bop_check=False)
+        print(f"[nose] bottom boss root: {len(cand)} edges -> r {got}")
         case = res if got is not None else case
-        for spec_ in (DRAIN, BREATHER):
-            cand = [e for e in case.edges() if root(e) and near_bottom(e, spec_)]
-            res, got = C.safe_fillet(case, cand, 3.0, min_r=1.0)
-            print(f"[nose] bottom boss root: {len(cand)} edges -> r {got}")
-            case = res if got is not None else case
-        cand = [e for e in case.edges() if root(e) and near_idler(e)]
-        res, got = C.safe_fillet(case, cand, 2.5, min_r=1.0)
-        print(f"[nose] idler boss root: {len(cand)} edges -> r {got}")
-        case = res if got is not None else case
-    finally:
-        C.BOP_CHECK = bop
+    cand = [e for e in case.edges() if root(e) and near_idler(e)]
+    res, got = C.safe_fillet(case, cand, 2.5, min_r=1.0, bop_check=False)
+    print(f"[nose] idler boss root: {len(cand)} edges -> r {got}")
+    case = res if got is not None else case
     return case

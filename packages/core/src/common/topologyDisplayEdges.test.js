@@ -73,18 +73,21 @@ test("topology display edges can filter by visibility class", () => {
 });
 
 test("topology display edges can filter by focused occurrence ids", () => {
+  // An occurrence id is a token and names one part exactly: a subassembly reaches a filter as
+  // the list of its leaves, never as a prefix the ids would share.
   const runtime = runtimeWithEdges([
     { occurrenceId: "part-a", segmentStart: 0, segmentCount: 1 },
     { occurrenceId: "part-b", segmentStart: 1, segmentCount: 1 },
-    { occurrenceId: "part-a.child", segmentStart: 2, segmentCount: 1 }
+    { occurrenceId: "part-c", segmentStart: 2, segmentCount: 1 }
   ]);
 
-  assert.deepEqual(Array.from(buildTopologyDisplayEdgePositions(runtime, { includePartIds: ["part-a"] })), [
+  assert.deepEqual(Array.from(buildTopologyDisplayEdgePositions(runtime, { includePartIds: ["part-a", "part-c"] })), [
     0, 0, 0, 1, 0, 0,
     4, 0, 0, 5, 0, 0
   ]);
   assert.deepEqual(Array.from(buildTopologyDisplayEdgePositions(runtime, { excludePartIds: ["part-a"] })), [
-    2, 0, 0, 3, 0, 0
+    2, 0, 0, 3, 0, 0,
+    4, 0, 0, 5, 0, 0
   ]);
 });
 
@@ -92,11 +95,11 @@ test("topology display edge polylines can filter by visibility class and focused
   const runtime = runtimeWithEdges([
     { occurrenceId: "part-a", visibilityClass: "feature", segmentStart: 0, segmentCount: 1 },
     { occurrenceId: "part-b", visibilityClass: "tangent", segmentStart: 1, segmentCount: 1 },
-    { occurrenceId: "part-a.child", visibilityClass: "tangent", segmentStart: 2, segmentCount: 1 }
+    { occurrenceId: "part-c", visibilityClass: "tangent", segmentStart: 2, segmentCount: 1 }
   ]);
 
   const polylines = buildTopologyDisplayEdgePolylines(runtime, {
-    includePartIds: ["part-a"],
+    includePartIds: ["part-a", "part-c"],
     visibilityClasses: ["tangent"]
   });
 

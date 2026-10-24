@@ -1,84 +1,1123 @@
 {
-  "comment": "Shared contract for the CAD selector grammar. The Python parser (cadgen.cad_ref_syntax) and the JS parser (@text-to-cad/core/lib/cadRefs.js) are separate implementations of the same language; this fixture is the only thing that keeps them honest. Every case must hold in BOTH. Cases tagged phase 1 cover label selectors.",
+  "comment": "Shared contract for the CAD ref grammars: the engine's cases are asserted by two languages, so they cannot drift. An engine document's (.xbf) refs are the engine's grammar -- REF = [FILE '#'] SELECTOR (',' SELECTOR)*, SELECTOR = OWNER | [OWNER '/'] ELEMENT, OWNER = SEGMENT ('/' SEGMENT)*, SEGMENT = LABEL | LABEL '.' N | QUOTED ['.' N], ELEMENT = an element name | face N | edge N | vertex N. `refCases` are parsed by cadRefs.js's parseEngineRef and cadgen.engine.refs.parse: the document (`file`), each selector's owner (its segments, a quoted one as {quoted, index}; null for the document's root) and element (null for the owner itself), and each selector's text (`printed`); a refused ref parses to nothing. `spellingCases` are served structures and the canonical ref of each occurrence (`at`: its child indices from the root) and element, what the CAD Viewer copies: asserted against cadRefs.js's spellEngineRefs and against cadgen.engine.refs.resolve_structure, which `cadgen inspect` runs, each resolving to its occurrence or element and being its canonical ref. A STEP's refs keep their own grammar until the engine's carries over: `selectorCases`, `inheritanceCases` and `tokenCases`, asserted by cadRefs.js. A STEP ref names geometry: an occurrence token (`o:` + 12 hex) and an element name under an occurrence token or a part label, joined by `/`. An element name, in both grammars, is its kind (`f:`/`e:`/`v:`) and its derivation -- an atom (a feature, a label or `function.operationN`, and the element's number among what it made; or a folded derivation: a feature, `~` and 12 hex) and the steps features took (`;M:`, `;G<kind>:`, `;MG<kind>:`, `;U[n]:`, `;L:`, each with a feature and up to four `+<kind>:<atom>`, or `;D<n>`) -- or, for an element no construction names, its geometric token (12 hex). To every parser a name is an opaque string the grammar admits. STEP cases tagged phase 1 cover label selectors.",
+  "refCases": [
+    {
+      "why": "the line Copy Prompt writes: the file's path, then an occurrence path and an element by its number",
+      "ref": "/work/XBF/kit.xbf#hand/finger.2/face 7",
+      "file": "/work/XBF/kit.xbf",
+      "selectors": [
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": "face 7"
+        }
+      ],
+      "printed": [
+        "hand/finger.2/face 7"
+      ]
+    },
+    {
+      "why": "a part by its label alone, an element by its name",
+      "ref": "kit.xbf#palm/f:palm.body.3;M:palm.relief",
+      "file": "kit.xbf",
+      "selectors": [
+        {
+          "owner": [
+            "palm"
+          ],
+          "element": "f:palm.body.3;M:palm.relief"
+        }
+      ],
+      "printed": [
+        "palm/f:palm.body.3;M:palm.relief"
+      ]
+    },
+    {
+      "why": "a path holding a space or a '#' is JSON-quoted, as the viewer writes it",
+      "ref": "\"/work/my parts/kit #2.xbf\"#hand/finger.2",
+      "file": "/work/my parts/kit #2.xbf",
+      "selectors": [
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": null
+        }
+      ],
+      "printed": [
+        "hand/finger.2"
+      ]
+    },
+    {
+      "why": "a part or an assembly alone: an owner and no element; a leading '#' names no file",
+      "ref": "#hand",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "hand"
+          ],
+          "element": null
+        }
+      ],
+      "printed": [
+        "hand"
+      ]
+    },
+    {
+      "why": "no owner: the document's root, its element by number or by name, neither taking an owner",
+      "ref": "face 3,f:plate.body.6;M:plate.relief",
+      "file": null,
+      "selectors": [
+        {
+          "owner": null,
+          "element": "face 3"
+        },
+        {
+          "owner": null,
+          "element": "f:plate.body.6;M:plate.relief"
+        }
+      ],
+      "printed": [
+        "face 3",
+        "f:plate.body.6;M:plate.relief"
+      ]
+    },
+    {
+      "why": "a bare element after an owner is that owner's, by name or by number",
+      "ref": "kit.xbf#hand/finger.2,face 3,e:finger.body.4",
+      "file": "kit.xbf",
+      "selectors": [
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": null
+        },
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": "face 3"
+        },
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": "e:finger.body.4"
+        }
+      ],
+      "printed": [
+        "hand/finger.2",
+        "hand/finger.2/face 3",
+        "hand/finger.2/e:finger.body.4"
+      ]
+    },
+    {
+      "why": "an edge and a vertex by number, the space optional",
+      "ref": "hand/finger.2/edge12,vertex1",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": "edge 12"
+        },
+        {
+          "owner": [
+            "hand",
+            "finger.2"
+          ],
+          "element": "vertex 1"
+        }
+      ],
+      "printed": [
+        "hand/finger.2/edge 12",
+        "hand/finger.2/vertex 1"
+      ]
+    },
+    {
+      "why": "a label is read whole: its spaces and dots are its own",
+      "ref": "kit/v1.5 bracket/face 2",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "kit",
+            "v1.5 bracket"
+          ],
+          "element": "face 2"
+        }
+      ],
+      "printed": [
+        "kit/v1.5 bracket/face 2"
+      ]
+    },
+    {
+      "why": "a label holding '/', ',' or a quote is JSON-quoted, and a comma inside one separates nothing",
+      "ref": "\"M3/M4 screw\"/e:screw.body.2,\"M3, M4\"/face 1,\"say \\\"hi\\\"\"",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            {
+              "quoted": "M3/M4 screw"
+            }
+          ],
+          "element": "e:screw.body.2"
+        },
+        {
+          "owner": [
+            {
+              "quoted": "M3, M4"
+            }
+          ],
+          "element": "face 1"
+        },
+        {
+          "owner": [
+            {
+              "quoted": "say \"hi\""
+            }
+          ],
+          "element": null
+        }
+      ],
+      "printed": [
+        "\"M3/M4 screw\"/e:screw.body.2",
+        "\"M3, M4\"/face 1",
+        "\"say \\\"hi\\\"\""
+      ]
+    },
+    {
+      "why": "a quoted label's number among the siblings so labelled, blanks allowed around it but not inside",
+      "ref": "kit/\"a\".2/face 1,kit/ \"a b\".2 /face 1",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "kit",
+            {
+              "quoted": "a",
+              "index": 2
+            }
+          ],
+          "element": "face 1"
+        },
+        {
+          "owner": [
+            "kit",
+            {
+              "quoted": "a b",
+              "index": 2
+            }
+          ],
+          "element": "face 1"
+        }
+      ],
+      "printed": [
+        "kit/\"a\".2/face 1",
+        "kit/\"a b\".2/face 1"
+      ]
+    },
+    {
+      "why": "a quoted segment is a label even where it reads as an element; a number counts from one",
+      "ref": "kit/\"face 3\",kit/face 03,kit/Face 3",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "kit",
+            {
+              "quoted": "face 3"
+            }
+          ],
+          "element": null
+        },
+        {
+          "owner": [
+            "kit",
+            "face 03"
+          ],
+          "element": null
+        },
+        {
+          "owner": [
+            "kit",
+            "Face 3"
+          ],
+          "element": null
+        }
+      ],
+      "printed": [
+        "kit/\"face 3\"",
+        "kit/face 03",
+        "kit/Face 3"
+      ]
+    },
+    {
+      "why": "the retired spellings parse as labels, which name nothing: `cadgen inspect` refuses them by name",
+      "ref": "o1.2.f7,o:4b1f9e2a7c03/f:hand.finger.1,finger_2/face 1",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "o1.2.f7"
+          ],
+          "element": null
+        },
+        {
+          "owner": [
+            "o:4b1f9e2a7c03"
+          ],
+          "element": "f:hand.finger.1"
+        },
+        {
+          "owner": [
+            "finger_2"
+          ],
+          "element": "face 1"
+        }
+      ],
+      "printed": [
+        "o1.2.f7",
+        "o:4b1f9e2a7c03/f:hand.finger.1",
+        "finger_2/face 1"
+      ]
+    },
+    {
+      "why": "only the first '#' ends the file: a later one is a label's",
+      "ref": "kit.xbf#kit/part #2/face 1",
+      "file": "kit.xbf",
+      "selectors": [
+        {
+          "owner": [
+            "kit",
+            "part #2"
+          ],
+          "element": "face 1"
+        }
+      ],
+      "printed": [
+        "kit/part #2/face 1"
+      ]
+    },
+    {
+      "why": "a '#' with a quote before it ends no file: only a quoted label holds one there",
+      "ref": "\"a#b\"/face 1",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            {
+              "quoted": "a#b"
+            }
+          ],
+          "element": "face 1"
+        }
+      ],
+      "printed": [
+        "\"a#b\"/face 1"
+      ]
+    },
+    {
+      "why": "whitespace around a segment is no part of it, and whitespace is Python's: NEL is, a BOM is not",
+      "ref": " kit /\u0085face 3\u0085, edge 2\ufeff ",
+      "file": null,
+      "selectors": [
+        {
+          "owner": [
+            "kit"
+          ],
+          "element": "face 3"
+        },
+        {
+          "owner": [
+            "edge 2\ufeff"
+          ],
+          "element": null
+        }
+      ],
+      "printed": [
+        "kit/face 3",
+        "edge 2\ufeff"
+      ]
+    },
+    {
+      "why": "an empty ref names nothing",
+      "ref": "",
+      "refused": true
+    },
+    {
+      "why": "nor does a blank one",
+      "ref": "   ",
+      "refused": true
+    },
+    {
+      "why": "a document and nothing in it",
+      "ref": "kit.xbf#",
+      "refused": true
+    },
+    {
+      "why": "a document and only blanks",
+      "ref": "kit.xbf#  ",
+      "refused": true
+    },
+    {
+      "why": "an empty segment",
+      "ref": "kit//face 1",
+      "refused": true
+    },
+    {
+      "why": "an empty segment, first",
+      "ref": "/kit",
+      "refused": true
+    },
+    {
+      "why": "a ref that ends in '/'",
+      "ref": "kit/",
+      "refused": true
+    },
+    {
+      "why": "a ref that ends in ','",
+      "ref": "kit,",
+      "refused": true
+    },
+    {
+      "why": "a quoted segment that does not close",
+      "ref": "kit/\"a",
+      "refused": true
+    },
+    {
+      "why": "a quoted segment that is no JSON string",
+      "ref": "kit/\"a\\x\"",
+      "refused": true
+    },
+    {
+      "why": "a quoted label followed by more than its number",
+      "ref": "\"a\" b/face 1",
+      "refused": true
+    },
+    {
+      "why": "a blank between a quoted label and its number",
+      "ref": "kit/\"a\" .2",
+      "refused": true
+    },
+    {
+      "why": "a number that does not count from one",
+      "ref": "kit/\"a\".02",
+      "refused": true
+    }
+  ],
+  "spellingCases": [
+    {
+      "why": "an assembly: a label that names one occurrence alone, else the occurrence's path from the root, each segment its label numbered among the siblings sharing it; quoted where it would misread",
+      "structure": {
+        "name": "kit",
+        "prototypes": [
+          {
+            "key": "k-palm",
+            "name": "palm",
+            "faceNames": {
+              "1": "f:palm.body.1",
+              "3": "f:palm.body.3;M:palm.relief"
+            },
+            "edgeNames": {},
+            "vertexNames": {}
+          },
+          {
+            "key": "k-finger",
+            "name": "finger",
+            "faceNames": {
+              "1": "f:finger.body.1"
+            },
+            "edgeNames": {
+              "4": "e:finger.body.4"
+            },
+            "vertexNames": {}
+          },
+          {
+            "key": "k-screw",
+            "name": "screw",
+            "faceNames": {},
+            "edgeNames": {
+              "2": "e:screw.body.2"
+            },
+            "vertexNames": {}
+          },
+          {
+            "key": "k-link",
+            "name": "link",
+            "faceNames": {},
+            "edgeNames": {},
+            "vertexNames": {
+              "1": "v:link.body.1"
+            }
+          }
+        ],
+        "tree": {
+          "name": "kit",
+          "children": [
+            {
+              "name": "palm",
+              "prototype": 0,
+              "instance": 0
+            },
+            {
+              "name": "hand",
+              "children": [
+                {
+                  "name": "finger",
+                  "prototype": 1,
+                  "instance": 1
+                },
+                {
+                  "name": "finger",
+                  "prototype": 1,
+                  "instance": 2
+                },
+                {
+                  "name": "finger",
+                  "prototype": 1,
+                  "instance": 3
+                }
+              ]
+            },
+            {
+              "name": "M3/M4 screw",
+              "prototype": 2,
+              "instance": 4
+            },
+            {
+              "name": "M3, M4",
+              "prototype": 2,
+              "instance": 5
+            },
+            {
+              "name": "a",
+              "prototype": 2,
+              "instance": 6
+            },
+            {
+              "name": "a",
+              "prototype": 2,
+              "instance": 7
+            },
+            {
+              "name": "a.2",
+              "prototype": 2,
+              "instance": 8
+            },
+            {
+              "name": "v1.5 bracket",
+              "prototype": 2,
+              "instance": 9
+            },
+            {
+              "name": "face 3",
+              "prototype": 2,
+              "instance": 10
+            },
+            {
+              "name": "kit",
+              "prototype": 2,
+              "instance": 11
+            },
+            {
+              "name": "arm",
+              "children": [
+                {
+                  "name": "link",
+                  "prototype": 3,
+                  "instance": 12
+                }
+              ]
+            },
+            {
+              "name": "arm",
+              "children": [
+                {
+                  "name": "link",
+                  "prototype": 3,
+                  "instance": 13
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "occurrences": [
+        {
+          "at": [],
+          "ref": "kit"
+        },
+        {
+          "at": [
+            0
+          ],
+          "ref": "palm"
+        },
+        {
+          "at": [
+            1
+          ],
+          "ref": "hand"
+        },
+        {
+          "at": [
+            1,
+            0
+          ],
+          "ref": "kit/hand/finger.1"
+        },
+        {
+          "at": [
+            1,
+            1
+          ],
+          "ref": "kit/hand/finger.2"
+        },
+        {
+          "at": [
+            1,
+            2
+          ],
+          "ref": "kit/hand/finger.3"
+        },
+        {
+          "at": [
+            2
+          ],
+          "ref": "\"M3/M4 screw\""
+        },
+        {
+          "at": [
+            3
+          ],
+          "ref": "\"M3, M4\""
+        },
+        {
+          "at": [
+            4
+          ],
+          "ref": "kit/a.1"
+        },
+        {
+          "at": [
+            5
+          ],
+          "ref": "kit/\"a\".2"
+        },
+        {
+          "at": [
+            6
+          ],
+          "ref": "a.2"
+        },
+        {
+          "at": [
+            7
+          ],
+          "ref": "v1.5 bracket"
+        },
+        {
+          "at": [
+            8
+          ],
+          "ref": "\"face 3\""
+        },
+        {
+          "at": [
+            9
+          ],
+          "ref": "kit/kit"
+        },
+        {
+          "at": [
+            10
+          ],
+          "ref": "kit/arm.1"
+        },
+        {
+          "at": [
+            10,
+            0
+          ],
+          "ref": "kit/arm.1/link"
+        },
+        {
+          "at": [
+            11,
+            0
+          ],
+          "ref": "kit/arm.2/link"
+        }
+      ],
+      "elements": [
+        {
+          "at": [
+            0
+          ],
+          "kind": "face",
+          "ordinal": 3,
+          "ref": "palm/f:palm.body.3;M:palm.relief"
+        },
+        {
+          "at": [
+            0
+          ],
+          "kind": "face",
+          "ordinal": 2,
+          "ref": "palm/face 2"
+        },
+        {
+          "at": [
+            1,
+            1
+          ],
+          "kind": "face",
+          "ordinal": 1,
+          "ref": "kit/hand/finger.2/f:finger.body.1"
+        },
+        {
+          "at": [
+            1,
+            2
+          ],
+          "kind": "edge",
+          "ordinal": 4,
+          "ref": "kit/hand/finger.3/e:finger.body.4"
+        },
+        {
+          "at": [
+            1,
+            0
+          ],
+          "kind": "edge",
+          "ordinal": 9,
+          "ref": "kit/hand/finger.1/edge 9"
+        },
+        {
+          "at": [
+            2
+          ],
+          "kind": "edge",
+          "ordinal": 2,
+          "ref": "\"M3/M4 screw\"/e:screw.body.2"
+        },
+        {
+          "at": [
+            3
+          ],
+          "kind": "face",
+          "ordinal": 1,
+          "ref": "\"M3, M4\"/face 1"
+        },
+        {
+          "at": [
+            5
+          ],
+          "kind": "face",
+          "ordinal": 1,
+          "ref": "kit/\"a\".2/face 1"
+        },
+        {
+          "at": [
+            7
+          ],
+          "kind": "face",
+          "ordinal": 1,
+          "ref": "v1.5 bracket/face 1"
+        },
+        {
+          "at": [
+            8
+          ],
+          "kind": "face",
+          "ordinal": 3,
+          "ref": "\"face 3\"/face 3"
+        },
+        {
+          "at": [
+            11,
+            0
+          ],
+          "kind": "vertex",
+          "ordinal": 1,
+          "ref": "kit/arm.2/link/v:link.body.1"
+        },
+        {
+          "at": [
+            10,
+            0
+          ],
+          "kind": "vertex",
+          "ordinal": 2,
+          "ref": "kit/arm.1/link/vertex 2"
+        }
+      ]
+    },
+    {
+      "why": "a document of one part: its part by its own label, its elements under the document's name",
+      "structure": {
+        "name": "plate",
+        "prototypes": [
+          {
+            "key": "k-plate",
+            "name": "plate",
+            "faceNames": {
+              "6": "f:plate.body.6;M:plate.relief"
+            },
+            "edgeNames": {},
+            "vertexNames": {}
+          }
+        ],
+        "tree": {
+          "name": "plate",
+          "children": [
+            {
+              "name": "part1",
+              "prototype": 0,
+              "instance": 0
+            }
+          ]
+        }
+      },
+      "occurrences": [
+        {
+          "at": [],
+          "ref": "plate"
+        },
+        {
+          "at": [
+            0
+          ],
+          "ref": "part1"
+        }
+      ],
+      "elements": [
+        {
+          "at": [
+            0
+          ],
+          "kind": "face",
+          "ordinal": 6,
+          "ref": "plate/f:plate.body.6;M:plate.relief"
+        },
+        {
+          "at": [
+            0
+          ],
+          "kind": "face",
+          "ordinal": 3,
+          "ref": "plate/face 3"
+        }
+      ]
+    },
+    {
+      "why": "a document that is one part, no assembly over it",
+      "structure": {
+        "name": "bolt",
+        "prototypes": [
+          {
+            "key": "k-bolt",
+            "name": "bolt",
+            "faceNames": {},
+            "edgeNames": {},
+            "vertexNames": {}
+          }
+        ],
+        "tree": {
+          "name": "bolt",
+          "prototype": 0,
+          "instance": 0
+        }
+      },
+      "occurrences": [
+        {
+          "at": [],
+          "ref": "bolt"
+        }
+      ],
+      "elements": [
+        {
+          "at": [],
+          "kind": "edge",
+          "ordinal": 5,
+          "ref": "bolt/edge 5"
+        }
+      ]
+    }
+  ],
   "selectorCases": [
     {
       "phase": 0,
-      "why": "occurrence + entity, the canonical copy-button form",
-      "selector": "o1.12.f19",
+      "why": "occurrence + element, the canonical copy-button form",
+      "selector": "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
       "selectorType": "face",
-      "occurrenceId": "o1.12",
-      "ordinal": 19,
-      "canonical": "o1.12.f19"
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "f:9d2e8c1b5a70",
+      "canonical": "o:4b1f9e2a7c03/f:9d2e8c1b5a70"
     },
     {
       "phase": 0,
-      "why": "deep nesting stays a single occurrence path",
-      "selector": "o1.2.3.4.5.6.e7",
+      "why": "an edge under an occurrence",
+      "selector": "o:0a9e8d7c6b5f/e:12ab34cd56ef",
       "selectorType": "edge",
-      "occurrenceId": "o1.2.3.4.5.6",
-      "ordinal": 7,
-      "canonical": "o1.2.3.4.5.6.e7"
+      "occurrenceId": "o:0a9e8d7c6b5f",
+      "element": "e:12ab34cd56ef",
+      "canonical": "o:0a9e8d7c6b5f/e:12ab34cd56ef"
     },
     {
       "phase": 0,
-      "why": "bare occurrence",
-      "selector": "o1.3",
+      "why": "a vertex under an occurrence",
+      "selector": "o:0a9e8d7c6b5f/v:fedcba987654",
+      "selectorType": "vertex",
+      "occurrenceId": "o:0a9e8d7c6b5f",
+      "element": "v:fedcba987654",
+      "canonical": "o:0a9e8d7c6b5f/v:fedcba987654"
+    },
+    {
+      "phase": 0,
+      "why": "an element named by its lineage: the feature that made it (function.operationN) and its number there",
+      "selector": "o:4b1f9e2a7c03/f:dial.extrude1.3",
+      "selectorType": "face",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "f:dial.extrude1.3",
+      "canonical": "o:4b1f9e2a7c03/f:dial.extrude1.3"
+    },
+    {
+      "phase": 0,
+      "why": "an element a later feature modified: what it was, then `;M:` and the feature",
+      "selector": "o:4b1f9e2a7c03/f:dial.make_box1.6;M:dial.cut1",
+      "selectorType": "face",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "f:dial.make_box1.6;M:dial.cut1",
+      "canonical": "o:4b1f9e2a7c03/f:dial.make_box1.6;M:dial.cut1"
+    },
+    {
+      "phase": 0,
+      "why": "generated from a face, with a further source of the step as an atom",
+      "selector": "o:4b1f9e2a7c03/e:dial.make_box1.6;Gf:dial.cut1+f:dial.make_cylinder2.1",
+      "selectorType": "edge",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "e:dial.make_box1.6;Gf:dial.cut1+f:dial.make_cylinder2.1",
+      "canonical": "o:4b1f9e2a7c03/e:dial.make_box1.6;Gf:dial.cut1+f:dial.make_cylinder2.1"
+    },
+    {
+      "phase": 0,
+      "why": "the second of a result's elements one step made alike: its number in the step",
+      "selector": "o:4b1f9e2a7c03/e:sk.make_line1.1;U:sk.wire1;Gv2:part.make_loft1+v:sk.make_line5.1",
+      "selectorType": "edge",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "e:sk.make_line1.1;U:sk.wire1;Gv2:part.make_loft1+v:sk.make_line5.1",
+      "canonical": "o:4b1f9e2a7c03/e:sk.make_line1.1;U:sk.wire1;Gv2:part.make_loft1+v:sk.make_line5.1"
+    },
+    {
+      "phase": 0,
+      "why": "a derivation folded to the feature of its last step and a digest, then stepped again",
+      "selector": "o:4b1f9e2a7c03/f:dial.cut3~5d1e0c2f9a3b;M:dial.fillet1",
+      "selectorType": "face",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "f:dial.cut3~5d1e0c2f9a3b;M:dial.fillet1",
+      "canonical": "o:4b1f9e2a7c03/f:dial.cut3~5d1e0c2f9a3b;M:dial.fillet1"
+    },
+    {
+      "phase": 0,
+      "why": "named from a parent, from lower elements, and told apart from a twin",
+      "selector": "o:4b1f9e2a7c03/v:sk.make_line3.1;U2:sk.wire1;L:sk.face1+e:sk.make_line2.1;D2",
+      "selectorType": "vertex",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "v:sk.make_line3.1;U2:sk.wire1;L:sk.face1+e:sk.make_line2.1;D2",
+      "canonical": "o:4b1f9e2a7c03/v:sk.make_line3.1;U2:sk.wire1;L:sk.face1+e:sk.make_line2.1;D2"
+    },
+    {
+      "phase": 0,
+      "why": "a feature the author labelled goes by its label",
+      "selector": "o:4b1f9e2a7c03/v:lid.2",
+      "selectorType": "vertex",
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "v:lid.2",
+      "canonical": "o:4b1f9e2a7c03/v:lid.2"
+    },
+    {
+      "phase": 0,
+      "why": "bare occurrence token",
+      "selector": "o:4b1f9e2a7c03",
       "selectorType": "occurrence",
-      "occurrenceId": "o1.3",
-      "ordinal": null,
-      "canonical": "o1.3"
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03"
     },
     {
       "phase": 0,
-      "why": "single-segment occurrence",
-      "selector": "o1",
-      "selectorType": "occurrence",
-      "occurrenceId": "o1",
-      "ordinal": null,
-      "canonical": "o1"
-    },
-    {
-      "phase": 0,
-      "why": "bare entity with no occurrence context",
-      "selector": "f45",
+      "why": "a bare element named by its geometric token, with no occurrence context (a document with one leaf)",
+      "selector": "f:9d2e8c1b5a70",
       "selectorType": "face",
       "occurrenceId": "",
-      "ordinal": 45,
-      "canonical": "f45"
+      "element": "f:9d2e8c1b5a70",
+      "canonical": "f:9d2e8c1b5a70"
     },
     {
       "phase": 0,
-      "why": "every entity kind maps to its type name",
-      "selector": "s2",
-      "selectorType": "shape",
-      "occurrenceId": "",
-      "ordinal": 2,
-      "canonical": "s2"
-    },
-    {
-      "phase": 0,
-      "selector": "e9",
+      "selector": "e:12ab34cd56ef",
       "selectorType": "edge",
       "occurrenceId": "",
-      "ordinal": 9,
-      "canonical": "e9"
+      "element": "e:12ab34cd56ef",
+      "canonical": "e:12ab34cd56ef"
     },
     {
       "phase": 0,
-      "selector": "v4",
+      "selector": "v:fedcba987654",
       "selectorType": "vertex",
       "occurrenceId": "",
-      "ordinal": 4,
-      "canonical": "v4"
+      "element": "v:fedcba987654",
+      "canonical": "v:fedcba987654"
+    },
+    {
+      "phase": 0,
+      "why": "a bare element name by lineage (a document with one leaf)",
+      "selector": "f:_bored_plate.cut12.4",
+      "selectorType": "face",
+      "occurrenceId": "",
+      "element": "f:_bored_plate.cut12.4",
+      "canonical": "f:_bored_plate.cut12.4"
     },
     {
       "phase": 0,
       "why": "leading # is stripped",
-      "selector": "#o2.f1",
+      "selector": "#o:4b1f9e2a7c03/f:9d2e8c1b5a70",
       "selectorType": "face",
-      "occurrenceId": "o2",
-      "ordinal": 1,
-      "canonical": "o2.f1"
+      "occurrenceId": "o:4b1f9e2a7c03",
+      "element": "f:9d2e8c1b5a70",
+      "canonical": "o:4b1f9e2a7c03/f:9d2e8c1b5a70"
+    },
+    {
+      "phase": 0,
+      "why": "a token is lower-case hex of exactly twelve characters; upper case is not one (it reads as a label spelling, which nothing resolves)",
+      "selector": "o:4B1F9E2A7C03",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "element": "",
+      "label": "o:4B1F9E2A7C03",
+      "canonical": "o:4B1F9E2A7C03"
+    },
+    {
+      "phase": 0,
+      "why": "a shape is not an element a ref can name",
+      "selector": "o:4b1f9e2a7c03/s:9d2e8c1b5a70",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/s:9d2e8c1b5a70"
+    },
+    {
+      "phase": 0,
+      "why": "a feature alone is no element: a name ends in the element's number",
+      "selector": "o:4b1f9e2a7c03/f:dial.extrude1",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.extrude1"
+    },
+    {
+      "phase": 0,
+      "why": "numbers count from one",
+      "selector": "o:4b1f9e2a7c03/f:dial.extrude1.0",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.extrude1.0"
+    },
+    {
+      "phase": 0,
+      "why": "a piece number is no step: pieces are told apart by `;D<n>`",
+      "selector": "o:4b1f9e2a7c03/f:dial.extrude1.3.2",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.extrude1.3.2"
+    },
+    {
+      "phase": 0,
+      "why": "a step names its operation from a closed set",
+      "selector": "o:4b1f9e2a7c03/f:dial.make_box1.6;X:dial.cut1",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.make_box1.6;X:dial.cut1"
+    },
+    {
+      "phase": 0,
+      "why": "a generated step names its source's kind",
+      "selector": "o:4b1f9e2a7c03/f:dial.make_box1.6;G:dial.cut1",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.make_box1.6;G:dial.cut1"
+    },
+    {
+      "phase": 0,
+      "why": "a folded atom ends in twelve hex digits",
+      "selector": "o:4b1f9e2a7c03/f:dial.cut3~5d1e0c2f",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:dial.cut3~5d1e0c2f"
+    },
+    {
+      "phase": 0,
+      "why": "a further source is an atom of a name, never a geometric token",
+      "selector": "o:4b1f9e2a7c03/e:dial.make_box1.6;Gf:dial.cut1+f:9d2e8c1b5a70",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/e:dial.make_box1.6;Gf:dial.cut1+f:9d2e8c1b5a70"
+    },
+    {
+      "phase": 0,
+      "why": "a feature is a label or function.operation, never three segments",
+      "selector": "o:4b1f9e2a7c03/f:a.b.c.1",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:a.b.c.1"
+    },
+    {
+      "phase": 0,
+      "why": "a geometric token holds no dot, and a segment starts with a letter",
+      "selector": "o:4b1f9e2a7c03/f:9d2e8c1b5a70.3",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03/f:9d2e8c1b5a70.3"
+    },
+    {
+      "phase": 0,
+      "why": "the retired positional grammar is no ref: o1.2.f7 is opaque, not an occurrence and a face",
+      "selector": "o1.2.f7",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "element": "",
+      "canonical": "o1.2.f7"
+    },
+    {
+      "phase": 0,
+      "why": "the retired bare ordinal is a label, not an element",
+      "selector": "f7",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "element": "",
+      "label": "f7",
+      "canonical": "f7"
     },
     {
       "phase": 0,
@@ -86,7 +1125,7 @@
       "selector": "m1",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "canonical": "m1"
     },
     {
@@ -95,7 +1134,7 @@
       "selector": "not a selector!",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "canonical": "not a selector!"
     },
     {
@@ -104,29 +1143,39 @@
       "selector": "eye_shank",
       "selectorType": "label",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "label": "eye_shank",
       "canonical": "eye_shank"
     },
     {
       "phase": 1,
-      "why": "label + entity, the headline feature",
-      "selector": "servo_end_plate.f45",
+      "why": "label + element, the headline feature",
+      "selector": "servo_end_plate/f:9d2e8c1b5a70",
       "selectorType": "face",
       "occurrenceId": "",
-      "ordinal": 45,
+      "element": "f:9d2e8c1b5a70",
       "label": "servo_end_plate",
-      "canonical": "servo_end_plate.f45"
+      "canonical": "servo_end_plate/f:9d2e8c1b5a70"
+    },
+    {
+      "phase": 1,
+      "why": "label + lineage name",
+      "selector": "servo_end_plate/f:servo_end_plate.fillet2.5",
+      "selectorType": "face",
+      "occurrenceId": "",
+      "element": "f:servo_end_plate.fillet2.5",
+      "label": "servo_end_plate",
+      "canonical": "servo_end_plate/f:servo_end_plate.fillet2.5"
     },
     {
       "phase": 1,
       "why": "colons appear inside real labels (mounting_eye:lower, piston_rod:chrome)",
-      "selector": "piston_rod:chrome.e3",
+      "selector": "piston_rod:chrome/e:12ab34cd56ef",
       "selectorType": "edge",
       "occurrenceId": "",
-      "ordinal": 3,
+      "element": "e:12ab34cd56ef",
       "label": "piston_rod:chrome",
-      "canonical": "piston_rod:chrome.e3"
+      "canonical": "piston_rod:chrome/e:12ab34cd56ef"
     },
     {
       "phase": 1,
@@ -134,7 +1183,7 @@
       "selector": "cast_rim:5spoke_2",
       "selectorType": "label",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "label": "cast_rim:5spoke_2",
       "canonical": "cast_rim:5spoke_2"
     },
@@ -144,7 +1193,7 @@
       "selector": "5spoke",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "canonical": "5spoke"
     },
     {
@@ -153,37 +1202,37 @@
       "selector": "outer_ring",
       "selectorType": "label",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "label": "outer_ring",
       "canonical": "outer_ring"
     },
     {
       "phase": 1,
-      "why": "REGRESSION GUARD: an entity-looking label prefix must not be stolen either",
-      "selector": "frame_rail",
+      "why": "REGRESSION GUARD: a label shaped like a token prefix is a label (o: alone is nothing)",
+      "selector": "o:",
       "selectorType": "label",
       "occurrenceId": "",
-      "ordinal": null,
-      "label": "frame_rail",
-      "canonical": "frame_rail"
+      "element": "",
+      "label": "o:",
+      "canonical": "o:"
     },
     {
       "phase": 0,
       "why": "only a LEADING '#' is the token marker; a later one is not a separator",
-      "selector": "o1#f2",
+      "selector": "o:4b1f9e2a7c03#f:9d2e8c1b5a70",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
-      "canonical": "o1#f2"
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03#f:9d2e8c1b5a70"
     },
     {
       "phase": 0,
       "why": "a trailing '#' is part of the selector text, not something to drop",
-      "selector": "o1#",
+      "selector": "o:4b1f9e2a7c03#",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
-      "canonical": "o1#"
+      "element": "",
+      "canonical": "o:4b1f9e2a7c03#"
     },
     {
       "phase": 1,
@@ -191,250 +1240,88 @@
       "selector": "eye#shank",
       "selectorType": "opaque",
       "occurrenceId": "",
-      "ordinal": null,
+      "element": "",
       "canonical": "eye#shank"
     }
   ],
   "inheritanceCases": [
     {
       "phase": 0,
-      "why": "a bare entity after an occurrence inherits that occurrence",
-      "input": "o1.2,f3,f4",
+      "why": "a bare element after an occurrence inherits that occurrence",
+      "input": "o:4b1f9e2a7c03,f:9d2e8c1b5a70,e:12ab34cd56ef",
       "expected": [
-        "o1.2",
-        "o1.2.f3",
-        "o1.2.f4"
+        "o:4b1f9e2a7c03",
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
+        "o:4b1f9e2a7c03/e:12ab34cd56ef"
       ]
     },
     {
       "phase": 0,
-      "why": "an occurrence-entity selector also seeds inheritance",
-      "input": "o1.2.f3,f4",
+      "why": "names by derivation inherit as tokens do",
+      "input": "o:4b1f9e2a7c03,f:dial.extrude1.3,e:dial.cut1~5d1e0c2f9a3b;U2:dial.fillet1",
       "expected": [
-        "o1.2.f3",
-        "o1.2.f4"
+        "o:4b1f9e2a7c03",
+        "o:4b1f9e2a7c03/f:dial.extrude1.3",
+        "o:4b1f9e2a7c03/e:dial.cut1~5d1e0c2f9a3b;U2:dial.fillet1"
       ]
     },
     {
       "phase": 0,
-      "why": "with no occurrence context bare entities stay bare",
-      "input": "f3,f4",
+      "why": "an occurrence/element selector also seeds inheritance",
+      "input": "o:4b1f9e2a7c03/f:9d2e8c1b5a70,e:12ab34cd56ef",
       "expected": [
-        "f3",
-        "f4"
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
+        "o:4b1f9e2a7c03/e:12ab34cd56ef"
+      ]
+    },
+    {
+      "phase": 0,
+      "why": "with no occurrence context bare elements stay bare",
+      "input": "f:9d2e8c1b5a70,e:12ab34cd56ef",
+      "expected": [
+        "f:9d2e8c1b5a70",
+        "e:12ab34cd56ef"
       ]
     },
     {
       "phase": 1,
       "why": "a label seeds inheritance the same way an occurrence does",
-      "input": "eye_shank,f3,f4",
+      "input": "eye_shank,f:9d2e8c1b5a70,e:12ab34cd56ef",
       "expected": [
         "eye_shank",
-        "eye_shank.f3",
-        "eye_shank.f4"
+        "eye_shank/f:9d2e8c1b5a70",
+        "eye_shank/e:12ab34cd56ef"
       ]
     },
     {
       "phase": 1,
-      "why": "label+entity seeds inheritance from its label",
-      "input": "servo_end_plate.f45,f46",
+      "why": "label/element seeds inheritance from its label",
+      "input": "servo_end_plate/f:9d2e8c1b5a70,f:fedcba987654",
       "expected": [
-        "servo_end_plate.f45",
-        "servo_end_plate.f46"
+        "servo_end_plate/f:9d2e8c1b5a70",
+        "servo_end_plate/f:fedcba987654"
       ]
     },
     {
       "phase": 1,
       "why": "a later occurrence overrides an inherited label",
-      "input": "eye_shank,f3,o2.1,f4",
+      "input": "eye_shank,f:9d2e8c1b5a70,o:0a9e8d7c6b5f,f:fedcba987654",
       "expected": [
         "eye_shank",
-        "eye_shank.f3",
-        "o2.1",
-        "o2.1.f4"
+        "eye_shank/f:9d2e8c1b5a70",
+        "o:0a9e8d7c6b5f",
+        "o:0a9e8d7c6b5f/f:fedcba987654"
       ]
-    }
-  ],
-  "aliasCases": [
-    {
-      "phase": 1,
-      "why": "unique labels get a bare alias and no number",
-      "rows": [
-        {
-          "id": "o1.1",
-          "name": "eye_shank"
-        },
-        {
-          "id": "o1.2",
-          "name": "pressure_tube"
-        }
-      ],
-      "aliases": {
-        "eye_shank": "o1.1",
-        "pressure_tube": "o1.2"
-      },
-      "ambiguous": {}
-    },
-    {
-      "phase": 1,
-      "why": "duplicates get numbered aliases in occurrence-tree order; the bare name is ambiguous",
-      "rows": [
-        {
-          "id": "o1.3",
-          "name": "cast_rim:5spoke"
-        },
-        {
-          "id": "o1.7",
-          "name": "cast_rim:5spoke"
-        }
-      ],
-      "aliases": {
-        "cast_rim:5spoke_1": "o1.3",
-        "cast_rim:5spoke_2": "o1.7"
-      },
-      "ambiguous": {
-        "cast_rim:5spoke": [
-          "cast_rim:5spoke_1",
-          "cast_rim:5spoke_2"
-        ]
-      }
-    },
-    {
-      "phase": 1,
-      "why": "ordering is numeric per path segment, so o1.10 sorts AFTER o1.2",
-      "rows": [
-        {
-          "id": "o1.10",
-          "name": "bolt"
-        },
-        {
-          "id": "o1.2",
-          "name": "bolt"
-        }
-      ],
-      "aliases": {
-        "bolt_1": "o1.2",
-        "bolt_2": "o1.10"
-      },
-      "ambiguous": {
-        "bolt": [
-          "bolt_1",
-          "bolt_2"
-        ]
-      }
-    },
-    {
-      "phase": 1,
-      "why": "a numbered alias never collides with a label an author actually wrote",
-      "rows": [
-        {
-          "id": "o1.1",
-          "name": "servo_end_mount"
-        },
-        {
-          "id": "o1.2",
-          "name": "servo_end_mount"
-        },
-        {
-          "id": "o1.3",
-          "name": "servo_end_mount_1"
-        }
-      ],
-      "aliases": {
-        "servo_end_mount_2": "o1.1",
-        "servo_end_mount_3": "o1.2",
-        "servo_end_mount_1": "o1.3"
-      },
-      "ambiguous": {
-        "servo_end_mount": [
-          "servo_end_mount_2",
-          "servo_end_mount_3"
-        ]
-      }
-    },
-    {
-      "phase": 1,
-      "why": "names that cannot be labels are reachable numerically only",
-      "rows": [
-        {
-          "id": "o1.1",
-          "name": "o1.4"
-        },
-        {
-          "id": "o1.2",
-          "name": "f12"
-        },
-        {
-          "id": "o1.3",
-          "name": "m2"
-        },
-        {
-          "id": "o1.4",
-          "name": "5spoke"
-        },
-        {
-          "id": "o1.5",
-          "name": "has space"
-        },
-        {
-          "id": "o1.6",
-          "name": "has.dot"
-        },
-        {
-          "id": "o1.7",
-          "name": ""
-        }
-      ],
-      "aliases": {},
-      "ambiguous": {}
-    },
-    {
-      "phase": 1,
-      "why": "group (non-leaf) rows are addressable too",
-      "rows": [
-        {
-          "id": "o1.1",
-          "name": "damper_body"
-        },
-        {
-          "id": "o1.1.1",
-          "name": "pressure_tube"
-        }
-      ],
-      "aliases": {
-        "damper_body": "o1.1",
-        "pressure_tube": "o1.1.1"
-      },
-      "ambiguous": {}
-    },
-    {
-      "phase": 1,
-      "why": "a row may carry the render package's `occurrenceId` spelling instead of `id`",
-      "rows": [
-        {
-          "occurrenceId": "o1.1",
-          "name": "eye_shank"
-        },
-        {
-          "id": "o1.2",
-          "name": "pressure_tube"
-        }
-      ],
-      "aliases": {
-        "eye_shank": "o1.1",
-        "pressure_tube": "o1.2"
-      },
-      "ambiguous": {}
     }
   ],
   "tokenCases": [
     {
       "phase": 2,
-      "why": "bare selector token \u2014 the form every existing ref uses",
-      "text": "#o1.2.f3",
+      "why": "bare selector token — the form every ref uses",
+      "text": "#o:4b1f9e2a7c03/f:9d2e8c1b5a70",
       "cadPath": "",
       "selectors": [
-        "o1.2.f3"
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70"
       ]
     },
     {
@@ -447,30 +1334,40 @@
     {
       "phase": 2,
       "why": "file prefix, the viewer's copy format: the file's path, extension included",
-      "text": "mounting_plate.stl#o1.2.f3",
+      "text": "mounting_plate.stl#o:4b1f9e2a7c03/f:9d2e8c1b5a70",
       "cadPath": "mounting_plate.stl",
       "selectors": [
-        "o1.2.f3"
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70"
       ]
     },
     {
       "phase": 2,
       "why": "directory-qualified prefix: the file's path under the viewer's root",
-      "text": "starship/super_heavy.step#o1.3",
+      "text": "starship/super_heavy.step#o:4b1f9e2a7c03",
       "cadPath": "starship/super_heavy.step",
       "selectors": [
-        "o1.3"
+        "o:4b1f9e2a7c03"
       ]
     },
     {
       "phase": 2,
       "why": "prefix + comma list; inheritance still applies inside the token",
-      "text": "plate.step#o1.2,f3,f4",
+      "text": "plate.step#o:4b1f9e2a7c03,f:9d2e8c1b5a70,e:12ab34cd56ef",
       "cadPath": "plate.step",
       "selectors": [
-        "o1.2",
-        "o1.2.f3",
-        "o1.2.f4"
+        "o:4b1f9e2a7c03",
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
+        "o:4b1f9e2a7c03/e:12ab34cd56ef"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "names by lineage behind a prefix",
+      "text": "plate.step#o:4b1f9e2a7c03/f:plate.cut1.2,e:plate.cut1.7",
+      "cadPath": "plate.step",
+      "selectors": [
+        "o:4b1f9e2a7c03/f:plate.cut1.2",
+        "o:4b1f9e2a7c03/e:plate.cut1.7"
       ]
     },
     {
@@ -482,20 +1379,20 @@
     },
     {
       "phase": 2,
-      "why": "a label selector behind a prefix \u2014 the two features compose",
-      "text": "shock.step#eye_shank.f45",
+      "why": "a label selector behind a prefix — the two features compose",
+      "text": "shock.step#eye_shank/f:9d2e8c1b5a70",
       "cadPath": "shock.step",
       "selectors": [
-        "eye_shank.f45"
+        "eye_shank/f:9d2e8c1b5a70"
       ]
     },
     {
       "phase": 2,
       "why": "an absolute prefix, as a viewer with no project root copies it; the parser keeps every prefix RAW",
-      "text": "/work/models/STEP/c.step#o1",
+      "text": "/work/models/STEP/c.step#o:4b1f9e2a7c03",
       "cadPath": "/work/models/STEP/c.step",
       "selectors": [
-        "o1"
+        "o:4b1f9e2a7c03"
       ]
     },
     {
@@ -508,33 +1405,33 @@
     {
       "phase": 2,
       "why": "leading whitespace is tolerated, as before",
-      "text": "   #f1",
+      "text": "   #f:9d2e8c1b5a70",
       "cadPath": "",
       "selectors": [
-        "f1"
+        "f:9d2e8c1b5a70"
       ]
     },
     {
       "why": "Imported filenames preserve whitespace and delimiters",
-      "text": "\"models/Hex Drive Screw (2).STEP\"#o1.f2,f3 note",
+      "text": "\"models/Hex Drive Screw (2).STEP\"#o:4b1f9e2a7c03/f:9d2e8c1b5a70,e:12ab34cd56ef note",
       "cadPath": "models/Hex Drive Screw (2).STEP",
       "selectors": [
-        "o1.f2",
-        "o1.f3"
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
+        "o:4b1f9e2a7c03/e:12ab34cd56ef"
       ]
     },
     {
       "why": "Imported filenames preserve whitespace and delimiters",
-      "text": "\"models/café #1 \\\"screw\\\".STEP\"#o1.f2,f3 note",
+      "text": "\"models/café #1 \\\"screw\\\".STEP\"#o:4b1f9e2a7c03/f:9d2e8c1b5a70,e:12ab34cd56ef note",
       "cadPath": "models/café #1 \"screw\".STEP",
       "selectors": [
-        "o1.f2",
-        "o1.f3"
+        "o:4b1f9e2a7c03/f:9d2e8c1b5a70",
+        "o:4b1f9e2a7c03/e:12ab34cd56ef"
       ]
     },
     {
       "why": "Malformed quoted filenames are not partial references",
-      "text": "\"broken name.step#o1",
+      "text": "\"broken name.step#o:4b1f9e2a7c03",
       "cadPath": "",
       "selectors": null
     }

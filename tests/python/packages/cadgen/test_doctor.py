@@ -71,6 +71,19 @@ class DoctorTests(unittest.TestCase):
             _, out, _ = _run([tmp])
         self.assertRegex(out, r"sharing  on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\n")
 
+    def test_the_report_says_where_the_engine_daemon_is_and_whether_it_runs(self) -> None:
+        # Asked, never started: a doctor that started the daemon would leave one running.
+        with TemporaryDirectory() as tmp, TemporaryDirectory() as engine, \
+                mock.patch.dict("os.environ", {"CADGEN_ENGINE_DIR": engine}):
+            code, out, _ = _run([tmp])
+            self.assertEqual(code, 0)
+            self.assertRegex(out, r"server   not running \(.+\); the first build starts it\n")
+            self.assertEqual([path for path in Path(engine).iterdir()], [], "nothing started")
+        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}]}
+        with TemporaryDirectory() as tmp, mock.patch("cadgen.engine.client.request", return_value=answer):
+            _, out, _ = _run([tmp])
+        self.assertRegex(out, r"server   running, pid 4242, 2 workers \(.+\)\n")
+
     def test_the_report_names_the_kernel_it_loaded(self) -> None:
         with TemporaryDirectory() as tmp:
             code, out, _ = _run([tmp])
@@ -184,6 +197,20 @@ class KernelProbeTest(unittest.TestCase):
         state, detail = doctor._probe_kernel()
         self.assertEqual(state, doctor.KERNEL_OK, detail)
         self.assertIn("OCP", detail)
+
+    def test_the_probe_imports_the_installed_kernel_whatever_folder_it_runs_from(self) -> None:
+        import os
+
+        with TemporaryDirectory() as folder:
+            Path(folder, "OCP.py").write_text("raise SystemExit('the working folder was searched')\n", encoding="utf-8")
+            here = os.getcwd()
+            os.chdir(folder)
+            try:
+                state, detail = doctor._probe_kernel()
+            finally:
+                os.chdir(here)
+        self.assertEqual(state, doctor.KERNEL_OK, detail)
+        self.assertNotIn(os.path.realpath(folder), os.path.realpath(detail))
 
     def test_the_probe_tells_a_missing_kernel_from_a_refused_one(self) -> None:
         # The child interpreter's last stderr line is all the probe has. A

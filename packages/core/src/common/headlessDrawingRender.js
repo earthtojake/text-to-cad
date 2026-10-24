@@ -102,6 +102,9 @@ function drawingAnnotation(raw) {
 /**
  * Render one resolved `dxf` snapshot job.
  *
+ * What the picture says about itself (an empty drawing) is cadgen's to say,
+ * and it does, beside the job; the page only paints.
+ *
  * @param {object} job The resolved render job; `job.resolved.drawingUrl` names the payload.
  * @returns {Promise<object>} The host's result shape: `{ ok, mode, outputs, warnings }`.
  */
@@ -152,6 +155,6 @@ export async function runHeadlessDrawingJob(job) {
     appearance: job?.display?.appearance === "dark" ? "dark" : "light",
     primitiveCount: drawable.primitiveCount,
     outputs,
-    warnings
+    warnings: []
   };
 }

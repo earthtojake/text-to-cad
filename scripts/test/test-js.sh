@@ -30,8 +30,6 @@ node scripts/test/check-kit-boundaries.mjs
 if [ "$SELECT" = core ] || [ "$SELECT" = all ]; then
   section "@text-to-cad/core tests"
   npm --prefix packages/core test
-  section "viewer benchmark helper tests"
-  node --test scripts/bench/viewer-memory/*.test.mjs
 fi
 if [ "$SELECT" = ui ] || [ "$SELECT" = all ]; then
   section "@text-to-cad/ui tests"

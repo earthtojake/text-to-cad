@@ -1,0 +1,93 @@
+{
+  "about": "The models corpus_bench.py measures, smallest first, each with one edit whose `from` occurs exactly once in its file. `root` is relative to the repository; `cwd`, `pythonpath`, `xbf`, `needs` and the edit's `file` are relative to the model's root; `targets` to its `cwd`.",
+  "models": [
+    {
+      "name": "l_bracket",
+      "root": "models/examples",
+      "cwd": "src",
+      "targets": ["l_bracket.py"],
+      "xbf": "XBF/l_bracket.xbf",
+      "edit": {"file": "src/l_bracket.py", "from": "BASE_THICKNESS = 8.0", "to": "BASE_THICKNESS = 9.0"},
+      "note": "the small example: one filleted part"
+    },
+    {
+      "name": "planetary_gear",
+      "root": "models/assemblies",
+      "cwd": "src/planetary_gear_assembly",
+      "targets": ["planetary_gear_assembly.py"],
+      "xbf": "XBF/planetary_gear_assembly/planetary_gear_assembly.xbf",
+      "edit": {"file": "src/planetary_gear_assembly/planetary_gear_assembly.py", "from": "CARRIER_DIAMETER = 105.0", "to": "CARRIER_DIAMETER = 106.0"},
+      "note": "the docs hero, whose GLB apps/docs/scripts/sync-hero-glb.mjs exports"
+    },
+    {
+      "name": "qdd",
+      "root": "models/qdd_actuator",
+      "cwd": "src",
+      "targets": ["qdd_actuator.py"],
+      "xbf": "XBF/qdd_actuator.xbf",
+      "edit": {"file": "src/qdd_actuator.py", "from": "GEAR_WIDTH = 12.0", "to": "GEAR_WIDTH = 13.0"}
+    },
+    {
+      "name": "motorbike",
+      "root": "models/motorbike",
+      "cwd": "src",
+      "targets": ["motorbike.py"],
+      "xbf": "XBF/motorbike.xbf",
+      "edit": {"file": "src/lib/spec.py", "from": "BRAKE_DISC_DIAMETER = 185.0", "to": "BRAKE_DISC_DIAMETER = 190.0"}
+    },
+    {
+      "name": "case",
+      "root": "models/moonwatch",
+      "cwd": "src",
+      "targets": ["case.py"],
+      "xbf": "XBF/case.xbf",
+      "edit": {"file": "src/lib/case.py", "from": "GUARD_RADIUS = 18.0", "to": "GUARD_RADIUS = 18.5"}
+    },
+    {
+      "name": "juno",
+      "root": "models/juno",
+      "cwd": "src",
+      "targets": ["juno.py::juno"],
+      "xbf": "XBF/juno.xbf",
+      "edit": {"file": "src/lib/legs.py", "from": "KNEE_Z = -290.0", "to": "KNEE_Z = -291.0"},
+      "note": "the robot alone, as main's juno.py was one model (`python juno.py` builds its 28 link models too); the edit is the engine's first juno bench's"
+    },
+    {
+      "name": "movement",
+      "root": "models/moonwatch",
+      "cwd": "src",
+      "targets": ["movement.py"],
+      "xbf": "XBF/movement.xbf",
+      "edit": {"file": "src/lib/mvt_keyless.py", "from": "HOUR_TIP_D = 4.37", "to": "HOUR_TIP_D = 4.40"}
+    },
+    {
+      "name": "tom",
+      "root": "models/tom",
+      "cwd": ".",
+      "pythonpath": ["src"],
+      "targets": ["src/tom.py"],
+      "xbf": "XBF/tom.xbf",
+      "needs": ["STEP/imported/parts"],
+      "edit": {"file": "src/lib/current_arm_parts.py", "from": "pattern_shift_x=-2.0", "to": "pattern_shift_x=-2.1"},
+      "note": "builds from tom/ with src on PYTHONPATH; reads the vendor STEP and Tom rev3's parts from the uncommitted STEP/imported (its src/README.md says how to put them there)"
+    },
+    {
+      "name": "hypercar",
+      "root": "models/hypercar",
+      "cwd": "src",
+      "targets": ["hypercar.py"],
+      "xbf": "XBF/hypercar.xbf",
+      "edit": {"file": "src/lib/hinge.py", "from": "LOWER_ARM = [(-34.0, 22.0),", "to": "LOWER_ARM = [(-34.0, 23.0),"},
+      "note": "the old benchmark's edit, LOWER_ARM's first point 22 -> 23 (src/README.md); since the corpus migration a plain @model that declares no GLB (its clips ride the document)"
+    },
+    {
+      "name": "f1",
+      "root": "models/f1",
+      "cwd": "src",
+      "targets": ["f1.py"],
+      "xbf": "XBF/f1.xbf",
+      "edit": {"file": "src/lib/front_wing.py", "from": "_ACCENT_FRAC = 0.07", "to": "_ACCENT_FRAC = 0.075"},
+      "note": "the edit src/README.md measures; since the corpus migration a plain @model that declares no GLB (its clips ride the document)"
+    }
+  ]
+}

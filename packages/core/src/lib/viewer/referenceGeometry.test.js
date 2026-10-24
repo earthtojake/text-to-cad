@@ -3,14 +3,11 @@ import { test } from "node:test";
 import * as THREE from "three";
 import {
   buildEdgeLinePositionsFromProxy,
-  buildFallbackFaceFanGeometry,
   buildFaceBoundaryLinePositions,
   buildFaceFillGeometryFromDisplayMeshes,
   buildFaceFillGeometryFromProxy,
   buildVertexMarkerMesh,
   createReferenceEdgeGeometryFromPoints,
-  createReferenceFaceBoundaryGeometry,
-  createReferenceFaceFillGeometry,
   displayRecordForReference,
   faceFillOffset,
   faceRunIndex,
@@ -91,95 +88,6 @@ test("reference edge geometry builds line segment buffers from point paths", () 
   ], "edge geometry");
   assert.equal(createReferenceEdgeGeometryFromPoints(THREE, [[0, 0, 0]]), null);
 });
-
-test("reference face boundary geometry prefers loop metadata and falls back to pick loops", () => {
-  const fromMeta = createReferenceFaceBoundaryGeometry(THREE, {
-    pickData: {
-      loopsMeta: [
-        { points: [[0, 0, 0], [1, 0, 0]] }
-      ],
-      loops: [
-        [[9, 0, 0], [10, 0, 0]]
-      ]
-    }
-  });
-  assertArrayNear(geometryPositions(fromMeta), [
-    0, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
-    0, 0, 0
-  ], "metadata boundary");
-
-  const fromLoops = createReferenceFaceBoundaryGeometry(THREE, {
-    pickData: {
-      loops: [
-        [[2, 0, 0], [3, 0, 0]]
-      ]
-    }
-  });
-  assertArrayNear(geometryPositions(fromLoops), [
-    2, 0, 0,
-    3, 0, 0,
-    3, 0, 0,
-    2, 0, 0
-  ], "fallback boundary");
-});
-
-test("reference fallback face fan geometry uses the supplied centroid", () => {
-  const geometry = buildFallbackFaceFanGeometry(THREE, [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-  ], [0, 0, 0]);
-
-  assertArrayNear(geometryPositions(geometry), [
-    0, 0, 0,
-    1, 0, 0,
-    0, 1, 0,
-    0, 0, 0,
-    0, 1, 0,
-    0, 0, 1,
-    0, 0, 0,
-    0, 0, 1,
-    1, 0, 0
-  ], "fallback fan");
-  assert.equal(buildFallbackFaceFanGeometry(THREE, [[0, 0, 0], [1, 0, 0]]), null);
-});
-
-test("reference face fill geometry triangulates planar loops", () => {
-  const geometry = createReferenceFaceFillGeometry(THREE, {
-    pickData: {
-      loops: [
-        [
-          [0, 0, 0],
-          [1, 0, 0],
-          [1, 1, 0],
-          [0, 1, 0]
-        ]
-      ],
-      surface: {
-        type: "PLANE",
-        origin: [0, 0, 0],
-        xDir: [1, 0, 0],
-        yDir: [0, 1, 0],
-        normal: [0, 0, 1]
-      }
-    }
-  });
-  const positions = geometryPositions(geometry);
-  assert.equal(positions.length, 18);
-  for (let index = 2; index < positions.length; index += 3) {
-    assertNear(positions[index], 0, `z ${index}`);
-  }
-  assert.equal(createReferenceFaceFillGeometry(THREE, {
-    pickData: {
-      loops: [
-        [[0, 0, 0], [1, 0, 0]]
-      ]
-    }
-  }), null);
-});
-
 
 test("reference proxy helpers build face fill and edge line buffers from selector data", () => {
   const runtime = createRuntime();
@@ -323,16 +231,16 @@ function movedRecord(partId, x) {
   return { partId, explodedViewMatrix: new THREE.Matrix4().makeTranslation(x, 0, 0) };
 }
 
-test("a reference resolves to the most specific display record that owns it", () => {
-  const parent = movedRecord("o1", 5);
-  const child = movedRecord("o1.3", 9);
-  const runtime = explodeRuntime([parent, child, movedRecord("o1.30", 99)]);
+test("a reference resolves to the display record of exactly its occurrence", () => {
+  // A reference's occurrence is a token; the record that owns it is the one with that id. No
+  // other record is "closer": an id carries no hierarchy to walk up, and none shares a prefix.
+  const base = movedRecord("o:3f2a9c1d7e5b", 5);
+  const arm = movedRecord("o:a1b2c3d4e5f6", 9);
+  const runtime = explodeRuntime([base, arm, movedRecord("o:a1b2c3d4e5f0", 99)]);
 
-  // o1.30 must NOT win on a string-prefix accident, and the deeper owner beats the shallower.
-  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o1.3" }), child);
-  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o1.3.1" }), child);
-  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o1.4" }), parent);
-  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o2.1" }), null);
+  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o:a1b2c3d4e5f6" }), arm);
+  assert.equal(displayRecordForReference(runtime, { pickData: { occurrenceId: "o:3f2a9c1d7e5b" } }), base);
+  assert.equal(displayRecordForReference(runtime, { occurrenceId: "o:0f1e2d3c4b5a" }), null);
   assert.equal(displayRecordForReference(runtime, { occurrenceId: "" }), null);
 });
 

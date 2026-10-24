@@ -1,21 +1,15 @@
-"""F1 part model: rear suspension.
+"""F1 part: rear suspension.
 
-The geometry `lib/suspension.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.20`; rebuild `f1.py`
-to pick up a change here.
+Built in car coordinates by `lib/suspension.py`; `f1.py` calls it in the car's body,
+a `@memo` stage of its own.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import suspension as suspension_lib
 
 
-@step(out="../STEP/suspension_rear.step")
+@memo
 def suspension_rear():
-    return suspension_lib.build_suspension_rear()
-
-
-if __name__ == "__main__":
-    suspension_rear()
+    built = suspension_lib.build_suspension_rear()
+    return built

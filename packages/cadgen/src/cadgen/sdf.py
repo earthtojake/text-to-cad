@@ -2,23 +2,19 @@
 
 No decorator, for the reason :mod:`cadgen.urdf` gives: a world or model
 description is authored, not generated. ``cadgen sdf validate`` is a generated
-MIRROR of :func:`validate` (README law 6).
+MIRROR of :func:`validate`; ``cadgen sdf snapshot`` draws one
+(``cadgen.engine.snapshot``).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen._internal.snapshot_door import robot_snapshot_verb
 from cadgen.results import ValidationResult
 
-__all__ = ["snapshot", "validate"]
+__all__ = ["validate"]
 
 SUFFIX = ".sdf"
-
-#: ``cadgen sdf snapshot``'s verb: render the robot the browser assembles from
-#: this description's link meshes.
-snapshot = robot_snapshot_verb("sdf")
 
 #: What `gz sdf --check` may be asked to do. Not a parser `choices=` list: a
 #: generated parser derives types, not enumerations, so the verb validates its
@@ -31,6 +27,7 @@ def validate(
     *,
     strict: bool = False,
     gz_check: str = "auto",
+    gz_remote: bool = False,
     verbose: bool = False,
 ) -> ValidationResult:
     """Check one SDFormat world or model for conformance.
@@ -43,6 +40,9 @@ def validate(
     strict: treat warnings as blocking.
     gz_check: run `gz sdf --check` as external validation — auto (when the tool
         is installed), required (fail without it), or never.
+    gz_remote: let `gz sdf --check` resolve the document's remote <uri> references
+        (http, https, fuel). Off by default: gz does not run on a document that names
+        one, so validating a file never fetches from a host the file names.
     verbose: narrate the target on stderr.
     """
     import sys
@@ -73,7 +73,7 @@ def validate(
     from cadgen.sdf_validation import validate_sdf_xml
 
     findings = validate_sdf_xml(xml_text, source_path=target, base_dir=target.parent)
-    findings.extend(run_gz_sdf_check(xml_text, output_path=target, mode=gz_check))
+    findings.extend(run_gz_sdf_check(xml_text, output_path=target, mode=gz_check, remote=gz_remote))
     findings = findings.deduplicated()
     summary = ""
     if not blocks(findings, strict=strict):

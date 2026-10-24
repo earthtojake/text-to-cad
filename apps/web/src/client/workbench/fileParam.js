@@ -1,49 +1,33 @@
 /**
- * The file a page shows, in its URL: `?file=<absolute path>`, and no `?file=` for the home. One
- * CAD Viewer serves every file on the machine, so a link names its file in full. A path that is not
- * absolute is a developer's: it resolves against the folder this viewer started in (the server's
- * `start`), and the page names the file in full from then on.
+ * The document a page shows, in its URL's path: `/<id>` -- a document's id (`cadgen.engine.ids`): a
+ * model's, or a file's, which the server derives from its canonical path and registers when a
+ * launcher or the page opens it -- and `/` for the home. There is no other form: a path that names
+ * no id (an old `/s/<session>/`, or `/` with `?file=`) is the home, and the page names it so.
  */
-const PARAM = "file";
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-const isAbsolute = (path) => /^(?:\/|[A-Za-z]:\/)/.test(path);
-
-/** `?file=` as the URL has it, or null. */
-export function readFileParam(search = window.location.search) {
-  const value = new URLSearchParams(search).get(PARAM);
-  return value && value.trim() ? value.trim() : null;
+/** The id the URL's path names, or null: the home. */
+export function readDocumentId(pathname = window.location.pathname) {
+  const value = String(pathname || "").replace(/^\/+|\/+$/g, "");
+  return ID.test(value) ? value : null;
 }
 
-/** The file a developer's build opens by default (`VIEWER_DEFAULT_FILE`), or null. */
+/** The file a developer's build opens by default (`VIEWER_DEFAULT_FILE`, an absolute path), or null. */
 export function readDefaultFileParam() {
   return String(import.meta.env?.VIEWER_DEFAULT_FILE ?? "").trim() || null;
 }
 
-/** `value` as an absolute path, `/`-separated: as it is, or resolved against `start`. */
-export function resolveFileParam(value, start = "") {
-  const raw = String(value || "").trim().replace(/\\/g, "/");
-  if (!raw) return "";
-  const joined = isAbsolute(raw) ? raw : `${String(start).replace(/\\/g, "/").replace(/\/+$/, "")}/${raw}`;
-  const drive = /^[A-Za-z]:/.test(joined) ? joined.slice(0, 2) : "";
-  const parts = [];
-  for (const part of joined.slice(drive.length).split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") parts.pop();
-    else parts.push(part);
-  }
-  return `${drive}/${parts.join("/")}`;
-}
-
-// A path stays readable in the URL: only what a query cannot carry is escaped.
-const encodePath = (path) => encodeURIComponent(path).replace(/%2F/gi, "/").replace(/%3A/gi, ":");
-
-/** Name `path` in the URL (`""` is none: the home), as a new history entry or in place of this one. */
-export function writeFileParam(path, { history = "push" } = {}) {
+/**
+ * Name the document `id` in the URL (`""` or null is none: the home, `/`), as a new history entry or
+ * in place of this one. Any other query the page carries is kept; a document named by query is not.
+ */
+export function writeDocumentId(id, { history = "push" } = {}) {
   const params = new URLSearchParams(window.location.search);
-  params.delete(PARAM);
+  params.delete("file");
+  params.delete("doc");
+  params.delete("id");
   const rest = params.toString();
-  const search = [path ? `${PARAM}=${encodePath(path)}` : "", rest].filter(Boolean).join("&");
-  const next = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+  const next = `/${id || ""}${rest ? `?${rest}` : ""}${window.location.hash}`;
   if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return;
   if (history === "push") window.history.pushState({}, "", next);
   else window.history.replaceState({}, "", next);

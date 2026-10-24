@@ -1,7 +1,7 @@
 """Original 28-DOF compact humanoid research platform concept.
 
 The model is intentionally designed from a blank parametric brief.  It does
-not import or derive geometry from any other model.  STEP is the primary
+not import or derive geometry from any other model.  The xbf is the primary
 artifact; every manufactured or articulated visual unit is a labeled child of
 the root assembly.
 
@@ -19,23 +19,20 @@ pivots are passive differential joints and are not counted as actuators.
 
 from __future__ import annotations
 
-import functools
-from cadgen import step
+from cadgen import model
 
 from dataclasses import asdict, dataclass
 from math import sqrt
 from typing import Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from cadgen.assembly import AssemblyHelper, label_shape
 
 
 # Restrained industrial palette.  Color carries subsystem meaning; there are
 # deliberately no logos, words, decals, or vendor-specific panel motifs.
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
+# sRGB hex strings: build123d's Shape.color setter builds the Color on
+# assignment.
 ALUMINUM = "#C8CDD1"
 COMPOSITE = "#292D31"
 ARMOR = "#ECEDE8"
@@ -200,11 +197,25 @@ def _axis_cylinder(center: Point, axis: Point, radius: float, length: float) -> 
     return bd.Cylinder(radius, length).moved(plane.location)
 
 
+def _label_text(name: str, *details: object) -> str:
+    """A compact label such as ``bearing_cap:left_knee_pitch:negative``."""
+    return ":".join("_".join(str(token).strip().replace(":", "_").split()) for token in (name, *details))
+
+
 def _colored(shape: object, name: str, color: bd.Color, *details: object) -> object:
-    return label_shape(shape, name, *details, color=color)
+    shape.label = _label_text(name, *details)
+    shape.color = color
+    return shape
 
 
-def _add_joint_module(assembly: AssemblyHelper, spec: JointSpec) -> object:
+def _module(parts: list, name: str, children: Sequence[object], *details: object) -> object:
+    """One labelled unit of the robot: a compound of its children, appended to ``parts``."""
+    module = bd.Compound(children=list(children), label=_label_text(name, *details))
+    parts.append(module)
+    return module
+
+
+def _add_joint_module(parts: list, spec: JointSpec) -> object:
     """Create an exposed cartridge and attach its native revolute frame."""
 
     axis = _unit(spec.axis)
@@ -248,18 +259,16 @@ def _add_joint_module(assembly: AssemblyHelper, spec: JointSpec) -> object:
             spec.name,
         ),
     ]
-    module = assembly.add_module(spec.name, children)
-    assembly.revolute_frame(
-        module,
-        spec.name,
-        bd.Axis(spec.center, spec.axis),
-        angular_range=spec.limits_deg,
-    )
+    module = _module(parts, spec.name, children)
+    # The actuator's axis and travel, as a joint on the cartridge (no part is
+    # connected to it, so the model has no mechanism, as before).
+    bd.RevoluteJoint(_label_text(spec.name), module, axis=bd.Axis(spec.center, spec.axis),
+                     angular_range=spec.limits_deg)
     return module
 
 
 def _add_structural_link(
-    assembly: AssemblyHelper,
+    parts: list,
     name: str,
     start: Point,
     end: Point,
@@ -357,10 +366,10 @@ def _add_structural_link(
             name,
         )
     )
-    return assembly.add_module(name, children)
+    return _module(parts, name, children)
 
 
-def _add_foot(assembly: AssemblyHelper, side: str) -> object:
+def _add_foot(parts: list, side: str) -> object:
     sign = SIDES[side]
     ankle = ANKLES[side]
     toe_out = 7.0 * sign
@@ -406,10 +415,10 @@ def _add_foot(assembly: AssemblyHelper, side: str) -> object:
             "inner",
         ),
     ]
-    return assembly.add_module("foot", children, side)
+    return _module(parts, "foot", children, side)
 
 
-def _add_pelvis(assembly: AssemblyHelper) -> object:
+def _add_pelvis(parts: list) -> object:
     children = [
         _colored(_at(_soft_box(150.0, 102.0, 104.0, 14.0), (0.0, 0.0, 750.0)), "pelvis_core", COMPOSITE),
         _colored(_at(_soft_box(82.0, 138.0, 116.0, 18.0), (68.0, 0.0, 746.0)), "pelvis_fairing", ARMOR, "left"),
@@ -419,10 +428,10 @@ def _add_pelvis(assembly: AssemblyHelper) -> object:
         _colored(_at(_soft_box(18.0, 118.0, 76.0, 5.0), (96.0, 0.0, 721.0)), "hip_bridge", ALUMINUM, "left"),
         _colored(_at(_soft_box(18.0, 118.0, 76.0, 5.0), (-96.0, 0.0, 721.0)), "hip_bridge", ALUMINUM, "right"),
     ]
-    return assembly.add_module("pelvis", children)
+    return _module(parts, "pelvis", children)
 
 
-def _add_torso(assembly: AssemblyHelper) -> object:
+def _add_torso(parts: list) -> object:
     children = [
         _colored(_at(_soft_box(168.0, 104.0, 224.0, 18.0), (0.0, -4.0, 953.0)), "torso_core", COMPOSITE),
         _colored(_at(_tapered_box(62.0, 126.0, 88.0, 142.0, 214.0, 16.0), (112.0, 0.0, 956.0)), "rib_shell", ARMOR, "left"),
@@ -441,10 +450,10 @@ def _add_torso(assembly: AssemblyHelper) -> object:
                 index,
             )
         )
-    return assembly.add_module("torso", children)
+    return _module(parts, "torso", children)
 
 
-def _add_head(assembly: AssemblyHelper) -> object:
+def _add_head(parts: list) -> object:
     center = (0.0, 10.0, 1210.0)
     children = [
         _colored(_at(_soft_box(150.0, 122.0, 126.0, 18.0), center, (3.0, 0.0, 0.0)), "head_shell", ARMOR),
@@ -466,10 +475,10 @@ def _add_head(assembly: AssemblyHelper) -> object:
                 _colored(_axis_cylinder((x_value, 90.0, 1225.0), (0.0, 1.0, 0.0), 6.2, 3.0), "camera_glass", SENSOR_GLASS, side),
             ]
         )
-    return assembly.add_module("sensor_head", children)
+    return _module(parts, "sensor_head", children)
 
 
-def _add_hand(assembly: AssemblyHelper, side: str) -> object:
+def _add_hand(parts: list, side: str) -> object:
     sign = SIDES[side]
     palm = PALMS[side]
     children: list[object] = [
@@ -504,13 +513,11 @@ def _add_hand(assembly: AssemblyHelper, side: str) -> object:
             _colored(_at(_soft_box(12.0, 14.0, 9.0, 3.0), thumb_end), "thumb_pad", ELASTOMER, side),
         ]
     )
-    return assembly.add_module("adaptive_hand", children, side)
+    return _module(parts, "adaptive_hand", children, side)
 
 
-@functools.cache
 def joint_specs() -> tuple[JointSpec, ...]:
-    """The 28 actuated axes. Cached and built on first use: the vector math
-    inside touches the CAD kernel, which must stay unloaded at import time."""
+    """The 28 actuated axes."""
     specs: list[JointSpec] = [
         JointSpec("waist_yaw", "waist", (0.0, 0.0, 816.0), (0.0, 0.0, 1.0), (-35.0, 35.0), 48.0, 44.0),
         JointSpec("waist_pitch", "waist", (0.0, 0.0, 848.0), (1.0, 0.0, 0.0), (-20.0, 25.0), 42.0, 112.0),
@@ -558,16 +565,16 @@ def joint_manifest() -> list[dict[str, object]]:
 
 
 def _build_robot() -> object:
-    assembly = AssemblyHelper("compact_humanoid_28")
+    parts: list = []
 
-    _add_pelvis(assembly)
-    _add_torso(assembly)
-    _add_head(assembly)
+    _add_pelvis(parts)
+    _add_torso(parts)
+    _add_head(parts)
 
     for side in SIDES:
-        _add_foot(assembly, side)
+        _add_foot(parts, side)
         _add_structural_link(
-            assembly,
+            parts,
             f"{side}_shank",
             ANKLES[side],
             KNEES[side],
@@ -577,7 +584,7 @@ def _build_robot() -> object:
             armor_fraction=0.60,
         )
         _add_structural_link(
-            assembly,
+            parts,
             f"{side}_thigh",
             KNEES[side],
             HIPS[side],
@@ -587,7 +594,7 @@ def _build_robot() -> object:
             armor_fraction=0.62,
         )
         _add_structural_link(
-            assembly,
+            parts,
             f"{side}_upper_arm",
             SHOULDERS[side],
             ELBOWS[side],
@@ -597,7 +604,7 @@ def _build_robot() -> object:
             armor_fraction=0.56,
         )
         _add_structural_link(
-            assembly,
+            parts,
             f"{side}_forearm",
             ELBOWS[side],
             WRISTS[side],
@@ -606,13 +613,12 @@ def _build_robot() -> object:
             preferred_x=(0.0, 1.0, 0.0),
             armor_fraction=0.60,
         )
-        _add_hand(assembly, side)
+        _add_hand(parts, side)
 
     for spec in joint_specs():
-        _add_joint_module(assembly, spec)
+        _add_joint_module(parts, spec)
 
-    robot = assembly.build()
-    robot.label = "compact_humanoid_28"
+    robot = bd.Compound(children=parts, label="compact_humanoid_28")
     return robot
 
 
@@ -631,9 +637,9 @@ def design_metrics() -> dict[str, object]:
     }
 
 
-@step(out="../../STEP/compact_humanoid/compact_humanoid.step")
+@model
 def compact_humanoid() -> object:
-    """Return the labeled STEP-ready build123d assembly."""
+    """Return the labeled build123d assembly."""
 
     return _build_robot()
 

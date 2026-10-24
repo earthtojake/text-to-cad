@@ -1,21 +1,16 @@
-"""Hypercar system model: powertrain — engine, intake, exhaust, transaxle, driveshafts.
+"""Hypercar system: powertrain — engine, intake, exhaust, transaxle, driveshafts.
 
-A sub-assembly of the car: the group `lib/powertrain.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.9`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/powertrain.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import powertrain as powertrain_lib
 
 
-@step(out="../STEP/powertrain.step")
+@memo
 def powertrain():
-    return powertrain_lib.build()
-
-
-if __name__ == "__main__":
-    powertrain()
+    built = powertrain_lib.build()
+    return built

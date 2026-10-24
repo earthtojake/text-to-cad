@@ -23,18 +23,15 @@ import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 //   not here: each renderer offers its tools, and `viewFeaturesForKind`
 //   (`common/viewSettings.js`) is the one rule of what a file's view offers.
 
-// How parameters reach the viewer. One consumer surface over the possible stores.
-export const PARAMETER_SOURCE = Object.freeze({
-  SIDECAR: "sidecar"
-});
-
 // WHICH ASSET the viewer loads for this format. A DXF loads a DRAWING: the server's
 // flattened 2D payload, not a mesh, so every "is it loaded yet?" check has to ask about the
 // drawing. Loader implementations stay per-format; this only names which one.
 export const ASSET_KIND = Object.freeze({
   MESH: "mesh",
   DRAWING: "drawing",
-  ROBOT: "robot"
+  ROBOT: "robot",
+  // A cadgen engine document: its structure and part buffers, read from the engine that serves it.
+  ENGINE_DOCUMENT: "engine-document"
 });
 
 // The file-list glyph. A table rather than a cascade of format tests: the icon is the most
@@ -77,7 +74,6 @@ const MESH_CAPABILITIES = Object.freeze({
   iconKind: ENTRY_ICON_KIND.STL_MESH,
   parts: false,
   topology: false,
-  params: null,
   animations: false,
   artifactManaged: false,
 });
@@ -88,7 +84,6 @@ const ROBOT_CAPABILITIES = Object.freeze({
   // Its links are picked by its own renderer, not through a STEP's part table.
   parts: false,
   topology: false,
-  params: null,
   animations: false,
   artifactManaged: false,
 });
@@ -99,7 +94,6 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   tools: VIEWPORT_TOOLS,
   parts: false,
   topology: false,
-  params: null,
   animations: false,
   // Formats whose VIEWPORT CONTENT comes from a generated package, so the viewer checks
   // freshness and may block on a build.
@@ -116,7 +110,6 @@ export const RENDER_CAPABILITIES = Object.freeze({
     iconKind: ENTRY_ICON_KIND.STEP,
     parts: true,
     topology: true,
-    params: PARAMETER_SOURCE.SIDECAR,
     animations: true,
     artifactManaged: true,
   }),
@@ -145,7 +138,17 @@ export const RENDER_CAPABILITIES = Object.freeze({
   }),
   [RENDER_FORMAT.URDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
   [RENDER_FORMAT.SRDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
-  [RENDER_FORMAT.SDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES })
+  [RENDER_FORMAT.SDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
+  // A cadgen engine document (`packages/ui/src/renderers/xbf`): B-rep parts and their placements,
+  // every face, edge and vertex named by its ordinal. Drawn from what the engine serves, never from
+  // a package the viewer builds.
+  [RENDER_FORMAT.XBF]: Object.freeze({
+    ...DEFAULT_CAPABILITIES,
+    assetKind: ASSET_KIND.ENGINE_DOCUMENT,
+    iconKind: ENTRY_ICON_KIND.STEP,
+    parts: true,
+    topology: true
+  })
 });
 
 // Extension aliases that name the same render format.
@@ -176,13 +179,6 @@ export function supportsTool(renderFormat, tool) {
 // policy ratchet's allowlist easy to describe: capability reads look like this.
 export function hasCapability(renderFormat, capability) {
   return renderCapabilities(renderFormat)[capability] === true;
-}
-
-// Which parameter store backs this format, or "" when it has no parameters. The viewer
-// resolves it once into a single active parameter runtime, so copy/paste/reset are
-// written once rather than once per store.
-export function parameterSourceKind(renderFormat) {
-  return renderCapabilities(renderFormat).params || "";
 }
 
 export function isArtifactManagedFormat(renderFormat) {

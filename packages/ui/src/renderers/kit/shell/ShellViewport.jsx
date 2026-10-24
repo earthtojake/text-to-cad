@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@text-to-cad/core/common/inspectEnvironment.js";
 import { resolveCadGridSettings } from "@text-to-cad/core/common/cadInk.js";
 import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@text-to-cad/core/common/sceneSettings.js";
+import { applySceneRig, sceneRigFor } from "@text-to-cad/core/lib/viewer/sceneRig.js";
 import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
 } from "@text-to-cad/core/lib/perspective.js";
@@ -60,6 +61,8 @@ import ViewportError from "../status/ViewportError.jsx";
 import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
+// The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
+const THEME_LIGHTS = Object.freeze(["hemisphereLight", "ambientLight", "keyLight", "fillLight", "rimLight", "spotLight", "pointLight"]);
 /** How long after the open-time fit the viewport and projection may still be settling. */
 const OPEN_FIT_SETTLE_MS = 600;
 // The stage group holds only what the look put there.
@@ -760,12 +763,20 @@ const ShellViewport = forwardRef(function ShellViewport({
   useSceneEffects({ runtimeRef, scene, displaySettings, enabled: sceneEffects, look: surfaceLook, loading: isLoading,
     viewerReadyTick, onBoundsChanged: () => syncSceneBounds() });
 
-  // The look: lighting rig or studio, background, floor, grid and axes.
+  // The look: lighting rig or studio, background, floor, grid and axes. A scene that brings its own
+  // lighting (`sceneContract.js`'s `rig`, or `rigFor` the look it wears) is lit by it outside
+  // Preview's Render, in place of the theme's lights, its environment the scene's (`sceneRig.js`);
+  // the theme's background, floor and grid stay.
+  const sceneRig = !renderMode ? sceneRigFor(scene, surfaceLook) : null;
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
+    // A rig going away is taken down first, so the theme below finds the stage as it left it; one
+    // replaced by another comes down after the next is up, which shares its environment's PMREM.
+    const shown = runtime.sceneRig || null;
+    if (shown && !sceneRig) shown.dispose();
     if (photographicLighting) {
-      for (const light of ["hemisphereLight", "ambientLight", "keyLight", "fillLight", "rimLight", "spotLight", "pointLight"]) {
+      for (const light of THEME_LIGHTS) {
         runtime[light].visible = false;
       }
       runtime.gridConfig = null;
@@ -808,6 +819,15 @@ const ShellViewport = forwardRef(function ShellViewport({
     // One primary shadow; the spot light drives the floor glow.
     runtime.keyLight.castShadow = runtime.keyLight.visible && runtime.softwareRendering !== true;
     runtime.spotLight.castShadow = false;
+    if (sceneRig) {
+      for (const light of THEME_LIGHTS) runtime[light].visible = false;
+      runtime.keyLight.castShadow = false;
+      if (shown?.rig === sceneRig) shown.restate();
+      else {
+        applySceneRig(runtime.THREE, runtime, sceneRig);
+        shown?.dispose();
+      }
+    }
     runtime.gridConfig = null;
     const floorZCandidate = floorFollowsModel ? runtime.modelFloorZBelowModel : runtime.modelFloorZBase;
     const floorZ = Number.isFinite(floorZCandidate) ? floorZCandidate : runtime.gridFloorZ ?? 0;
@@ -820,7 +840,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.requestRender();
   }, [
     defaultGridRadius, photographicLighting, appearance, normalizedThemeSettings, normalizedSceneScaleMode, resolvedFloorMode,
-    renderMode, floorFollowsModel, viewerReadyTick, viewerTheme, updateActiveGridHelper, applyActivePhotographicStudio
+    renderMode, floorFollowsModel, viewerReadyTick, viewerTheme, updateActiveGridHelper, applyActivePhotographicStudio, sceneRig
   ]);
 
   // The reflection environment: Inspect's small fill for authored materials, or the studio's.
@@ -839,7 +859,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (renderMode && renderConfiguration && !studio) { runtime.environmentReady = false; return; }
     if (!photographicLighting || !renderConfiguration) {
       runtime.environmentReady = true;
-      if (scene?.keepsAuthoredFinish) {
+      if (sceneRig) {
+        // A scene's own rig lights it with its own environment (the look above put it up).
+      } else if (scene?.keepsAuthoredFinish) {
         if (runtime.environmentResourceIdentity !== INSPECT_ENVIRONMENT_ID) {
           clearEnvironmentResource();
           runtime.environmentResource = createInspectEnvironmentResource(runtime.THREE);
@@ -899,7 +921,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
   }, [
     applyActivePhotographicStudio, renderConfiguration, renderEnvironmentMapSize, photographicLighting,
-    scene?.keepsAuthoredFinish, renderMode, studioSceneTick, viewerReadyTick, viewerTheme, normalizedThemeSettings.background
+    scene?.keepsAuthoredFinish, renderMode, studioSceneTick, viewerReadyTick, viewerTheme, normalizedThemeSettings.background,
+    sceneRig
   ]);
 
   // Preview's orbit.

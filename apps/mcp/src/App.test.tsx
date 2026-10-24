@@ -1,4 +1,4 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
 import { version } from '../package.json';
@@ -17,7 +17,7 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // The host's notice, if it had one, drawn as the real viewer would once a model is on screen.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.notice ?? null}</>; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.openInBrowser ?? null}{props.notice ?? null}</>; },
   };
 });
 
@@ -25,7 +25,9 @@ beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unob
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
 
 const POLICY = 'https://www.texttocad.dev/privacy-policy';
-type Answer = (body: any) => unknown;
+type Answer = (body: any, url: URL) => unknown;
+/** An answer with a status of its own (a route answers 200 otherwise). */
+class Status { constructor(readonly status: number, readonly body: unknown) {} }
 
 /**
  * A host frame and CAD's server, as the page reaches them: its sync, and the viewer's routes over
@@ -53,11 +55,13 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   const server = {
     sync: () => new Promise(() => {}), reply: vi.fn(async () => ({})),
     http: vi.fn(async ({ url, body }: { url: string; body: string }) => {
-      const path = new URL(url).pathname;
+      const target = new URL(url);
+      const path = target.pathname;
       const sent = body ? JSON.parse(atob(body)) : null;
       requests.push({ path, body: sent });
       if (!answers[path]) return new Promise(() => {});
-      const value = await answers[path](sent);
+      const value = await answers[path](sent, target);
+      if (value instanceof Status) return { status: value.status, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(value.body)) };
       return value === null ? { status: 204, headers: {}, body: '' }
         : { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(value)) };
     }),
@@ -67,7 +71,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   return { bridge, server };
 }
 // The home, as the server launches it: the library, with Open on a computer that has a chooser.
-const home: Launch = { protocol: 5, page: 'home', model: null, pick: true };
+const home: Launch = { protocol: 9, page: 'home', model: null, pick: true };
 const sized = (notify: ReturnType<typeof vi.fn>) => notify.mock.calls.filter(([method]) => method === 'ui/notifications/size-changed');
 
 it('a tab host gets the page it always had, down to its bottom: the home, with no card to size and no full-size button', () => {
@@ -134,12 +138,12 @@ it('a model opened from the home is shown in place, joins the library with its p
 
 it('every view has the home and browses from its file\'s folder, but the host\'s file handler shows its file alone', () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'home', model: null, surface: 'tab', pick: false }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'home', model: null, surface: 'tab', pick: false }} />);
   // A thread's empty tab is the home; a computer with no chooser has no Open.
   expect([viewer.props!.file, viewer.props!.library?.pick]).toEqual(['', undefined]);
   expect(viewer.props!.host.files.list).toBeDefined();
   cleanup();
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
   // No home, and a source that neither lists nor searches: no explorer either.
   expect([viewer.props!.file, viewer.props!.library]).toEqual(['/work/a.step', undefined]);
   expect([viewer.props!.host.files.list, viewer.props!.host.files.search]).toEqual([undefined, undefined]);
@@ -149,9 +153,9 @@ it("the host's file handler keeps the file it opened: a show sent to it changes 
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const replies: ((reply: { events: unknown[] }) => void)[] = [];
   server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
   // A show's launch names no surface: it is not this view's to take.
-  await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 5, page: 'viewer', model: '/work/b.step' } }] }); });
+  await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 7, page: 'viewer', model: '/work/b.step' } }] }); });
   expect([viewer.props!.file, viewer.props!.library, viewer.props!.history, viewer.props!.host.files.list])
     .toEqual(['/work/a.step', undefined, undefined, undefined]);
 });
@@ -205,9 +209,9 @@ it("a view keeps its own history of files, as a browser's tab does: the agent's 
   const replies: ((reply: { events: unknown[] }) => void)[] = [];
   server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
   const agentShows = (model: string, seq: number) => act(async () => {
-    replies.shift()!({ events: [{ seq, type: 'show', launch: { protocol: 5, page: 'viewer', model } }] });
+    replies.shift()!({ events: [{ seq, type: 'show', launch: { protocol: 7, page: 'viewer', model } }] });
   });
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step' }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step' }} />);
   const at = () => [viewer.props!.file, viewer.props!.history!.canGoBack, viewer.props!.history!.canGoForward];
   expect(at()).toEqual(['/work/a.step', false, false]);
   // The agent shows b, and the person opens c from the explorer: each a step.
@@ -241,7 +245,7 @@ it("a view keeps its own history of files, as a browser's tab does: the agent's 
   cleanup();
   // A view opened on the home: the home is its first step, so Back from the first file returns
   // there, and Forward to the file.
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'home', model: null, surface: 'tab', pick: false }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'home', model: null, surface: 'tab', pick: false }} />);
   expect(at()).toEqual(['', false, false]);
   act(() => viewer.props!.onShow('/work/a.step'));
   expect(at()).toEqual(['/work/a.step', true, false]);
@@ -251,21 +255,71 @@ it("a view keeps its own history of files, as a browser's tab does: the agent's 
   expect(at()).toEqual(['/work/a.step', true, false]);
   cleanup();
   // A file handler shows its file alone, with no home to go to: no Back or Forward.
-  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
   expect(viewer.props!.history).toBeUndefined();
+});
+
+it("Open in browser has the server open the page of what the view shows from this computer, and asks the host only where the server can open no browser", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  server.answers['/__cad/browser'] = (_body, url) => ({ url: `http://127.0.0.1:3245/${url.searchParams.get('model') ? 'id-a' : ''}?token=t` });
+  let display = true;
+  server.answers['/__cad/browser/open'] = () => display ? { opened: true } : new Status(503, { error: 'there is no display to open a browser on' });
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a b.step' }} />);
+  const button = await screen.findByRole('button', { name: 'Open in browser' });
+  act(() => button.click());
+  await waitFor(() => expect(server.asked('/__cad/browser/open')).toEqual([{ model: '/work/a b.step' }]));
+  // The request names the document, never a URL; the server opened it, so the host is asked nothing.
+  display = false;
+  act(() => button.click());
+  await waitFor(() => expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'http://127.0.0.1:3245/id-a?token=t' }));
+  expect(server.asked('/__cad/browser/open')).toHaveLength(2);
+  expect(bridge.request.mock.calls.filter(([method]) => method === 'ui/open-link')).toHaveLength(1);
+});
+
+it("Open in browser, the navbar's last control, opens the web viewer's page of what the view shows now through the host, and is absent where the engine gives none", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  const agentShows = (model: string, seq: number) => act(async () => {
+    replies.shift()!({ events: [{ seq, type: 'show', launch: { protocol: 9, page: 'viewer', model } }] });
+  });
+  // The engine's page of each document (`/<id>`, its viewer token in the URL) and its home; none for one it cannot give.
+  const ids: Record<string, string> = { '/work/a b.step': 'id-a', '/work/b.step': 'id-b' };
+  // A computer whose server can open no browser: every press is the host's to open.
+  server.answers['/__cad/browser/open'] = () => new Status(503, { error: 'there is no display to open a browser on' });
+  server.answers['/__cad/browser'] = (_body, url) => {
+    const model = url.searchParams.get('model');
+    if (model && !ids[model]) return new Status(503, { error: 'CAD Viewer client is not built' });
+    return { url: `http://127.0.0.1:3245/${model ? ids[model] : ''}?token=t` };
+  };
+  const opened = async (url: string) => {
+    act(() => screen.getByRole('button', { name: 'Open in browser' }).click());
+    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url }));
+  };
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a b.step' }} />);
+  await screen.findByRole('button', { name: 'Open in browser' });
+  await opened('http://127.0.0.1:3245/id-a?token=t');
+  // The home the person goes to, and the model the agent shows next: each its own page.
+  act(() => viewer.props!.onShow(''));
+  await opened('http://127.0.0.1:3245/?token=t');
+  await agentShows('/work/b.step', 1);
+  await opened('http://127.0.0.1:3245/id-b?token=t');
+  await agentShows('/work/gone.step', 2);
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull());
+  expect(viewer.props!.openInBrowser).toBeNull();
 });
 
 it('an inline host that cannot show a view full size gets no Full size, and still the whole viewer', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
-    launch={{ protocol: 5, page: 'viewer', model: '/work/part.stl', surface: 'inline', view: 'cad-1-b', order: { createdAt: 1, seq: 1 } }} />);
+    launch={{ protocol: 7, page: 'viewer', model: '/work/part.stl', surface: 'inline', view: 'cad-1-b', order: { createdAt: 1, seq: 1 } }} />);
   expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
   expect(viewer.props!.fullSize).toBeNull();
   expect(viewer.props!.host.environment.compact).toBeUndefined();
 });
 
 it('a Quick Edit queues into a tab host\'s composer always, into an inline host\'s when it takes model context, and sends where the host takes messages', () => {
-  const model: Launch = { protocol: 5, page: 'viewer', model: '/work/part.stl' };
+  const model: Launch = { protocol: 7, page: 'viewer', model: '/work/part.stl' };
   const reach = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
     const { bridge, server } = host({ displayMode: presentation === 'tabs' ? 'fullscreen' : 'inline' }, capabilities);
     render(<App bridge={bridge as any} server={server as any} presentation={presentation} launch={model} />);
@@ -285,7 +339,7 @@ it('a Quick Edit queues into a tab host\'s composer always, into an inline host\
 it('a Quick Edit that reached its destination is counted by the CAD app\'s server, told nothing of the edit', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: { text: {} } });
   server.answers['/__cad/analytics/activity'] = () => null;
-  render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 5, page: 'viewer', model: '/work/part.stl' }} />);
+  render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 7, page: 'viewer', model: '/work/part.stl' }} />);
   viewer.props!.host.usage.used('quickEdit');
   await vi.waitFor(() => expect(server.asked('/__cad/analytics/activity')).toEqual([{ quickEdit: true }]));
 });

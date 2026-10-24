@@ -14,13 +14,11 @@ or consumer-owned declarations are required.
 **DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install.
 `api.texttocad.dev`, which cadgen talks to, is its own project: [`apps/api`](../api/README.md).
 
-The package migration is a pure refactor: the site's UI, UX, functionality, content and static
-CAD showcases remain unchanged. Normal development, checks and deployment use
-existing static assets and do not start Python. Asset regeneration is still an
-explicit operation. The hero composes an explicit static HTTP resource provider
-from core for descriptors, surfaces and sidecars. It needs no FileViewer host,
-Electron services or Python backend; the resource-provider migration keeps its
-existing static asset URLs and rendering behavior.
+Normal development, checks and deployment use existing static assets and do not
+start Python; regenerating an asset is an explicit operation. The hero reads one
+static GLB with core's GLB path, the CAD Viewer's, and plays its clip with core's
+GLB animation runtime. It needs no FileViewer host, Electron services or Python
+backend.
 
 Install from the repository root with `npm ci` (or the docs-only workspace
 filter), then `npm run build:docs`. `apps/docs/vercel.json` runs the root
@@ -42,21 +40,24 @@ repository (default `main`; a release passes its own commit, and a past release
 is redeployed from its tag). The Vercel project's Root Directory setting (in
 Vercel, not this repo) must point at `apps/docs`.
 
-Hero STEP assets under `public/hero/` are a view of the tree behind the
-planetary gear STEP (`assembly.json` + each component's `.surf`) plus its
-schema-v9 sidecar with embedded animation, committed as PLAIN files (never LFS — Vercel serves them statically
-with no backend). Refresh them after rebuilding the model:
+The hero is one GLB, `public/hero/planetary.glb`: the planetary gear model
+(`models/assemblies/src/planetary_gear_assembly/`) exported from its document by
+`cadgen export`, its parts, colours and its `meshCycle` motion, which the export bakes
+into a clip. It is committed as a PLAIN file (never LFS: Vercel serves it statically
+with no backend). The page frames it, draws each part's folds and outline in the
+hero's edge colour, and plays the clip slowed to a display pace. Refresh it after
+changing the model:
 
 ```
-python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py
-node apps/docs/scripts/sync-hero-step-assets.mjs   # same CADGEN_CACHE_DIR as the build
+node apps/docs/scripts/sync-hero-glb.mjs
 ```
 
-The sync script asks cadgen for the tree by the STEP's bytes and exports a
-view of it, so it never restates a store path. The check script
-(`scripts/check-hero-step-assets.mjs`, part of `npm run check`) pins the surf
-container and sidecar contracts against @text-to-cad/core so a schema bump cannot
-silently break the hero render.
+The sync script builds the model with this checkout's cadgen (`PYTHON_BIN`, default the
+repository's `.venv`), exports the document the model wrote, and runs the check. The check
+script (`scripts/check-hero-glb.mjs`, part of `npm run check`) holds the GLB to the
+model's source (the motion's name, duration and loop) and to the page (the clip it
+plays), then reads it and plays the clip through @text-to-cad/core's GLB path, so an
+export or format change cannot silently break the hero.
 
 ## The shape of the app
 
@@ -64,7 +65,7 @@ silently break the hero render.
 src/app/         # routes
 src/components/  # site components incl. the CAD hero renderers
 src/lib/         # site utilities
-public/hero/     # showcase tree view + sidecar, plain files (never LFS)
+public/hero/     # the hero's GLB, a plain file (never LFS)
 scripts/         # asset checks
 ```
 
@@ -131,7 +132,8 @@ skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from
 Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
 A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
-them to one text). Install
+them to one text), and How it works: three steps from a model's script to the CAD viewer
+(`howItWorks`), the README's How it works. Install
 leads with the message to send to an agent, monospace like the commands, with buttons that open it
 in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; under it, one
 sentence says what text-to-cad sends and how to turn it off, with the privacy policy (`telemetryNote`:
@@ -143,8 +145,8 @@ Codex's plugin directory, its commands, update and remove folded under Manual in
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message and what it sends,
-each install's commands (to install, update and remove it), the skills and
+together: the plugin's description, how it works, the install message and what
+it sends, each install's commands (to install, update and remove it), the skills and
 Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
 and the README says more: numbered steps to install it yourself and fuller notes
 under each install. The site has the

@@ -18,7 +18,7 @@ import { FolderExplorer } from "./FolderExplorer.jsx";
 /**
  * The row above a file and above the host's home: ONE navbar, the same in every app, so a person
  * finds each control in the same place whatever is open. Over the home it has only the logo (its
- * menu without Back to files), Back and Forward, the host's update and Full size.
+ * menu without Back to files), Back and Forward, the host's update, Full size and its page elsewhere.
  *
  * Left, in this order: the text-to-cad logo, which opens the app's menu (`AppMenu`: Back to files
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
@@ -29,9 +29,10 @@ import { FolderExplorer } from "./FolderExplorer.jsx";
  * Right, only what a host or a file adds: the host's update button while its install is behind
  * (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the
  * CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's way to show
- * the view full size (`fullSize`), where it shows it small; last, the renderer's own view controls,
+ * the view full size (`fullSize`), where it shows it small; the renderer's own view controls,
  * drawn into the box it is handed (`controlsRef`: a 3D view's Display and Preview, or in Preview
- * its settings and the way out). The colour scheme is the app menu's.
+ * its settings and the way out); last, the host's way to open what is shown in a page of its own
+ * outside the host (`openInBrowser`: the CAD app's Open in browser). The colour scheme is the app menu's.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -92,10 +93,10 @@ function FileMenu({ path, platform, capabilities, onAction }) {
  * name, transparent until the pointer is on it, opening the explorer under it. Where they cannot,
  * it is the name alone, in the same place.
  */
-function FileName({ path, explorer }) {
+function FileName({ path, name: given, explorer }) {
   const [open, setOpen] = useState(false);
   const mobile = useViewerMobile();
-  const name = path.split("/").pop() || path;
+  const name = given || path.split("/").pop() || path;
   if (!explorer) return <span className="min-w-0 truncate px-1" data-file-name="">{name}</span>;
   // Opened, its filter has the keyboard, so typing finds a file at once; a phone keeps its keyboard
   // down, the explorer holding focus itself. Nothing else is focused for the person on opening.
@@ -126,18 +127,21 @@ function FileName({ path, explorer }) {
  * @param {{ links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[], colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string } | null} [props.menu]
  *   The rest of the app's menu: the host's links and the person's settings.
  * @param {import("../types.js").ViewerHistory | null} [props.history] The view's own history, where the host keeps one: Back and Forward after the logo.
- * @param {string | null} [props.file] The open file, by its absolute path.
+ * @param {string | null} [props.file] The open file, by its absolute path (a document with no file of its own: its id).
+ * @param {string} [props.name] The document's name where its path does not give it (a model's).
  * @param {{ source: Pick<import("../types").FileSource, "list" | "search">, onOpen(path: string): void } | null} [props.explorer]
  *   Where the host's files can be browsed: the explorer the name opens.
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
  *   onAction(action: import("./entry-menu.js").EntryAction, path: string): void } | null} [props.fileMenu]
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
+ * @param {import("react").ReactNode} [props.actions] Host workflow controls at the right end.
  * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
  * @param {import("react").ReactNode} [props.fullSize] The host's Full size button, where it shows the view small.
- * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box, last in the row, the renderer draws its view controls into.
+ * @param {import("react").ReactNode} [props.openInBrowser] The host's way to open what is shown outside it, last in the row.
+ * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome, menu = null, history = null, file = null, explorer = null, fileMenu = null, trailing = null, update = null, fullSize = null, controlsRef, className }) {
+export function ViewerNavbar({ onHome, menu = null, history = null, file = null, name, explorer = null, fileMenu = null, trailing = null, update = null, fullSize = null, openInBrowser = null, controlsRef, actions = null, className }) {
   const { t } = useI18n();
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
@@ -145,7 +149,7 @@ export function ViewerNavbar({ onHome, menu = null, history = null, file = null,
         {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
         {history ? <HistoryButtons viewHistory={history} /> : null}
         {file ? <span className="flex min-w-0 items-center">
-          <FileName path={file} explorer={explorer} />
+          <FileName path={file} name={name} explorer={explorer} />
           {fileMenu ? <FileMenu path={file} {...fileMenu} /> : null}
         </span> : null}
       </nav>
@@ -154,6 +158,8 @@ export function ViewerNavbar({ onHome, menu = null, history = null, file = null,
         {trailing}
         {fullSize}
         {controlsRef ? <div ref={controlsRef} className="contents" data-view-controls="" /> : null}
+        {actions}
+        {openInBrowser}
       </div>
     </header>
   );

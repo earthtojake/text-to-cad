@@ -27,9 +27,8 @@ const SCENE_APPEARANCE = Object.freeze({
 const DEFAULT_SCENE_APPEARANCE = SCENE_APPEARANCE.SYSTEM;
 
 // The studio, quality, envelope, lighting and backdrop vocabularies are the
-// cross-language Render contract: cadgen's snapshot_core carries the same sets
-// and tests/python/global/test_snapshot_viewer_theme_parity.py reads these
-// exports from source to prove they still agree. Keep them exported and frozen.
+// Render contract the viewer's settings and a snapshot job share. Keep them
+// exported and frozen.
 export const RENDER_STUDIO = Object.freeze({
   LIGHT: "light",
   DARK: "dark"
@@ -60,10 +59,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
   Object.freeze({
     id: SCENE_QUALITY.INTERACTIVE,
     label: "Interactive",
-    targetPixelError: 1.25,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 1.5,
-    snapshotLodLevel: 1,
     renderScale: 1,
     shadowMapSize: 2048,
     environmentMapSize: 256
@@ -71,10 +67,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
   Object.freeze({
     id: SCENE_QUALITY.STANDARD,
     label: "Standard",
-    targetPixelError: 1,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 2,
-    snapshotLodLevel: 1,
     renderScale: 1,
     shadowMapSize: 2048,
     environmentMapSize: 256
@@ -82,10 +75,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
   Object.freeze({
     id: SCENE_QUALITY.HIGH,
     label: "High",
-    targetPixelError: 0.25,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 2,
-    snapshotLodLevel: 3,
     renderScale: 2,
     shadowMapSize: 4096,
     environmentMapSize: 512
@@ -126,9 +116,9 @@ export const DEFAULT_RENDER_LIGHTING = Object.freeze({
   fill: 0.25
 });
 
-// Render's floor stands at the authored Z=0 plane, as the Display preset's does
-// (`RENDER_FLOOR_PLACEMENT`), its opacity letting geometry below that plane remain visible;
-// "lowest" follows the current model bounds instead.
+// Render's floor stands at the model's lowest point, as Preview's does (`RENDER_FLOOR_PLACEMENT`),
+// following the current model bounds; "origin" pins it to the authored Z=0 plane instead, its
+// opacity letting geometry below that plane remain visible.
 export const DEFAULT_RENDER_BACKDROP = Object.freeze({
   transparent: false,
   ground: true,

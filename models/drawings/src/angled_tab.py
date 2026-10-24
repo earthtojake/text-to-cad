@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import dxf
+from cadgen import model
+
+import build123d as bd
 
 PLATE_LENGTH_MM = 100.0
 PLATE_WIDTH_MM = 60.0
@@ -21,7 +22,7 @@ HOLE_DIAMETER_MM = 6.0
 HOLE_CENTRES_MM = ((25.0, 30.0), (88.0, 48.0))
 
 
-@dxf(out="../DXF/angled_tab.dxf")
+@model
 def angled_tab():
     with bd.BuildSketch() as cut:
         with bd.Locations((PLATE_LENGTH_MM / 2.0, PLATE_WIDTH_MM / 2.0)):
@@ -36,7 +37,10 @@ def angled_tab():
         (PLATE_LENGTH_MM, BEND_RIGHT_Y_MM),
     )
 
-    return {"CUT": cut.sketch, "BEND": bend}
+    # A part per layer, named by its label.
+    plate = cut.sketch
+    plate.label, bend.label = "CUT", "BEND"
+    return bd.Compound(children=[plate, bend], label="angled_tab")
 
 
 if __name__ == "__main__":

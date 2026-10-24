@@ -17,11 +17,9 @@ Clearances target a tuned 0.4 mm-nozzle FDM printer:
 - 0.2 mm radial scallop between each knuckle and the opposite plate
 """
 from __future__ import annotations
-from cadgen import step
+from cadgen import materials, model
 
-from cadgen import build123d as bd
-from cadgen import srgb
-from cadgen.assembly import AssemblyHelper
+import build123d as bd
 
 
 HINGE_LENGTH = 40.0
@@ -124,7 +122,7 @@ def _make_leaf_a():
     )
     leaf = leaf - [_bore_tool(*KNUCKLE_A1), _bore_tool(*KNUCKLE_A2), _notch_tool(-1.0, *KNUCKLE_B)]
     leaf.label = "leaf_a_barrel_bores"
-    leaf.color = srgb("#5B6B7A")
+    leaf.color = "#5B6B7A"
     return leaf
 
 
@@ -135,29 +133,23 @@ def _make_leaf_b():
     )
     leaf = leaf - [_notch_tool(1.0, *KNUCKLE_A1), _notch_tool(1.0, *KNUCKLE_A2)]
     leaf.label = "leaf_b_captive_pin"
-    leaf.color = srgb("#C98056")
+    leaf.color = "#C98056"
     return leaf
 
 
-@step(out="../STEP/print_in_place_hinge.step")
+@model
 def print_in_place_hinge():
     """Return the print-in-place hinge as a labeled two-leaf assembly compound."""
-    asm = AssemblyHelper("print_in_place_hinge")
-
-    leaf_a = asm.add(_make_leaf_a(), "leaf_a_barrel_bores")
-    leaf_b = asm.add(_make_leaf_b(), "leaf_b_captive_pin")
-
-    bore_axis = asm.revolute_frame(leaf_a, "bore_axis", bd.Axis(HINGE_AXIS_ORIGIN, HINGE_AXIS_DIRECTION))
-    # Same orientation as the revolute frame (local Z along the hinge axis) so the
-    # angle=0 connect holds the as-printed pose instead of re-rotating leaf B.
-    pin_axis = asm.rigid_frame(
-        leaf_b,
-        "pin_axis",
-        bd.Location(bd.Plane(origin=(0.0, 0.0, AXIS_Z), x_dir=(0.0, 0.0, 1.0), z_dir=(1.0, 0.0, 0.0))),
-    )
-    asm.revolute(bore_axis, pin_axis, angle=0.0, label="hinge_articulation")
-
-    return asm.build()
+    leaf_a = _make_leaf_a()
+    leaf_b = _make_leaf_b()
+    # The hinge's one joint, at the as-printed pose: a revolute on leaf A's bores and leaf B's
+    # rigid frame on the same axis, paired by their label (the parts stand where they print).
+    axis = bd.Axis(HINGE_AXIS_ORIGIN, HINGE_AXIS_DIRECTION)
+    bd.RevoluteJoint("hinge_articulation", leaf_a, axis=axis)
+    bd.RigidJoint("hinge_articulation", leaf_b, axis.location)
+    hinge = bd.Compound(children=[leaf_a, leaf_b], label="print_in_place_hinge")
+    hinge.material = materials.pla.but(color=None)  # every leaf PLA, in its own colour
+    return hinge
 
 
 if __name__ == "__main__":

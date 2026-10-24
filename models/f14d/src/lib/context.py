@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from lib.palette import srgb, style  # noqa: F401  (re-export)
+from lib.palette import style  # noqa: F401  (re-export)
 
 
 def group(label, children):
@@ -44,6 +44,23 @@ def mirror_pair(build_one, label_base, sides=(1, -1)):
 
 def place(shape, x=0.0, y=0.0, z=0.0, rx=0.0, ry=0.0, rz=0.0):
     return bd.Location((x, y, z), (rx, ry, rz)) * shape
+
+
+def compound_from_instances(label, instances):
+    """A labelled compound placing ``(prototype, location, name)`` instances.
+
+    Each placement is ``prototype.moved(location)`` named ``name``: under the
+    engine's memo a placement shares its prototype's geometry (one prototype in
+    the document, placed N times), so N instances cost one shape.
+    """
+    if not instances:
+        raise RuntimeError(f"assembly {label!r} has no instances")
+    children = []
+    for prototype, location, name in instances:
+        placed = prototype.moved(location)
+        placed.label = str(name)
+        children.append(placed)
+    return bd.Compound(children=children, label=str(label))
 
 
 def frame(origin, x_dir, z_dir):

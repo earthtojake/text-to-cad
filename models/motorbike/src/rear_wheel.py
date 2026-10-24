@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import wheels as W
 
 
-@step(out="../STEP/rear_wheel.step")
+@model
 def rear_wheel():
     return bd.Compound(children=W.build_rear_wheel(), label="rear_wheel")
 

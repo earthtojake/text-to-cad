@@ -28,7 +28,7 @@ export function useRobotReferences({ robot, components = EMPTY, selection, resou
   return useMemo(() => {
     const hasLinkRow = name => Boolean(tree?.nodesById.has(robotLinkNodeId(name)));
     const objects = components.filter(component => selectedComponentIds.includes(component.id));
-    const names = [...new Set([...selectedLinkNames, ...objects.map(component => component.linkName)])].filter(name => LABEL.test(String(name || "")));
+    const names = [...new Set([...selectedLinkNames, ...objects.map(component => component.link)])].filter(name => LABEL.test(String(name || "")));
     const reference = name => resource?.kind === "workspace-file" && LABEL.test(String(name || ""))
       ? { resource: { ...resource }, target: { kind: "cad-selector", selectors: [name] } } : null;
     const references = names.map(reference).filter(Boolean);
@@ -41,7 +41,7 @@ export function useRobotReferences({ robot, components = EMPTY, selection, resou
           onRemove: () => selectLink(name, { multiSelect: true }),
           onHover: on => hoverLink(on ? name : "") };
       }),
-      ...objects.map(component => ({ key: `object:${component.id}`, label: component.name || component.linkName, glyph: "solid", ...copy(component.linkName),
+      ...objects.map(component => ({ key: `object:${component.id}`, label: component.name || component.link, glyph: "solid", ...copy(component.link),
         card: <RobotComponentDetails components={components} selectedIds={[component.id]}/>,
         onRemove: () => select(component.id, { multiSelect: true }),
         onHover: on => hover(on ? component.id : "") })),

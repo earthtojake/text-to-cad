@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runAnnotateScenario } from '../../../harness/annotateScenario.mjs';
-import { serveStepHarness } from '../../../harness/stepScenario.mjs';
+import { serveXbfHarness } from '../../../harness/xbfScenario.mjs';
 
-// The drawing tools under the frame that ships them: the STEP renderer, over the committed
-// two-part fixture. It is a kit tool, so the scenario itself
-// (`harness/annotateScenario.mjs`) knows nothing about STEP.
+// The drawing tools under the frame that ships them: the engine document's renderer
+// (`renderers/xbf`, which draws an .xbf and a STEP), over core's bracket fixture. They are kit
+// tools, so the scenario itself (`harness/annotateScenario.mjs`) knows nothing about the frame.
 
 test('the drawing tools put ink into the model that orbits with it, undo, redo, recolour and clear, and stay when they are left — where Select picks, haloes and deletes it — and goes when the model updates', async (t) => {
-  const harness = await serveStepHarness(t);
+  const harness = await serveXbfHarness(t);
   await runAnnotateScenario(await harness.open());
 });
 
-
 test('the drawing controls are one row at every width, its buttons in order on one line, the tools of Shapes in place of Pencil\'s; on a phone the same row, in touch tiles', async (t) => {
-  const harness = await serveStepHarness(t);
+  const harness = await serveXbfHarness(t);
   const { page, pane, errors } = await harness.open();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const pencil = pane.getByRole('button', { name: 'Pencil', exact: true });

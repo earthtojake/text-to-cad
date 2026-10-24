@@ -6,6 +6,14 @@ effects. No shared feature discovers Electron, browser clipboard, a backend URL,
 persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
+A view shows a file by its absolute path, or a document the engine holds by its id alone (a
+model's: a lower-case UUID, `cadgen.engine.ids`). A file's metadata may carry `navigationPath`,
+the on-disk file to browse from and act on; null says the document has no file of its own (a
+model's): its view has no Select File and no file menu, its navbar names it by its `name`, and it
+never enters saved recents or thumbnail storage. A file's Select File (the explorer its name
+opens) is rooted at that file's folder. Python scripts are never documents: no view opens one,
+and no folder lists one.
+
 The host contains `files`, optional native `fileActions`, `clipboard`,
 `promptContext`, the optional `promptFiles`, `navigation` (the optional `openFile(path)` and
 `home()`), the optional `links` (the app menu's), the optional `usage`
@@ -27,14 +35,17 @@ adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
 tickets and cache identity.
 
-A host passes no tolerance to the STEP renderer: it draws each part at the display mesh its
-part's record names, which cadgen derived at its display tolerance
-([the display mesh](loading.md#1-the-display-mesh)).
+A host passes no tolerance to a renderer: an engine document's parts (an `.xbf`'s, a STEP's)
+are drawn at the meshes the cadgen engine made of them.
 
 Apps create services for the workspace lifetime. File tabs borrow them, while
 mounted renderers own scenes, document controllers and temporary resource leases.
 Unmounting one view releases its work without disposing another view's services
 or admitted cache writes. Hosts dispose a service when its workspace closes.
+
+`FileViewer`'s optional `presentation.error` receives `message`, `missing`, and
+`reload`, which rereads only the file that produced the error; a callback from a
+departed file cannot reload its replacement.
 
 ## Interface map and implementations
 
@@ -49,7 +60,7 @@ are for reading and maintaining the contracts.
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
 | `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
 | `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /__cad/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@text-to-cad/core/client` |
-| `StepRendererOptions`, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@text-to-cad/ui/renderers/step` |
+| `XbfRendererOptions` (an `.xbf` and a STEP), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@text-to-cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@text-to-cad/ui/renderers/dxf` |
@@ -71,9 +82,29 @@ implementations. [Web storage](../../../apps/web/docs/storage.md) documents
 browser lifetimes. Shared component tests can
 use the [explicit fake host](../src/host/testing/host.ts).
 
+## Export destinations and jobs
+
+`ViewerHost.downloads` is an optional `DownloadPort`: `save(url, filename)` hands the
+browser a ready job's same-origin file URL (`ExportService.fileUrl`) as a plain download,
+so the browser's own download setting decides where it goes. Optional `remember`/`restore`
+persist the page's export records (request, filename, whether the file was handed over),
+never a file, handle or server path. No shared UI detects a browser or writes to the host
+filesystem.
+
+`CadViewer` combines that port with `CadWorkspaceService.exports` (`ExportService`).
+Both are required to show Export. A host whose page cannot make a browser download
+omits the port: the MCP host has no HTTP origin (every request is a `cad_http` call), so
+it has no Export. The XBF renderer publishes only the displayed document and revision:
+Export writes the document as its code built it, so the menu offers formats alone, never a
+selection or a pose. The GLB and mesh renderers publish the file shown: its path as the
+document and the catalog hash of the bytes on screen as the revision, which the server checks
+before it converts the file to the other mesh kinds. `FileViewer.navbarActions` and `overlay` are named
+composition slots: the first is in the navbar's right group; the second is in the
+relative viewport below it. The generic FileViewer knows nothing about export jobs.
+
 ## A CAD renderer's controls
 
-The controls of a CAD renderer (STEP, GLB, mesh, robot) are its own, over the viewport: its
+The controls of a CAD renderer (an engine document's, GLB, mesh, robot) are its own, over the viewport: its
 tool strip, the tool in hand's sub-toolbar and its file sidebar, its view's controls (Display,
 Preview) drawn into the navbar's `navbarSlot` (`settings-ui.md#the-file-sidebar-and-the-tool-stack`); a
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
@@ -87,7 +118,7 @@ beside the appearance and the home's layout.
 Preview is the shared shell's own state (`previewing`); there is no host
 prop for it and a host cannot start or observe it. It is a 3D view's alone, and each
 renderer says whether its view is one: it declares `previewable` to the shell
-(`useRendererShell`), as STEP, GLB, STL/3MF and URDF/SRDF/SDF do. A view that does
+(`useRendererShell`), as an engine document (an `.xbf`, a STEP), GLB, STL/3MF and URDF/SRDF/SDF do. A view that does
 not — a DXF's 2D drawing, which draws its own surface without the shell — has no
 Preview at all, no control and not a disabled one, and nothing that asks for it
 (a link or a host request, should either come to) takes it there: it keeps
@@ -131,7 +162,7 @@ Where there is no navbar (a view shown small) the renderer draws them over its v
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
-`navigation.openFile(path)` shows a file, by its absolute path, in this view: a pick
+`navigation.openFile(path)` shows a file, by its absolute path (or a document by its id), in this view: a pick
 in the explorer, a renderer's link. `navigation.home()`, where the host has a home,
 shows it in this view: from a file, the app menu's Back to files (the menu the navbar's
 logo opens) leads to it; over the home the same navbar has the logo and its menu, with no
@@ -146,12 +177,16 @@ where no browser does (the CAD app's views), hands it as `history` (`ViewerHisto
 draws Back and Forward over it, over a file and over the home alike. What the history holds is
 the host's (the CAD app's: every file the view showed and the home, a step like a file, the
 agent's shows and the person's moves alike); the web hands none, its page having the
-browser's, where the home is a step too. `onShown(path | null)` says which file the catalog
-has on screen (null for the home, or a file still resolving or missing), for a host that
-names its page after it or records it. The host decides what showing a file means,
-because only the host knows which view shows it: the web viewer is one page per machine
-and writes the file into its URL (`?file=`, a new history entry, so the browser's back
-and forward move between files, and a bare URL is the home), and the CAD app, which
+browser's, where the home is a step too. `onShown(path | null, id | null)` says which file the
+catalog has on screen, by its own path (a model by its id), and its document's id (null for the
+home, or a file still resolving or missing), for a host that names its page after it or records
+it. `CadViewer` joins the catalog's rows by that id (`client.entryOf`), not by the path the host
+asked for, so a symlinked or case-variant spelling of one file is one row. The host decides what
+showing a file means, because only the host knows which view shows it: the web viewer is one
+page per engine and addresses every document by path, `/<id>` (a file opened by its path is asked
+for its id first; a new history entry, so the browser's back and forward move between documents,
+and `/` is the home, which also shows the folder of the most recent launch: `CadViewer`'s
+`start`), and the CAD app, which
 renders in Codex (the sidebar, a tab beside each thread and a file handler) and inline in
 Claude Desktop and other MCP Apps hosts, shows it in the view that asked or, from the
 home, launches it.
@@ -180,16 +215,14 @@ home, launches it.
 Platform-agnostic UI can use DOM, canvas, React and renderer-owned workers.
 Filesystem access, transport selection, credentials, clipboard, persistent
 storage, page navigation and native process lifecycle remain host responsibilities.
-So do a transport's limits: a host whose channel caps one reply declares the
-most one batched read may ask for (`createCadClient({ maxBatchBytes })`), and the
-shared loader never asks for more; the host carries a longer body in parts (the
-CAD app's tunnel reads it a range at a time), and the loader sees it whole.
+So do a transport's limits: a host whose channel caps one reply carries a longer body
+in parts (the CAD app's tunnel reads it a range at a time), and the loader sees it whole.
 
 ## Prompt handoff
 
 Context actions use `PromptContextPort.deliver(context)`. Desktop
 inserts into a compatible draft; web prepares clipboard representations. Ordinary
-explicit copy/paste controls use the separate `ClipboardPort`. Delivery never
+explicit copy controls use the separate `ClipboardPort`. Delivery never
 submits a prompt. `send(context)`, present only where the host has a chat to post
 to, posts the context as the person's message now (`sent`); absent, nothing can
 send one.
@@ -205,8 +238,9 @@ them all. Producers freeze resource and selection identity before
 asynchronous capture. Blob URLs are delivery leases, never portable identity.
 
 A reference contains a workspace-file identity (the file's absolute path,
-`/`-separated: `/a/b.step`, `C:/a/b.step`; validation rejects any other spelling)
-or HTTP(S) URL plus a tagged
+`/`-separated: `/a/b.step`, `C:/a/b.step`; validation rejects any other spelling), a
+`cad-model` identity (a document the engine holds by its id alone: `path` is the id), or an
+HTTP(S) URL plus a tagged
 selection: `whole-resource`, `text-range`, or `cad-selector`. Text positions are
 zero-based UTF-16 with an exclusive end. CAD selectors use core's validated
 cadgen grammar, not STEP entity numbers. Preserve a revision when available;
@@ -215,8 +249,8 @@ references do not promise to survive edits. Shared serialization handles quoting
 `formatPromptMessage(context, { attachmentPath })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
 then `File: <path>`; then `References:` and one reference per line; then each
-JSON file by its label and path (`Views (cadgen snapshot --job): <job.json>`,
-`Annotation: <file.annotation.json>`), where `attachmentPath` says where it was saved.
+JSON file by its label and path (the views' `.snapshot.json`, an
+`.annotation.json`), where `attachmentPath` says where it was saved.
 No pictures are rendered, attached or sent.
 
 
@@ -243,8 +277,12 @@ they do not transfer Promise or Blob values across native IPC.
 
 Quick Edit is the shared, host-neutral note to the agent
 ([the design system](settings-ui.md#quick-edit)), and its buttons are what the host can carry out.
-Every way it goes carries its words, references and a snapshot packet captured at
-Copy, Queue or Send. The packet includes the current view plus distinct drawn views
+Copy, Queue and Send carry the words and references, with a snapshot packet captured
+at the press when the displayed revision matches the saved input. If the viewer
+retains a previous revision, Quick Edit keeps the note and
+references available and explicitly says they describe that displayed revision; the
+saved file may differ. It omits replay jobs rather than naming that saved file as the
+picture on screen. The packet, when available, includes the current view plus distinct drawn views
 with remaining ink; an equivalent drawn entry uses the exact current framing.
 Shared input and inline annotation ([annotation](annotation.md)) appear once; measurements
 are the person's and never go. Each job may override shared fields. Projection and lens are preserved.
@@ -253,7 +291,8 @@ written as one temporary `.snapshot.json` and named by path. Hosts use
 `resolvePromptMessage` to resolve an attachment's optional `inlineText` before its
 path, keeping destination binding inside the gesture. Drawing, selecting and typing
 keep data in memory. Nothing renders at the press. The agent saves inline JSON to
-a temporary file before calling `cadgen snapshot --job <file>`.
+a temporary file, then draws a view the ink was drawn in with
+`cadgen snapshot <document> <out.png> --annotation <file> --camera authored`.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
 inside the gesture while the files are still being made; its references name their
@@ -267,14 +306,12 @@ document or revision never retargets it. A Quick Edit that reached its destinati
 `usage.used('quickEdit')`, for its count; a host that throws there changes nothing.
 
 `ViewerHost.promptFiles` is a `PromptFiles`: `create({ name, input, views, annotation })`
-answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, `read(path)` fetches JSON,
-and optional `save({ name, kind, data })` remains for older clients that export individual
-annotation files. Current chips do not call it. `createHttpPromptFiles({ origin, fetch })` from
+answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, and `read(path)` fetches JSON. `createHttpPromptFiles({ origin, fetch })` from
 `@text-to-cad/core/client` posts to `POST /__cad/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
 snapshot and returns its path with HTTP 200. The client advertises `acceptInline: true`;
 requests without it always receive a saved path, so already-open clients remain compatible. There is no render worker
 or polling endpoint. Guarded `GET /__cad/prompt-files/<name>` serves JSON only;
-`POST /__cad/prompt-files/save` supports those older clients. The files
+The files
 are scratch in the system's temporary directory and outlive the viewer until the
 system clears them. The response and persisted snapshot name input and output
 files by absolute path; annotation data is inline, so replay works from another
@@ -283,7 +320,7 @@ reaches the server through its tunnel.
 
 ## App-specific interfaces
 
-The optional CAD `live` binding receives a `CadLiveController` only while its
+The optional CAD `live` binding receives a `LiveViewController` only while its
 viewport is mounted. `readState()` returns a detached serializable snapshot of
 the actual resource/revision, current selections, camera, display and render
 mode. It reads the viewport camera directly, with its last camera snapshot as
@@ -309,10 +346,11 @@ On the home, a card on screen with no picture, or one taken before its file last
 changed (`pictured` against `modified`), is pictured out of sight wherever the host
 keeps pictures (`onThumbnail`): `CadViewer` mounts a viewer of its own for it, over
 its own client — its own renderers and live binding, compact, behind the page at the
-picture's size — one model at a time, each once per visit, and only a model whose
-artifact status is already `compiled`, and keeps the picture through `onThumbnail`
-as it keeps the file on screen's. The home never builds anything: an unbuilt model
-keeps its placeholder until a view shows it.
+picture's size — one model at a time, each once per visit, and a STEP only once the
+cadgen engine holds it (`client.engineHolds`), and keeps the picture through
+`onThumbnail` as it keeps the file on screen's. The home never starts the engine's
+read of a STEP (a large one's is long): one it does not hold keeps its placeholder
+until a view shows it.
 `readState().display` and `setDisplaySettings(patch)` use the same sparse display
 schema as snapshots: `mode` selects `solid`, `shaded`, `parts`, `xray`, `hidden-line`,
 or `wireframe` (each a look at its own defaults), `grid` switches the measuring grid,
@@ -407,8 +445,8 @@ keyboard `platform` (`environment.platform`) for its undo and redo keys.
 
 FileViewer draws ONE navbar, the same in every app, over every file and over a host's home.
 Over the home it has only the logo and its menu (no Back to files), Back and Forward where
-the host hands a `history`, and the host's update and Full size, each where it stands over
-a file; the home's search, layout switch and Open stay
+the host hands a `history`, and the host's update, Full size and Open in browser, each where
+it stands over a file; the home's search, layout switch and Open stay
 in its Recent Files row, and its links under its title. Left: the text-to-cad "C" logo,
 which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
 Forward where the host hands a `history`, then the open file's name and its ⋯ menu. The
@@ -421,8 +459,12 @@ manager, each where `fileActions` can do it, and is absent where it can do none 
 right-click on the name). Right, only what a host or a file adds: the host's update button
 first (`update`, while its install is behind), the renderer's navigation actions, the
 host's Full size where it shows the view small
-(`fullSize`, the inline card's way to full size, over the home too), and last the box the
-renderer draws its own controls into (over a file only). The navbar holds no settings.
+(`fullSize`, the inline card's way to full size, over the home too), the box the
+renderer draws its own controls into (over a file only), and last the host's way to open
+what is shown in a page of its own outside the host (`openInBrowser`, `CadViewerProps.openInBrowser`:
+the CAD app's Open in browser, the web viewer's page of the document on screen or of the
+home, over the home too, which the CAD app's server opens on the person's computer and the host
+only where the server can open no browser; the web app, itself that page, hands none). The navbar holds no settings.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
@@ -485,8 +527,9 @@ never resizes it.
 
 A file that will not open leaves the navbar over a page of the host's
 (`presentation.error`). `CadViewer`'s says "File does not exist" and the file's path
-when it is missing (`isMissingFileError`), and "Could not open that file" and the
-reason otherwise, each with a Go home button where the host has a home.
+when it is missing (`isMissingFileError`) -- for a document named by its id, "This model is no
+longer held" and the engine's words, which name the command that builds it again -- and "Could
+not open that file" and the reason otherwise, each with a Go home button where the host has a home.
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre, ending in the view's own controls (Display and Preview, a 3D view's), the tool in
@@ -494,6 +537,7 @@ hand's sub-toolbar under it, the file sidebar down the left edge, Quick Edit at 
 top-right, and the view cube at the bottom-right. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. Neither app has one now.
+Quick Edit has no host preference or persisted enable/disable state.
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects
@@ -516,8 +560,8 @@ view with no host clipboard gets no icon. Each host makes its port copy wherever
 web falls back to the page's copy command when the browser refuses the asynchronous
 clipboard, and so does the CAD app when its host grants its frame no clipboard.
 
-A copied reference names its file by its absolute path (`<path>#<selector>`), and so
-does a copied Quick Edit: every view spells a file the same way, so a reference pasted
+A copied reference names its file by its absolute path (`<path>#<selector>`), a model by its
+document id (`<id>#<selector>`), and so does a copied Quick Edit: every view spells a file the same way, so a reference pasted
 into a chat or a tool says exactly which file it means.
 
 Nothing of the viewer sits at the bottom centre. A host whose own control floats over
@@ -532,3 +576,9 @@ The shared viewer consumes these layout values without identifying the host.
 
 A renderer's update status is its own: the CAD renderers show it centred under the tool
 strip and its sub-toolbar. The navbar carries none.
+
+
+A retained predecessor is useful for a Quick Edit's note and references, but does not prove
+which bytes the file contains. While one is displayed, Quick Edit says so in the box and in its
+prompt context, and makes no replay packet. Once the matching saved revision is displayed,
+snapshot handoff resumes.

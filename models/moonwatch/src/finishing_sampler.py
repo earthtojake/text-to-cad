@@ -5,14 +5,15 @@ for judging the finishing vocabulary (anglage, stripes, perlage, snailing,
 screws, jewels, wheels, heart cam) before it is spent on real parts.
 """
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import finishing as F
+from lib import materials as M
 from lib import spec as S
 
 
-@step(out="../STEP/finishing_sampler.step")
+@model
 def finishing_sampler():
     parts = []
 
@@ -23,7 +24,7 @@ def finishing_sampler():
     bridge = bridge - stripes
     bridge, applied = F.anglage_top(bridge, S.ANGLAGE_WIDTH)
     bridge = bridge - bd.Pos(4.0, 2.0, 0) * F.jewel_countersink_cut()
-    bridge.color = bd.Color(*S.COPPER_GOLD)
+    bridge.color = bd.Color(S.COPPER_GOLD)
     bridge.label = "striped_bridge_coupon"
     parts.append(bridge)
 
@@ -40,7 +41,7 @@ def finishing_sampler():
     # perlage plate coupon
     plate = bd.Pos(0, -11.0, -0.6) * F._box(14.0, 8.0, 1.2)
     plate = plate - [bd.Pos(0, -11.0, 0) * s for s in F.perlage_cutter(14.0, 8.0)]
-    plate.color = bd.Color(*S.COPPER_GOLD)
+    plate.color = bd.Color(S.COPPER_GOLD)
     plate.label = "perlage_plate_coupon"
     parts.append(plate)
 
@@ -67,7 +68,7 @@ def finishing_sampler():
     cam.label = "heart_cam"
     parts.append(cam)
 
-    return bd.Compound(children=parts, label="finishing_sampler")
+    return bd.Compound(children=M.apply_materials(parts, "finishing_sampler"), label="finishing_sampler")
 
 
 if __name__ == "__main__":

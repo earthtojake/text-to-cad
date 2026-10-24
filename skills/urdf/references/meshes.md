@@ -10,7 +10,7 @@ The unit of export is the **link**, not the assembly and not the CAD feature tre
 2. Never point multiple links at one combined assembly mesh with compensating origins. If two links share a source body, the body must be split at the joint in CAD before export.
 3. Export each link's mesh **in that link's own frame** — the frame the ledger defines, coincident with the parent joint frame at zero position. Done right, every `<visual><origin>` is identity (`0 0 0`, `0 0 0`), which is the convention to follow and the easiest state to audit.
 4. If an export cannot be re-framed (vendor mesh, scanned part), a nonzero visual origin is acceptable but must be recorded in the ledger with its source; it is a per-link constant, not a tuning knob.
-5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow (`$cad`, `$step-parts` when installed). Do not attempt to fix a wrong split by editing URDF origins.
+5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow (`$cad`, `$step-parts` when installed): with `$cad`, each link is a model of its own returning the link's part in the link's frame, and `cadgen export <id> link.stl` writes its mesh. Do not attempt to fix a wrong split by editing URDF origins.
 
 Checklist after export, before authoring:
 
@@ -23,16 +23,20 @@ Checklist after export, before authoring:
 
 - URDF lengths are meters. Mesh files are frequently millimeters, and STL carries no unit metadata at all.
 - Express the conversion explicitly with `scale` on every mesh reference: `scale="0.001 0.001 0.001"` for mm sources. Omit `scale` only when the mesh is genuinely authored in meters.
+- STL and 3MF are read as the numbers they hold (a 3MF's `unit` attribute is not applied), so `scale` alone converts them: `cadgen` writes both in millimeters, which take `scale="0.001 0.001 0.001"`.
+- A GLB is meters by the glTF specification (`cadgen` writes GLB in meters), so a GLB link mesh takes no `scale`; give one only to resize the asset itself.
 - One convention per robot: do not mix mm and m assets in the same file without a ledger entry per exception.
 - A robot rendering ~1000× too large or too small in the viewer is a scale-attribute bug; fix the scale, not the joint origins.
 
 ## Reference Forms
 
 - **Local relative paths** (`3MF/forearm_link.3mf`) resolve from the `.urdf` file's directory. Preferred for a robot kept in a project tree — the bundled validator verifies these files exist.
-- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific; confirm the consuming environment resolves the package root as expected. The CAD Viewer takes the nearest folder named `name` above the `.urdf` as the package root, so keep the description inside its package folder.
+- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected. The CAD Viewer and `cadgen snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
 - Remote URIs are accepted with warnings; avoid them for durable fixtures.
 
 Keep mesh files under the same model directory tree as the URDF, so the file and its assets move together.
+
+What the CAD Viewer and `cadgen snapshot` draw is narrower than what the validator accepts: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which cadgen meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it.
 
 ## Visual vs Collision Assets
 

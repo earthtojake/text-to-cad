@@ -9,7 +9,7 @@ surfaces; the thread helix and press-fit interference are omitted from CAD.
 Each returned component is a positive closed native solid.
 """
 import math
-from cadgen import build123d as bd
+import build123d as bd
 from lib.finish import finish
 from lib.layout import FINGERS, THUMB_CMC, THUMB_LENGTHS, finger_fan_matrix
 

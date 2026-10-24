@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import chassis as B
 
 
-@step(out="../STEP/center_stand.step")
+@model
 def center_stand():
     built = B.build_center_stand()
     if isinstance(built, list):

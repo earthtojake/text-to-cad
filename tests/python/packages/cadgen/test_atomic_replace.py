@@ -1,14 +1,12 @@
-"""Every artifact rename retries the Windows errors that are worth retrying.
+"""Every rename cadgen makes retries the Windows errors that are worth retrying.
 
-A cached artifact is written to a temp file and renamed into place. On a Windows SMB share that
-rename can lose to ``WinError 32`` -- the redirector still holds the handle Python just closed --
-which under a parallel component build fails reliably (issue #241: 8 workers failed every time
-on a NAS, one worker succeeded). PR #244 fixed the rename inside the GLB writer; this pins the
-policy for all of them, because there are seven in a build's write path and hardening one moves
-the failure to the next.
+A file is written to a temp file and renamed into place. On a Windows SMB share that rename can
+lose to ``WinError 32`` -- the redirector still holds the handle Python just closed (issue #241:
+8 workers failed every time on a NAS, one worker succeeded). This pins the policy for every
+rename, because hardening one moves the failure to the next.
 
 The second is a held DESTINATION: NTFS refuses a rename over a file another process has open with
-``WinError 5``, which is how two builds of one model -- each reading back what it just published
+``WinError 5``, which is how two processes writing one file -- each reading back what it just wrote
 -- failed a byte-identical save on the Windows runner.
 """
 
@@ -334,129 +332,6 @@ class EveryRenameGoesThroughTheHelperTest(unittest.TestCase):
             "use cadgen._internal.atomic_replace.replace_atomic: a bare os.replace loses to "
             "WinError 32 on an SMB share (issue #241)",
         )
-
-
-class OpenWithLadderTest(unittest.TestCase):
-    """Reopening a file we just wrote gets the same narrow wait the renames get.
-
-    The STEP writer reopens its own output up to three times per export -- read
-    it, rewrite the tail in place, hash it -- and on Windows each of those is
-    refused while a deferred close or a scanner still holds the handle. Only
-    WinError 32 waits; a denial or a missing file must surface at once, and off
-    Windows this is plain open().
-    """
-
-    def setUp(self) -> None:
-        import tempfile
-
-        self._tmp = tempfile.TemporaryDirectory(prefix="cadgen-ladder-")
-        self.addCleanup(self._tmp.cleanup)
-        self.path = Path(self._tmp.name) / "payload.step"
-        self.path.write_bytes(b"ISO-10303-21;\n")
-
-    def test_a_clean_open_reads_the_file(self) -> None:
-        with atomic_replace.open_with_ladder(self.path, "rb") as handle:
-            self.assertEqual(b"ISO-10303-21;\n", handle.read())
-        self.assertEqual(b"ISO-10303-21;\n", atomic_replace.read_bytes_with_ladder(self.path))
-
-    def test_a_sharing_violation_is_waited_out_then_the_open_succeeds(self) -> None:
-        real_open = Path.open
-        attempts = []
-
-        def flaky(self_path, mode, *args, **kwargs):
-            attempts.append(mode)
-            if len(attempts) <= 2:
-                raise sharing_violation()
-            return real_open(self_path, mode, *args, **kwargs)
-
-        with mock.patch.object(Path, "open", flaky), mock.patch("time.sleep") as sleep:
-            with atomic_replace.open_with_ladder(self.path, "rb") as handle:
-                self.assertEqual(b"ISO-10303-21;\n", handle.read())
-        self.assertEqual(3, len(attempts))
-        self.assertEqual(list(atomic_replace.RETRY_DELAYS_SECONDS[:2]), [c.args[0] for c in sleep.call_args_list])
-
-    def test_the_ladder_is_bounded_and_the_violation_propagates(self) -> None:
-        with mock.patch.object(Path, "open", side_effect=sharing_violation()), mock.patch("time.sleep") as sleep:
-            with self.assertRaises(PermissionError) as raised:
-                atomic_replace.open_with_ladder(self.path, "rb")
-        self.assertEqual(atomic_replace.WINDOWS_SHARING_VIOLATION, raised.exception.winerror)
-        self.assertEqual(len(atomic_replace.RETRY_DELAYS_SECONDS), sleep.call_count)
-
-    def test_any_other_error_surfaces_at_once(self) -> None:
-        denied = PermissionError(13, "Access is denied")
-        denied.winerror = 5
-        with mock.patch.object(Path, "open", side_effect=denied), mock.patch("time.sleep") as sleep:
-            with self.assertRaises(PermissionError) as raised:
-                atomic_replace.open_with_ladder(self.path, "rb")
-        self.assertEqual(5, raised.exception.winerror)
-        self.assertEqual(0, sleep.call_count)
-
-    def test_a_missing_file_is_not_retried(self) -> None:
-        with mock.patch("time.sleep") as sleep:
-            with self.assertRaises(FileNotFoundError):
-                atomic_replace.open_with_ladder(self.path.with_name("absent.step"), "rb")
-        self.assertEqual(0, sleep.call_count)
-
-    def test_windows_reports_a_held_file_through_errno_alone_and_it_is_waited_out(self) -> None:
-        """What Windows' open() really raises for a file a peer is renaming over:
-        EACCES and no winerror. Two builds of one model, each reading back the
-        .step the other was replacing, failed a save on the Windows runner so."""
-        import errno
-
-        real_open = Path.open
-        attempts = []
-
-        def held(self_path, mode, *args, **kwargs):
-            attempts.append(mode)
-            if len(attempts) <= 2:
-                raise PermissionError(errno.EACCES, "Permission denied")
-            return real_open(self_path, mode, *args, **kwargs)
-
-        with mock.patch.object(atomic_replace, "_OPEN_REFUSAL_IS_ERRNO_ONLY", True), \
-                mock.patch.object(Path, "open", held), mock.patch("time.sleep") as sleep:
-            with atomic_replace.open_with_ladder(self.path, "rb") as handle:
-                self.assertEqual(b"ISO-10303-21;\n", handle.read())
-        self.assertEqual(3, len(attempts))
-        self.assertEqual(2, sleep.call_count)
-
-    def test_an_errno_denial_with_no_file_there_or_off_windows_surfaces_at_once(self) -> None:
-        import errno
-
-        denied = PermissionError(errno.EACCES, "Permission denied")
-        for windows, path in ((True, self.path.with_name("absent.step")), (False, self.path)):
-            with self.subTest(windows=windows), \
-                    mock.patch.object(atomic_replace, "_OPEN_REFUSAL_IS_ERRNO_ONLY", windows), \
-                    mock.patch.object(Path, "open", side_effect=denied), mock.patch("time.sleep") as sleep:
-                with self.assertRaises(PermissionError):
-                    atomic_replace.open_with_ladder(path, "rb")
-                self.assertEqual(0, sleep.call_count)
-
-    def test_every_step_writer_reopen_goes_through_the_ladder(self) -> None:
-        """The rule the atomic_replace docstring states: harden one and the
-        failure moves to the next. Pins that no reopen of the written STEP was
-        left on a bare open()."""
-        for relative in ("cadgen/step_export.py", "cadgen/_internal/step_hash.py"):
-            bare = _bare_reads(relative)
-            self.assertEqual([], bare, f"{relative} reopens its output without the ladder: {bare}")
-
-    def test_every_read_of_an_imported_document_goes_through_the_ladder(self) -> None:
-        """#529: importing a STEP on Windows failed with "[Errno 13] Permission
-        denied" while another program held or replaced it -- the refusal the
-        ladder waits out for cadgen's own STEPs. Pins that the import's reads of
-        the document (the closure hash before the job, the scene loads in it)
-        are not left on a bare read."""
-        for relative in ("cadgen/_internal/step_scene_package.py", "cadgen/daemon/executors.py"):
-            bare = _bare_reads(relative)
-            self.assertEqual([], bare, f"{relative} reads a document without the ladder: {bare}")
-
-
-def _bare_reads(relative: str) -> list[str]:
-    """Reads and reopens in a cadgen module that are not on a ladder line."""
-    import re as _re
-
-    source = (REPO_ROOT / "packages" / "cadgen" / "src" / relative).read_text(encoding="utf-8")
-    body = source.split('"""', 2)[-1] if source.count('"""') >= 2 else source
-    return _re.findall(r"^(?!.*ladder).*\b(?:read_bytes\(\)|write_bytes\(|\.open\(\s*[\"']r)", body, _re.M)
 
 
 if __name__ == "__main__":

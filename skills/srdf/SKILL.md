@@ -17,13 +17,12 @@ SRDF correctness is a **planning semantics** problem. The common failure is not 
 ## Setup
 
 Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
-one installation, and its warm build daemon, with the CAD app's server:
+one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.26 cadgen`
-- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.26 python`
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 python`
 
-The first run downloads that installation and the first snapshot its headless
-browser; later runs reuse both.
+The first run downloads that installation; later runs reuse it.
 
 ## Format boundary
 
@@ -35,24 +34,27 @@ Do not place geometry, inertials, joint origins, link poses, mesh references, ph
 
 ## Show the model
 
-Show the user each file you create or change, and any they ask to see. Snapshots and
-validation don't replace this.
+Show the user each model and file you create or change, and any they ask to see.
+Snapshots and validation don't replace this. Once a viewer is open, the person is looking
+at the model: after an edit, report the run's one line and stop. Never screenshot the
+viewer to confirm your own work.
 
-- If your tools include `cad_show` (your host may prefix it), use it with the file's
-  absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
-- Otherwise run the CAD Viewer, from any folder:
+- If your tools include `cad_show` (your host may prefix it), call it with the model's id
+  or the file's absolute path, and follow its description for when to call it again.
+  `cad_view` reads what the user selected; `cad_screenshot` shows you what they see, for
+  when they ask about it.
+- Otherwise give the user the page's link once: a model's page is the `view:` line its
+  run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cadgen viewer --host 127.0.0.1 --json --detach
+  cadgen viewer --host 127.0.0.1 --json FILE [FILE ...]
   ```
 
-  `--detach` returns once the viewer answers requests and leaves it running in the
-  background: always pass it, since a foreground viewer never exits (and piping its
-  output through `tail` can hide the URL for good). It starts this machine's one viewer,
-  or reuses it. Read `url` from its one JSON line (never guess the port), and for each
-  file return `url?file=<its URL-encoded absolute path>`. If it fails to launch, say so.
+  The command ensures this installation's engine, registers each file and prints
+  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
+  JSON line (never guess the port); the URL carries its token query. A page follows
+  every later run of its model and every rewrite of its file, so share it once.
+  Return that link to the user. If it fails to launch, say so.
 
 Keep the SRDF beside its uniquely matching URDF (same robot name). Review
 planning groups, named states and joints; visual review does not prove planning
@@ -76,7 +78,7 @@ correctness.
 
 ## Commands
 
-Run `cadgen` as Setup defines it. `cadgen doctor <skill-dir>` reports the installation in use and checks that it is the one this skill pins — docs drift silently on another. Validation itself needs nothing beyond the Python standard library; only snapshots need the browser. Use `cadgen <verb> --help` for the complete current interface.
+Run `cadgen` as Setup defines it. `cadgen doctor <skill-dir>` reports the installation in use and checks that it is the one this skill pins — docs drift silently on another. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cadgen <verb> --help` for the complete current interface.
 
 The validator shape is:
 
@@ -99,46 +101,51 @@ The validator parses the SRDF, resolves the paired URDF (the same-folder `.urdf`
 
 ## Snapshot Tool
 
-`cadgen snapshot` renders the robot to a PNG still, using the same shared
-CLI and headless browser runtime every rendering skill uses — so a snapshot matches what
-the CAD Viewer shows.
+`cadgen snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
+rendered by OCCT:
 
 ```bash
 cadgen snapshot path/to/robot.srdf review.png
+cadgen snapshot path/to/robot.srdf review.png --pose arm/ready
+cadgen snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
 ```
 
-Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying where the CAD Viewer opens the robot: each at its default, then
-this SRDF's `home` group state if it declares one (the `"jointValues"` job field is the same
-thing in a packet). The snapshot draws the robot with the viewer's own scene, so it shows what
-the viewer shows, and a link mesh that cannot be loaded fails it rather than leaving the link
-out. Robots are authored in metres and are framed on the robot scene scale automatically.
+Hand it the `.srdf`: it draws the paired URDF's geometry, the same-folder `.urdf`
+whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match,
+or more than one, is refused before anything renders, naming the robot name it
+looked for and the `.urdf` files it found.
 
-A normal snapshot uses Solid mode and Light appearance. The display mode is `solid`
-(the default) or `parts` (each link its own colour), each at its own defaults;
-`--grid` draws the measuring grid under the robot, and `--preview` draws Preview's
-shared photographic scene instead, in perspective. Inline display JSON and JSON files
-are the Viewer's display object: `mode`, `grid`, `appearance` (`light`, the default,
-or `dark`), `camera` (projection and focal length) and `clip`.
-Top-level `--camera` and `--joint-values` remain active in every display mode.
-`display.clip` cuts the robot as the viewer's Clip does
-(`{"clip":{"axis":"x","at":0.05}}`, `at` in metres); `exploded`, and `shaded`, `xray`,
-`hidden-line` and `wireframe`, describe a STEP model's CAD edges and parts, and are
-refused by name here. A Quick Edit job from the viewer replays as it is: its `jointValues`, its
-`selection.hide` (the parts hidden in the Links panel, by their ids), its clip and
-annotation (`cadgen snapshot --job <file>`). Quick Edit supplies inline JSON or a
-`.snapshot.json` path; save inline JSON to a temporary file before using `--job`.
+The robot opens where the CAD Viewer opens it: every joint at zero, then this
+SRDF's `home` group state if it declares one. `--pose` names a group state
+(`group/name`, or a name only one group has) or gives joint values over that
+opening pose, in degrees (metres for a prismatic joint), each naming a joint a
+person can drive, within its limits, or the request is refused before anything
+renders: a fixed joint or a `<mimic>` follower is refused by name (a follower
+follows its leader). Each link is placed by the viewer's own forward kinematics and
+drawn in one colour of the Parts palette. A visual is a `box`, `cylinder` or
+`sphere`, which cadgen meshes itself, or an STL, 3MF or GLB file beside the URDF;
+a mesh in another format (`.dae`, `.obj`), a `package://` or remote URI, or a
+missing file is refused by name, and a link mesh that cannot be loaded fails the
+snapshot rather than leaving the link out.
+
+A normal snapshot uses Solid mode and Light appearance. `--display` takes any of the
+viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`, ...),
+`exploded=AMOUNT`, or the display object: `appearance` (`light` or `dark`),
+`camera` (projection and focal length) and `clip` (`{"clip": {"axis": "x", "at":
+0.05}}`, `at` in metres). `--grid` draws the measuring grid, `--preview` draws
+Preview's photographic look, and `--camera`, `--size-profile`, `--width` and
+`--height` frame and size it. A Quick Edit packet from the viewer (inline JSON, saved
+to a temporary `.snapshot.json`, or its path) replays with
+`--annotation <packet> --camera authored`, its job's `jointValues` given as `--pose`.
 Inspect supplied annotations before editing. Without annotations, the captured
 view is optional context; render it when useful to the request.
 
 Link meshes are resolved relative to the description, so they must be present: an
-unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
+unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
-An SRDF's geometry comes from its paired URDF, so it has no snapshot door of its
-own; the polymorphic `cadgen snapshot` routes one by suffix. The grammar is
-`cadgen snapshot TARGET [OUT] [flags]`, the same one every format door uses. Use
-`cadgen snapshot --help` for the complete current interface.
+OUT is written exactly as given and must be a `.png`; check the exit status before
+reading it. Use `cadgen snapshot --help` for the complete current interface.
 
 ## References
 

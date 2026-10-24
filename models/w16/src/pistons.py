@@ -1,28 +1,21 @@
-"""W16 system model: pistons — 16 x piston/rings/pin/circlips/rod/cap/bolts/shells.
+"""W16 system: pistons — 16 x piston/rings/pin/circlips/rod/cap/bolts/shells.
 
-A sub-assembly of the engine: the parts `lib/pistons.py` builds, as one model
-with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.3`; rebuild `w16.py` to pick up a change here.
+A stage of the engine: the parts `lib/pistons.py` builds, as one labelled group,
+which `w16.py` calls in its body. A `@memo` function: an edit that does not
+reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
+from cadgen import memo
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
 from lib import pistons as pistons_lib
-from lib import spec as S
-from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/pistons.step", materials=materials_for_system("pistons"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@memo
 def pistons():
     parts = pistons_lib.build()
     if not parts:
         raise RuntimeError("pistons.build() produced no parts")
-    return material_compound(parts, "pistons")
-
-
-if __name__ == "__main__":
-    pistons()
+    group = bd.Compound(children=parts, label="pistons")
+    return group

@@ -1,10 +1,10 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 import math
 from collections.abc import Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 DISPLAY_NAME = "Roadable VTOL flying car concept"
@@ -16,16 +16,16 @@ DISPLAY_NAME = "Roadable VTOL flying car concept"
 MODEL_LABEL = "roadable_vtol_flying_car_concept"
 
 COLORS = {
-    "pearl_body": (0.82, 0.86, 0.84, 1.0),
-    "graphite": (0.03, 0.035, 0.04, 1.0),
-    "dark_glass": (0.08, 0.16, 0.24, 0.58),
-    "warm_lens": (1.0, 0.74, 0.28, 1.0),
-    "red_lens": (0.95, 0.08, 0.05, 1.0),
-    "titanium": (0.52, 0.56, 0.58, 1.0),
-    "brushed_aluminum": (0.72, 0.74, 0.73, 1.0),
-    "rotor_blue": (0.24, 0.42, 0.56, 1.0),
-    "safety_orange": (1.0, 0.35, 0.06, 1.0),
-    "rubber": (0.005, 0.006, 0.007, 1.0),
+    "pearl_body": "#eaefec",
+    "graphite": "#303538",
+    "dark_glass": "#506f8694",
+    "warm_lens": "#ffdf90",
+    "red_lens": "#f9503f",
+    "titanium": "#bfc5c8",
+    "brushed_aluminum": "#dddfde",
+    "rotor_blue": "#86adc5",
+    "safety_orange": "#ffa045",
+    "rubber": "#101214",
 }
 
 Vector3 = tuple[float, float, float]
@@ -59,14 +59,14 @@ ROTOR_Z = DUCT_Z + 0.9
 
 def style(shape: bd.Shape, label: str, color_name: str) -> bd.Shape:
     shape.label = label
-    shape.color = bd.Color(*COLORS[color_name])
+    shape.color = bd.Color(COLORS[color_name])
     return shape
 
 
 def group(label: str, children: Sequence[bd.Shape], color_name: str | None = None) -> bd.Compound:
     compound = bd.Compound(obj=list(children), children=list(children), label=label)
     if color_name is not None:
-        compound.color = bd.Color(*COLORS[color_name])
+        compound.color = bd.Color(COLORS[color_name])
     return compound
 
 
@@ -120,17 +120,11 @@ def cylinder_z(label: str, center: Vector3, radius: float, length: float, color_
 
 
 def cylinder_between(label: str, p1: Vector3, p2: Vector3, radius: float, color_name: str) -> bd.Shape:
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
-    from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
     axis = (p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
     length = math.sqrt(axis[0] ** 2 + axis[1] ** 2 + axis[2] ** 2)
     direction = (axis[0] / length, axis[1] / length, axis[2] / length)
-    wrapped = BRepPrimAPI_MakeCylinder(
-        gp_Ax2(gp_Pnt(*p1), gp_Dir(*direction)),
-        radius,
-        length,
-    ).Shape()
-    return style(bd.Shape(obj=wrapped), label, color_name)
+    cylinder = bd.Cylinder(radius, length, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    return style(cylinder.moved(bd.Plane(origin=p1, z_dir=direction).location), label, color_name)
 
 
 def annular_z(label: str, center: Vector3, outer_radius: float, inner_radius: float, height: float, color_name: str) -> bd.Shape:
@@ -396,7 +390,7 @@ def road_gear() -> bd.Compound:
     )
 
 
-@step(out="../../STEP/flying_car/flying_car.step")
+@model
 def flying_car():
     return group(
         MODEL_LABEL,

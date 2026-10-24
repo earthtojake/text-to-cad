@@ -1,16 +1,16 @@
 # Assembly positioning and mating
 
 Read this file when placing assembly parts, defining mating datums or checking
-alignment. Author placements in the model source, then check the saved geometry.
-Choose explicit transforms or native build123d joints according to which makes
-the intended relationship easiest to express and maintain. Neither requires a
-particular assembly size or complexity.
+alignment.
+
+## Contents
+
+- [Transforms and local frames](#transforms-and-local-frames)
+- [Native joints](#native-joints)
+- [Child models and imported components](#child-models-and-imported-components)
+- [Alignment and measurement checks](#alignment-and-measurement-checks)
 
 ## Transforms and local frames
-
-Use functional datums and explicit dimensions for placements. A part's origin
-might be its mounting interface, symmetry center or rotational axis; use the
-convention that fits the design. Record it when another part depends on it.
 
 ```python
 # Inside an assembly model:
@@ -21,49 +21,40 @@ right.label = "spacer_right"
 assembly = bd.Compound(children=[left, right], label="spacer_pair")
 ```
 
-Place child models with `.moved()` or `Pos/Rot/Location * child` to preserve
-shared geometry. `.located()` replaces the existing placement and copies the
-geometry; it loses the cached child link. Labels identify roles and repeated
-occurrences, such as `m3_screw:front_left`. A functional group can be a nested
-labeled `Compound` when the design benefits from that hierarchy.
+A placement shares its shape: `Pos(...) * part`, `.moved()` and `.located()` place
+the same geometry again, so a part placed many times is one part in the document.
+`.located()` replaces the placement where `.moved()` composes it. Labels name roles
+and repeated placements, and a functional group is a nested labelled `Compound`.
 
-Mirroring changes geometry, so an inline mirrored child belongs to the parent
-rather than linking to the original child's tree. It remains cached with that
-parent. A separate mirrored model is useful for independent outputs or reuse,
-not a requirement; see [mirroring and caching](step-generation.md#mirrored-geometry-and-reusable-models).
+Mirroring makes new geometry, not a placement: `bd.mirror(left, about=bd.Plane.YZ)`
+inline is a part of its own. A separate mirrored model suits a part that needs its
+own files or reuse across assemblies; a shared factory in `lib/` serves both hands.
 
 ## Native joints
 
-Joints can express a relationship between reusable datums without hand-solving
-its placement. They perform source-level placement; they are not persistent
-STEP constraints or a replacement for the separate [kinematics](kinematics.md)
-interface. Call `connect_to()` on the fixed joint with the moving joint as its
-argument.
+Joints express a relationship between datums without hand-solving the placement,
+and the engine keeps them as the assembly's mechanism. Call `connect_to()` on the
+joint that stays, with the moving part's joint as its argument.
 
-For example, `src/enclosure.py` places a lid above a base with a specified gap:
+For example, `src/enclosure.py` seats a lid on a base with a gasket gap:
 
 ```python
-from cadgen import build123d as bd, step
+import build123d as bd
+from cadgen import model
 
 BASE_HEIGHT = 30.0
 LID_THICKNESS = 3.0
 GASKET_GAP = 0.5
 
 
-@step(out="../STEP/enclosure.step")
+@model
 def enclosure():
     base = bd.Box(80, 50, BASE_HEIGHT)
     lid = bd.Box(80, 50, LID_THICKNESS)
     base.label, lid.label = "base", "lid"
-    bd.RigidJoint(
-        "lid_target", to_part=base,
-        joint_location=bd.Location((0, 0, BASE_HEIGHT / 2 + GASKET_GAP)),
-    )
-    bd.RigidJoint(
-        "underside", to_part=lid,
-        joint_location=bd.Location((0, 0, -LID_THICKNESS / 2)),
-    )
-    base.joints["lid_target"].connect_to(lid.joints["underside"])
+    bd.RigidJoint("lid_seat", base, bd.Location((0, 0, BASE_HEIGHT / 2 + GASKET_GAP)))
+    bd.RigidJoint("lid_seat", lid, bd.Location((0, 0, -LID_THICKNESS / 2)))
+    base.joints["lid_seat"].connect_to(lid.joints["lid_seat"])
     return bd.Compound(children=[base, lid], label="enclosure")
 
 
@@ -71,67 +62,56 @@ if __name__ == "__main__":
     enclosure()
 ```
 
-Native joint options include `RigidJoint` for fixed placement, `RevoluteJoint`
-for rotation, `LinearJoint` for translation, `CylindricalJoint` for combined
-rotation/translation and `BallJoint` for spherical orientation. Use `Location`
-for rigid/ball joint frames and `Axis` for revolute/linear/cylindrical joints.
+The joint kinds are `RigidJoint` for fixed placement, `RevoluteJoint` for rotation,
+`LinearJoint` for translation, `CylindricalJoint` for both about one axis and
+`BallJoint` for spherical orientation. Use a `Location` for rigid and ball joint
+frames and an `Axis` for revolute, linear and cylindrical joints. Two parts whose
+rigid joints are connected move as one; a moving joint makes a pair the viewer's
+Position, a snapshot's `--pose` and the model's motions drive ([kinematics](kinematics.md)).
 
-Creating joints reads the child's placement and may materialize it earlier
-than a deferred transform. Cached child models return geometry, labels,
-appearance and placements; do not rely on Python joint objects surviving a
-child's cache round trip. Define the joints needed by the parent in its source.
+Connect parts before putting them in the compound that holds them. `connect_to`
+cannot place a part inside a nested assembly: there, put each part where it stands
+and give the two joints one label, and the engine pairs them by it. A child model's
+joints stay in its own document, so the joints an assembly needs are authored in the
+assembly's body, on the parts it places.
 
 ## Child models and imported components
 
-Call a project model to compose it. Use `cadgen.read_step` for a vendor document
-or an explicitly decoupled export; like every file a build reads, it is an input.
-See the [model contract](step-generation.md) for dependency tracking.
-
-For imported geometry, inspect its existing origin, orientation and functional
-features with `read_scene` before choosing datums. Express measured offsets
-or joint frames in the source, then validate the placed result. Anchor model
-input paths on `__file__` when they must work from any working directory.
-
-```bash
-python path/to/assembly.py
-python tmp/check_assembly.py
-```
+A project model is composed by calling it; `read_xbf` reads a vendor part converted
+once from its STEP (`cadgen export vendor.step vendor.xbf`), and `read_step` a STEP
+as it is. Both are inputs, like every file a run reads
+([inputs](model-contract.md#inputs)). An imported part keeps its vendor's origin and
+orientation; a snapshot or `cadgen inspect` shows them and its functional features, and the
+measured offsets or joint frames go in the source.
 
 ## Alignment and measurement checks
 
-Select the actual mating features from `read_scene`, then express the intended
-relationship in Python. There is no generic alignment mode that guesses which
-points or axes the design means. See `inspection-and-validation.md` for the
-reader and native measurement interfaces.
+There is no generic alignment mode that guesses which points or axes the design
+means: a check names the mating features and states the relationship in Python
+([inspection](inspection-and-validation.md)).
 
-For example, for two planar mating faces (with their refs already identified):
+For example, for the enclosure's two mating faces:
 
 ```python
-from cadgen import read_scene
+import build123d as bd
 
-scene = read_scene("STEP/assembly.step")
-(moving_face, fixed_face) = scene.resolve("#moving.f1,fixed.f2")
-moving, fixed = moving_face.shape(), fixed_face.shape()
+from enclosure import enclosure
+
+doc = enclosure().shape
+parts = {part.label: part for part in doc.leaves}
+fixed = parts["base"].faces().sort_by(bd.Axis.Z)[-1]     # the base's top
+moving = parts["lid"].faces().sort_by(bd.Axis.Z)[0]      # the lid's underside
 n = fixed.normal_at().normalized()
 m = moving.normal_at().normalized()
 signed_gap_mm = (moving.center() - fixed.center()).dot(n)
 parallel_error_deg = min(n.get_angle(m), n.get_angle(-m))
 print(signed_gap_mm, parallel_error_deg)
-assert abs(signed_gap_mm) < 0.01
+assert abs(signed_gap_mm - 0.5) < 0.01
 assert parallel_error_deg < 0.1
 ```
 
-These thresholds are illustrative; use the task's tolerances. The plane gap
-and parallelism test does not establish lateral alignment or overlapping face
-footprints. Check those when required. For opposed normals, assert the signed
-orientation explicitly instead of accepting either parallel direction.
-
-For a screw-pattern dimension, compare the analytic centers of the selected
-circular edges. For clear space between bodies use `closest_points`.
-`shape.bounding_box().size` measures the world-aligned envelope. Use explicit
-vectors and datums for orientation, signed offsets and center spacing.
-Update source placements, regenerate, and rerun the relevant checks.
-
-Correct failed positioning in the model source, then regenerate and rerun the
-relevant checks. Report measured relationships and any intended alignment left
-unchecked; no positioning report is needed when positioning is irrelevant.
+A plane gap and parallelism test does not establish lateral alignment or
+overlapping face footprints, and accepting either parallel direction misses a
+flipped part. A screw pattern's spacing is between the analytic centers of its
+circular edges, clear space between bodies is `closest_points`, and
+`shape.bounding_box().size` is the world-aligned envelope.

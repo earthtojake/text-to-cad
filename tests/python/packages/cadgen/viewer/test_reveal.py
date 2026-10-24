@@ -17,22 +17,39 @@ class RevealTests(unittest.TestCase):
 
     def test_native_commands(self):
         target = str(self.target)
-        with mock.patch('cadgen.viewer.reveal.subprocess.run') as run:
+        found = {'dbus-send': None, 'xdg-open': '/usr/bin/xdg-open'}
+        with mock.patch('cadgen.viewer.reveal.subprocess.run') as run, \
+                mock.patch('cadgen.viewer.reveal.executables.find', side_effect=lambda name: found[name]):
             with mock.patch('cadgen.viewer.reveal.sys.platform', 'darwin'):
                 reveal_path(target)
                 self.assertEqual(run.call_args.args[0], ['/usr/bin/open', '-R', str(self.target.resolve())])
-            with mock.patch('cadgen.viewer.reveal.sys.platform', 'linux'), mock.patch('cadgen.viewer.reveal.shutil.which', return_value=None):
+            with mock.patch('cadgen.viewer.reveal.sys.platform', 'linux'):
                 reveal_path(target)
-                self.assertEqual(run.call_args.args[0], ['xdg-open', str(self.target.parent.resolve())])
-            with mock.patch('cadgen.viewer.reveal.sys.platform', 'linux'), mock.patch('cadgen.viewer.reveal.shutil.which', return_value='/usr/bin/dbus-send'):
+                self.assertEqual(run.call_args.args[0], ['/usr/bin/xdg-open', str(self.target.parent.resolve())])
+                found['dbus-send'] = '/usr/bin/dbus-send'
                 reveal_path(target)
+                self.assertEqual(run.call_args.args[0][0], '/usr/bin/dbus-send')
                 self.assertIn('array:string:' + self.target.resolve().as_uri(), run.call_args.args[0])
                 run.side_effect = [subprocess.CalledProcessError(1, 'dbus-send'), None]
                 reveal_path(target)
-                self.assertEqual(run.call_args.args[0][0], 'xdg-open')
-        with mock.patch('cadgen.viewer.reveal.sys.platform', 'win32'), mock.patch('cadgen.viewer.reveal.subprocess.Popen') as spawn:
+                self.assertEqual(run.call_args.args[0][0], '/usr/bin/xdg-open')
+                # A helper is run by the absolute path PATH's absolute folders give it, or not at all.
+                run.side_effect, found['dbus-send'], found['xdg-open'] = None, None, None
+                with self.assertRaisesRegex(FileNotFoundError, 'xdg-open'):
+                    reveal_path(target)
+        with mock.patch('cadgen.viewer.reveal.sys.platform', 'win32'), mock.patch('cadgen.viewer.reveal.subprocess.Popen') as spawn, \
+                mock.patch.dict('os.environ', {'SystemRoot': 'C:\\Windows'}):
             reveal_path(target)
-            self.assertEqual(spawn.call_args.args[0], ['explorer.exe', '/select,' + str(self.target.resolve())])
+            self.assertEqual(spawn.call_args.args[0], [str(Path('C:\\Windows') / 'explorer.exe'), '/select,' + str(self.target.resolve())])
+
+    def test_a_name_explorer_would_split_at_its_comma_opens_its_folder_through_the_shell(self):
+        named = Path(self.server.root, 'part.step,other.step')
+        named.write_text('fixture', encoding='utf-8')
+        with mock.patch('cadgen.viewer.reveal.sys.platform', 'win32'), mock.patch('cadgen.viewer.reveal.subprocess.Popen') as spawn, \
+                mock.patch('cadgen.viewer.reveal.os.startfile', create=True) as shell:
+            reveal_path(str(named))
+        spawn.assert_not_called()
+        shell.assert_called_once_with(str(named.resolve().parent))
 
     def test_rejects_relative_missing_and_invalid_paths(self):
         with mock.patch('cadgen.viewer.reveal.subprocess.run') as run:

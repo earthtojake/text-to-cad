@@ -1,6 +1,8 @@
 """``cadgen srdf validate`` — a GENERATED CLI over :func:`cadgen.srdf.validate`.
 
-There is no parser here on purpose; see :mod:`cadgen.cli.step_build`. The
+There is no parser here on purpose: everything the command accepts is derived
+from the verb function's signature (:mod:`cadgen._internal.cli_from_function`), so a
+flag cannot drift from a parameter. The
 findings document is `--json` (the ValidationResult dataclass), and one run
 validates one file against its paired URDF.
 """

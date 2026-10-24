@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import dxf
+from cadgen import model
+
+import build123d as bd
 
 BLANK_WIDTH_MM = 70.0
 FLANGE_LENGTH_MM = 30.0
@@ -21,7 +22,7 @@ BLANK_LENGTH_MM = FLANGE_LENGTH_MM + WEB_LENGTH_MM + FLANGE_LENGTH_MM
 BEND_XS_MM = (FLANGE_LENGTH_MM, FLANGE_LENGTH_MM + WEB_LENGTH_MM)
 
 
-@dxf(out="../DXF/u_channel_bracket.dxf")
+@model
 def u_channel_bracket():
     with bd.BuildSketch() as cut:
         with bd.Locations((BLANK_LENGTH_MM / 2.0, BLANK_WIDTH_MM / 2.0)):
@@ -41,9 +42,12 @@ def u_channel_bracket():
 
     # The two bend lines: vertical and full-height, which is what the preview
     # mesher requires to split the blank into foldable strips.
-    bends = [bd.Line((x, 0.0), (x, BLANK_WIDTH_MM)) for x in BEND_XS_MM]
+    bends = bd.Compound([bd.Line((x, 0.0), (x, BLANK_WIDTH_MM)) for x in BEND_XS_MM])
 
-    return {"CUT": cut.sketch, "BEND": bends}
+    # A part per layer, named by its label: the two bends one part of both.
+    blank = cut.sketch
+    blank.label, bends.label = "CUT", "BEND"
+    return bd.Compound(children=[blank, bends], label="u_channel_bracket")
 
 
 if __name__ == "__main__":

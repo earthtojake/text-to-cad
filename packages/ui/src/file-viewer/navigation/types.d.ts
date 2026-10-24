@@ -56,7 +56,7 @@ export function fuzzyMatch(
 /**
  * The one navbar, over a file and over a host's home (with no file, history or Back to files). Left: the logo, which opens the app's menu
  * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
- * name (the explorer's door, where the host's files can be browsed) and its ⋯. Right: `update`, `trailing` (the file's actions), `fullSize`, then the renderer's view controls (`controlsRef`).
+ * name (the explorer's door, where the host's files can be browsed) and its ⋯. Right: `update`, `trailing` (the file's actions), `fullSize`, the renderer's view controls (`controlsRef`), then `openInBrowser`.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to files. */
@@ -67,6 +67,8 @@ export const ViewerNavbar: ComponentType<{
   history?: import("../types.js").ViewerHistory | null;
   /** The open file, by its absolute path. */
   file?: string | null;
+  /** The document's name where its path does not give it (a model's). */
+  name?: string;
   explorer?: { source: Pick<FileSource, "list" | "search">; onOpen: (path: string) => void } | null;
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction, path: string) => void } | null;
   trailing?: ReactNode;
@@ -74,7 +76,10 @@ export const ViewerNavbar: ComponentType<{
   update?: ReactNode;
   /** The host's Full size button, where it shows the view small. */
   fullSize?: ReactNode;
-  /** The box, last in the row, the renderer draws its view controls into (a 3D view's Display and Preview). */
+  /** The host's way to open what is shown outside it (the CAD app's Open in browser): last in the row. */
+  openInBrowser?: ReactNode;
+  /** The box the renderer draws its view controls into (a 3D view's own, then Display and Preview). */
+  actions?: ReactNode;
   controlsRef?: (element: HTMLDivElement | null) => void;
   className?: string;
 }>;

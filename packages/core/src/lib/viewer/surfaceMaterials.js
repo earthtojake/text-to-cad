@@ -177,7 +177,7 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   });
   record.material.vertexColors = nextUseVertexColors;
   // Per-part PBR overrides: a descriptor occurrence may carry a "material"
-  // object (see cadgen component_package._occurrence_material) so brushed,
+  // object (cadgen's, per occurrence) so brushed,
   // polished, lacquered, and transparent parts can differ in RESPONSE, not
   // just albedo. The theme value is the fallback per property.
   const partMaterial =

@@ -8,8 +8,10 @@ name: Publish Release
 # ships untested.
 #
 # The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle,
-# the wheel and sdist -- installs and exercises the wheel, uploads it to PyPI, and waits until
-# PyPI's index lists the version. Only then does anything that installers follow name it: the
+# the wheel and sdist -- and installs and exercises the wheel. The pypi job alone uploads it, in
+# the `release` environment, which deploys from main only and is the one PyPI's trusted publisher
+# names, and waits until PyPI's index lists the version. Only then does anything that installers
+# follow name it: the
 # `latest` branch and claude.ai's `claude-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
 # version, and the tag and the GitHub Release go out. The version feed cadgen's update notice
@@ -18,7 +20,8 @@ name: Publish Release
 # a version minutes before PyPI has it.
 #
 # A dispatch resumes: it publishes the commit on the branch that last moved VERSION, if that
-# version has no tag yet (PyPI's skip-existing makes a re-upload a no-op).
+# version has no tag yet. A file PyPI already holds is not uploaded again: the release attaches
+# PyPI's own bytes, checked against PyPI's sha256 (scripts/release/pypi_release.py).
 #
 # The IRREVERSIBLE steps -- PyPI, the branches, docs, tag, GitHub Release -- run only on
 # refs/heads/main. build-test is the rehearsal branch: a bump merged into it is built and
@@ -191,8 +194,6 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
-      # Trusted publishing (OIDC) for the PyPI upload.
-      id-token: write
 
     steps:
       - name: Check out release commit
@@ -235,11 +236,15 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web apps/mcp
 
-      # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
-      # builders, the snapshot browser bundle, the CAD Viewer client, the CAD app and the
-      # file tracers are all gitignored, so the release commit carries none of them. Nothing
-      # here writes to git -- the wheel is the release asset.
+      # The bundle feeds the WHEEL, and it is the only thing that does: the snapshot
+      # browser bundle, the CAD Viewer client and the CAD app are all
+      # gitignored, so the release commit carries none of them. Nothing
+      # here writes to git -- the wheel is the release asset. TEXT_TO_CAD_RELEASE names the
+      # version this build releases, so the Viewer and the CAD app it bundles show it as it is;
+      # any other build shows where it came from (`-dev.<commit>`, @text-to-cad/ui/build-id).
       - name: Bundle production outputs
+        env:
+          TEXT_TO_CAD_RELEASE: ${{ needs.gate.outputs.version }}
         run: scripts/bundle/bundle.sh --clean
 
       - name: Validate production bundle layout
@@ -299,7 +304,7 @@ jobs:
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
       # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
       # built minutes earlier by a step that could fail soft, and a wheel without it
-      # installs cleanly and then cannot render a snapshot or export a mesh.
+      # installs cleanly and then cannot serve a Viewer or the CAD app.
       - name: Assert the shipping wheel carries its built runtime
         run: |
           wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
@@ -309,14 +314,8 @@ jobs:
           for required in \
             cadgen/_runtime/browser/snapshot-render.js \
             cadgen/_runtime/browser/render.html \
-            cadgen/_runtime/node/mesh-export.mjs \
             cadgen/_runtime/viewer/index.html \
-            cadgen/_runtime/mcp/index.html \
-            cadgen/_runtime/native/filetrace-macos-aarch64.dylib \
-            cadgen/_runtime/native/filetrace-macos-x86_64.dylib \
-            cadgen/_runtime/native/filetrace-linux-x86_64.so \
-            cadgen/_runtime/native/filetrace-linux-aarch64.so \
-            cadgen/_runtime/native/filetrace-windows-x86_64.dll; do
+            cadgen/_runtime/mcp/index.html; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2
               echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2
@@ -349,33 +348,6 @@ jobs:
           POSTHOG_CLI_HOST: ${{ secrets.POSTHOG_CLI_HOST }}
         run: npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files"
 
-      # Uploaded BEFORE anything an installer follows names the version. If the upload
-      # succeeds and a later step fails, dispatch this workflow again: it resumes.
-      - name: Publish cadgen to PyPI
-        if: needs.gate.outputs.is_main == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/cadgen/dist
-          skip-existing: true
-
-      # uv resolves a pin through PyPI's simple index, so nothing names the version until the
-      # index lists it -- usually seconds after the upload.
-      - name: Wait until PyPI's index lists the release
-        if: needs.gate.outputs.is_main == 'true'
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          for _ in $(seq 60); do
-            if curl -fsS -H 'Accept: application/vnd.pypi.simple.v1+json' https://pypi.org/simple/cadgen/ |
-              python3 -c 'import json, sys; sys.exit(sys.argv[1] not in json.load(sys.stdin)["versions"])' "$VERSION"; then
-              echo "PyPI's index lists cadgen $VERSION."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "PyPI's index still does not list cadgen $VERSION ten minutes after the upload." >&2
-          exit 1
-
       - name: Rehearsal summary (build-test)
         if: needs.gate.outputs.is_main != 'true'
         run: |
@@ -390,6 +362,82 @@ jobs:
           for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
+  # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
+  # `pypi` environment, which deploys from main only, and PyPI's trusted publisher for cadgen names
+  # this workflow AND that environment (CONTRIBUTING.md, "Repository settings"). So a run on any
+  # other branch -- build-test, or a workflow changed there -- cannot publish. Uploaded BEFORE
+  # anything an installer follows names the version; if a later job fails, dispatch this workflow
+  # again: it resumes, uploading only what PyPI does not hold yet.
+  pypi:
+    name: PyPI
+    needs:
+      - gate
+      - publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      # Trusted publishing (OIDC) for the PyPI upload: this job's alone.
+      id-token: write
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Download the distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: cadgen-${{ needs.gate.outputs.version }}
+          path: ${{ runner.temp }}/built
+
+      # Nothing is skipped unseen: a file PyPI already holds is not uploaded again, and the release attaches
+      # PyPI's bytes of it, checked against the sha256 PyPI lists. A file PyPI holds that this run
+      # did not build stops the release. The upload folder is in the workspace, which the
+      # publishing action's container sees.
+      - name: Compare the distribution with what PyPI holds
+        id: held
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 scripts/release/pypi_release.py --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+
+      - name: Publish cadgen to PyPI
+        if: steps.held.outputs.upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-to-pypi
+
+      # uv resolves a pin through PyPI's simple index, so nothing names the version until the
+      # index lists it -- usually seconds after the upload.
+      - name: Wait until PyPI's index lists the release
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          for _ in $(seq 60); do
+            if curl -fsS -H 'Accept: application/vnd.pypi.simple.v1+json' https://pypi.org/simple/cadgen/ |
+              python3 -c 'import json, sys; sys.exit(sys.argv[1] not in json.load(sys.stdin)["versions"])' "$VERSION"; then
+              echo "PyPI's index lists cadgen $VERSION."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "PyPI's index still does not list cadgen $VERSION ten minutes after the upload." >&2
+          exit 1
+
+      # What PyPI serves of the release, for the GitHub Release to attach.
+      - name: Upload the released distribution as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cadgen-${{ needs.gate.outputs.version }}-released
+          path: ${{ runner.temp }}/released/*
+          if-no-files-found: error
+
   # The plugin alone, one commit per release, onto the branches installers follow
   # (scripts/release/plugin_branch.py): `latest`, which every install command names, and
   # `claude-plugin`, which claude.ai's directory follows and whose copy names that directory as
@@ -400,8 +448,8 @@ jobs:
     name: Install branches
     needs:
       - gate
-      - publish
-    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+      - pypi
+    if: ${{ !cancelled() && needs.pypi.result == 'success' && needs.gate.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -466,6 +514,7 @@ jobs:
     needs:
       - gate
       - publish
+      - pypi
       - branches
     if: ${{ !cancelled() && needs.branches.result == 'success' }}
     runs-on: ubuntu-latest
@@ -486,13 +535,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-      # The distribution this run built and uploaded to PyPI, fetched back from the
-      # workflow artifact so the release page carries the same bytes -- not a
-      # rebuild, which could legally differ.
+      # The distribution as PyPI serves it (the pypi job's artifact: this run's upload, or
+      # PyPI's own bytes of what an earlier run uploaded), so the release page carries the same
+      # bytes -- not a rebuild, which could legally differ.
       - name: Download the published distribution
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-${{ needs.gate.outputs.version }}
+          name: cadgen-${{ needs.gate.outputs.version }}-released
           path: packages/cadgen/dist
 
       # The plugin ZIP the publish job built and checked from this same commit.

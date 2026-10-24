@@ -13,6 +13,7 @@ import {
   agentInstallLinks,
   agentInstallMessage,
   agents,
+  howItWorks,
   installs,
   pluginDescription,
   pluginRequestUrl,
@@ -55,14 +56,35 @@ function AgentMessage() {
   );
 }
 
+// Copy with code in backticks (src/lib/content.ts), each code span set as code.
+function withCode(text: string) {
+  return text.split("`").map((part, index) =>
+    index % 2 ? <code key={index} className="font-mono text-foreground">{part}</code> : part,
+  );
+}
+
+// How a model is made, under the overview: the README's How it works.
+function HowItWorks() {
+  return (
+    <div id="how-it-works" className="scroll-mt-20 space-y-1 pt-3">
+      <h3 className="text-base font-semibold text-foreground">
+        <TitleLink anchor="how-it-works">How it works</TitleLink>
+      </h3>
+      <ol className="list-decimal space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
+        {howItWorks.map((step) => (
+          <li key={step}>{withCode(step)}</li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 // What text-to-cad sends, under the message (src/lib/content.ts): its command set as code, and the
 // privacy policy, which says the rest.
 function TelemetryNote() {
   return (
     <p className="text-sm leading-6 text-muted-foreground">
-      {telemetryNote.split("`").map((part, index) =>
-        index % 2 ? <code key={index} className="font-mono text-foreground">{part}</code> : part,
-      )}{" "}
+      {withCode(telemetryNote)}{" "}
       See the{" "}
       <a href="/privacy-policy" className="text-foreground underline underline-offset-4">
         privacy policy
@@ -297,6 +319,7 @@ export default function Home() {
               </a>{" "}
               {support.after}
             </p>
+            <HowItWorks />
           </section>
 
           <section id="install" aria-labelledby="install-title" className="scroll-mt-20 space-y-3 py-6">

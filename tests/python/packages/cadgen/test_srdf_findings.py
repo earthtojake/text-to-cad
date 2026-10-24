@@ -258,7 +258,7 @@ class SrdfFindingsTests(unittest.TestCase):
         self.assertIn("ambiguous_paired_urdf", error_codes)
 
     def test_case_variant_suffix_pairs_for_validation_and_snapshot(self) -> None:
-        from cadgen.snapshot_cli import paired_urdf_for_srdf
+        from cadgen.robot_payload import paired_urdf_for_srdf
 
         original = self.temp_root / "robot.urdf"
         for suffix in (".URDF", ".UrDf"):
@@ -273,23 +273,23 @@ class SrdfFindingsTests(unittest.TestCase):
 
     def test_unlistable_pair_directory_reports_no_pair(self) -> None:
         from cadgen.srdf_validation import find_paired_urdf
-        from cadgen.snapshot_cli import paired_urdf_for_srdf, SnapshotError
+        from cadgen.robot_payload import RobotReadError, paired_urdf_for_srdf
 
         with mock.patch.object(Path, "iterdir", side_effect=PermissionError("cannot list")):
             self.assertEqual(find_paired_urdf("edge", self.temp_root), (None, []))
             error_codes, _ = self._codes(_srdf(""))
-            with self.assertRaises(SnapshotError):
+            with self.assertRaises(RobotReadError):
                 paired_urdf_for_srdf(self.temp_root / "robot.srdf")
         self.assertIn("no_paired_urdf", error_codes)
 
     def test_snapshot_refusal_lists_case_variant_candidates(self) -> None:
-        from cadgen.snapshot_cli import paired_urdf_for_srdf, SnapshotError
+        from cadgen.robot_payload import RobotReadError, paired_urdf_for_srdf
 
         original = self.temp_root / "robot.urdf"
         original.unlink()
         (self.temp_root / "other.URDF").write_text(URDF.replace('name="edge"', 'name="other"'), encoding="utf-8")
         self._report(_srdf(""))
-        with self.assertRaisesRegex(SnapshotError, "other.URDF"):
+        with self.assertRaisesRegex(RobotReadError, "other.URDF"):
             paired_urdf_for_srdf(self.temp_root / "robot.srdf")
 
     def test_multi_root_paired_urdf_warns_not_a_tree(self) -> None:

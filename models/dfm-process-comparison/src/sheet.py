@@ -1,10 +1,14 @@
-from cadgen import step, stl
+from cadgen import materials, model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/sheet.step")
-@stl(out="../STL/sheet.stl")
+
+@model
 def sheet():
-    return tray("sheet")
+    part = tray("sheet")
+    # 5052-H32 sheet (README): the catalogue's generic aluminium
+    part.material = materials.aluminium
+    return part
+
 
 if __name__ == "__main__":
     sheet()

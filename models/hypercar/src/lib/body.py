@@ -17,18 +17,18 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import palette as P
 from lib import surfaces as S
 from lib.context import group, style
 
 # which panels are painted body colour, which are exposed carbon
-CARBON_PANELS = {"rocker:left", "rocker:right", "underbody", "front_fascia_lower"}
+CARBON_PANELS = {"rocker_panel:left", "rocker_panel:right", "underbody", "front_fascia_lower"}
 
 PANEL_COLOR = {
-    "rocker:left": P.CARBON,
-    "rocker:right": P.CARBON,
+    "rocker_panel:left": P.CARBON,
+    "rocker_panel:right": P.CARBON,
     "underbody": P.CARBON,
 }
 

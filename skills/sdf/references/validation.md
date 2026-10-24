@@ -125,7 +125,9 @@ Plugin filenames and parameters can pass bundled validation and still fail in th
 
 ### CAD Viewer review
 
-CAD Viewer treats SDF plugins, sensors, lights, includes, and nested models as static metadata, and says so per kind in the file's warning list. A plugin named `cad-viewer-input-motion` (or `cad_viewer_input_motion`) is recognized and then ignored: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
+CAD Viewer lists SDF plugins, sensors, lights, physics settings and includes as static metadata, with their counts (an included model is not drawn). A model nested in the model is drawn with it. No plugin runs and none moves the model, whatever its name: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
+
+What the viewer and `cadgen snapshot` draw is narrower than what the validator accepts: cadgen resolves the frame graph into every link's rest placement — the model's and every model nested in it, whose links, frames and joints it names by scope (`arm::elbow`, the name `--pose` takes; a nested model is posed in the model it is nested in and attached to its `canonical_link`, else its first link) — meshes `box`, `cylinder`, `sphere` and `capsule` itself, and draws a mesh `<uri>` only when it is a local STL, 3MF or GLB file beside the description or in its ROS package (`package://NAME/...`: the nearest folder above the description named NAME, or holding a `package.xml` that names it). A `plane`, `heightmap`, `polyline` or `ellipsoid`, a `model://` or remote URI, a package no folder above the description is, a `.dae`, `.obj` or `.ply` mesh, a missing file, or a scoped name that names nothing is refused by name, the viewer refuses a model placed by `placement_frame`, and the validator's own errors refuse the file before anything renders.
 
 After `.sdf` files are created or modified, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
@@ -140,6 +142,8 @@ After `.sdf` files are created or modified, show them ([Show the model](../SKILL
 | `never` | not run | `gz_check_skipped` info |
 
 A `gz` on PATH that cannot start (a broken launcher, a missing interpreter) is a `gz_check_failed` **error** under `auto` and `required` alike, naming why it could not start.
+
+`gz sdf --check` resolves the document's own `<include>`/`<uri>` references, and the document chooses them. So gz does not run on a document that names a remote reference (`http://`, `https://`, `fuel://`), or that does not parse as XML: that is a `gz_check_remote` info under `auto` and an **error** under `required`, naming the references. `--gz-remote` lets gz fetch them; without it, validating a file never waits on a host the file names. Local references (relative paths, `file://`, `model://`, `package://`) are not refused, and a local model the document includes is not read for remote references of its own.
 
 A tool that is not installed says nothing about the document, so under `auto` its absence is a note and never blocks — including under `--strict`, which promotes warnings about the FILE. Use `required` to demand the external check. Record which mode ran in the diagnostics report.
 

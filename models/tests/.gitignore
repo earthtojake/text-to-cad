@@ -1,12 +1,8 @@
-*.step
-*.stp
-*.step.json
-*.stp.json
-*.stl
-*.3mf
-*.glb
-*.png
-*.jpg
-*.mp4
-*.log
+# Files written on request (cadgen export, exports.py): reproducible from the code.
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/tmp/
 __pycache__/

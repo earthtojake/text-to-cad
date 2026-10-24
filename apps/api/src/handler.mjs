@@ -7,7 +7,8 @@
  *   GET    /v1/versions        the version feed, PyPI's latest (versions.mjs) -> 200, the same for everyone,
  *                              or 503 while PyPI cannot be read and nothing has been
  *   POST   /v1/events          a batch of counts (events.mjs) -> 204
- *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204
+ *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204, or 429 past
+ *                              the limit per address and per install id (limit.mjs)
  *   GET    /v1/health          -> 200, or 503 naming a missing setting (posthog.mjs: SETTINGS)
  *                              or PostHog's status when it will not take the project's keys
  *
@@ -72,9 +73,10 @@ async function json(request) {
  *   ready(): Promise<void> }} store `ready`: throws when the service will not take a batch (health asks).
  * @param {{ missing?: string[], country?: string | null, versions?: () => Promise<object | null> }} [options] `missing`: settings the host
  *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
- *   `versions`: the version feed (versions.mjs).
+ *   `versions`: the version feed (versions.mjs). `limiter`: how often one caller may ask to forget (limit.mjs),
+ *   by `client`, the address the host says the request came from, and by install id.
  */
-export async function handle(request, store, { missing = [], country, versions } = {}) {
+export async function handle(request, store, { missing = [], country, versions, limiter, client } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
   let batch; // what /v1/events parsed, for the line a refusal logs
@@ -115,9 +117,27 @@ export async function handle(request, store, { missing = [], country, versions }
     }
     // The id rides in the body, never the path: the host's request logs keep each path beside the
     // caller's IP address, and must never pair the two.
+    // Each deletion spends the service's personal key, so one caller -- an address, or an install id from
+    // anywhere -- may ask only so often (limit.mjs): beyond that, a 429 saying when to ask again, which a
+    // client takes as a deletion it still owes.
     if (path === '/v1/forget' && request.method === 'POST') {
+      const limited = key => {
+        const taken = limiter.take(key);
+        if (taken.ok) return null;
+        const refused = refuse(429, path, 'too many requests');
+        refused.headers.set('retry-after', String(taken.retryAfter));
+        return refused;
+      };
+      if (limiter && client) {
+        const refused = limited(`address ${client}`);
+        if (refused) return refused;
+      }
       const { install } = await json(request) ?? {};
       if (!isUuid(install)) return refuse(400, path, 'not an install id');
+      if (limiter) {
+        const refused = limited(`install ${install.toLowerCase()}`);
+        if (refused) return refused;
+      }
       await store.forget(install);
       return reply(204);
     }

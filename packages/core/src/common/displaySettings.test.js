@@ -89,13 +89,11 @@ test("display settings normalize exploded view, guides, and part colors", () => 
   });
 });
 
-test("display mode vocabulary is canonical and retired values teach replacements", () => {
+test("display mode vocabulary is canonical", () => {
   for (const mode of Object.values(CAD_DISPLAY_MODE)) {
     assert.equal(resolveDisplayMode({ mode }), mode);
   }
-  assert.throws(() => resolveDisplayMode({ mode: "solid" }), /use 'shaded_edges'/);
-  assert.throws(() => resolveDisplayMode({ mode: "rendered" }), /use 'shaded'/);
-  for (const alias of ["edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
+  for (const alias of ["solid", "rendered", "edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
     assert.throws(() => resolveDisplayMode({ mode: alias }), /Unknown display mode/);
   }
 });

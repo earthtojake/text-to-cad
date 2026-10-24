@@ -1,10 +1,10 @@
 from __future__ import annotations
-from cadgen import step, threemf
+
+from cadgen import materials, model
 
 from math import sqrt
 
-from cadgen import build123d as bd
-from cadgen.assembly import AssemblyHelper
+import build123d as bd
 
 
 # Units: millimeters.
@@ -129,42 +129,42 @@ def _make_base():
     base = base - groove
 
     base.label = "base_plate"
-    base.color = bd.Color(0.58, 0.62, 0.66, 1.0)
+    base.color = bd.Color("#c8ced4")
     return base
 
 
 def _make_peg():
     peg = bd.Cylinder(radius=PEG_DIAMETER / 2.0, height=PEG_HEIGHT)
     peg.label = "cylindrical_peg"
-    peg.color = bd.Color(0.86, 0.24, 0.20, 1.0)
+    peg.color = bd.Color("#ef867c")
     return peg
 
 
 def _make_block():
     block = bd.Box(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
     block.label = "square_block"
-    block.color = bd.Color(0.18, 0.53, 0.88, 1.0)
+    block.color = bd.Color("#76c0f1")
     return block
 
 
 def _make_cone():
     cone = bd.Cone(0.0, CONE_BASE_DIAMETER / 2.0, CONE_HEIGHT)
     cone.label = "cone"
-    cone.color = bd.Color(0.95, 0.64, 0.16, 1.0)
+    cone.color = bd.Color("#f9d16f")
     return cone
 
 
 def _make_sphere():
     sphere = bd.Sphere(SPHERE_DIAMETER / 2.0)
     sphere.label = "sphere"
-    sphere.color = bd.Color(0.45, 0.72, 0.34, 1.0)
+    sphere.color = bd.Color("#b3dd9e")
     return sphere
 
 
 def _make_prism():
     prism = _triangular_prism(PRISM_SIDE, PRISM_LENGTH)
     prism.label = "triangular_prism"
-    prism.color = bd.Color(0.58, 0.34, 0.74, 1.0)
+    prism.color = bd.Color("#c89edf")
     return prism
 
 
@@ -173,7 +173,7 @@ def _make_cube_top_pad():
         bd.Location((0.0, 0.0, CUBE_TOP_PAD_HEIGHT / 2.0))
     )
     pad.label = "cube_top_pad"
-    pad.color = bd.Color(0.10, 0.14, 0.20, 1.0)
+    pad.color = bd.Color("#59697c")
     return pad
 
 
@@ -182,7 +182,7 @@ def _make_cube_top_post(x_offset: float, name: str):
         bd.Location((x_offset, 0.0, CUBE_TOP_PAD_HEIGHT + CUBE_TOP_POST_HEIGHT / 2.0))
     )
     post.label = name
-    post.color = bd.Color(0.84, 0.30, 0.50, 1.0)
+    post.color = bd.Color("#ec95bc")
     return post
 
 
@@ -197,7 +197,7 @@ def _make_cube_top_cap():
         )
     )
     cap.label = "cube_top_bridge_cap"
-    cap.color = bd.Color(0.12, 0.70, 0.74, 1.0)
+    cap.color = bd.Color("#61dadf")
     return cap
 
 
@@ -213,101 +213,84 @@ def _make_cube_top_bead():
         )
     )
     bead.label = "cube_top_bead"
-    bead.color = bd.Color(0.98, 0.86, 0.20, 1.0)
+    bead.color = bd.Color("#fdef7c")
     return bead
 
 
 def _make_cube_top_subassembly():
-    subassembly = AssemblyHelper("cube_top_subassembly")
-    subassembly.add(_make_cube_top_pad(), "cube_top_pad")
-    subassembly.add(
-        _make_cube_top_post(-CUBE_TOP_POST_SPACING / 2.0, "cube_top_left_post"),
-        "cube_top_left_post",
+    return bd.Compound(
+        children=[
+            _make_cube_top_pad(),
+            _make_cube_top_post(-CUBE_TOP_POST_SPACING / 2.0, "cube_top_left_post"),
+            _make_cube_top_post(CUBE_TOP_POST_SPACING / 2.0, "cube_top_right_post"),
+            _make_cube_top_cap(),
+            _make_cube_top_bead(),
+        ],
+        label="cube_top_subassembly",
     )
-    subassembly.add(
-        _make_cube_top_post(CUBE_TOP_POST_SPACING / 2.0, "cube_top_right_post"),
-        "cube_top_right_post",
-    )
-    subassembly.add(_make_cube_top_cap(), "cube_top_bridge_cap")
-    subassembly.add(_make_cube_top_bead(), "cube_top_bead")
-    return subassembly.build()
 
 
-@step(out="../STEP/basic_shape_mating_test_fixture.step")
-@threemf(out="../3MF/basic_shape_mating_test_fixture.3mf")
+def _mate(fixed, fixed_frame: str, fixed_at: bd.Location, moving, moving_frame: str,
+          moving_at: bd.Location, *, offset: float | None = None) -> None:
+    """Seat ``moving`` on ``fixed`` (the old ``rigid_frame`` pair + ``face_to_face`` or
+    ``coaxial``): a RigidJoint on each part in its own frame, and ``connect_to`` moves
+    ``moving`` so the two frames coincide. ``offset`` (mm along the fixed frame's Z)
+    seats it from a second fixed joint, ``<fixed_frame>:offset``, as the old helper's
+    ``offset=`` did."""
+    bd.RigidJoint(fixed_frame, fixed, fixed_at)
+    if offset is not None:
+        fixed_frame = f"{fixed_frame}:offset"
+        bd.RigidJoint(fixed_frame, fixed, fixed_at * bd.Location((0.0, 0.0, offset)))
+    bd.RigidJoint(moving_frame, moving, moving_at)
+    fixed.joints[fixed_frame].connect_to(moving.joints[moving_frame])
+
+
+@model
 def basic_shape_mating_test_fixture():
-    asm = AssemblyHelper("basic_shape_mating_test_fixture")
-
-    base = asm.add(_make_base(), "base_plate")
-    peg = asm.add(_make_peg(), "cylindrical_peg")
-    block = asm.add(_make_block(), "square_block")
-    cone = asm.add(_make_cone(), "cone")
-    sphere = asm.add(_make_sphere(), "sphere")
-    prism = asm.add(_make_prism(), "triangular_prism")
-    cube_top_subassembly = asm.add(
-        _make_cube_top_subassembly(),
-        "cube_top_subassembly",
-    )
+    base = _make_base()
+    peg = _make_peg()
+    block = _make_block()
+    cone = _make_cone()
+    sphere = _make_sphere()
+    prism = _make_prism()
+    cube_top_subassembly = _make_cube_top_subassembly()
 
     peg_x, peg_y = STATIONS["cylindrical_peg"]
-    peg_seat = asm.rigid_frame(base, "peg_pocket_floor", bd.Location((peg_x, peg_y, BASE_TOP_Z - POCKET_DEPTH)))
-    peg_bottom = asm.rigid_frame(peg, "bottom_center", bd.Location((0.0, 0.0, -PEG_HEIGHT / 2.0)))
-    asm.face_to_face(peg_seat, peg_bottom, offset=-PEG_COLLISION_DEPTH)
+    _mate(base, "peg_pocket_floor", bd.Location((peg_x, peg_y, BASE_TOP_Z - POCKET_DEPTH)),
+          peg, "bottom_center", bd.Location((0.0, 0.0, -PEG_HEIGHT / 2.0)),
+          offset=-PEG_COLLISION_DEPTH)
 
     block_x, block_y = STATIONS["square_block"]
-    block_seat = asm.rigid_frame(
-        base,
-        "block_pocket_floor",
-        bd.Location((block_x, block_y, BASE_TOP_Z - POCKET_DEPTH)),
-    )
-    block_bottom = asm.rigid_frame(block, "bottom_center", bd.Location((0.0, 0.0, -BLOCK_SIZE / 2.0)))
-    asm.face_to_face(block_seat, block_bottom, offset=BLOCK_CONTACT_OFFSET)
+    _mate(base, "block_pocket_floor", bd.Location((block_x, block_y, BASE_TOP_Z - POCKET_DEPTH)),
+          block, "bottom_center", bd.Location((0.0, 0.0, -BLOCK_SIZE / 2.0)),
+          offset=BLOCK_CONTACT_OFFSET)
 
-    asm.rigid_frame(block, "top_center", bd.Location((0.0, 0.0, BLOCK_SIZE / 2.0)))
-    cube_top_seat = asm.rigid_frame(
-        base,
-        "cube_top_subassembly_seat",
-        bd.Location((block_x, block_y, BASE_TOP_Z - POCKET_DEPTH + BLOCK_CONTACT_OFFSET + BLOCK_SIZE)),
-    )
-    cube_top_subassembly_bottom = asm.rigid_frame(
-        cube_top_subassembly,
-        "bottom_center",
-        bd.Location((0.0, 0.0, 0.0)),
-    )
-    asm.face_to_face(
-        cube_top_seat,
-        cube_top_subassembly_bottom,
-        label="cube_top_subassembly_on_square_block",
-    )
+    bd.RigidJoint("top_center", block, bd.Location((0.0, 0.0, BLOCK_SIZE / 2.0)))
+    _mate(base, "cube_top_subassembly_seat",
+          bd.Location((block_x, block_y, BASE_TOP_Z - POCKET_DEPTH + BLOCK_CONTACT_OFFSET + BLOCK_SIZE)),
+          cube_top_subassembly, "bottom_center", bd.Location((0.0, 0.0, 0.0)))
 
     cone_x, cone_y = STATIONS["cone"]
-    cone_tip_seat = asm.rigid_frame(
-        base,
-        "cone_countersink_tip",
-        bd.Location((cone_x, cone_y, BASE_TOP_Z - CONE_SEAT_DEPTH)),
-    )
-    cone_tip = asm.rigid_frame(cone, "tip", bd.Location((0.0, 0.0, -CONE_HEIGHT / 2.0)))
-    asm.coaxial(cone_tip_seat, cone_tip, offset=0.1)
+    _mate(base, "cone_countersink_tip", bd.Location((cone_x, cone_y, BASE_TOP_Z - CONE_SEAT_DEPTH)),
+          cone, "tip", bd.Location((0.0, 0.0, -CONE_HEIGHT / 2.0)), offset=0.1)
 
     sphere_x, sphere_y = STATIONS["sphere"]
-    sphere_cup_center = asm.rigid_frame(base, "sphere_cup_center", bd.Location((sphere_x, sphere_y, BASE_TOP_Z)))
-    sphere_center = asm.rigid_frame(sphere, "center", bd.Location((0.0, 0.0, 0.0)))
-    asm.coaxial(sphere_cup_center, sphere_center, offset=0.1)
+    _mate(base, "sphere_cup_center", bd.Location((sphere_x, sphere_y, BASE_TOP_Z)),
+          sphere, "center", bd.Location((0.0, 0.0, 0.0)), offset=0.1)
 
     prism_x, prism_y = STATIONS["triangular_prism"]
-    prism_v_bottom = asm.rigid_frame(
-        base,
-        "v_groove_bottom",
-        bd.Location((prism_x, prism_y, BASE_TOP_Z - V_GROOVE_DEPTH)),
-    )
-    prism_bottom_vertex = asm.rigid_frame(
-        prism,
-        "bottom_vertex",
-        bd.Location((0.0, 0.0, -PRISM_HEIGHT / 2.0)),
-    )
-    asm.face_to_face(prism_v_bottom, prism_bottom_vertex, offset=-PRISM_COLLISION_DEPTH)
+    _mate(base, "v_groove_bottom", bd.Location((prism_x, prism_y, BASE_TOP_Z - V_GROOVE_DEPTH)),
+          prism, "bottom_vertex", bd.Location((0.0, 0.0, -PRISM_HEIGHT / 2.0)),
+          offset=-PRISM_COLLISION_DEPTH)
 
-    return asm.build()
+    fixture = bd.Compound(
+        children=[base, peg, block, cone, sphere, prism, cube_top_subassembly],
+        label="basic_shape_mating_test_fixture",
+    )
+    # One material for every part: bead-blasted aluminium anodised in each part's own colour.
+    fixture.material = materials.aluminium_6061.but(
+        color=None, roughness=0.6, anisotropy=0.0, description="Bead-blasted 6061-T6, colour-anodised")
+    return fixture
 
 
 if __name__ == "__main__":

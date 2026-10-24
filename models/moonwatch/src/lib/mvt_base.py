@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 from lib import finishing as F
@@ -389,14 +389,14 @@ def _ang(frm, to):
 
 def _finish(part, label, color):
     part.label = label
-    part.color = bd.Color(*color)
+    part.color = bd.Color(color)
     return part
 
 
 # Stripe-shadow tone: spec COPPER_GOLD_DEEP sits only ~0.04 above COPPER_GOLD
 # and vanished inside the key light's specular pool (render-verified), so the
 # overlay uses the same hue scaled to a true groove shadow.
-_STRIPE_SHADOW_COLOR = tuple(0.62 * c for c in S.COPPER_GOLD_DEEP[:3]) + (1.0,)
+_STRIPE_SHADOW_COLOR = "#8d6953"  # COPPER_GOLD_DEEP at 0.62 of its linear value
 
 
 def _add_shadow(parts, shadow, label):
@@ -426,7 +426,7 @@ def _add_shadow(parts, shadow, label):
 # anglage chamfer"); this near-white warm-gold mirror tone stays clearly
 # distinct from the striped tops at any angle. Inline by design (not a spec
 # finish color: it stands in for specular pickup, not a material).
-_ANGLAGE_COLOR = (0.97, 0.82, 0.62, 1.0)
+_ANGLAGE_COLOR = "#fceace"
 
 
 def _add_anglage(parts, ribbon, label):
@@ -464,7 +464,7 @@ def _screw(head_d=S.SCREW_HEAD_DIAMETER, hh=0.34, shank=0.8,
     shank_p = _cyl(0.275 * head_d, shank + 0.05, -hh - shank)
     slot = bd.Rot(0, 0, slot_angle) * bd.Box(head_d + 0.6, slot_w, 2 * depth)
     s = (head + shank_p) - slot
-    s.color = bd.Color(*color)
+    s.color = bd.Color(color)
     return s
 
 

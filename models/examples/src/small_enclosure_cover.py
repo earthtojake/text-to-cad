@@ -1,13 +1,15 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import materials, model
 # Prompt: Small enclosure cover with raised rim, corner screw holes, and shallow recessed center.
 
 from lib.simple_model_library import make_small_enclosure_cover
 
 
-@step(out="../STEP/small_enclosure_cover.step")
+@model
 def small_enclosure_cover():
-    return make_small_enclosure_cover()
+    part = make_small_enclosure_cover()
+    part.material = materials.abs.but(color=None)
+    return part
 
 
 if __name__ == "__main__":

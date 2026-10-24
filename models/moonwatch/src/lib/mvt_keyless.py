@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 from lib import finishing as F
@@ -152,7 +152,7 @@ def _ang(frm, to):
 
 def _finish(part, label, color):
     part.label = label
-    part.color = bd.Color(*color)
+    part.color = bd.Color(color)
     return part
 
 
@@ -178,7 +178,7 @@ def _screw(head_d=S.SCREW_HEAD_DIAMETER, hh=0.32, shank=0.9,
     s = s - bd.Pos(0, 0, top + 0.5) * bd.Box(head_d * 3, head_d * 3, 1.0)
     depth = min(0.16, hh * 0.5)
     s = s - bd.Pos(0, 0, top + 0.3 - depth) * bd.Box(head_d * 2.2, slot_w, 0.6)
-    s.color = bd.Color(*color)
+    s.color = bd.Color(color)
     return s, top
 
 

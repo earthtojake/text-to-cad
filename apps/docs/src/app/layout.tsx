@@ -10,7 +10,7 @@ const socialPreview = {
   url: "/social-preview.png",
   width: 1200,
   height: 630,
-  alt: "text-to-cad: Give your agent CAD superpowers. 100% open source and free. A planetary gear assembly rendered from its STEP file.",
+  alt: "text-to-cad: Give your agent CAD superpowers. 100% open source and free. A planetary gear assembly modeled with text-to-cad.",
 };
 
 const themeScript = `

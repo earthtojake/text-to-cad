@@ -1,12 +1,8 @@
 """Material palette for the hypercar.
 
-IMPORTANT -- colour space.  The render pipeline treats build123d ``Color``
-channels as **linear** RGB and converts them to sRGB for display
-(``packages/core/src/lib/assembly/meshData.js`` ``linearChannelToSrgbByte``).
-So ``Color(0.5, 0.5, 0.5)`` shows up as roughly ``#BCBCBC``, not ``#808080``.
-
-Every colour here is therefore authored as the sRGB hex you actually want to
-see and converted with :func:`srgb`.  Never hand-write raw float triples.
+IMPORTANT -- colour space.  Every colour here is the sRGB hex you actually want
+to see; a shape takes it as it is (``shape.color = "#..."``), and the engine
+stores it linear.
 
 Also: a colour set on a *group* compound is ignored by the render package --
 only leaf occurrences carry colour.  Use :func:`style` on every leaf.
@@ -14,21 +10,7 @@ only leaf occurrences carry colour.  Use :func:`style` on every leaf.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-
-
-def _to_linear(channel_8bit):
-    c = channel_8bit / 255.0
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-
-def srgb(hex_string, alpha=1.0):
-    """Build a Color from the sRGB hex you want to SEE on screen."""
-    h = hex_string.lstrip("#")
-    if len(h) == 3:
-        h = "".join(ch * 2 for ch in h)
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return bd.Color(_to_linear(r), _to_linear(g), _to_linear(b), alpha)
+import build123d as bd
 
 
 # ---------------------------------------------------------------------------
@@ -88,5 +70,5 @@ LENS_ALPHA = 0.30
 def style(shape, label, hex_string, alpha=1.0):
     """Label + colour a LEAF shape.  Returns the shape so it can be inlined."""
     shape.label = label
-    shape.color = srgb(hex_string, alpha)
+    shape.color = (hex_string, alpha)
     return shape

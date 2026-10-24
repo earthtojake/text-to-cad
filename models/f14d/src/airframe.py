@@ -1,4 +1,4 @@
-"""F-14D system model: airframe — the one-piece blended skin, cut and detailed.
+"""F-14D system: airframe — the one-piece blended skin, cut and detailed.
 
 The skin is lofted with certain real openings FILLED (a section through them
 is two regions and cannot loft as one wire) and they are cut back here. Which
@@ -14,22 +14,19 @@ cutters are applied is decided in THIS file, explicitly:
   Nothing visual is lost: at 19 m rendered to 1920 px a 4 mm groove is
   sub-pixel, and panel lines read from the renderer's feature-edge overlay.
 
-`f14d.py` links this model as occurrence `o1.1`.
+A stage of the aircraft, which `f14d.py` calls in its body: a `@memo`
+function, so an edit that does not reach its code replays it from the worker's
+memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import airframe as airframe_lib
 from lib import cockpit, inlets
 
 
-@step(out="../STEP/airframe.step")
+@memo
 def airframe():
     cutters = [*inlets.skin_cutters(), *cockpit.skin_cutters()]
-    return airframe_lib.build(cutters)
-
-
-if __name__ == "__main__":
-    airframe()
+    group = airframe_lib.build(cutters)
+    return group

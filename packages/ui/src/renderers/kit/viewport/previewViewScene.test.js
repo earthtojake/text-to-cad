@@ -5,7 +5,7 @@ import { previewSceneQuality, previewViewScene } from './previewViewScene.js';
 
 const scene = quality => ({
   quality: resolveSceneQuality(quality),
-  display: { mode: 'shaded', clip: { enabled: true, axis: 'x', amount: 0.4 }, exploded: { enabled: true, amount: 0.5 } },
+  display: { mode: 'shaded', clip: { enabled: true, axis: 'x', at: 4 }, exploded: { enabled: true, amount: 0.5 } },
   view: { lighting: { quality: 'preview' } }
 });
 

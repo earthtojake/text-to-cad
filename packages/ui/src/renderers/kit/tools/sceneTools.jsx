@@ -63,4 +63,3 @@ export function useSceneTools({ shell, scene, features, state, measurable, clear
   const select = measureSelectHandlers(measure, () => runtime.current?.current, clearParts, { picks: measurable });
   return { tools, subToolbar, overlay, onSelectPress: select.press, onSelectHover: select.hover };
 }
-

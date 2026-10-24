@@ -6,16 +6,14 @@ colored body; rows articulate about shared pin axes with 0.06 radial
 clearance.
 """
 
-from cadgen import step
+from cadgen import model
 
-from lib import materials
-from lib.bracelet import build_bracelet
+from lib import watch
 
 
-@step(out="../STEP/bracelet.step", materials=materials.materials_for_model("bracelet"))
+@model
 def bracelet():
-    compound = build_bracelet()
-    return compound
+    return watch.bracelet()
 
 
 if __name__ == "__main__":

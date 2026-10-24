@@ -21,7 +21,7 @@ from typing import Callable
 from .backend import absolute_path
 from .content_types import extension_of
 from .natural_sort import collation_key
-from .scanner import SOURCE_EXTENSIONS, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name
+from .scanner import VIEWER_EXTENSIONS, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name
 
 # A folder this full lists its first entries and says so.
 LIST_LIMIT = 2000
@@ -48,7 +48,7 @@ def _skipped(name: str) -> bool:
 
 
 def _listed(name: str) -> bool:
-    return not is_hidden_name(name) and extension_of(name) in SOURCE_EXTENSIONS
+    return not is_hidden_name(name) and extension_of(name) in VIEWER_EXTENSIONS
 
 
 def _entries(folder: str):

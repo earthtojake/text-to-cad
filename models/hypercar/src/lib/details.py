@@ -33,10 +33,10 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-from cadgen import build123d as bd, compound_from_instances
+import build123d as bd
 
 from lib import surfaces as S
-from lib.context import group, style
+from lib.context import compound_from_instances, group, style
 from lib import palette as P
 
 

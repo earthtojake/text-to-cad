@@ -171,6 +171,15 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
 
+  // This harness opens dark. Ask for the light token cascade before measuring its light ink;
+  // the later switch on html then exercises the same host theme change in the other direction.
+  await page.evaluate(() => {
+    for (let element = document.querySelector('[data-drawing-surface]'); element; element = element.parentElement) {
+      element.classList.remove('dark');
+    }
+    document.documentElement.classList.add('light');
+  });
+
   const light = await frame(pane);
   const box = inkBox(light);
   // Fitted: the drawing's own aspect, centred, filling the pane but for the gutter.

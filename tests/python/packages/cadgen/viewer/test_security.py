@@ -2,7 +2,7 @@
 
 There is no served directory: a file is named by its absolute path, wherever it is
 (``cadgen.viewer.backend``). What IS refused is a ref that is not an absolute path (400), and
-anything that would leave as bytes without being a CAD file or its sidecar (404). Every denial
+anything that would leave as bytes without being a CAD file (404). Every denial
 asserts BOTH the status and that the secret bytes are absent — a denial that 404s for the wrong
 reason passes vacuously otherwise.
 
@@ -24,24 +24,22 @@ from urllib.parse import quote
 
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
-from cadgen.viewer.store_paths import result_tree
-
-from tests.python.support.store_fixtures import seed_result
 
 SECRET = "TOP-SECRET-BYTES"
 
 
 class AttackFixture:
-    """``base/project`` plus a store, behind a live server."""
+    """``base/project`` behind a live server, and an engine folder no engine daemon is in: the
+    engine's routes answer what they answer with none, and none is started."""
 
     def __init__(self):
         self.base = tempfile.mkdtemp()
         self.root = os.path.join(self.base, "project")
         os.makedirs(self.root)
-        self.cache = os.path.join(self.base, "cache")
-        os.makedirs(self.cache)
-        self._previous_cache = os.environ.get("CADGEN_CACHE_DIR")
-        os.environ["CADGEN_CACHE_DIR"] = self.cache
+        self.engine = os.path.join(self.base, "engine")
+        os.makedirs(self.engine)
+        self._previous_engine = os.environ.get("CADGEN_ENGINE_DIR")
+        os.environ["CADGEN_ENGINE_DIR"] = self.engine
 
         self.write("ok.step", "public step\n")
         self.write("ok.stl", "solid public\n")
@@ -56,17 +54,6 @@ class AttackFixture:
         self.write(".dotfile.step", SECRET)
         self.write(".worktree/inside.step", "under a hidden folder\n")
         os.makedirs(os.path.join(self.root, "dir.step"))
-
-        # A real result in the store: the tree hash is what the store route serves.
-        self.package_name = seed_result(
-            Path(self.root, "part.step"), {"kind": "assembly-package", "components": {"c0": {}}}
-        )
-        from cadgen.store.trees import get_tree
-        from cadgen.store.objects import read_verified_object
-        from tests.python.support.store_fixtures import FIXTURE_SURFACE_PRODUCER
-        self.component_name, component = next(iter(get_tree(self.package_name)["components"].items()))
-        self.component_payload = read_verified_object(component["brep"])
-        self.store_binding = "&surfaceProducer=" + quote(json.dumps(FIXTURE_SURFACE_PRODUCER))
 
         self.dist = os.path.join(self.base, "dist")
         os.makedirs(os.path.join(self.dist, "assets"))
@@ -95,10 +82,10 @@ class AttackFixture:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
-        if self._previous_cache is None:
-            os.environ.pop("CADGEN_CACHE_DIR", None)
+        if self._previous_engine is None:
+            os.environ.pop("CADGEN_ENGINE_DIR", None)
         else:
-            os.environ["CADGEN_CACHE_DIR"] = self._previous_cache
+            os.environ["CADGEN_ENGINE_DIR"] = self._previous_engine
         shutil.rmtree(self.base, ignore_errors=True)
 
     def request(self, method, target, *, headers=None, body=None):
@@ -144,19 +131,6 @@ class ControlCases(SecurityTestCase):
         # The viewer serves bytes to render, never a save-as: no route attaches.
         self.assertNotIn("content-disposition", {k.lower() for k in headers})
 
-    def test_a_source_sidecar_serves(self):
-        status, headers, _ = self.fixture.asset(self.fixture.path("part.step.json"))
-        self.assertEqual(status, 200)
-        self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
-
-    def test_the_store_route_serves_a_component(self):
-        status, headers, body = self.fixture.request(
-            "GET", f"/__cad/store?file={self.fixture.package_name}/components/{self.fixture.component_name}.brep"
-        )
-        self.assertEqual(status, 200)
-        self.assertEqual(body, self.fixture.component_payload)
-        self.assertEqual(headers["content-type"], "application/octet-stream")
-        self.assertNotIn("content-disposition", {k.lower() for k in headers})
 
 
 class RawFilesAreNeverPages(SecurityTestCase):
@@ -167,14 +141,11 @@ class RawFilesAreNeverPages(SecurityTestCase):
         status, headers, _ = self.fixture.asset(self.fixture.path("robot.urdf"))
         self.assertEqual((status, headers["content-type"]), (200, "application/xml; charset=utf-8"))
         self.assertEqual((headers["x-content-type-options"], headers["content-security-policy"]), sandbox)
-        status, headers, _ = self.fixture.request(
-            "GET", f"/__cad/store?file={self.fixture.package_name}/components/{self.fixture.component_name}.brep"
-        )
-        self.assertEqual((status, headers["x-content-type-options"], headers["content-security-policy"]), (200, *sandbox))
-        # The viewer's own page is the app, never sandboxed.
+        # The viewer's own page is the app, never sandboxed: framed by its own origin alone.
         status, headers, _ = self.fixture.request("GET", "/")
         self.assertEqual(status, 200)
-        self.assertNotIn("content-security-policy", {name.lower() for name in headers})
+        self.assertEqual({name.lower(): value for name, value in headers.items()}["content-security-policy"],
+                         "frame-ancestors 'self'")
 
 
 class FilesByAbsolutePath(SecurityTestCase):
@@ -199,7 +170,7 @@ class FilesByAbsolutePath(SecurityTestCase):
     def test_a_null_byte_is_a_400_with_the_exact_message(self):
         status, _, body = self.fixture.request("GET", "/__cad/asset?file=%2Froot%2Fok.step%00.png")
         self.assertEqual(status, 400)
-        self.assertEqual(body, b'{"error":"File path contains an invalid null byte"}')
+        self.assertEqual(body, b'{"ok":false,"error":"File path contains an invalid null byte"}')
 
     def test_repeated_file_params_take_the_first(self):
         good = quote(self.fixture.path("ok.step"), safe="")
@@ -251,11 +222,11 @@ class OnlyCadBytesLeave(SecurityTestCase):
         status, _, body = self.fixture.asset(self.fixture.path("dir.step"))
         self.assertDenied(status, body, {404})
 
-    def test_the_sidecar_allowlist_is_the_pair_of_suffixes_not_dot_json(self):
-        status, _, _ = self.fixture.asset(self.fixture.path("part.step.json"))
-        self.assertEqual(status, 200)
-        status, _, body = self.fixture.asset(self.fixture.path("secrets.json"))
-        self.assertDenied(status, body, {404})
+    def test_no_json_leaves_not_even_one_named_as_a_step_s(self):
+        for name in ("part.step.json", "secrets.json"):
+            with self.subTest(name=name):
+                status, _, body = self.fixture.asset(self.fixture.path(name))
+                self.assertDenied(status, body, {404})
 
 
 class MalformedPercentEncoding(SecurityTestCase):
@@ -319,7 +290,8 @@ class TheTwoGatesCoverTheDataRoutes(SecurityTestCase):
             f"/__cad/catalog?file={ref}",
             f"/__cad/asset?file={ref}",
             f"/__cad/folder?path={quote(self.fixture.root, safe='')}",
-            f"/__cad/store?file={self.fixture.package_name}/assembly.json{self.fixture.store_binding}",
+            f"/__cad/xbf?file={ref}&held=1",
+            "/__cad/api/look",
         ]
 
     def test_a_hostile_host_is_refused_on_every_data_route(self):
@@ -343,70 +315,6 @@ class TheTwoGatesCoverTheDataRoutes(SecurityTestCase):
                 _, headers, _ = self.fixture.request("GET", target)
                 offenders = [k for k in headers if k.lower().startswith("access-control-")]
                 self.assertEqual(offenders, [])
-
-
-class ArtifactRoute(SecurityTestCase):
-    """``/__cad/artifact`` takes a file by its absolute path, like every route."""
-
-    def artifact(self, file_param, *, method="GET"):
-        target = f"/__cad/artifact?file={quote(str(file_param), safe='')}"
-        headers = {"x-cadgen-viewer": "1"} if method == "POST" else None
-        return self.fixture.request(method, target, headers=headers)
-
-    def test_a_relative_ref_is_a_400_on_both_methods_and_compiles_nothing(self):
-        for method in ("GET", "POST"):
-            with self.subTest(method=method):
-                status, _, body = self.artifact("ok.step", method=method)
-                self.assertEqual(status, 400, body[:400])
-        self.assertIsNone(result_tree(self.fixture.path("ok.step")), "a refused ref never reaches the kernel")
-
-    def test_an_absolute_ref_is_answered(self):
-        # GET rather than POST: accepting a ref on POST means compiling it, and
-        # this asserts acceptance rather than exercising the kernel.
-        status, _, body = self.artifact(self.fixture.path("ok.step"))
-        self.assertEqual(status, 200, body[:400])
-        self.assertEqual(json.loads(body)["state"], "not-compiled")
-
-    def test_a_trailing_newline_is_not_a_step_entry(self):
-        r"""``\Z``, not ``$``: Python's ``$`` also matches before a trailing newline, so ``ok.step\n``
-        once claimed STEP ownership and was offered a compile of a document that does not exist."""
-        status, _, body = self.artifact(self.fixture.path("ok.step") + "\n")
-        self.assertEqual(status, 200, body[:400])
-        payload = json.loads(body)
-        self.assertEqual(payload["state"], "compiled")
-        self.assertNotIn("compile", payload)
-
-
-class StoreRouteConfinement(SecurityTestCase):
-    """The store tier: a tree and its objects by hash, never a path the client names."""
-
-    def test_traversal_and_hidden_components_are_404_never_403(self):
-        for rel in ("../../etc/hosts", "..%2F..%2Fetc%2Fhosts", "/etc/hosts", ".building-x/assembly.json"):
-            with self.subTest(rel=rel):
-                status, _, body = self.fixture.request("GET", f"/__cad/store?file={rel}")
-                self.assertEqual(status, 404)
-                self.assertEqual(body, b'{"error":"Not found"}')
-
-    def test_leading_slashes_are_stripped_so_the_client_form_works(self):
-        # resolvePackageAssetUrl emits file=/<key>/components/c0.surf.
-        status, _, body = self.fixture.request(
-            "GET", f"/__cad/store?file=/{self.fixture.package_name}/components/{self.fixture.component_name}.brep"
-        )
-        self.assertEqual(status, 200)
-        self.assertEqual(body, self.fixture.component_payload)
-
-    def test_backslashes_are_converted(self):
-        status, _, _ = self.fixture.request(
-            "GET",
-            f"/__cad/store?file={self.fixture.package_name}\\components\\{self.fixture.component_name}.brep",
-        )
-        self.assertEqual(status, 200)
-
-    def test_the_v_param_is_accepted_and_ignored(self):
-        status, _, _ = self.fixture.request(
-            "GET", f"/__cad/store?file={self.fixture.package_name}/assembly.json{self.fixture.store_binding}&v=zzz"
-        )
-        self.assertEqual(status, 200)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """Preserve the fingertip bridge envelope using two rational meridian patches."""
 import math
-from cadgen import build123d as bd
+import build123d as bd
 from lib.fingertip_pad import PAD_RADII,PAD_CENTER_Y_FRACTION,PAD_CENTER_Z,PAD_BOND_PLANE_Z,MOUNT_SEAT_Z
 from lib.finish import finish
 

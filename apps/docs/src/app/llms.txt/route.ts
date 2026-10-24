@@ -3,6 +3,7 @@
 import {
   agentInstallByline,
   agentInstallMessage,
+  howItWorks,
   installs,
   pluginDescription,
   skillGroups,
@@ -22,6 +23,10 @@ export function GET() {
     `> ${pluginDescription}`,
     "",
     `${support.before} [${support.link.text}](${support.link.href}) ${support.after}`,
+    "",
+    "## How it works",
+    "",
+    ...howItWorks.map((step, index) => `${index + 1}. ${step}`),
     "",
     "## Install",
     "",

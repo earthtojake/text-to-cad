@@ -12,17 +12,13 @@ import {
   CAMERA_PROJECTION,
   resolveDisplayEdgeSettings
 } from "./displaySettings.js";
-import {
-  buildModel,
-  normalizedSelectorValues
-} from "./cadScene.js";
+import { normalizedSelectorValues } from "./cadScene.js";
 import {
   applyDisplayRecordTransform
 } from "./displayRecordTransform.js";
 import {
   resolveTopologyDisplayEdgeRuntimes,
-  shouldRenderTopologyDisplayEdges,
-  shouldUseRecordTopologyEdgeTransforms
+  shouldRenderTopologyDisplayEdges
 } from "./topologyDisplayEdgeRuntime.js";
 import {
   screenSpaceLineDeviceResolution,
@@ -34,11 +30,13 @@ import {
 import { syncRuntimeStepClipPlane } from "../lib/viewer/modelRuntime.js";
 import { createSceneClip } from "../lib/viewer/sceneClip.js";
 import { disposeSectionCaps } from "../lib/viewer/sectionCaps.js";
+import { applySceneRig, renderWithSceneRig, sceneRigFor } from "../lib/viewer/sceneRig.js";
 import {
   applyExplodedViewProgress,
   clearExplodedViewRecords,
   computeExplodedViewLayout,
-  explodedViewBounds
+  explodedViewBounds,
+  occurrencePathsFromAssemblyRoot
 } from "../lib/viewer/explodedView.js";
 import {
   addFloor as addSharedFloor,
@@ -56,8 +54,7 @@ import {
   RENDER_SCENE_SCALE,
   RENDER_VIEW_PRESETS,
   rendererDataUrlWithOptionalLabel as sharedRendererDataUrlWithOptionalLabel,
-  resolveRenderView,
-  shouldBurnInViewLabels as sharedShouldBurnInViewLabels
+  resolveRenderView
 } from "./renderOptions.js";
 import {
   normalizeCameraSpec
@@ -369,7 +366,8 @@ function roundedBounds(bounds) {
   return min && max ? { min, max } : null;
 }
 
-// The parts inventory: what is in this model and what can be selected.
+// The parts inventory of a family scene (a GLB, an STL, a 3MF, a robot, an engine document):
+// what it drew.
 //
 // This is the ONLY output whose size grows with the model -- everything else in the CLI
 // surface is constant (a 600-part assembly logs the same ~100 bytes a single part does).
@@ -378,16 +376,14 @@ function roundedBounds(bounds) {
 // `ref` were the same string three times over (identical in 600/600 parts), `label`
 // duplicated `name` (600/600), and the coordinates carried 16 significant figures.
 //
-// `ref` survives rather than `id`/`occurrenceId` because it is the form that goes
-// straight back into `--focus` / `--hide` / `inspect`; the bare id is one string slice
-// away for anyone who needs it.
+// `ref` survives rather than `id`/`occurrenceId` because it is the form a reader hands
+// back to address the part; the bare id is one string slice away for anyone who needs it.
 // A label ref (`#eye_shank`) addresses a part by the `name` already in every row, so this
 // payload deliberately does NOT carry a second `labelRef` identifier -- that would undo the
-// size work above for a string the row already contains. `inspect refs` reports the exact
-// paste spelling, including the numbered form for duplicated labels, where the output is
-// small enough for it to be free.
-export function listRenderableParts(meshData) {
-  return toArray(meshData.parts).map((part, index) => {
+// size work above for a string the row already contains. A duplicated label's numbered
+// aliases (`#wheel_1`, `#wheel_2`) are spelled out where the bare label is refused.
+export function listRenderableParts(parts) {
+  return toArray(parts).map((part, index) => {
     const occurrenceId = String(part?.occurrenceId || part?.id || "");
     return {
       ref: occurrenceId ? `#${occurrenceId}` : "",
@@ -480,13 +476,11 @@ export function renderJobContext(meshData, job = {}) {
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
   const edgesVisible = sceneSettings.view.edges.enabled;
-  const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
-  const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
+  const selectorRuntime = job.selectorRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,
     cadEdgeSource: stepDisplayEnabled,
-    displayEdgeRuntime,
     selectorRuntime,
     edgeSettings
   });
@@ -510,7 +504,6 @@ export function renderJobContext(meshData, job = {}) {
     sharedRenderOptions,
     edgeSettings,
     selectorRuntime,
-    displayEdgeRuntime,
     topologyDisplayEdgesVisible
   };
 }
@@ -638,9 +631,16 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     backgroundTexture = colorTextureFromBackground(context.theme.background || {}, firstSize.width, firstSize.height);
     scene.background = backgroundTexture;
   }
+  // A family's scene that brings its own lighting (`sceneContract.js`'s `rig`, or `rigFor` the look
+  // it wears) is lit by it outside Render, in place of the theme's rig, as the viewer's viewport
+  // lights it (`sceneRig.js`): its environment is the scene's, and it is drawn as the rig blends
+  // (`renderWithSceneRig`, in `captureModel`).
+  const ownRig = photographicConfiguration ? null : sceneRigFor(model.scene, model.look);
+  const sceneRig = ownRig ? applySceneRig(THREE, { scene, renderer }, ownRig) : null;
   // PMREM generation is synchronous, but `ready` stays a promise so a failure
   // reaches the caller after it holds a viewport it can dispose.
   const ready = Promise.resolve().then(() => {
+    if (sceneRig) return null;
     const resource = context.sceneSettings.view.lighting.enabled
       ? createEnvironmentResource(renderer, studioConfiguration, { size: context.quality.environmentMapSize })
       : keepsAuthoredFinish(model) ? createInspectEnvironmentResource(THREE) : null;
@@ -652,7 +652,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     scene.environment = resource?.texture || null;
     return resource;
   });
-  if (!context.sceneSettings.view.lighting.enabled) applyLighting(
+  if (!sceneRig && !context.sceneSettings.view.lighting.enabled) applyLighting(
     scene,
     context.theme,
     model.bounds || context.bounds,
@@ -697,6 +697,8 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     perspectiveCamera,
     studioRuntime,
     studioConfiguration,
+    // The scene's own rig, up on this stage (`applySceneRig`), or null.
+    sceneRig,
     // The grid as drawn, for the depth fit: the viewer fits its near and far planes to it too.
     gridBounds: floor?.gridBounds ?? null,
     context,
@@ -711,6 +713,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
       viewport.sceneClip?.dispose();
       model.dispose?.();
       scene.remove?.(model.root);
+      sceneRig?.dispose();
       if (studioRuntime) disposePhotographicStudio(studioRuntime);
       if (scene.environment === environmentResource?.texture) scene.environment = null;
       if (scene.background === environmentResource?.texture) scene.background = null;
@@ -777,7 +780,9 @@ function applyViewportExplodedView(viewport, bounds, layoutBounds = bounds) {
     resetExplodedView();
     return bounds;
   }
-  const layout = computeExplodedViewLayout(model.displayRecords, layoutBounds);
+  // The tree is the only hierarchy a part has: a token names no ancestors.
+  const hierarchy = occurrencePathsFromAssemblyRoot(model.meshData?.assemblyRoot);
+  const layout = computeExplodedViewLayout(model.displayRecords, layoutBounds, { hierarchy });
   if (!layout.entries.length) {
     resetExplodedView();
     return bounds;
@@ -794,28 +799,13 @@ function applyViewportExplodedView(viewport, bounds, layoutBounds = bounds) {
 function syncViewportTopologyDisplayEdges(viewport) {
   const { context, model } = viewport;
   const renderedPartIds = displayRecordPartIds(model.displayRecords);
-  const baseEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
+  const edgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
     selectorRuntime: context.selectorRuntime,
-    displayEdgeRuntime: context.displayEdgeRuntime,
-    displayRecords: model.displayRecords,
-    transformDisplayEdges: false
-  });
-  const transformByRecord = shouldUseRecordTopologyEdgeTransforms({
-    transformDetected: baseEdgeRuntimes.transformCount > 0,
-    topologyDisplayEdgesVisible: context.topologyDisplayEdgesVisible,
-    displayEdgeRuntime: context.displayEdgeRuntime,
     displayRecords: model.displayRecords
   });
-  const edgeRuntimes = transformByRecord
-    ? baseEdgeRuntimes
-    : resolveTopologyDisplayEdgeRuntimes({
-        selectorRuntime: context.selectorRuntime,
-        displayEdgeRuntime: context.displayEdgeRuntime,
-        displayRecords: model.displayRecords
-      });
   syncTopologyDisplayEdgeLine(
     model.runtime,
-    transformByRecord ? context.displayEdgeRuntime : edgeRuntimes.topologyRuntime,
+    edgeRuntimes.selectorRuntime,
     {
       visible: context.topologyDisplayEdgesVisible,
       edgeSettings: renderedPartIds.length
@@ -825,7 +815,6 @@ function syncViewportTopologyDisplayEdges(viewport) {
           }
         : context.edgeSettings,
       viewerTheme: model.runtime?.baseTheme,
-      transformByRecord,
       displayRecords: model.displayRecords
     }
   );
@@ -864,11 +853,13 @@ export async function captureModel(viewport, captureOptions = {}) {
   const modelBounds = viewport.model?.bounds || meshData?.bounds || bounds;
 
   if (mode === "list") {
+    if (typeof viewport.model.listParts !== "function") {
+      throw new Error("--mode list lists a GLB, mesh or robot scene here; cadgen lists a STEP model's parts itself");
+    }
     return {
       ok: true,
       mode,
-      // A family's scene lists what it drew; a CAD model its composed part occurrences.
-      parts: listRenderableParts(viewport.model.listParts ? { parts: viewport.model.listParts() } : meshData),
+      parts: listRenderableParts(viewport.model.listParts()),
       bounds: roundedBounds(modelBounds) || modelBounds,
       warnings
     };
@@ -994,7 +985,8 @@ export async function captureModel(viewport, captureOptions = {}) {
     }
     stageStarted = performance.now();
     syncViewportAnnotation(viewport, job, { height });
-    // Render is drawn through its studio's frame, every sample of it; anything else is one draw.
+    // Render is drawn through its studio's frame, every sample of it; anything else is one draw, as
+    // the scene's own rig blends it.
     const studioFrame = viewport.studioRuntime?.photographicStudio?.frame || null;
     if (studioFrame) {
       studioFrame.renderStill(viewport.renderer, viewport.scene, renderCamera, {
@@ -1004,7 +996,7 @@ export async function captureModel(viewport, captureOptions = {}) {
         })
       });
     } else {
-      viewport.renderer.render(viewport.scene, renderCamera);
+      renderWithSceneRig(viewport.sceneRig, viewport.renderer, viewport.scene, renderCamera);
     }
     if (outputTimings) outputTimings.drawSubmitMs = Math.round(performance.now() - stageStarted);
     // WebGL submission can return before GPU completion. PNG readback may
@@ -1039,7 +1031,7 @@ export async function captureModel(viewport, captureOptions = {}) {
     timings: {
       sceneBuildMs,
       renderMs,
-      meshCount: viewport.model.displayRecords.length || (meshData ? listRenderableParts(meshData).length : 0) || 1
+      meshCount: viewport.model.displayRecords.length || toArray(meshData?.parts).length || 1
     },
     warnings
   };

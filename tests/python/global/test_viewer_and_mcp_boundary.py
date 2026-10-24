@@ -1,8 +1,9 @@
 """The CAD Viewer's backend and the CAD app's server are leaves of cadgen.
 
 Outside `cadgen/viewer/`, `cadgen/mcp/` and the commands that start them (`cli/viewer.py`,
-`cli/viewer_stop.py`, `cli/mcp.py`, which the CLI registry names by string), no cadgen module
-imports either -- except `cadgen.viewer.recents`, the state directory's one definition. CI
+`cli/mcp.py`, which the CLI registry names by string), no cadgen module
+imports either -- except the injected `_internal/engine_host.py` composition root
+and `cadgen.viewer.recents`, the state directory's one definition. CI
 leans on this: a change confined to one of them runs only the tests that reach it
 (scripts/github-workflows/select_checks.py), so an import across the line has to move the
 line there too.
@@ -22,7 +23,7 @@ sys.modules.setdefault("select_checks", selector)
 _spec.loader.exec_module(selector)
 
 CADGEN = REPO_ROOT / selector.CADGEN_SRC
-SHELLS = {"cli/viewer.py", "cli/viewer_stop.py", "cli/mcp.py"}
+SHELLS = {"cli/viewer.py", "cli/mcp.py"}
 ALLOWED = {"cadgen.viewer.recents"}
 
 
@@ -57,10 +58,10 @@ class ViewerAndMcpAreLeaves(unittest.TestCase):
         offenders = []
         for path in sorted(CADGEN.rglob("*.py")):
             relative = path.relative_to(CADGEN).as_posix()
-            if inside(relative):
+            if inside(relative) or relative == "_internal/engine_host.py":
                 continue
             offenders += [f"{relative} -> {name}" for name in references(path, relative) if leaf(name)]
-        self.assertEqual(offenders, [], "outside the viewer and MCP leaves, only cadgen.viewer.recents may be imported")
+        self.assertEqual(offenders, [], "only the application composition root may import viewer/MCP leaves")
 
     def test_the_selector_draws_the_same_line(self):
         self.assertEqual(set(selector.VIEWER_CODE), {f"{selector.CADGEN_SRC}/viewer/**",

@@ -3,8 +3,8 @@
 ``cadgen.flatten`` used to sample every wire into points, union polygons in
 shapely, and emit polylines — so a filleted corner reached the DXF as a run of
 chords at a resolution nobody chose, and kerf compensation compounded it. The
-union and the offset are OCC operations on the real faces now
-(design/dxf-build123d.md), with shapely kept only for the degenerate unions OCC
+union and the offset are OCC operations on the real faces now,
+with shapely kept only for the degenerate unions OCC
 refuses.
 
 The tests below are about the CURVES, because that is what changed. Counting
@@ -37,9 +37,10 @@ def _plate():
 
 
 def _entity_kinds(shape) -> dict[str, int]:
-    from cadgen._internal.dxf_emit import emit_dxf
+    # The engine's DXF writer (build123d's ExportDXF), as a declared @dxf file writes the edges.
+    from cadgen.engine.export.dxf import _emit
 
-    _, document = emit_dxf(shape, label="flatten-test")
+    _, document = _emit([("CUT", list(shape.edges()))], "flatten-test")
     return dict(collections.Counter(entity.dxftype() for entity in document.modelspace()))
 
 

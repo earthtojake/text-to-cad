@@ -1,4 +1,3 @@
-import type { CadEditingPreview } from '@text-to-cad/core/client';
 import type { LibraryModel } from '@text-to-cad/ui/library';
 import type { UpdateNotice } from '@text-to-cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
@@ -7,9 +6,10 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
  * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
- * routes through `cad_http`.
+ * routes through `cad_http`. Every one of the page's calls carries its app capability (the launch's
+ * `dev.texttocad/httpToken`): `cad_http` as a header, `cad_sync` and `cad_capture_reply` as `app`.
  */
-export const PROTOCOL = 5;
+export const PROTOCOL = 9;
 
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {
@@ -41,13 +41,12 @@ export interface HttpReply { status: number; headers: Record<string, string>; bo
 export interface SyncRequest {
   view: string; surface: string; model: string | null;
   focused?: boolean; closed?: boolean; state?: Record<string, unknown>;
-  watch?: { file: string; previews?: string[] };
+  watch?: { file: string };
 }
 export interface SyncReply {
   events: ViewEvent[];
   /** The watched file's catalog revision, or why it could not be read (the agent's requests come regardless). */
   catalog?: { revision?: string; error?: string };
-  previews?: ({ file: string; error?: string } & CadEditingPreview)[];
 }
 
 export class ServerError extends Error {
@@ -64,7 +63,7 @@ export function readLaunch(result: ToolResult | undefined): Launch | null {
 }
 
 /** CAD's server, as this page calls it through the host. */
-export function createServer(bridge: Pick<Bridge, 'callTool'>) {
+export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string) {
   async function call<T>(name: string, args: Record<string, unknown> = {}, options?: CallOptions): Promise<T> {
     const result = await bridge.callTool(name, args, options);
     if (result.isError) throw new ServerError(toolText(result));
@@ -73,12 +72,12 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
   return {
     /** This view's one call each second (`host/sync.ts`). */
     sync: (request: SyncRequest, options?: CallOptions) =>
-      call<SyncReply>('cad_sync', request as unknown as Record<string, unknown>, options).then(value => ({ ...value, events: value.events || [] })),
+      call<SyncReply>('cad_sync', { ...request, app: appToken }, options).then(value => ({ ...value, events: value.events || [] })),
     reply: (requestId: string, reply: { png?: string; error?: string }) =>
-      call('cad_capture_reply', { requestId, ...reply }),
+      call('cad_capture_reply', { requestId, ...reply, app: appToken }),
     /** One request to the viewer's routes (`host/tunnel.ts`): everything else the page asks of the server. */
     http: (args: { method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
-      call<HttpReply>('cad_http', args, options),
+      call<HttpReply>('cad_http', { ...args, headers: { ...args.headers, 'x-cadgen-app': appToken } }, options),
   };
 }
 export type Server = ReturnType<typeof createServer>;

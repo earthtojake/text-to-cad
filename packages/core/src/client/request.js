@@ -8,6 +8,17 @@ export class ViewerRequestError extends Error {
   }
 }
 
+/**
+ * Whether a request failed because the engine that served this page is gone: nothing answers at its
+ * address (it stopped), or an engine answers there that does not hold this page's token (one started
+ * since, `cadgen/viewer/engine_app.py`). What the page says then is the engine's state, never the
+ * refusal's JSON.
+ */
+export function isEngineGone(error) {
+  const failure = error?.failure;
+  return failure?.kind === "network" || (failure?.status === 403 && failure?.detail === "engine token required");
+}
+
 export function serverErrorMessage(payload) {
   const value = payload?.error || payload?.result?.error || payload?.result?.validation?.error;
   if (typeof value === "string") return value.trim();

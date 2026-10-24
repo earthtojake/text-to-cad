@@ -1,10 +1,10 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 import math
 from collections.abc import Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 DISPLAY_NAME = "Futuristic lunar rover wheel suspension corner"
@@ -20,15 +20,15 @@ BASE_CENTER_X = -20.0
 BASE_TOP_Z = 8.0
 
 COLORS = {
-    "dark_graphite": (0.005, 0.006, 0.007, 1.0),
-    "matte_black": (0.002, 0.002, 0.002, 1.0),
-    "satin_titanium": (0.42, 0.43, 0.40, 1.0),
-    "pale_aluminum": (0.78, 0.80, 0.78, 1.0),
-    "brushed_steel": (0.50, 0.52, 0.54, 1.0),
-    "anodized_orange": (1.00, 0.34, 0.08, 1.0),
-    "spring_orange": (1.00, 0.42, 0.02, 1.0),
-    "brushed_aluminum": (0.66, 0.68, 0.66, 1.0),
-    "fastener_steel": (0.18, 0.19, 0.20, 1.0),
+    "dark_graphite": "#101214",
+    "matte_black": "#070707",
+    "satin_titanium": "#adafaa",
+    "pale_aluminum": "#e5e7e5",
+    "brushed_steel": "#bcbfc2",
+    "anodized_orange": "#ff9e50",
+    "spring_orange": "#ffad27",
+    "brushed_aluminum": "#d4d7d4",
+    "fastener_steel": "#76797c",
 }
 
 
@@ -72,14 +72,14 @@ def v_norm(a: Vector3) -> Vector3:
 
 def style(shape: bd.Shape, label: str, color_name: str) -> bd.Shape:
     shape.label = label
-    shape.color = bd.Color(*COLORS[color_name])
+    shape.color = bd.Color(COLORS[color_name])
     return shape
 
 
 def group(label: str, children: Sequence[bd.Shape], color_name: str | None = None) -> bd.Compound:
     compound = bd.Compound(obj=list(children), children=list(children), label=label)
     if color_name is not None:
-        compound.color = bd.Color(*COLORS[color_name])
+        compound.color = bd.Color(COLORS[color_name])
     return compound
 
 
@@ -126,19 +126,13 @@ def oriented_box(
 
 
 def cylinder_between(label: str, p1: Vector3, p2: Vector3, radius: float, color_name: str) -> bd.Shape:
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
-    from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt, gp_Trsf
     axis = v_sub(p2, p1)
     length = v_len(axis)
     if length <= 1e-6:
         return style(bd.Sphere(radius).moved(bd.Location(p1)), label, color_name)
     direction = v_norm(axis)
-    wrapped = BRepPrimAPI_MakeCylinder(
-        gp_Ax2(gp_Pnt(*p1), gp_Dir(*direction)),
-        radius,
-        length,
-    ).Shape()
-    return style(bd.Shape(obj=wrapped), label, color_name)
+    cylinder = bd.Cylinder(radius, length, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    return style(cylinder.moved(bd.Plane(origin=p1, z_dir=direction).location), label, color_name)
 
 
 def cylinder_x(label: str, center: Vector3, radius: float, length: float, color_name: str) -> bd.Shape:
@@ -530,7 +524,7 @@ def fasteners() -> bd.Compound:
     return group("fasteners", parts, "fastener_steel")
 
 
-@step(out="../../STEP/lunar_rover_corner_assembly/lunar_rover_corner_assembly.step")
+@model
 def lunar_rover_corner_assembly():
     upper_arm, lower_arm = control_arms()
     chassis_plate, support_blocks = chassis_bulkhead()

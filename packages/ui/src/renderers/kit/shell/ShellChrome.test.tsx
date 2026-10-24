@@ -390,6 +390,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   frame({ appearance: { colorScheme: 'light', compact: true } });
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
+  expect(document.querySelector('[data-cad-tools-toggle]')).toBeNull();
   expect(barButtons()).toEqual([]);
   expect(document.querySelector('[data-quick-edit]')).toBeNull();
   expect(viewportProps.current.viewCube).toBe(false);

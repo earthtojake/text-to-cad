@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import trim as B
 
 
-@step(out="../STEP/tail_light.step")
+@model
 def tail_light():
     built = B.build_tail_light()
     if isinstance(built, list):

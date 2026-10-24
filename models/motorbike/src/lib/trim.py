@@ -6,7 +6,7 @@ assembly; the standalone entries show the rider-left instance.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import lib as L
 from lib import spec as S
@@ -19,7 +19,7 @@ def build_headlight():
                             S.HEADLIGHT_DEPTH)
     rim = L.axis_ring((cx + 4.0, cy, cz), (1, 0, 0), r + 3.0, r - 4.0, 10.0)
     lamp = shell.fuse(rim)
-    lamp = L.paint(lamp, "headlight_shell", color=S.CHROME)
+    lamp = L.paint(lamp, "headlight_shell", color=S.CHROME, material=S.POLISHED_STAINLESS)
 
     flat = L.axis_cylinder((cx + 6.0, cy, cz), (1, 0, 0), r - 6.0, 8.0)
     dome = (
@@ -28,7 +28,7 @@ def build_headlight():
         - L.axis_cylinder((cx + 36.0, cy, cz), (1, 0, 0), r + 10.0, 40.0)
     )
     lens = flat.fuse(dome)
-    lens = L.paint(lens, "headlight_lens", color=S.LENS_CLEAR)
+    lens = L.paint(lens, "headlight_lens", color=S.LENS_CLEAR, material=S.HEADLIGHT_LENS)
     return [lamp, lens]
 
 
@@ -36,10 +36,10 @@ def build_tail_light():
     cx, cy, cz = S.TAILLIGHT_CENTER
     housing = L.axis_cylinder((cx + 14.0, cy, cz), (1, 0, 0),
                               S.TAILLIGHT_OD / 2, S.TAILLIGHT_DEPTH)
-    housing = L.paint(housing, "tail_light_housing", color=S.ENGINE_DARK)
+    housing = L.paint(housing, "tail_light_housing", color=S.ENGINE_DARK, material=S.ABS_HOUSING)
     lens = L.axis_cylinder((cx - 2.0, cy, cz), (1, 0, 0),
                            S.TAILLIGHT_OD / 2 - 6.0, 10.0)
-    lens = L.paint(lens, "tail_light_lens", color=S.RED_LENS)
+    lens = L.paint(lens, "tail_light_lens", color=S.RED_LENS, material=S.SIGNAL_LENS)
     return [housing, lens]
 
 
@@ -55,12 +55,12 @@ def build_turn_signal(position, side):
     )
     body = stalk.fuse(housing)
     body = L.paint(body, "turn_signal_housing", "left" if side > 0 else "right",
-                   color=S.CHROME)
+                   color=S.CHROME, material=S.POLISHED_STAINLESS)
     lens = L.axis_cylinder(
         (x, y + out[1] * 43.0, z), out, S.SIGNAL_LENS_OD / 2 - 6.0, 8.0,
     )
     lens = L.paint(lens, "turn_signal_lens", "left" if side > 0 else "right",
-                   color=S.AMBER)
+                   color=S.AMBER, material=S.SIGNAL_LENS)
     return [body, lens]
 
 
@@ -81,7 +81,7 @@ def build_mirror(side, base):
     # `mirror:<side>`, and a leaf sharing that label shadows it — a `#mirror:left`
     # mate ref would resolve leaf-first and leave the glass behind.
     mirror = L.paint(mirror, "mirror_shell", "left" if side > 0 else "right",
-                     color=S.CHROME)
+                     color=S.CHROME, material=S.POLISHED_STAINLESS)
     glass = L.axis_cylinder(
         (head_center[0] - n[0] * (S.MIRROR_HEAD_T / 2 + 1.0),
          head_center[1] - n[1] * (S.MIRROR_HEAD_T / 2 + 1.0),
@@ -89,5 +89,5 @@ def build_mirror(side, base):
         n, S.MIRROR_HEAD_RX - 7.0, 2.0,
     )
     glass = L.paint(glass, "mirror_glass", "left" if side > 0 else "right",
-                    color=(0.12, 0.14, 0.18, 1.0))
+                    color="#616976", material=S.MIRROR_GLASS)
     return [mirror, glass]

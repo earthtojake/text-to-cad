@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import cos, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 def _polar_point(radius: float, angle: float) -> tuple[float, float]:
@@ -158,7 +158,7 @@ def make_cylindrical_spacer_sleeve():
         rim_edges.extend(_circular_edges(model.part, radius=outer_radius, axis="z", coordinate=z_pos))
         rim_edges.extend(_circular_edges(model.part, radius=bore_radius, axis="z", coordinate=z_pos))
     part = _safe_fillet(model.part, rim_edges, 1.1)
-    return _finish(part, "cylindrical_spacer_sleeve_through_bore_rounded_rims", bd.Color(0.68, 0.68, 0.64, 1.0))
+    return _finish(part, "cylindrical_spacer_sleeve_through_bore_rounded_rims", bd.Color("#d7d7d1"))
 
 
 def make_square_mounting_block():
@@ -172,7 +172,7 @@ def make_square_mounting_block():
             _hole_x(5.5, size + 2.0, 0.0, y_pos, height / 2.0)
 
     part = _safe_chamfer(model.part, _line_edges(model.part), 0.8)
-    return _finish(part, "square_mounting_block_vertical_and_side_clearance_holes", bd.Color(0.50, 0.58, 0.64, 1.0))
+    return _finish(part, "square_mounting_block_vertical_and_side_clearance_holes", bd.Color("#bcc8d1"))
 
 
 def make_gusset_plate():
@@ -202,7 +202,7 @@ def make_gusset_plate():
             _hole_z(6.0, base_thickness + 2.0, x_pos, -6.0)
 
     part = _safe_fillet(model.part, _line_edges(model.part), 0.9)
-    return _finish(part, "gusset_plate_triangular_web_base_holes_softened_edges", bd.Color(0.58, 0.63, 0.58, 1.0))
+    return _finish(part, "gusset_plate_triangular_web_base_holes_softened_edges", bd.Color("#c8d0c8"))
 
 
 def make_rectangular_clamp_block():
@@ -218,7 +218,7 @@ def make_rectangular_clamp_block():
             _hole_y(5.5, width + 2.0, x_pos, 0.0, height / 2.0)
 
     part = _safe_chamfer(model.part, _line_edges(model.part), 0.7)
-    return _finish(part, "rectangular_clamp_block_split_slot_two_transverse_screw_holes", bd.Color(0.57, 0.60, 0.64, 1.0))
+    return _finish(part, "rectangular_clamp_block_split_slot_two_transverse_screw_holes", bd.Color("#c7cbd1"))
 
 
 def make_shaft_collar():
@@ -235,7 +235,7 @@ def make_shaft_collar():
     for z_pos in (0.0, height):
         edge_set.extend(_circular_edges(model.part, axis="z", coordinate=z_pos))
     part = _safe_chamfer(model.part, edge_set, 0.8)
-    return _finish(part, "shaft_collar_bore_radial_set_screw_hole_chamfered_faces", bd.Color(0.46, 0.50, 0.55, 1.0))
+    return _finish(part, "shaft_collar_bore_radial_set_screw_hole_chamfered_faces", bd.Color("#b5bcc4"))
 
 
 def make_pulley_wheel():
@@ -252,7 +252,7 @@ def make_pulley_wheel():
         _hole_z(10.0, hub_height + 4.0, 0.0, 0.0, z_min=-4.0)
 
     part = _safe_fillet(model.part, _circular_edges(model.part, axis="z"), 0.8)
-    return _finish(part, "pulley_wheel_central_hub_outer_groove_through_bore", bd.Color(0.42, 0.46, 0.50, 1.0))
+    return _finish(part, "pulley_wheel_central_hub_outer_groove_through_bore", bd.Color("#adb5bc"))
 
 
 def make_spur_gear_blank():
@@ -280,7 +280,7 @@ def make_spur_gear_blank():
         _hole_z(18.0, hub_height + 4.0, 0.0, 0.0, z_min=-4.0)
 
     part = _safe_chamfer(model.part, _circular_edges(model.part, axis="z"), 0.6)
-    return _finish(part, "spur_gear_blank_central_bore_raised_hub_simplified_teeth", bd.Color(0.70, 0.58, 0.36, 1.0))
+    return _finish(part, "spur_gear_blank_central_bore_raised_hub_simplified_teeth", bd.Color("#dac8a2"))
 
 
 def make_flywheel_disk():
@@ -299,7 +299,7 @@ def make_flywheel_disk():
             _hole_z(10.0, thickness + 2.0, x_pos, y_pos)
 
     part = _safe_fillet(model.part, _circular_edges(model.part, axis="z"), 0.8)
-    return _finish(part, "flywheel_disk_central_bore_annular_rim_lightening_holes", bd.Color(0.59, 0.61, 0.63, 1.0))
+    return _finish(part, "flywheel_disk_central_bore_annular_rim_lightening_holes", bd.Color("#cacdd0"))
 
 
 def make_cam_follower_roller():
@@ -315,7 +315,7 @@ def make_cam_follower_roller():
         edge_set.extend(_circular_edges(model.part, radius=radius, axis="z", coordinate=z_pos))
         edge_set.extend(_circular_edges(model.part, radius=6.0, axis="z", coordinate=z_pos))
     part = _safe_fillet(model.part, edge_set, 1.8)
-    return _finish(part, "cam_follower_roller_bearing_bore_rounded_outer_profile", bd.Color(0.60, 0.64, 0.67, 1.0))
+    return _finish(part, "cam_follower_roller_bearing_bore_rounded_outer_profile", bd.Color("#cbd1d6"))
 
 
 def make_small_enclosure_cover():
@@ -341,7 +341,7 @@ def make_small_enclosure_cover():
                 _hole_z(4.2, base_thickness + 1.5, x_pos, y_pos)
 
     part = _safe_fillet(model.part, _line_edges(model.part), 0.5)
-    return _finish(part, "small_enclosure_cover_raised_rim_corner_screw_holes_recessed_center", bd.Color(0.38, 0.51, 0.62, 1.0))
+    return _finish(part, "small_enclosure_cover_raised_rim_corner_screw_holes_recessed_center", bd.Color("#a6bdce"))
 
 
 def make_cylindrical_cap():
@@ -358,7 +358,7 @@ def make_cylindrical_cap():
             bd.Cylinder(10.0, 6.0, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN), mode=bd.Mode.ADD)
 
     part = _safe_fillet(model.part, _circular_edges(model.part, axis="z"), 1.0)
-    return _finish(part, "cylindrical_cap_hollow_interior_top_boss_rounded_external_edges", bd.Color(0.52, 0.57, 0.61, 1.0))
+    return _finish(part, "cylindrical_cap_hollow_interior_top_boss_rounded_external_edges", bd.Color("#bfc7cd"))
 
 
 def make_retainer_plate():
@@ -373,7 +373,7 @@ def make_retainer_plate():
             _hole_z(7.0, thickness + 2.0, x_pos, 0.0)
 
     part = _safe_chamfer(model.part, _line_edges(model.part), 0.8)
-    return _finish(part, "retainer_plate_elongated_slot_two_holes_chamfered_perimeter", bd.Color(0.60, 0.62, 0.66, 1.0))
+    return _finish(part, "retainer_plate_elongated_slot_two_holes_chamfered_perimeter", bd.Color("#cbced4"))
 
 
 def make_keyed_shaft_hub():
@@ -391,7 +391,7 @@ def make_keyed_shaft_hub():
             _hole_z(5.5, height + 2.0, x_pos, y_pos)
 
     part = _safe_chamfer(model.part, _circular_edges(model.part, axis="z"), 0.7)
-    return _finish(part, "keyed_shaft_hub_central_bore_keyway_bolt_hole_pattern", bd.Color(0.49, 0.52, 0.56, 1.0))
+    return _finish(part, "keyed_shaft_hub_central_bore_keyway_bolt_hole_pattern", bd.Color("#babfc5"))
 
 
 def make_t_slot_slider_block():
@@ -413,7 +413,7 @@ def make_t_slot_slider_block():
                 _hole_z(4.5, height + 2.0, x_pos, y_pos)
 
     part = _safe_chamfer(model.part, _line_edges(model.part), 0.5)
-    return _finish(part, "t_slot_slider_block_central_channel_side_reliefs_mounting_holes", bd.Color(0.47, 0.53, 0.55, 1.0))
+    return _finish(part, "t_slot_slider_block_central_channel_side_reliefs_mounting_holes", bd.Color("#b6c0c4"))
 
 
 def make_mounting_plate():
@@ -432,4 +432,4 @@ def make_mounting_plate():
                 _hole_z(5.5, thickness + 2.0, x_pos, y_pos)
 
     part = _safe_fillet(model.part, _line_edges(model.part), 0.8)
-    return _finish(part, "mounting_plate_central_cutout_side_slot_four_corner_holes_rounded_edges", bd.Color(0.58, 0.65, 0.69, 1.0))
+    return _finish(part, "mounting_plate_central_cutout_side_slot_four_corner_holes_rounded_edges", bd.Color("#c8d3d8"))

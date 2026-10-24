@@ -58,15 +58,17 @@ class Request:
     directly, without binding a port.
     """
 
-    __slots__ = ("method", "raw_method", "path", "query", "headers", "_read_body", "_body")
+    __slots__ = ("method", "raw_method", "path", "query", "headers", "_read_body", "_body", "consent_by")
 
-    def __init__(self, *, raw_method, path, query, headers, read_body):
+    def __init__(self, *, raw_method, path, query, headers, read_body, consent_by=None):
         self.raw_method = raw_method
         # HEAD is handled as GET throughout; only the writers know the difference.
         self.method = "GET" if raw_method == "HEAD" else raw_method
         self.path = path
         self.query = query
         self.headers = headers
+        # Set by the trusted MCP adapter, never from an HTTP header.
+        self.consent_by = consent_by
         self._read_body = read_body
         self._body: bytes | None = None
 

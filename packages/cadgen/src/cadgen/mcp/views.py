@@ -1,6 +1,6 @@
-"""The views this process serves, and the events waiting for each one.
+"""The views one MCP session serves, and the events waiting for each one.
 
-The host starts one server process per thread, so the registry holds that
+A tab host starts one shim and MCP session per thread, so the registry holds that
 thread's views: its tab, the tabs the agent opened, a file view. A view is live
 while it keeps syncing; one that has not synced for :data:`LIVE_SECONDS` is
 forgotten.

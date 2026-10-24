@@ -1,6 +1,6 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+from cadgen import materials, model
+import build123d as bd
 
 
 OUTER_LENGTH = 100.0
@@ -17,7 +17,7 @@ STANDOFF_HOLE_DEPTH = 8.0
 STANDOFF_LOCATIONS = ((-35.0, -25.0), (-35.0, 25.0), (35.0, -25.0), (35.0, 25.0))
 
 
-@step(out="../STEP/open_top_electronics_enclosure.step")
+@model
 def open_top_electronics_enclosure():
     """Return the open-top electronics enclosure model in millimeters."""
     inner_length = OUTER_LENGTH - 2.0 * WALL_THICKNESS
@@ -63,6 +63,7 @@ def open_top_electronics_enclosure():
 
     part = enclosure.part
     part.label = "open_top_electronics_enclosure_bosses"
+    part.material = materials.abs
     return part
 
 

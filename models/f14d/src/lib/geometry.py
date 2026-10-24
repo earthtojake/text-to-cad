@@ -299,9 +299,6 @@ def _smooth(pts, passes=2):
     return out
 
 
-_SLOPE_CACHE = {}
-
-
 def _slopes(pts):
     """Fritsch-Carlson (PCHIP) tangents for a control curve.
 
@@ -312,10 +309,6 @@ def _slopes(pts):
     is C1 with sensible tangents and cannot overshoot, so control points stay
     control points instead of becoming features.
     """
-    key = id(pts)
-    hit = _SLOPE_CACHE.get(key)
-    if hit is not None and hit[0] is pts:
-        return hit[1]
     n = len(pts)
     if n < 2:
         return [0.0] * n
@@ -331,7 +324,6 @@ def _slopes(pts):
             w1 = 2.0 * h[i] + h[i - 1]
             w2 = h[i] + 2.0 * h[i - 1]
             m[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
-    _SLOPE_CACHE[key] = (pts, m)
     return m
 
 

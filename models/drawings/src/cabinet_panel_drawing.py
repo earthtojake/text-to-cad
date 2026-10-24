@@ -18,8 +18,9 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import dxf
+from cadgen import model
+
+import build123d as bd
 
 PANEL_WIDTH_MM = 600.0
 PANEL_HEIGHT_MM = 400.0
@@ -136,7 +137,7 @@ def _diameter_callout(ann, centre, radius, label, side):
     )
 
 
-@dxf(out="../DXF/cabinet_panel_drawing.dxf")
+@model
 def cabinet_panel_drawing():
     elevation_x, elevation_y = ELEVATION_ORIGIN
     section_x, section_y = SECTION_ORIGIN
@@ -250,7 +251,11 @@ def cabinet_panel_drawing():
     ):
         labels.append(_text(value, position, TITLE_TEXT_MM))
 
-    return {"CUT": cut.sketch, "ENGRAVE": [*labels, *ann.edges]}
+    # A part per layer, named by its label: every annotation one part of them all.
+    views = cut.sketch
+    annotation = bd.Compound([*labels, *ann.edges])
+    views.label, annotation.label = "CUT", "ENGRAVE"
+    return bd.Compound(children=[views, annotation], label="cabinet_panel_drawing")
 
 
 if __name__ == "__main__":

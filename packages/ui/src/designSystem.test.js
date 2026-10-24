@@ -39,7 +39,7 @@ const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/naviga
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
-  for (const dir of [...CHROME, "renderers/step", "renderers/robot"]) for (const file of sources(join(root, dir))) {
+  for (const dir of [...CHROME, "renderers/xbf", "renderers/robot"]) for (const file of sources(join(root, dir))) {
     if (PAGES.includes(relative(root, file))) continue;
     readFileSync(file, "utf8").split("\n").forEach((line, index) => {
       if (NATIVE_SCROLLER.test(line)) found.push(`${relative(root, file)}:${index + 1}: ${line.trim().slice(0, 120)}`);

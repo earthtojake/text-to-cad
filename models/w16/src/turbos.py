@@ -1,28 +1,22 @@
-"""W16 system model: turbos — four turbochargers.
+"""W16 system: turbos — four turbochargers.
 
-A sub-assembly of the engine: the parts `lib/turbos.py` builds, as one model
-with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.10`; rebuild `w16.py` to pick up a change here.
+A stage of the engine: the parts `lib/turbos.py` builds, as one labelled group,
+which `w16.py` calls in its body. A `@memo` function: an edit that does not
+reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
+from cadgen import memo
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
 from lib import turbos as turbos_lib
 from lib import spec as S
-from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/turbos.step", materials=materials_for_system("turbos"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@memo
 def turbos():
     parts = turbos_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("turbos.build() produced no parts")
-    return material_compound(parts, "turbos")
-
-
-if __name__ == "__main__":
-    turbos()
+    group = bd.Compound(children=parts, label="turbos")
+    return group

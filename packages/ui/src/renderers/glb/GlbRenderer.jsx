@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
 import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { useExportView } from "../../export/context.js";
+import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
@@ -105,6 +107,13 @@ function GlbSurface({ view, data }) {
   const previewAnimation = useGlbAnimation(previewScene?.document || null, () => shell.frame.previewViewRef.current?.requestRender?.());
   const previewView = useMemo(() => ({ scene: previewScene, animation: previewAnimation }), [previewScene, previewAnimation]);
 
+  // Export converts the file shown to the other two mesh kinds: its path names it and the bytes on
+  // screen (their catalog hash) are its revision; the server refuses a file that has changed since.
+  const host = useViewerHost();
+  const exportView = useMemo(() => scene && loaded.revision && document.modelKey && !host.environment.compact ? {
+    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name, preview: previewing
+  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name, previewing]);
+  useExportView(exportView);
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: true, clearParts: selection.clear });
   const selectActive = !previewing && Boolean(scene) && shell.toolMode === GLB_TOOL.SELECT;
   const strip = [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON }), ...sceneTools.tools];

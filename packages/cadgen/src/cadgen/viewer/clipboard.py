@@ -1,11 +1,12 @@
 """Local PNG clipboard delivery for the viewer's explicit snapshot action."""
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from cadgen.engine import executables
 
 MAX_PNG_BYTES = 20 * 1024 * 1024
 
@@ -19,9 +20,9 @@ def copy_png(data: bytes) -> None:
             image = Path(directory) / "snapshot.png"
             image.write_bytes(data)
             subprocess.run(["/usr/bin/osascript", "-e", 'on run argv\nset the clipboard to (read POSIX file (item 1 of argv) as «class PNGf»)\nend run', str(image)], check=True, capture_output=True, timeout=10)
-    elif shutil.which("wl-copy"):
-        subprocess.run(["wl-copy", "--type", "image/png"], input=data, check=True, timeout=10)
-    elif shutil.which("xclip"):
-        subprocess.run(["xclip", "-selection", "clipboard", "-t", "image/png"], input=data, check=True, timeout=10)
+    elif wayland := executables.find("wl-copy"):  # each tool by its absolute path, never the working folder's
+        subprocess.run([wayland, "--type", "image/png"], input=data, check=True, timeout=10)
+    elif x11 := executables.find("xclip"):
+        subprocess.run([x11, "-selection", "clipboard", "-t", "image/png"], input=data, check=True, timeout=10)
     else:
         raise RuntimeError("PNG clipboard is unavailable on this viewer host")

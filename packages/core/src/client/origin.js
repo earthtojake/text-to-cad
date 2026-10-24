@@ -1,7 +1,7 @@
 // THE origin of the CAD Viewer backend this surface talks to.
 //
 // The standalone app is served BY that backend, so every call it makes is a
-// root-relative `/__cad/...` or `/__tess_cache/...` URL and the origin is the
+// root-relative `/__cad/...` URL and the origin is the
 // empty string — same origin, exactly what shipped before this module existed.
 // A host that embeds the viewer (one that spawns `cadgen viewer --api-only`
 // per project root, say) is served from somewhere else
@@ -17,7 +17,7 @@ const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//u;
 // The entry fields that carry a backend URL. A catalog entry is data from the
 // server, so the rebasing below is a rewrite of THESE keys and nothing else —
 // an unknown field is left alone rather than guessed at.
-const ENTRY_URL_KEYS = Object.freeze(["url", "poseUrl", "renderModuleUrl"]);
+const ENTRY_URL_KEYS = Object.freeze(["url", "poseUrl"]);
 
 /** @param {unknown} value @returns {string} */
 export function normalizeViewerOrigin(value) {

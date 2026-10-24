@@ -6,10 +6,10 @@ must never happen is the CAD KERNEL loading into the server:
 * ``cadgen viewer`` has to start in the time ``cadgen --help`` does. An OCP or
   build123d import at module scope anywhere in the package costs seconds and
   ~300MB before the first request.
-* The long-lived server must not hold a kernel it never uses. The one
-  kernel-bearing action -- importing a foreign STEP -- is a compile job in
-  cadgen's pool (``compiles`` submits and waits); no viewer module names the
-  build entry point.
+* The long-lived server must not hold a kernel it never uses. A STEP or an
+  ``.xbf`` is read, meshed and measured by the cadgen engine, in its daemon and
+  the processes it starts (``documents.py`` dispatches directly to its
+  HTTP); no viewer module names a build entry point.
 
 Both are checked twice: on the AST (so the offender is named by file and line)
 and on ``sys.modules`` after importing the package (so a kernel import that
@@ -76,11 +76,12 @@ class NoKernelInTheServer(unittest.TestCase):
         # In a SUBPROCESS: this test process may already have the kernel loaded
         # from another suite, which would make an in-process sys.modules check
         # meaningless in one direction and a false failure in the other.
+        # Every module of the package, and the engine's client the engine route speaks through.
+        modules = [f"cadgen.viewer.{path.stem}" for path in _python_sources() if path.stem != "__main__"]
         script = (
-            "import sys\n"
-            "import cadgen.viewer.main, cadgen.viewer.compiles\n"
-            "import cadgen.viewer.http_app, cadgen.viewer.cadgen_ops, cadgen.viewer.scanner\n"
-            "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.folders\n"
+            "import importlib, sys\n"
+            f"for name in {modules + ['cadgen.engine.client']!r}:\n"
+            "    importlib.import_module(name)\n"
             "loaded = sorted(m for m in sys.modules if m.split('.')[0] in "
             f"{sorted(KERNEL_ROOTS)!r})\n"
             "print(loaded)\n"
@@ -91,14 +92,20 @@ class NoKernelInTheServer(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(completed.stdout.strip(), "[]", completed.stdout)
 
-    def test_no_module_names_the_build_entry_point(self) -> None:
-        # The kernel-bearing call has no home in the viewer at all: an import is a
-        # compile JOB in cadgen's pool (compiles.py submits and waits). A call site
-        # here would be a place for the kernel to leak into the server process.
+    def test_no_module_names_a_build_entry_point(self) -> None:
+        # A kernel-bearing call has no home in the viewer at all: a document is the engine's to
+        # read (``documents.py`` uses its document server). A call site here would be a place for the kernel
+        # to leak into the server process.
+        entry_points = ("cadgen.engine.build", "cadgen.engine.document", "cadgen.engine.serve",
+                        "cadgen.engine.reader")
         callers = []
         for path in _python_sources():
-            if "step_artifact_cli" in path.read_text(encoding="utf-8"):
-                callers.append(path.name)
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):  # at any scope: a function's import loads it too
+                names = ([alias.name for alias in node.names] if isinstance(node, ast.Import)
+                         else [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
+                if any(name == point or name.startswith(point + ".") for name in names for point in entry_points):
+                    callers.append(f"{path.name}:{node.lineno}")
         self.assertEqual(callers, [])
 
 

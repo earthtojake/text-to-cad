@@ -59,7 +59,8 @@ export function quickEditReferenceIds(selection) {
  * Prompt always — the note as text to paste into an agent's prompt box, its references by their
  * files' absolute paths, and the files the host makes for it (`prompt`, `host.promptFiles`) by
  * theirs: one .snapshot.json containing the drawn views and the shared inline annotation, written only when Copy, Queue or Send is pressed, without rendering. Every way
- * it goes carries the same; Queue where the destination is a composer (the host's context for the next
+ * it goes carries the same. A displayed unsaved or retained revision instead carries explicit
+ * context that the saved file may differ, preserving text and references without replay jobs; Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
  * clear and close the box once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
  * its button showing a tick for a moment. A failure keeps the note and says why. Its corner resizes it for
@@ -71,7 +72,7 @@ export function quickEditReferenceIds(selection) {
  *   chips?: readonly import("./ReferenceChips.jsx").ReferenceChip[] | null,
  *   annotation?: { present: boolean, clear?: () => void } | null,
  *   prompt?: { views(): { label: string }[], files(views: { label: string }[]): Promise<object> | null,
- *     read(path: string): Promise<Blob>, annotation(): object | null } | null,
+ *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@text-to-cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
@@ -99,6 +100,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const annotated = Boolean(annotation?.present);
   const attached = referenceIds.length > 0 || annotated;
   const written = Boolean(text.trim());
+  const replayUnavailable = prompt?.unavailable?.() || "";
   const open = written || attached;
   // Docked (a phone's) it is a bottom sheet, opening at a peek of its header and chips; a swipe up,
   // or a tap on its title, brings up the note and its buttons, and a swipe down puts them away again,
@@ -233,10 +235,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     setError("");
     let outcome;
     try {
-      const views = prompt?.views() ?? [];
+      const unavailable = prompt?.unavailable?.() || "";
+      const views = unavailable ? [] : prompt?.views() ?? [];
       const files = views.length ? prompt.files(views) : null;
       void files?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read });
+      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else outcome = host.clipboard.writeText(copiedQuickEdit(context)).then(() => ({ status: "copied" }));
@@ -414,6 +417,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           <X className="size-3" aria-hidden="true" />
         </button>}
       </div>
+      {replayUnavailable ? <p role="status" className="text-tiny text-muted-foreground" data-quick-edit-replay-unavailable="">{replayUnavailable}</p> : null}
       {shownChips.length ? <ReferenceChips chips={shownChips} className="-mt-0.5" /> : null}
       {/* Peeking, the sheet's way in: a field to write in, which opens it with the keyboard in the note. */}
       {/* Its text the note's size: it becomes the note as the sheet opens. */}

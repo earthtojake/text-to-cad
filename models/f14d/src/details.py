@@ -1,21 +1,16 @@
-"""F-14D system model: details — antennas, probes, lights, wicks, vents, panels.
+"""F-14D system: details — antennas, probes, lights, wicks, vents, panels.
 
-The group `lib/details.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.10`; rebuild `f14d.py` to pick up a change here.
+A stage of the aircraft: the group `lib/details.py` builds, already on its gear
+stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
+not reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import details as details_lib
 
 
-@step(out="../STEP/details.step")
+@memo
 def details():
-    return details_lib.build()
-
-
-if __name__ == "__main__":
-    details()
+    group = details_lib.build()
+    return group

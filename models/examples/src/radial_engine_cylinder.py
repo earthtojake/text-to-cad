@@ -1,8 +1,8 @@
 from __future__ import annotations
-from cadgen import step
+from cadgen import materials, model
 from math import cos, radians, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib.part_common import circular_edges, polar_point, safe_fillet
 
@@ -54,7 +54,7 @@ def _edge_fillets(part):
     return edges
 
 
-@step(out="../STEP/radial_engine_cylinder.step")
+@model
 def radial_engine_cylinder():
     """Return the radial-engine-style cylinder model in millimeters."""
     boss_rotation_y = 90.0 - BOSS_ANGLE_DEGREES
@@ -122,6 +122,7 @@ def radial_engine_cylinder():
     part = cylinder.part
     part = safe_fillet(part, _edge_fillets(part), radius=EDGE_FILLET)
     part.label = "radial_engine_cylinder_cooling_fins"
+    part.material = materials.aluminium_6061
     return part
 
 

@@ -8,7 +8,7 @@ The rotor/stator electromagnetic internals are enclosed, not represented as
 cosmetic solids. Gearbox can start at Z=18.05 without case interference.
 """
 from math import cos, sin, radians
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 MOTOR_RADIUS=6.8

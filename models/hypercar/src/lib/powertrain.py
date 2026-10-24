@@ -20,9 +20,9 @@ from __future__ import annotations
 import math
 from bisect import bisect_left
 
-from cadgen import build123d as bd
+import build123d as bd
 
-import cadgen
+from lib.context import compound_from_instances
 
 from lib import surfaces as S  # noqa: F401  (package datums)
 from lib.context import group
@@ -372,7 +372,7 @@ def _intake_row(s, proto, kind, colour):
          f"{kind}:{tag}_{i + 1}")
         for i, y in enumerate(Y_CYL)
     ]
-    return cadgen.compound_from_instances(f"{kind}_{tag}", inst)
+    return compound_from_instances(f"{kind}_{tag}", inst)
 
 
 def _oil_cap():
@@ -402,7 +402,7 @@ def _cover_bolts():
                     bd.Location((x, y, z), (0.0, s * V_ANGLE, 0.0)),
                     f"cam_cover_bolt:{tag}_{n}",
                 ))
-    return cadgen.compound_from_instances("cam_cover_bolts", inst)
+    return compound_from_instances("cam_cover_bolts", inst)
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +491,7 @@ def _port_bosses():
                 bd.Location((x, y, z), (0.0, s_ * 120.0, 0.0)),
                 f"exhaust_port_boss:{tag}_{i + 1}",
             ))
-    return cadgen.compound_from_instances("exhaust_port_bosses", inst)
+    return compound_from_instances("exhaust_port_bosses", inst)
 
 
 def _megaphone(sy):

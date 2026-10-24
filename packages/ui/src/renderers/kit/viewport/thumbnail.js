@@ -1,5 +1,6 @@
 import { fitCameraDepthToBounds } from "@text-to-cad/core/common/renderOptions.js";
 import { mergeBoundsList } from "@text-to-cad/core/lib/viewer/autoZoom.js";
+import { renderWithSceneRig } from "@text-to-cad/core/lib/viewer/sceneRig.js";
 import { getSceneScaleSettings } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import { canvasToBlob } from "@text-to-cad/core/lib/viewer/screenshotCapture.js";
 import { interactiveCameraFrameForBounds } from "../camera/viewportCameraFit.js";
@@ -87,7 +88,7 @@ export async function renderThumbnail(runtime, { bounds, modelOffset = null, sce
     // Screen-space lines keep their width in pixels of the picture, as they do on screen.
     runtime.setScreenSpaceLineResolution?.(pixelWidth, pixelHeight);
     renderer.setViewport(0, 0, pixelWidth / pixelRatio, pixelHeight / pixelRatio);
-    renderer.render(scene, camera);
+    renderWithSceneRig(runtime.sceneRig, renderer, scene, camera);
     // The GL viewport starts at the buffer's bottom-left; the canvas's rows run from its top. A view
     // of a shared GPU device reads the device's buffer, where the frame was just drawn.
     context.drawImage(renderer.drawingCanvas || renderer.domElement, 0, buffer.y - pixelHeight, pixelWidth, pixelHeight, 0, 0, pixelWidth, pixelHeight);
@@ -98,7 +99,7 @@ export async function renderThumbnail(runtime, { bounds, modelOffset = null, sce
     renderer.setViewport(viewport);
     renderer.setScissorTest(scissorTest);
     runtime.syncScreenSpaceLineMaterials?.();
-    renderer.render(scene, viewCamera);
+    renderWithSceneRig(runtime.sceneRig, renderer, scene, viewCamera);
     renderer.setRenderTarget(target);
   }
   return canvasToBlob(canvas);

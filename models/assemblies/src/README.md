@@ -1,73 +1,133 @@
 # assemblies models
 
-The repo's demo assemblies as one cad-project, one group per assembly:
-`src/<assembly>/` holds the root model plus every part model and helper that
-assembly owns, and its artifacts land in `STEP/<assembly>/` (meshes in
-`STL/<assembly>/`, `3MF/<assembly>/`, `GLB/<assembly>/`). Standalone parts
-live in the sibling `models/examples/` project and 2D drawings in
-`models/drawings/`. Nothing here is committed except this `src/` tree — build
-what you need.
+`models/assemblies` on cadgen 0.8: the repo's demo assemblies, one group per
+assembly, each model a `@model` that writes nothing. `src/<group>/` holds the group's
+scripts and its own `lib/`. A group imports its siblings and its
+own `lib/`, and nothing across groups. There are 23 models. The old project had
+27 decorated files: `link_robot` and `research_humanoid` were three each, and
+each is one model now.
 
-```bash
-python models/assemblies/src/flying_car/flying_car.py       # one assembly and whatever is stale beneath it
-ls models/assemblies/src/*/*.py | xargs -n1 -P4 python       # every model
+Build a group from its folder; each script builds the models its `__main__` calls and
+prints each one's id and page:
+
+```
+cd planetary_gear_assembly && python planetary_gear_assembly.py
+cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
 ```
 
-Unchanged models are no-ops. A group is self-contained: its scripts import
-siblings and its own `lib/` with no path setup (python puts the script's
-directory on `sys.path`), and nothing imports across groups.
+| Script | Model | What it is |
+| --- | --- | --- |
+| `compact_humanoid/compact_humanoid.py` | `compact_humanoid` | 28-DOF compact humanoid concept; each actuator axis is an unconnected joint on its cartridge, so there is no mechanism (none before either) |
+| `cutaway_turbofan_engine/cutaway_turbofan_engine.py` | `cutaway_turbofan_engine` | Labeled multi-body cutaway turbofan |
+| `flying_car/flying_car.py` | `flying_car` | Four-rotor flying car concept |
+| `link_robot/link_robot.py` | `link_robot` | A base, two placements of `link_arm()` and a spare `link_pin()`: one pin B-rep placed five times, two levels deep |
+| `lunar_rover_corner_assembly/lunar_rover_corner_assembly.py` | `lunar_rover_corner_assembly` | Lunar rover corner: wheel, hub motor, suspension |
+| `mars_rover_concept/mars_rover_concept.py` | `mars_rover_concept` | Mars rover on terrain: 28 joints, 1 coupling, 4 configurations, 3 motions and an animation |
+| `mechanical_iris_aperture/mechanical_iris_aperture.py` | `mechanical_iris_aperture` | Labeled mechanical iris aperture |
+| `miniature_spiral_staircase/miniature_spiral_staircase.py` | `miniature_spiral_staircase` | Labeled miniature spiral staircase |
+| `motorcycle_fidgets/motorcycle_{helmet,seat,shock,wheel}_fidget.py` | `motorcycle_*_fidget` | Four Cherry MX switch fidgets; the group shares `lib/mx_switch_socket.py` and `lib/color.py` |
+| `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `motorcycle_shock_absorber` | Coilover damper; the rod rides a linear joint, `damper_stroke` |
+| `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
+| `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |
+| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`apps/docs/scripts/sync-hero-glb.mjs` exports it) |
+| `planetary_gear_stage/planetary_gear_stage.py` | `planetary_gear_stage` | Simplified planetary gear stage (`lib/gear_teeth.py`) |
+| `research_humanoid/research_humanoid.py` | `research_humanoid` | Adult-scale humanoid: 28 body joints, and 15 per hand from `lib.build_hand(side)` |
+| `robotic_hand_end_effector/robotic_hand_end_effector.py` | `robotic_hand_end_effector` | Cybernetic robotic hand end-effector |
+| `sculpted_humanoid/sculpted_humanoid.py` | `sculpted_humanoid` | Sculpted humanoid: 58 revolute joints in an athletic pose |
+| `six_axis_industrial_robot_arm/six_axis_industrial_robot_arm.py` | `six_axis_industrial_robot_arm` | Six-axis industrial robot arm display assembly |
+| `six_blade_open_propeller/six_blade_open_propeller.py` | `six_blade_open_propeller` | Six-blade open propeller |
+| `spiral_staircase/spiral_staircase.py` | `spiral_staircase` | Miniature spiral staircase |
 
-Two models carry kinematics and choreography: `planetary_gear_assembly`
-(mates + a `drive` coupling + `quarter_cycle`/`half_cycle` poses) and
-`mars_rover_concept` (27 mates, 7 couplings, 4 poses). Their `.anim.js` clips
-sit beside the scripts and are copied into the artifact sidecar at build.
-`miniature_spiral_staircase` declares a `_highres` mesh variant at
-`mesh_tolerance=4e-4` to exercise the tolerance path.
+## The port
 
-### Single-model assemblies
+- `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
+  imported directly. Nothing else reads these models' STEP, so no model declares
+  one; `cadgen export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
+  is the planetary gear's, written by the docs site's `sync-hero-glb.mjs` with
+  `cadgen.export(model, path)`.
+- No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
+  hands are plain functions called in the one body (the hand models' two scripts
+  are gone). The engine places a part used twice as one prototype.
+- `AssemblyHelper` and `label_shape` became build123d itself. Each relation is a
+  `RevoluteJoint` (or `LinearJoint`) on the fixed part and a `RigidJoint` on the
+  moving one, connected at 0 where the parts stand. Every model with joints has
+  its pose as the as-built configuration. A pair is named by its joint.
+- `research_humanoid` fastens each joint's clevis yoke to the joint's fixed
+  side. The old model exported no mechanism, so a yoke left standing when its
+  limb posed never showed. Each hand's palm carries `<side>_hand_mount`, and the
+  wrist carrier carries its twin; the label pairs them, since the palm sits
+  inside the hand's own compound, where `connect_to` cannot place it.
+- `motorcycle_shock_absorber` seats its spring on the lower perch only. A second
+  rigid seat on the rod's perch would weld the rod to the body and lock the
+  stroke.
+- `flying_car`, `lunar_rover_corner_assembly`, `mars_rover_concept` and
+  `pelican_riding_bicycle` made their `cylinder_between` with OCCT's
+  `BRepPrimAPI_MakeCylinder`, a maker the memo does not key. Their calls ran
+  uncached and their bodies were never kept. The helper is a placed
+  `bd.Cylinder` now, the same cylinder.
+- No model is a `@memo`. The kernel memo already replays every call an edit does
+  not reach, so 17 of the 23 edits measured cost under a second. The two
+  slowest edits land on expensive geometry itself: the sculpted humanoid's
+  pelvis (11.7 s, its joint keepouts trimmed again) and the propeller's hub
+  height (5.4 s: it sets every blade's root span and height). No function holds seconds of kernel
+  work that an edit elsewhere leaves untouched.
 
-One script per group: the assembly is composed inside one model body.
+## Kinematics, motions and what was dropped
 
-| Script | Artifact | Description |
-|--------|----------|-------------|
-| `compact_humanoid/compact_humanoid.py` | `STEP/compact_humanoid/compact_humanoid.step` | Original 28-DOF compact humanoid research platform concept |
-| `cutaway_turbofan_engine/cutaway_turbofan_engine.py` | `STEP/cutaway_turbofan_engine/cutaway_turbofan_engine.step` | Labeled multi-body cutaway turbofan display model |
-| `flying_car/flying_car.py` | `STEP/flying_car/flying_car.step` | Four-rotor flying car concept |
-| `lunar_rover_corner_assembly/lunar_rover_corner_assembly.py` | `STEP/lunar_rover_corner_assembly/lunar_rover_corner_assembly.step` | Lunar rover corner module: wheel, hub motor, suspension |
-| `mars_rover_concept/mars_rover_concept.py` | `STEP/mars_rover_concept/mars_rover_concept.step` | Mars rover concept on terrain, mated + animated |
-| `mechanical_iris_aperture/mechanical_iris_aperture.py` | `STEP/mechanical_iris_aperture/mechanical_iris_aperture.step` | Labeled mechanical iris aperture assembly |
-| `miniature_spiral_staircase/miniature_spiral_staircase.py` | `STEP/miniature_spiral_staircase/miniature_spiral_staircase.step + STL/miniature_spiral_staircase/miniature_spiral_staircase_highres.stl, 3MF/miniature_spiral_staircase/miniature_spiral_staircase_highres.3mf, GLB/miniature_spiral_staircase/miniature_spiral_staircase_highres.glb` | Labeled miniature spiral staircase STEP compound |
-| `motorcycle_fidgets/motorcycle_helmet_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_helmet_fidget.step` | Motorcycle helmet fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
-| `motorcycle_fidgets/motorcycle_seat_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_seat_fidget.step` | Motorcycle pillion (backseat) fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
-| `motorcycle_fidgets/motorcycle_shock_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_shock_fidget.step` | Motorcycle shock absorber fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
-| `motorcycle_fidgets/motorcycle_wheel_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_wheel_fidget.step` | Motorcycle wheel fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
-| `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `STEP/motorcycle_shock_absorber/motorcycle_shock_absorber.step` | Motorcycle rear shock absorber (coilover damper) assembly |
-| `pelican_riding_bicycle/pelican_riding_bicycle.py` | `STEP/pelican_riding_bicycle/pelican_riding_bicycle.step` | Pelican riding a bicycle (organic + mechanical mix) |
-| `photo_coffee_cup/photo_coffee_cup.py` | `STEP/photo_coffee_cup/photo_coffee_cup.step` | Photo-inspired takeaway coffee cup model |
-| `planetary_gear_assembly/planetary_gear_assembly.py` | `STEP/planetary_gear_assembly/planetary_gear_assembly.step + STL/planetary_gear_assembly/planetary_gear_assembly.stl, 3MF/planetary_gear_assembly/planetary_gear_assembly.3mf, GLB/planetary_gear_assembly/planetary_gear_assembly.glb` | Labeled simplified planetary gear assembly |
-| `planetary_gear_stage/planetary_gear_stage.py` | `STEP/planetary_gear_stage/planetary_gear_stage.step` | Simplified planetary gear assembly |
-| `robotic_hand_end_effector/robotic_hand_end_effector.py` | `STEP/robotic_hand_end_effector/robotic_hand_end_effector.step` | Labeled cybernetic robotic hand end-effector STEP assembly |
-| `sculpted_humanoid/sculpted_humanoid.py` | `STEP/sculpted_humanoid/sculpted_humanoid.step` | Sculpted full-scale humanoid research platform |
-| `six_axis_industrial_robot_arm/six_axis_industrial_robot_arm.py` | `STEP/six_axis_industrial_robot_arm/six_axis_industrial_robot_arm.step` | Labeled six-axis industrial robot arm display assembly |
-| `six_blade_open_propeller/six_blade_open_propeller.py` | `STEP/six_blade_open_propeller/six_blade_open_propeller.step` | Six-blade open propeller |
-| `spiral_staircase/spiral_staircase.py` | `STEP/spiral_staircase/spiral_staircase.step` | Miniature spiral staircase model |
+- `planetary_gear_assembly`: the typed mates are build123d joints. `sun` and
+  `carrier` turn on the ring (the ground), `pin1..3` are fastened to the
+  carrier and `planet1..3` turn on their pins. `drive` is a coupling over the exact fixed-ring ratios (sun 1, carrier
+  24/84, planets -(24/18)(60/84)); a coupling is a constraint, so the sun,
+  carrier and planets turn only through it, and its range is the sun's limits,
+  0..1260 (the old control's range; the old sun mate allowed -1260..1260).
+  `quarter_cycle` and `half_cycle` are configurations. `meshCycle` is `drive`
+  swept 0 -> 1260 over 6 s, linear, a seamless cycle a player repeats.
+  `inspectExplode` is a GLB animation (`cadgen.gltf`): over 5 s it drives `drive`
+  through the same sweep (`.pose`) while each planet and its pin move 16 mm out along
+  the planet's rest radial and back, the sun lifts 7 mm and the carrier and pins drop
+  4 mm, as the old clip did, the translations eased out to 2.5 s and back. A GLB
+  exported from the model carries both as clips of their names; the STL and 3MF exports
+  are dropped.
+- `mars_rover_concept`: its 27 typed mates are build123d joints on its
+  top-level groups (26 revolute, one linear: `lid_lift`). Of its 7 couplings
+  one is a real linkage and stays: `rocker_split`, the differential bar making
+  the rockers counter-rotate and taking half the split, a constraint (the
+  rockers and the bar move only through it, over the rockers' +-12 deg). The
+  six convenience controls are dropped, each pose and motion setting their
+  joints itself:
+  - `drive` (all six wheels by one knob): each wheel is driven on its own.
+  - `steer` (the Ackermann-ish gearing, 1 / 0.79 / -1 / -0.79): the four
+    steer joints set by those ratios (`_steer`).
+  - `crab` (every corner to one heading): no pose or clip used it.
+  - `bogie_pitch` (both bogies by one knob): the bogies pivot independently.
+  - `solar_deploy` (both wings, mirrored): `solar_left` and `-solar_right`
+    (`_solar`).
+  - `cutaway` (lid 420 mm, panel -75 deg by one 0..1 knob): `lid_lift` and
+    `panel_swing` (`_cutaway`).
 
-### Multi-model assemblies
-
-Groups whose root links other models in the same directory; running the root
-builds the stale children in parallel and links their results.
-
-| Script | Artifact | Description |
-|--------|----------|-------------|
-| `research_humanoid/research_humanoid.py` | `STEP/research_humanoid/research_humanoid.step` | Production-realistic, adult-scale humanoid research platform; links the two hand models below |
-| `research_humanoid/research_humanoid_hand_left.py` | `STEP/research_humanoid/research_humanoid_hand_left.step` | Its left 15-axis dexterous hand, a sub-assembly model (`lib/research_humanoid_lib.build_hand`) |
-| `research_humanoid/research_humanoid_hand_right.py` | `STEP/research_humanoid/research_humanoid_hand_right.step` | The right hand — a mirror image, so its own model from the same factory |
-| `link_robot/link_robot.py` | `STEP/link_robot/link_robot.step` | Three-level link tree used by the store tests: a base, two placements of `link_arm`, one of `link_pin` |
-| `link_robot/link_arm.py` | `STEP/link_robot/link_arm.step` | A bar plus two placements of the pin model |
-| `link_robot/link_pin.py` | `STEP/link_robot/link_pin.step` | The leaf: a plain cylinder |
-
-`planetary_gear_stage/lib/gear_teeth.py` is that group's own copy of the two
-gear-profile helpers it needs; the parts in `models/examples` keep theirs in
-`lib/part_common.py`, because a group never imports across projects.
-
-Build: `python src/<group>/<group>.py` per group; unchanged models are no-ops.
+  Its 4 poses are configurations: `stowed`, `deployed`, `arm_reach`,
+  `cutaway_open`. Limits are offsets from the display pose, as before. Its four
+  clips keep the old clips' numbers: `driveAround` (18 s), `armCycle` (12 s) and
+  `deploySequence` (20 s) are motions, functions of time over the joints, and
+  `explodedAssembly` (12 s) is a GLB animation (`cadgen.gltf`), none looped, as
+  before:
+  - `heave`, a prismatic joint: the chassis rides the terrain, which is the ground
+    and stays put while the body heaves over it in `driveAround`; every group the
+    chassis carries heaves with it, through its joints or fastened to it.
+  - `explodedAssembly`: each group but the terrain and the chassis moves along the
+    old clip's vector, 520 mm times its length at the peak, eased out over 6 s and
+    back. The groups are siblings in the rover's tree, so each moves by its own
+    vector alone, as the old clip moved them, without dragging the groups hung on
+    its joints.
+  - Deliberate differences: `driveAround` rolls the wheels four turns
+    unwrapped, where the old clip wrapped the angle at 360 (a jump a joint's
+    curve cannot take), so the six wheel joints range over +-1440 deg, four
+    turns each way (+-360 before); the mast pitches about
+    its head pivot as it heaves with the body, where the old clip pitched it
+    about the unheaved pivot (at most 2.5 mm apart). `deploySequence` also
+    thinned the dust layer's opacity as the deck opened; 0.8 has no opacity
+    channel, so the dust layer stays as built.
+- `miniature_spiral_staircase`: the `_highres` STL, 3MF and GLB at
+  `mesh_tolerance=4e-4` are dropped. The engine meshes at one tolerance
+  (FreeCAD's), configurable nowhere.
+- `motorcycle_fidgets`: `cadgen.srgb(hex, alpha)` -> the `(hex, alpha)` pair, which a shape takes as it is.

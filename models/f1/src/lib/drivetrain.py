@@ -33,7 +33,7 @@ import functools
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec, surfaces
 
@@ -430,8 +430,8 @@ def _norm3(a, b):
 def _pivot_axes():
     """(lower, upper) rear wishbone pivot axes as unit tuples.
 
-    Built on first use, not at import: _norm3 goes through bd.Vector and the
-    kernel must stay unloaded until the @step freshness gate has run.
+    Built on first use, not at import: _norm3 goes through bd.Vector, and
+    loading this module never touches the CAD kernel.
     """
     return (_norm3(spec.R_LOWER_IN_FWD, spec.R_LOWER_IN_AFT),
             _norm3(spec.R_UPPER_IN_FWD, spec.R_UPPER_IN_AFT))
@@ -1243,8 +1243,7 @@ def _flank_pad(side, outer):
 
 
 def build_gearbox_casing():
-    """The ribbed magnesium casing: two thirds of the drivetrain's build time,
-    so it is its own model and an edit elsewhere never rebuilds it."""
+    """The ribbed magnesium casing: two thirds of the drivetrain's build time."""
     return surfaces.styled(_gearbox_casing(_casing_outer_ribbed()), "gearbox_casing", spec.MAGNESIUM)
 
 
@@ -1289,7 +1288,7 @@ def build_rear_structure():
 def build_drivetrain_parts():
     """The running gear inside the casing: clutch, gear cluster, selectors,
     differential and driveshafts. Cheap enough to rebuild with the drivetrain
-    model itself."""
+    stage itself."""
     kids = []
 
     # --- clutch ---------------------------------------------------------

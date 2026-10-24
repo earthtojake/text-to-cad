@@ -1,9 +1,8 @@
-"""A CAD CLI failure has to lead with the failure, and name the caller's own code.
+"""A generated CLI's failure has to lead with the failure, and name where it was raised.
 
-Before this, an uncaught generator exception reached the interpreter: a `model()` that
-raised printed a 62-line traceback whose only useful line was last, and one missing its
-return printed 43 lines to say "must return one value". Both are ordinary authoring
-mistakes, so both are what an agent hits most.
+An uncaught exception would reach the interpreter as a long traceback whose only useful line
+is last. The report is the failure, the frame that raised it, and the hint to re-run with
+``--verbose`` where the command takes it.
 """
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ class ReportCliErrorTest(unittest.TestCase):
 
     def _report(self, exc, **kwargs) -> str:
         stream = io.StringIO()
-        code = report_cli_error(exc, tool="cadgen import", stream=stream, **kwargs)
+        code = report_cli_error(exc, tool="cadgen urdf validate", stream=stream, **kwargs)
         self.assertEqual(1, code, "a reported failure is still a failure")
         return stream.getvalue()
 
@@ -60,53 +59,32 @@ class ReportCliErrorTest(unittest.TestCase):
             f"the failure must be the FIRST line, got: {text.splitlines()[0]!r}",
         )
 
-    def test_it_names_the_models_own_frames(self):
+    def test_it_names_where_it_was_raised_and_stays_compact(self):
         text = self._report(_raise_from_model(self.model))
-        self.assertIn("widget.py:6 in model", text)
-        self.assertIn("widget.py:2 in _inner", text)
-
-    def test_it_drops_the_runtime_frames(self):
-        # A model that fails INSIDE cadgen: the traceback carries a cadgen frame, and the
-        # report must not. Those frames are identical in every failure and say nothing
-        # about which model broke -- they are the ~50 lines this reporter exists to remove.
-        self.model.write_text(
-            "from cadgen.metadata import normalize_mesh_numeric\n"
-            "\n"
-            "\n"
-            "def model():\n"
-            "    return normalize_mesh_numeric(-1, field_name='mesh_tolerance')\n", encoding="utf-8"
-        )
-        text = self._report(_raise_from_model(self.model))
-        self.assertIn("widget.py:5 in model", text, "the model's frame is kept")
-        self.assertNotIn("metadata.py", text, "a cadgen frame is runtime, not the model")
-        self.assertLess(len(text.splitlines()), 10, "a compact report stays compact")
+        self.assertIn("raised in", text)
+        self.assertIn("widget.py:2", text, "the innermost frame: the one that raised")
+        self.assertLess(len(text.splitlines()), 5, "a compact report stays compact")
 
     def test_verbose_restores_the_full_traceback(self):
         text = self._report(_raise_from_model(self.model), verbose=True)
         self.assertIn("Traceback (most recent call last)", text)
         self.assertIn("test_cli_errors.py", text, "internal frames are the point of --verbose")
 
-    def test_a_failure_with_no_model_frames_still_names_where_it_came_from(self):
-        # A validation error raised before the generator ever ran, so every frame is
-        # runtime. The message already names the model; the report points at the raiser so
-        # a cadgen-side fault is still diagnosable without --verbose.
-        import cadgen._internal.cli_errors as cli_errors
-
-        original = cli_errors.__dict__.get("_model_frames")
-        self.addCleanup(lambda: cli_errors.__dict__.__setitem__("_model_frames", original))
-        cli_errors._model_frames = lambda exc: []
-        try:
-            raise ValueError("widget.py model() must return one value")
-        except ValueError as exc:
-            text = self._report(exc)
-        self.assertIn("must return one value", text)
-        self.assertIn("raised in", text)
-        self.assertLess(len(text.splitlines()), 5)
-
     def test_an_exception_that_was_never_raised_still_reports(self):
         # Defensive: a caller may report a constructed exception with no traceback at all.
         text = self._report(ValueError("no traceback here"))
         self.assertIn("FAILED: ValueError: no traceback here", text)
+
+    def test_a_failure_with_no_message_is_named_by_its_type_and_where_it_was_raised(self):
+        """A bare ``assert`` in the kernel says nothing: the one-line text a ``--json``
+        envelope carries names the type and the raiser instead of an empty string."""
+        from cadgen._internal.cli_errors import failure_text
+
+        self.model.write_text("def model():\n    assert False\n", encoding="utf-8")
+        text = failure_text(_raise_from_model(self.model))
+        self.assertRegex(text, r"^AssertionError \(raised in .*widget\.py:2\)$")
+        self.assertEqual(failure_text(ValueError("bad radius")), "bad radius")
+        self.assertEqual(failure_text(AssertionError()), "AssertionError")
 
     def test_the_hint_is_offered_when_the_command_takes_the_flag(self):
         self.assertIn("re-run with --verbose", self._report(_raise_from_model(self.model)))

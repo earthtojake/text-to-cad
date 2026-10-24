@@ -1,9 +1,8 @@
-"""The clamp plate's 3D geometry (plain module: no @dxf/@step here).
+"""The clamp plate's 3D geometry (plain module: no model here).
 
-Shared code, not a model — `src/*.py` is the model catalog and everything under
-`src/lib/` is a helper. The drawing (`src/clamp_plate.py`) projects this solid's
-top face to a cut profile, which is the STEP-projection workflow without a STEP
-artifact: this drawings project deliberately emits drawings only.
+Shared code, not a model: the drawing (`clamp_plate.py`) lays this solid's top
+face into the XY plane as its cut profile, from live geometry, never a file a
+build wrote.
 
 Prompt: Flat clamp plate with rounded corners, two clamping bolt holes, and a
 central adjustment slot.
@@ -11,7 +10,7 @@ central adjustment slot.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 LENGTH_MM = 70.0
 WIDTH_MM = 40.0

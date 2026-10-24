@@ -1,3 +1,5 @@
+import { renderWithSceneRig } from "./sceneRig.js";
+
 export function dataUrlToBlob(dataUrl) {
   const parts = String(dataUrl || "").split(",");
   if (parts.length !== 2) {
@@ -201,7 +203,8 @@ export async function buildCompositeScreenshotBlob(runtime, {
       renderer.xr.enabled = false;
     }
     renderer.setRenderTarget(null);
-    renderer.render(scene, camera);
+    // As the view draws it: through the scene's own rig where it blends in linear light.
+    renderWithSceneRig(runtime.sceneRig, renderer, scene, camera);
   } finally {
     renderer.setRenderTarget(previousRenderTarget);
     if (renderer.xr) {

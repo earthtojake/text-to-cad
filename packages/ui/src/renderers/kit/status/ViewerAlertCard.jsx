@@ -150,7 +150,8 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
   const readableReason = shortReason.length > 360 ? `${shortReason.slice(0, 360)}…` : shortReason;
   const title = alertTitle(shown, t);
   // The issue is the project's, in English: the title it is filed under is the alert's own or English's.
-  const report = alertIssueUrl(host?.links?.issues, { ...shown, title: alertTitle(shown) },
+  // An alert that is no fault (`report: false`, a model built from code changed since) files no issue.
+  const report = shown.report === false ? null : alertIssueUrl(host?.links?.issues, { ...shown, title: alertTitle(shown) },
     { file, version: host?.links?.version, platform: host?.environment.platform });
   return (
     <div className={cn("pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center py-3", mobile ? "px-3" : "px-4")}>

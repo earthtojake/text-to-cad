@@ -3,7 +3,8 @@
 Yaw is Z through (0,-9,0); flexion is X through (0,0,0).
 Drive flats are +X for yaw and +Y for flexion. All dimensions millimetres.
 """
-from cadgen import build123d as bd, srgb
+import build123d as bd
+
 
 WRIST_FOREARM_MOUNTS=tuple((x,-30.,z) for x in (-10.,10.) for z in (-9.,9.))
 WRIST_PALM_MOUNTS=((-24.,14.,-10.2),(24.,14.,-10.2))
@@ -53,7 +54,7 @@ def _finish(pieces,bores,label):
         if current is not None:shape=shape.fillet(.03,[current])
     for args in bores:shape=shape-_bore(*args)
     if len(shape.solids())!=1 or not shape.is_valid:raise ValueError(f'{label}: invalid result, solids={len(shape.solids())}, valid={shape.is_valid}, volumes={[s.volume for s in shape.solids()]}')
-    shape.label=label;shape.color=srgb('#a9b7c1')
+    shape.label=label;shape.color='#a9b7c1'
     return shape
 
 
@@ -109,7 +110,7 @@ def make_wrist_palm_cradle(label='wrist_palm_cradle'):
     # the palm's complete M3 bore wall intact and a 0.4 mm spacer interface.
     for x in (-24.,24.):
         shape=shape-(bd.Pos(x,14,-10.2)*bd.Cylinder(3.5,4.0))
-    shape.label=label;shape.color=srgb('#a9b7c1')
+    shape.label=label;shape.color='#a9b7c1'
     return shape
 
 

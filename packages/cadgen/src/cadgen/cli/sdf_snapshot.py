@@ -1,18 +1,8 @@
-"""``cadgen sdf snapshot`` — render SDF robot descriptions.
+"""``cadgen sdf snapshot`` -- draw an SDFormat world or model into a PNG, where the CAD Viewer
+opens it, its link meshes placed by forward kinematics.
 
-A GENERATED CLI over :func:`cadgen.sdf.snapshot`. There is no parser here on
-purpose: everything the command accepts is derived from the verb function's
-signature by :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift
-from a parameter (README law 6). Which input kinds the door accepts
-is declared once, beside the verb, in
-:data:`cadgen._internal.snapshot_door.DOOR_KINDS`.
-
-The verb is the ROBOT shape: the mesh surface plus ``--joint-values``, which is
-how a description gets posed. STEP-only flags (selection, kinematics, section
-mode) are not in this signature at all, and ``--display`` takes ``solid`` or
-``parts`` (``--grid`` and ``--preview`` beside it); ``display.clip`` cuts the robot
-(``at`` in metres), and what describes a CAD model or moves parts apart (the
-edge-made modes, Shaded, exploded) is refused by name.
+``cadgen snapshot`` (``cadgen.engine.snapshot``) for a ``.sdf`` alone: the same parser and the
+same picture, by OCCT; any other file is refused by name before anything renders.
 """
 
 from __future__ import annotations
@@ -20,18 +10,20 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from cadgen._internal.cli_from_function import generated_main, generated_parser
-
 DEFAULT_PROG = "cadgen sdf snapshot"
-VERB = ("cadgen.sdf", "snapshot")
+SUFFIXES = (".sdf",)
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    return generated_parser(VERB, prog=prog)
+    from cadgen.engine.snapshot import build_parser as snapshot_parser
+
+    return snapshot_parser(prog)
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    return generated_main(VERB, argv, prog=prog)
+    from cadgen.engine.snapshot import main as snapshot
+
+    return snapshot(list(argv) if argv is not None else None, prog=prog, suffixes=SUFFIXES)
 
 
 if __name__ == "__main__":

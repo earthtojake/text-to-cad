@@ -31,13 +31,14 @@ describe('how the host presents a view', () => {
     const offered: unknown[] = [];
     for (const displayModes of [undefined, ['inline', 'fullscreen']]) {
       const listeners = new Set<(event: MessageEvent) => void>();
-      const bridge = createBridge({
+      const host = {
         postMessage(message: any) {
           if (message.method !== 'ui/initialize') return;
           offered.push(message.params.appCapabilities.availableDisplayModes);
-          queueMicrotask(() => { for (const listener of listeners) listener({ data: { jsonrpc: '2.0', id: message.id, result: {} } } as MessageEvent); });
+          queueMicrotask(() => { for (const listener of listeners) listener({ data: { jsonrpc: '2.0', id: message.id, result: {} }, source: host } as unknown as MessageEvent); });
         },
-      }, { addEventListener: (_type: string, listener: any) => listeners.add(listener), removeEventListener() {} } as any);
+      };
+      const bridge = createBridge(host, { addEventListener: (_type: string, listener: any) => listeners.add(listener), removeEventListener() {} } as any);
       await bridge.initialize({ name: 'CAD', version: 'test' }, displayModes ? { displayModes } : undefined);
     }
     expect(offered).toEqual([['fullscreen'], ['inline', 'fullscreen']]);

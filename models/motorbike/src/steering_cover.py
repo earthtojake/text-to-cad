@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import bodywork as B
 
 
-@step(out="../STEP/steering_cover.step")
+@model
 def steering_cover():
     built = B.build_steering_cover()
     if isinstance(built, list):

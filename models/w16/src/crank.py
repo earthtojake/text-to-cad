@@ -1,28 +1,22 @@
-"""W16 system model: crank — crankshaft, damper, flywheel.
+"""W16 system: crank — crankshaft, damper, flywheel.
 
-A sub-assembly of the engine: the parts `lib/bottom_end.py` builds, as one model
-with its own STEP, its own record and its own worker. `w16.py` links it as
-occurrence `o1.2`; rebuild `w16.py` to pick up a change here.
+A stage of the engine: the parts `lib/bottom_end.py` builds, as one labelled group,
+which `w16.py` calls in its body. A `@memo` function: an edit that does not
+reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
+from cadgen import memo
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
 
 from lib import bottom_end as bottom_end_lib
 from lib import spec as S
-from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/crank.step", materials=materials_for_system("crank"),
-      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
+@memo
 def crank():
     parts = bottom_end_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("bottom_end.build() produced no parts")
-    return material_compound(parts, "crank")
-
-
-if __name__ == "__main__":
-    crank()
+    group = bd.Compound(children=parts, label="crank")
+    return group

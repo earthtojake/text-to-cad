@@ -1,21 +1,16 @@
-"""Hypercar system model: lighting — lamp internals + light signature.
+"""Hypercar system: lighting — lamp internals + light signature.
 
-A sub-assembly of the car: the group `lib/lighting.py` builds, as one model with
-its own STEP, its own record and its own worker. `hypercar.py` links it as
-occurrence `o1.3`; rebuild `hypercar.py` to pick up a change here.
+A stage of the car: the group `lib/lighting.py` builds, which `hypercar.py`
+calls in its body. A `@memo` function: an edit that does not reach its code
+replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import lighting as lighting_lib
 
 
-@step(out="../STEP/lighting.step")
+@memo
 def lighting():
-    return lighting_lib.build()
-
-
-if __name__ == "__main__":
-    lighting()
+    built = lighting_lib.build()
+    return built

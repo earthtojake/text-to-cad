@@ -1,8 +1,8 @@
 """lyra kinematic chain spec shared by the CAD assembly and URDF/SRDF.
 
 Stdlib-only (no build123d) so robot-description generators can import it
-cheaply. `lyra.py` consumes the same offsets and CAD pose angles, keeping
-the STEP assembly, the URDF tree, and the viewer animation sidecar in
+cheaply. `lyra.py` consumes the same offsets, ranges and CAD pose angles,
+keeping the xbf assembly's joints, the URDF tree, and the motions in
 lockstep.
 
 Design ledger:
@@ -244,7 +244,7 @@ def _zero_deg() -> dict[str, float]:
 
 
 def _relaxed_deg() -> dict[str, float]:
-    """Gentle natural curl; this is the pose baked into lyra.step."""
+    """Gentle natural curl: the pose the lyra model is built in (its as-built configuration)."""
     pose = _zero_deg()
     curl = {
         "index": (10.0, 14.0, 8.0),

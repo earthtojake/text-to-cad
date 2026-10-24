@@ -22,7 +22,8 @@ const PHONE_PANEL_WIDTH = 288;
  * of its own at the viewer's top-left, one tile per section (`ToolPanel`s drawn as sections,
  * `ToolStackContext`'s `sidebar`): a tree by its name (**Model tree**, **Links**: a tree icon, its
  * filter heading the panel), **Position**
- * for a model's joints, **Animation** for its routines, and any other section by its name. None is open as a file opens; a tile
+ * for a model's joints, **Animation** for its routines (**Motion** for an engine document's
+ * motions), and any other section by its name. None is open as a file opens; a tile
  * opens its section in a panel under the toolbar, a second press on it closes it, and so does the
  * section's own collapse button; another tile opens its section instead. One section at a time.
  * The panel is read for as long as it is open, so it has its own surface (`FILE_SIDEBAR_SURFACE_CLASS`):
@@ -216,7 +217,7 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
     const section = meta.current.get(id) || {};
     const tile = section.fit === "tree" ? { label: section.title || "Tree", Icon: ListTree }
       : id === "position" ? { label: "Position", Icon: PositionIcon }
-        : id === "animation" ? { label: "Animation", Icon: Clapperboard }
+        : id === "animation" ? { label: section.title || "Animation", Icon: Clapperboard }
         : { label: section.title || id, Icon: FileText };
     return { id, ...tile, changed: Boolean(section.changed) };
   });

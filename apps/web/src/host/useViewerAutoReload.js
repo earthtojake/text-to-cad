@@ -2,50 +2,52 @@ import { useEffect, useRef } from "react";
 import {
   AUTO_RELOAD_PHASE,
   nextAutoReloadState,
-  VIEWER_INSTALL_POLL_MS,
-  VIEWER_RELOADING_POLL_MS,
-  VIEWER_WATCH_INTERVAL_MS
+  VIEWER_INSTALL_POLL_MS
 } from "./viewerAutoReload.js";
 
-const DEVELOPMENT_CADENCE = Object.freeze({ watchMs: VIEWER_WATCH_INTERVAL_MS, reloadingMs: VIEWER_RELOADING_POLL_MS });
 const INSTALLED_CADENCE = Object.freeze({ watchMs: VIEWER_INSTALL_POLL_MS, reloadingMs: VIEWER_INSTALL_POLL_MS });
 
 /**
  * Reload the page once its server is no longer the one it loaded from.
  *
  * Asks whenever the server says who it is (`serverInfo.identityToken`): at a
- * development backend's cadence when it restarts itself (`autoReload`, a source
- * checkout), at an installed one's otherwise, and at once when the person comes
- * back to the window. The decision lives in `viewerAutoReload.js`; this is the
+ * five-second intervals, and at once when the person comes back to the window. The decision lives in `viewerAutoReload.js`; this is the
  * timer, the fetch and the reload.
  *
- * @param {{autoReload?: boolean, identityToken?: string}|null} serverInfo
- * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string }> }} options  `fetchServerInfo`
- *   asks the backend who it is now; a closed port mid-restart answers `{ ok: false }`, not a throw.
+ * @param {{identityToken?: string}|null} serverInfo
+ * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string }>, follow?: boolean,
+ *   onForeign?: () => void }} options  `fetchServerInfo` asks the backend who it is now; a closed port
+ *   mid-restart answers `{ ok: false }`, not a throw. `follow` reloads into a new identity (a dev
+ *   server); otherwise a new identity is a process this page cannot authenticate, so polling stops and
+ *   `onForeign` says so.
  */
 export function useViewerAutoReload(serverInfo, {
   fetchServerInfo,
+  follow = false,
+  onForeign = () => {},
   reload = defaultReload,
   now = () => Date.now(),
   schedule = (run, delayMs) => setTimeout(run, delayMs),
   cancel = (handle) => clearTimeout(handle)
 }) {
   const optionsRef = useRef(null);
-  optionsRef.current = { fetchServerInfo, reload, now, schedule, cancel };
-  const development = Boolean(serverInfo?.autoReload);
+  optionsRef.current = { fetchServerInfo, follow, onForeign, reload, now, schedule, cancel };
   const baseline = String(serverInfo?.identityToken || "");
 
   useEffect(() => {
     if (!baseline) {
       return undefined;
     }
-    const cadence = development ? DEVELOPMENT_CADENCE : INSTALLED_CADENCE;
+    const cadence = INSTALLED_CADENCE;
     let active = true;
     let asking = false;
     let timer = null;
     let state = { phase: AUTO_RELOAD_PHASE.WATCHING, since: optionsRef.current.now() };
 
     const ask = async () => {
+      if (!active) {
+        return;  // stopped (another process answered, or a reload is under way): never ask again
+      }
       if (timer !== null) {
         optionsRef.current.cancel(timer);
         timer = null;
@@ -59,8 +61,15 @@ export function useViewerAutoReload(serverInfo, {
       if (!active) {
         return;
       }
-      const next = nextAutoReloadState(state, poll, { baseline, now: optionsRef.current.now(), ...cadence });
+      const next = nextAutoReloadState(state, poll, { baseline, now: optionsRef.current.now(), ...cadence,
+        follow: optionsRef.current.follow });
       state = { phase: next.phase, since: next.since };
+      if (next.phase === AUTO_RELOAD_PHASE.FOREIGN) {
+        active = false;
+        window.removeEventListener("focus", askNow);
+        optionsRef.current.onForeign();
+        return;
+      }
       if (next.reload) {
         active = false;
         optionsRef.current.reload();
@@ -80,7 +89,7 @@ export function useViewerAutoReload(serverInfo, {
         optionsRef.current.cancel(timer);
       }
     };
-  }, [development, baseline]);
+  }, [baseline]);
 }
 
 function defaultReload() {

@@ -415,6 +415,13 @@ class SkillSelfContainmentTest(unittest.TestCase):
         if errors:
             self.fail("Skill source files reference repo-root or sibling paths:\n" + "\n".join(errors))
 
+    def test_no_skill_vendors_a_runtime(self) -> None:
+        # Skills once vendored cadgen and its runtime into `skills/*/scripts/packages`.
+        # A stray copy would ship and be imported ahead of the distribution, quietly
+        # pinning that skill to a stale runtime.
+        strays = sorted(path.relative_to(REPO_ROOT).as_posix() for path in REPO_ROOT.glob("skills/*/scripts/packages"))
+        self.assertEqual([], strays, f"skills must not vendor runtimes: {strays}")
+
     def _check_requirements(self, errors: list[str], skill_root: Path, manifest: Path) -> None:
         for line_number, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), start=1):
             for context, spec in _requirement_path_specs(line):

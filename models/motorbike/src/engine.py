@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import drivetrain as B
 
 
-@step(out="../STEP/engine.step")
+@model
 def engine():
     built = B.build_engine()
     if isinstance(built, list):

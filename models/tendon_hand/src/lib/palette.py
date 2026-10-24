@@ -60,8 +60,10 @@ the sub-assembly studies, but the assembled hand no longer uses it -- the
 palette below folds steel into aluminium.
 """
 
+from cadgen import materials
+
 # --- physical surfaces ------------------------------------------------------
-# Roughness/metalness/clearcoat used by @step named material definitions.
+# Roughness/metalness/clearcoat of each surface: the look of `MATERIALS` below.
 
 ALUMINUM = {"roughness": .34, "metalness": .86, "clearcoat": .12}
 ANODIZED = {"roughness": .32, "metalness": .68, "clearcoat": .16}
@@ -72,17 +74,26 @@ CORD = {"roughness": .57, "metalness": .03}
 # stays at its default 1 so render composition preserves that authored value.
 LINER = {"roughness": .30, "metalness": .05}
 
-MATERIAL_DEFINITIONS = {
-    "aluminum_frame": {"name": "Machined aluminum", **ALUMINUM},
-    "anodized_dark": {"name": "Dark anodized aluminum", **ANODIZED},
-    "steel": {"name": "Polished steel", **STEEL},
-    "silicone_pad": {"name": "Silicone pad", **SILICONE},
-    "silicone_grommet": {"name": "Silicone grommet", **SILICONE},
-    "bowden_liner": {"name": "Translucent Bowden liner", **LINER},
-    "cord_flexion": {"name": "Flexion cord", **CORD},
-    "cord_abduction": {"name": "Abduction cord", **CORD},
-    "cord_pip": {"name": "PIP cord", **CORD},
-    "cord_tip": {"name": "Tip cord", **CORD},
+# The buckets as engine materials, set on each part (`lib.assembly.compound`): the
+# catalogue's entry for what the body is made of, in the look above (`metallic`,
+# `roughness`, `coat`), its name the description. Every one keeps `color=None`, so a
+# part stays the colour the palette gave it.
+def _material(base, description, look):
+    return base.but(color=None, description=description, anisotropy=0.0, metallic=look["metalness"],
+                    roughness=look["roughness"], coat=look.get("clearcoat", 0.0))
+
+
+MATERIALS = {
+    "aluminum_frame": _material(materials.aluminium_6061, "Machined aluminum", ALUMINUM),
+    "anodized_dark": _material(materials.aluminium_6061, "Dark anodized aluminum", ANODIZED),
+    "steel": _material(materials.stainless_304, "Polished steel", STEEL),
+    "silicone_pad": _material(materials.silicone_50a, "Silicone pad", SILICONE),
+    "silicone_grommet": _material(materials.silicone_50a, "Silicone grommet", SILICONE),
+    "bowden_liner": _material(materials.ptfe, "Translucent Bowden liner", LINER),
+    "cord_flexion": _material(materials.uhmw_pe, "Flexion cord", CORD),
+    "cord_abduction": _material(materials.uhmw_pe, "Abduction cord", CORD),
+    "cord_pip": _material(materials.uhmw_pe, "PIP cord", CORD),
+    "cord_tip": _material(materials.uhmw_pe, "Tip cord", CORD),
 }
 
 ASSEMBLY_MATERIAL_BUCKETS = (
@@ -94,19 +105,6 @@ RIGID_ASSEMBLY_MATERIAL_BUCKETS = (
     "aluminum_frame", "anodized_dark",
     "silicone_pad", "silicone_grommet",
 )
-
-def assembly_materials(*buckets):
-    selected = buckets or ASSEMBLY_MATERIAL_BUCKETS
-    return {
-        "definitions": {key: MATERIAL_DEFINITIONS[key] for key in selected},
-        "assignments": [
-            {"targets": [f"#material_{key}"], "material": key}
-            for key in selected
-        ],
-    }
-
-ASSEMBLY_MATERIALS = assembly_materials()
-RIGID_ASSEMBLY_MATERIALS = assembly_materials(*RIGID_ASSEMBLY_MATERIAL_BUCKETS)
 
 # The structural frame is the SAME anodised black as the actuator pack: one
 # machine, one finish. It keeps the aluminium material (metalness .86) rather
@@ -308,8 +306,7 @@ def census(rows):
 
 def apply_palette(bodies):
     """Recolor bodies; the owning @step assigns their named PBR materials."""
-    from cadgen import srgb
     for body in bodies:
         _, color, _material, alpha = finish_for(body.name, body.kind)
-        body.shape.color = srgb(color, alpha)
+        body.shape.color = (color, alpha)
     return census([dict(name=b.name, kind=b.kind) for b in bodies])

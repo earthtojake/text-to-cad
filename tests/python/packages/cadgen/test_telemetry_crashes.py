@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen import analytics
-from cadgen.daemon import client
 
 
 def _user_calls(target, filename: str = "/home/someone/secret_bracket.py"):
@@ -80,12 +79,12 @@ class SignatureTest(unittest.TestCase):
         self.assertIsNone(analytics.signature(KeyError("x"), "somewhere"))
 
     def test_an_error_cadgen_raises_on_purpose_is_never_its_bug_whatever_its_type(self) -> None:
-        # cadgen tells a person their mistake in Python's own words ("@step returned a dict" is a TypeError):
+        # cadgen tells a person their mistake in Python's own words ("@step must return a build123d Shape" is a TypeError):
         # a crash is only an error Python raised in cadgen's code, never one at a raise.
         folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         source = folder / "generation.py"
-        source.write_text("def told():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+        source.write_text("def told():\n    raise TypeError(\n        '@step must return a build123d Shape')\n\n"
                           "def told_too(x):\n    if not x: raise KeyError('no such joint')\n\n"
                           "def broke():\n    return {}['tree']\n", encoding="utf-8")
         namespace: dict = {}
@@ -100,20 +99,21 @@ class SignatureTest(unittest.TestCase):
         self.assertEqual(found["frames"][-1], {"file": "cadgen/_internal/generation.py", "function": "broke", "line": 9})
 
     def test_what_a_model_asks_wrongly_of_cadgens_helpers_is_its_own_mistake(self) -> None:
-        # cadgen's frame is the innermost, but only to name what the model asked for: a name build123d does
-        # not have (still with Python's suggestion), a colour that is not a string.
+        # A name build123d does not have, asked of the module cadgen's finder bound lazily (still with Python's
+        # suggestion), and a colour that is none: the person's mistakes, never cadgen's crash.
         import traceback
 
-        from cadgen import build123d as bd
-        from cadgen.color import srgb
+        import build123d as bd
+
+        from cadgen.engine import Material
 
         missing = _caught(_user_calls(lambda: bd.Boxx))
         self.assertIsInstance(missing, AttributeError)
         self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
-        not_a_string = _caught(_user_calls(lambda: srgb(0x2E3742)))
-        self.assertIsInstance(not_a_string, TypeError)
-        self.assertIn("got int", str(not_a_string))
-        for error in (missing, not_a_string):
+        not_a_colour = _caught(_user_calls(lambda: Material("x", color=0x2E3742)))
+        self.assertIsInstance(not_a_colour, ValueError)
+        self.assertIn("not 3028802", str(not_a_colour))
+        for error in (missing, not_a_colour):
             with self.subTest(error=type(error).__name__):
                 self.assertIsNone(analytics.signature(error, "build", bugs_only=True))
         self.assertIs(bd.Box, __import__("build123d").Box, "a name it has is build123d's own")
@@ -145,7 +145,7 @@ class SignatureTest(unittest.TestCase):
         file_of, here = analytics._file_of, os.path.realpath(__file__)
         self.addCleanup(sys.setrecursionlimit, sys.getrecursionlimit())
         sys.setrecursionlimit(200)  # a short stack: each frame's file is looked up on disk
-        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/authoring.py"
+        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/engine/model.py"
                                if os.path.realpath(path) == here else file_of(path)):
             theirs, mine = _caught(model), _caught(_user_calls(ours, "/work/model.py"))
             sys.setrecursionlimit(1000)
@@ -154,7 +154,7 @@ class SignatureTest(unittest.TestCase):
                     self.assertIsNone(analytics.signature(theirs, where, bugs_only=bugs_only), "theirs is in the cycle")
                     found = analytics.signature(mine, where, bugs_only=bugs_only)
                     self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
-                                     ("RecursionError", {"cadgen/authoring.py"}), "the person's call is far outside it")
+                                     ("RecursionError", {"cadgen/engine/model.py"}), "the person's call is far outside it")
 
     def test_cadgens_own_module_gone_is_its_installation_removed_and_never_a_crash(self) -> None:
         import importlib
@@ -241,7 +241,7 @@ class FailureReasonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         source = folder / "export.py"
         source.write_text("def export(write):\n    return write()\n\n"
-                          "def refuse():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+                          "def refuse():\n    raise TypeError(\n        '@step must return a build123d Shape')\n\n"
                           "def broke():\n    return {}['tree']\n", encoding="utf-8")
         self.cadgen: dict = {}
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
@@ -258,7 +258,6 @@ class FailureReasonTest(unittest.TestCase):
         from PIL import Image
 
         kernel = functools.partial(Image.new, "NOT A MODE", (1, 1))  # a library refusing what it was asked
-        child = type("ChildBuildError", (RuntimeError,), {"__module__": "cadgen.store.lazy"})
         raises = _raises
         cases = {
             "model_error": raises(ValueError("No module named secret: a message is never read")),
@@ -272,7 +271,6 @@ class FailureReasonTest(unittest.TestCase):
             "io_error": raises(PermissionError("locked")),
             "timeout": raises(TimeoutError()),
             "memory": raises(MemoryError()),
-            "child_failed": raises(child("child model secret_arm failed")),
         }
         for reason, call in cases.items():
             with self.subTest(reason=reason):
@@ -297,23 +295,6 @@ class FailureReasonTest(unittest.TestCase):
         self.assertEqual(analytics.build_failure(twice), "timeout")
         self.assertEqual(analytics.build_failure(analytics.because(ValueError(), "Secret words")), "other")
         self.assertEqual(analytics.build_failure(ValueError()), "other", "no frames: whose code is unknown")
-
-    def test_a_snapshots_failure_is_what_it_was_doing_unless_the_error_says_more(self) -> None:
-        playwright_timeout = type("TimeoutError", (Exception,), {"__module__": "playwright._impl._errors"})
-        route = type("RouteFileError", (RuntimeError,), {"__module__": "cadgen.snapshot_core", "status": 404})
-        for error, otherwise, reason in (
-            (_caught(_user_calls(self.cadgen["broke"])), "input_error", "bug"),
-            (analytics.because(RuntimeError(), "browser"), "render_error", "browser"),
-            (FileNotFoundError("/w/secret.step"), "input_error", "no_file"),
-            (route("no such file"), "bad_request", "no_file"),
-            (playwright_timeout(), "render_error", "timeout"),
-            (MemoryError(), "render_error", "memory"),
-            (ValueError("bad camera"), "bad_request", "bad_request"),
-            (ValueError("bad camera"), "a word of tomorrow", "other"),
-        ):
-            with self.subTest(error=type(error).__name__, otherwise=otherwise):
-                self.assertEqual(analytics.snapshot_failure(error, otherwise), reason)
-                self.assertIn(reason, analytics.SNAPSHOT_FAILURES)
 
 
 class _Recording(unittest.TestCase):
@@ -360,12 +341,12 @@ class RecorderCrashTest(_Recording):
         analytics.report(_caught(lambda: int("x")), "command", bugs_only=True)  # raised on purpose: none
         self.assertEqual([crash["where"] for crash in noted], ["route"])
         analytics.collect_crashes(None)
-        with mock.patch.object(client, "hand_over") as handed:
+        with mock.patch.object(analytics, "hand_over") as handed:
             analytics.report(_caught(_cadgen_bug), "command", handled=False)
         [counts] = [call.args[0] for call in handed.call_args_list]
         self.assertEqual([(crash["where"], crash["handled"]) for crash in counts["crashes"]], [("command", False)])
         # Reporting never fails what failed.
-        with mock.patch.object(client, "hand_over", side_effect=RuntimeError("broken")):
+        with mock.patch.object(analytics, "hand_over", side_effect=RuntimeError("broken")):
             analytics.report(_caught(_cadgen_bug), "command")
 
 
@@ -405,11 +386,11 @@ class ServerCrashTest(_Recording):
 
 
 class CommandCrashTest(unittest.TestCase):
-    """A command sends nothing itself: its crash is handed to a running daemon, as its snapshots are."""
+    """A command sends nothing itself: its crash is kept with its counts (``analytics.hand_over``)."""
 
     def setUp(self) -> None:
         analytics.collect_crashes(None)
-        handed = mock.patch.object(client, "hand_over")
+        handed = mock.patch.object(analytics, "hand_over")
         self.handed = handed.start()
         self.addCleanup(handed.stop)
 
@@ -461,7 +442,7 @@ class CommandCrashTest(unittest.TestCase):
             raise ValueError("no such file: /home/someone/secret.step")
 
         for invoke in (told, _cadgen_bug):
-            emit(invoke, prog="cadgen step build", as_json=True, stdout=io.StringIO())
+            emit(invoke, prog="cadgen urdf validate", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
         self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cadgen/analytics.py"))
 

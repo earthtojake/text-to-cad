@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from cadgen import model
+from cadgen.ap242 import configuration_sequence, gear_pair, mechanism_state
+from cadgen.gltf import animation
+
 import math
 from collections.abc import Sequence
 
-from cadgen import step  # noqa: E402
-from cadgen import build123d as bd
+import build123d as bd
 
 
 DISPLAY_NAME = "Mars rover concept vehicle"
@@ -16,10 +19,11 @@ DISPLAY_NAME = "Mars rover concept vehicle"
 # - the vehicle is modeled in its display pose: suspension neutral, arm in a
 #   sampling hover, mast head level, solar wings deployed, HGA at 35 deg
 #
-# Kinematics (typed mates) is declared on the @step decorator from KINEMATICS
-# below and travels in the model's sidecar; choreography lives in the sibling
-# the embedded ANIMATION_JS source. Mate axes are built from the SAME derived
-# constants the geometry uses, so re-deriving the layout re-derives the pivots.
+# The mechanism is build123d joints on the top-level groups (`_connect` below)
+# and the joints the clips need (`_clip_joints`), with the differential's
+# coupling, the configurations and the four old clips as motions in the model's
+# body. Joint axes are built from the SAME derived constants the geometry uses,
+# so re-deriving the layout re-derives the pivots.
 
 # ---------------------------------------------------------------------------
 # Source parameters (geometry contract; snake_case names are part of the
@@ -110,31 +114,31 @@ RTG_MOUNT = (-1060.0, 0.0, 1060.0)
 RTG_DIR = (-math.cos(math.radians(8.0)), 0.0, -math.sin(math.radians(8.0)))
 
 COLORS = {
-    "ivory_panel": (0.80, 0.77, 0.70, 1.0),
-    "graphite_panel": (0.045, 0.050, 0.055, 1.0),
-    "satin_titanium": (0.42, 0.43, 0.40, 1.0),
-    "brushed_steel": (0.50, 0.52, 0.54, 1.0),
-    "pale_aluminum": (0.66, 0.68, 0.66, 1.0),
-    "fastener_steel": (0.18, 0.19, 0.20, 1.0),
-    "wheel_graphite": (0.055, 0.058, 0.062, 1.0),
-    "grouser_steel": (0.14, 0.145, 0.15, 1.0),
-    "jpl_orange": (1.00, 0.30, 0.05, 1.0),
-    "copper_band": (0.65, 0.26, 0.10, 1.0),
-    "gold_mli": (0.85, 0.55, 0.12, 1.0),
-    "avionics_blue": (0.07, 0.16, 0.42, 1.0),
-    "solar_cell": (0.015, 0.04, 0.13, 1.0),
-    "science_teal": (0.03, 0.35, 0.32, 1.0),
-    "white_thermal": (0.88, 0.90, 0.92, 1.0),
-    "black_cable": (0.015, 0.015, 0.017, 1.0),
-    "battery_orange": (0.95, 0.38, 0.02, 1.0),
-    "mars_regolith": (0.42, 0.16, 0.07, 1.0),
-    "mars_rock": (0.16, 0.075, 0.045, 1.0),
-    "dust_tan": (0.60, 0.32, 0.16, 1.0),
-    "boot_rubber": (0.03, 0.03, 0.032, 1.0),
-    "dish_white": (0.90, 0.90, 0.88, 1.0),
-    "rtg_core": (0.10, 0.105, 0.11, 1.0),
-    "rtg_fin": (0.78, 0.80, 0.82, 1.0),
-    "camera_lens": (0.02, 0.03, 0.05, 1.0),
+    "ivory_panel": "#e7e3da",
+    "graphite_panel": "#3c3f42",
+    "satin_titanium": "#adafaa",
+    "brushed_steel": "#bcbfc2",
+    "pale_aluminum": "#d4d7d4",
+    "fastener_steel": "#76797c",
+    "wheel_graphite": "#424446",
+    "grouser_steel": "#696a6c",
+    "jpl_orange": "#ff953f",
+    "copper_band": "#d38b59",
+    "gold_mli": "#edc461",
+    "avionics_blue": "#4b6fad",
+    "solar_cell": "#213865",
+    "science_teal": "#30a099",
+    "white_thermal": "#f1f3f6",
+    "black_cable": "#212123",
+    "battery_orange": "#f9a627",
+    "mars_regolith": "#ad6f4b",
+    "mars_rock": "#6f4d3c",
+    "dust_tan": "#cb996f",
+    "boot_rubber": "#303032",
+    "dish_white": "#f3f3f1",
+    "rtg_core": "#595b5d",
+    "rtg_fin": "#e5e7ea",
+    "camera_lens": "#27303f",
 }
 
 
@@ -189,14 +193,14 @@ def _apply_rover_scale(shape: bd.Shape) -> bd.Shape:
 def style(shape: bd.Shape, label: str, color_name: str) -> bd.Shape:
     shape = _apply_rover_scale(shape)
     shape.label = label
-    shape.color = bd.Color(*COLORS[color_name])
+    shape.color = bd.Color(COLORS[color_name])
     return shape
 
 
 def group(label: str, children: Sequence[bd.Shape], color_name: str | None = None) -> bd.Compound:
     compound = bd.Compound(obj=list(children), children=list(children), label=label)
     if color_name is not None:
-        compound.color = bd.Color(*COLORS[color_name])
+        compound.color = bd.Color(COLORS[color_name])
     return compound
 
 
@@ -234,19 +238,13 @@ def oriented_box(
 
 
 def cylinder_between(label: str, p1: Vector3, p2: Vector3, radius: float, color_name: str) -> bd.Shape:
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
-    from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt, gp_Trsf
     axis = v_sub(p2, p1)
     length = v_len(axis)
     if length <= 1e-6:
         return style(bd.Sphere(radius).moved(bd.Location(p1)), label, color_name)
     direction = v_norm(axis)
-    wrapped = BRepPrimAPI_MakeCylinder(
-        gp_Ax2(gp_Pnt(*p1), gp_Dir(*direction)),
-        radius,
-        length,
-    ).Shape()
-    return style(bd.Shape(obj=wrapped), label, color_name)
+    cylinder = bd.Cylinder(radius, length, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    return style(cylinder.moved(bd.Plane(origin=p1, z_dir=direction).location), label, color_name)
 
 
 def cylinder_x(label: str, center: Vector3, radius: float, length: float, color_name: str) -> bd.Shape:
@@ -334,7 +332,7 @@ def terrain() -> bd.Compound:
             obj=list(compound.children), children=list(compound.children), label="terrain"
         ).rotate(bd.Axis((150.0, 0.0, 0.0), (0.0, 1.0, 0.0)), terrain_slope_angle)
         rotated.label = "terrain"
-        rotated.color = bd.Color(*COLORS["mars_regolith"])
+        rotated.color = bd.Color(COLORS["mars_regolith"])
         return rotated
     return compound
 
@@ -424,9 +422,9 @@ def body_shell() -> bd.Compound:
 
 
 def deck_lid() -> bd.Compound:
-    # Front-left deck plate: the cutaway lid the sidecar lifts to reveal the
-    # avionics/power/science bays. The dust patch rides on the lid so it must
-    # stay the LAST child (sidecar feature `lid_dust` -> #o1.5.9).
+    # Front-left deck plate: the cutaway lid `lid_lift` raises to reveal the
+    # avionics/power/science bays. The dust patch rides on the lid
+    # (`deck_lid_dust_patch`).
     parts = [
         oriented_box("deck_lid_plate", (575.0, 255.0, deck_z - 11.0),
                      920.0, 770.0, 22.0, color_name="ivory_panel", fillet_radius=5.0),
@@ -644,8 +642,7 @@ def rocker(s: float, side: str) -> bd.Compound:
     steer_mount = (x_front, s * y_wheel, STEER_TOP_Z)
     bogie_pt = (BOGIE_PIVOT[0], s * BOGIE_PIVOT[1], BOGIE_PIVOT[2])
     parts = [
-        # accent hub cap is intentionally the FIRST child (#o1.N.1) so the
-        # sidecar accent palette can restyle it by stable ref
+        # the accent hub cap, named for its accent colour
         cylinder_y(f"rocker_{side}_pivot_accent_cap", (pivot[0], s * (y_susp + 52.0), pivot[2]), 48.0, 14.0, "jpl_orange"),
         cylinder_y(f"rocker_{side}_pivot_hub", pivot, 70.0, 90.0, "satin_titanium"),
         cylinder_between(f"rocker_{side}_front_tube", pivot, front_elbow, 34.0, "satin_titanium"),
@@ -983,7 +980,7 @@ def antenna_whips() -> bd.Compound:
 
 
 def solar_wing(s: float, side: str) -> bd.Compound:
-    # Modeled at the display deploy angle; the sidecar rotates about the hinge
+    # Modeled at the display deploy angle; `solar_<side>` turns it about the hinge
     # axis (X-parallel line at y=±half_wid, z=deck+6) by the deploy delta.
     alpha = math.radians(SOLAR_DEPLOY_DEG)
     o = (0.0, s * math.sin(alpha), -math.cos(alpha))          # outward span direction
@@ -1042,33 +1039,24 @@ def power_rtg() -> bd.Compound:
 
 
 # ---------------------------------------------------------------------------
-# Kinematics: typed mates (design/pose-animation-split.md).
+# Kinematics: build123d joints on the top-level groups.
 #
-# ZERO IS THE ARTIFACT AS WRITTEN. The rover is modeled in its display pose —
+# ZERO IS THE MODEL AS BUILT. The rover is modeled in its display pose --
 # suspension neutral, arm in a sampling hover, mast level, wings deployed at
-# SOLAR_DEPLOY_DEG, HGA at 35 deg — so every DOF below reads 0 there and the
-# limits are offsets FROM that pose, not absolute machine angles. The solar
-# wings are the one place that shows: the retired pose block carried a 102 deg
-# `offset` on the deploy driver to say the same thing, and here the offset is
-# simply gone because the modeled angle IS the origin.
+# SOLAR_DEPLOY_DEG, HGA at 35 deg -- so every joint is connected at 0 there and
+# the limits are offsets FROM that pose, not absolute machine angles.
 #
 # Every axis is built from the derived layout constants above rather than
-# retyped, so the pivots cannot drift from the geometry (the retired block had
-# to warn that its literals mirrored the default parameters).
+# retyped, so the pivots cannot drift from the geometry. A joint on a group
+# carries its whole subtree, which is what makes the rocker-bogie chain three
+# joints instead of three hundred.
 #
-# Mate refs name the top-level GROUPS by label; a mate on a group carries its
-# whole instance subtree, which is what makes the rocker-bogie chain three
-# mates instead of three hundred.
-#
-# What did NOT become kinematics, deliberately: the explode ramps, the accent
-# palette, the shell X-ray / emissive styling, the dust and RTG visibility
-# toggles, and the chassis heave/pitch/roll (which drove a MERGED feature over
-# sixteen groups — not one occurrence, so not one mate). Those are
-# presentation; the ones worth keeping are restated as clips in
-# the embedded ANIMATION_JS source.
+# What did NOT become kinematics, deliberately: the accent palette, the shell
+# X-ray / emissive styling, the dust and RTG visibility toggles, and the
+# chassis pitch/roll. The four old clips are motions (`_clip_joints` and the
+# clips below): the chassis heaves on a prismatic joint of the terrain, and
+# every group slides off on a prismatic joint of its own for the explode.
 # ---------------------------------------------------------------------------
-
-import cadgen  # noqa: E402  (light import; no kernel)
 
 _Y_AXIS = (0.0, 1.0, 0.0)
 _Z_AXIS = (0.0, 0.0, 1.0)
@@ -1101,28 +1089,46 @@ _STEER_STATIONS = (
 # The panel that swings clear for the cutaway hinges on its lower outboard
 # edge, where the side plate meets the belly pan.
 _PANEL_HINGE = (0.0, half_wid, belly_z + 10.0)
+# The differential bar's pivot on the deck, and the Ackermann-ish steer gearing
+# with the front-left fork as the unit.
+_DIFFERENTIAL_PIVOT = (430.0, 0.0, 1235.0)
+_STEER_GEARS = {"steer_front_left": 1.0, "steer_front_right": 0.79,
+                "steer_rear_left": -1.0, "steer_rear_right": -0.79}
+# Wheel revolutions in one `driveAround` lap.
+_DRIVE_TURNS = 4
 
 
-def _rover_kinematics() -> dict:
-    chassis = "#chassis_frame"
-    mates = []
+def _mate(fixed: bd.Shape, moving: bd.Shape, label: str, origin: Vector3, direction: Vector3,
+          limits: tuple[float, float], *, linear: bool = False) -> None:
+    """``moving`` turns (or, ``linear``, slides) about the axis on ``fixed``: build123d's
+    revolute or linear joint, the moving side's rigid joint on the joint's own frame,
+    connected at 0 where the parts stand."""
+    axis = bd.Axis(origin, direction)
+    if linear:
+        bd.LinearJoint(label, fixed, axis=axis, linear_range=limits)
+    else:
+        bd.RevoluteJoint(label, fixed, axis=axis, angular_range=limits)
+    bd.RigidJoint(label, moving, fixed.location * fixed.joints[label].relative_axis.location)
+    if linear:
+        fixed.joints[label].connect_to(moving.joints[label], position=0.0)
+    else:
+        fixed.joints[label].connect_to(moving.joints[label], angle=0.0)
+
+
+def _connect(groups: dict[str, bd.Shape]) -> None:
+    """The rover's 27 joints, on its top-level groups by label."""
+    chassis = groups["chassis_frame"]
 
     # -- rocker-bogie suspension -------------------------------------------
     # The rocker hangs off the chassis, the bogie off the rocker, and the
     # differential bar splits the two rockers (the ratio lives in the
-    # `rocker_split` coupling, exactly as the retired ratio driver did).
+    # `rocker_split` coupling).
     for side, sign in _SIDE_SIGN.items():
         rocker_pivot = ROCKER_PIVOT if sign > 0 else _mirror_y(ROCKER_PIVOT)
         bogie_pivot = BOGIE_PIVOT if sign > 0 else _mirror_y(BOGIE_PIVOT)
-        mates.append(cadgen.revolute(
-            f"rocker_{side}", parent=chassis, child=f"#rocker_{side}",
-            origin=rocker_pivot, direction=_Y_AXIS, limits=(-12, 12)))
-        mates.append(cadgen.revolute(
-            f"bogie_{side}", parent=f"#rocker_{side}", child=f"#bogie_{side}",
-            origin=bogie_pivot, direction=_Y_AXIS, limits=(-15, 15)))
-    mates.append(cadgen.revolute(
-        "differential", parent=chassis, child="#differential",
-        origin=(430.0, 0.0, 1235.0), direction=_Z_AXIS, limits=(-6, 6)))
+        _mate(chassis, groups[f"rocker_{side}"], f"rocker_{side}", rocker_pivot, _Y_AXIS, (-12, 12))
+        _mate(groups[f"rocker_{side}"], groups[f"bogie_{side}"], f"bogie_{side}", bogie_pivot, _Y_AXIS, (-15, 15))
+    _mate(chassis, groups["differential"], "differential", _DIFFERENTIAL_PIVOT, _Z_AXIS, (-6, 6))
 
     # -- steering and drive --------------------------------------------------
     # Each corner fork steers about the vertical through its own wheel center,
@@ -1131,441 +1137,242 @@ def _rover_kinematics() -> dict:
     # so they hang straight off their bogie.
     for mate_name, group_label, x0, side, on_bogie in _STEER_STATIONS:
         center = (x0, _SIDE_SIGN[side] * y_wheel, axle_z)
-        mates.append(cadgen.revolute(
-            mate_name,
-            parent=f"#bogie_{side}" if on_bogie else f"#rocker_{side}",
-            child=f"#{group_label}",
-            origin=center, direction=_Z_AXIS, limits=(-60, 60)))
+        carrier = groups[f"bogie_{side}" if on_bogie else f"rocker_{side}"]
+        _mate(carrier, groups[group_label], mate_name, center, _Z_AXIS, (-60, 60))
+    # Four turns each way: `driveAround` rolls the wheels four revolutions
+    # unwrapped (the old clip wrapped its angle at 360, a jump a joint's
+    # curve cannot take).
     for mate_name, group_label, x0, side, steer in _WHEEL_STATIONS:
         center = (x0, _SIDE_SIGN[side] * y_wheel, axle_z)
-        parent = f"#steering_{steer.removeprefix('steer_')}" if steer else f"#bogie_{side}"
-        mates.append(cadgen.revolute(
-            mate_name, parent=parent, child=f"#{group_label}",
-            origin=center, direction=_Y_AXIS, limits=(-360, 360)))
+        carrier = groups[f"steering_{steer.removeprefix('steer_')}"] if steer else groups[f"bogie_{side}"]
+        _mate(carrier, groups[group_label], mate_name, center, _Y_AXIS, (-_DRIVE_TURNS * 360, _DRIVE_TURNS * 360))
 
     # -- remote sensing mast -------------------------------------------------
-    # Azimuth turns the COLUMN (the head rides it as a mate child); elevation
-    # pitches the head alone. The retired block hung both joints on the head,
-    # which a mate tree forbids — one parent mate per occurrence — and turning
-    # the column is the truer reading anyway.
+    # Azimuth turns the column (the head rides it); elevation pitches the head.
     mast_x, mast_y = MAST_XY
-    mates.append(cadgen.revolute(
-        "mast_yaw", parent=chassis, child="#mast_base",
-        origin=(mast_x, mast_y, deck_z), direction=_Z_AXIS, limits=(-170, 170)))
-    mates.append(cadgen.revolute(
-        "mast_pitch", parent="#mast_base", child="#mast_head",
-        origin=(mast_x, mast_y, HEAD_PIVOT_Z), direction=_Y_AXIS, limits=(-60, 25)))
+    _mate(chassis, groups["mast_base"], "mast_yaw", (mast_x, mast_y, deck_z), _Z_AXIS, (-170, 170))
+    _mate(groups["mast_base"], groups["mast_head"], "mast_pitch", (mast_x, mast_y, HEAD_PIVOT_Z), _Y_AXIS,
+          (-60, 25))
 
     # -- robotic arm: azimuth -> shoulder -> elbow -> wrist -> turret --------
-    mates.append(cadgen.revolute(
-        "arm_azim", parent=chassis, child="#arm_azimuth",
-        origin=(ARM_AZIMUTH_XY[0], ARM_AZIMUTH_XY[1], 715.0), direction=_Z_AXIS,
-        limits=(-45, 45)))
-    mates.append(cadgen.revolute(
-        "arm_shoulder", parent="#arm_azimuth", child="#arm_shoulder",
-        origin=ARM_SHOULDER, direction=_Y_AXIS, limits=(-60, 35)))
-    mates.append(cadgen.revolute(
-        "arm_elbow", parent="#arm_shoulder", child="#arm_elbow",
-        origin=ARM_ELBOW, direction=_Y_AXIS, limits=(-75, 45)))
-    mates.append(cadgen.revolute(
-        "arm_wrist", parent="#arm_elbow", child="#arm_wrist",
-        origin=ARM_WRIST, direction=_Y_AXIS, limits=(-70, 60)))
-    mates.append(cadgen.revolute(
-        "arm_turret", parent="#arm_wrist", child="#arm_turret",
-        origin=ARM_TURRET, direction=_wrist_dir, limits=(-180, 180)))
+    _mate(chassis, groups["arm_azimuth"], "arm_azim", (ARM_AZIMUTH_XY[0], ARM_AZIMUTH_XY[1], 715.0), _Z_AXIS,
+          (-45, 45))
+    _mate(groups["arm_azimuth"], groups["arm_shoulder"], "arm_shoulder", ARM_SHOULDER, _Y_AXIS, (-60, 35))
+    _mate(groups["arm_shoulder"], groups["arm_elbow"], "arm_elbow", ARM_ELBOW, _Y_AXIS, (-75, 45))
+    _mate(groups["arm_elbow"], groups["arm_wrist"], "arm_wrist", ARM_WRIST, _Y_AXIS, (-70, 60))
+    _mate(groups["arm_wrist"], groups["arm_turret"], "arm_turret", ARM_TURRET, _wrist_dir, (-180, 180))
 
     # -- antennas and solar wings -------------------------------------------
-    mates.append(cadgen.revolute(
-        "hga_elev", parent="#antenna_hga_mast", child="#antenna_hga_dish",
-        origin=HGA_ELEV_PIVOT, direction=_Y_AXIS, limits=(-15, 55)))
+    _mate(groups["antenna_hga_mast"], groups["antenna_hga_dish"], "hga_elev", HGA_ELEV_PIVOT, _Y_AXIS, (-15, 55))
     for side, sign in _SIDE_SIGN.items():
         hinge = (-150.0, sign * half_wid, SOLAR_HINGE_Z)
         # Modeled at SOLAR_DEPLOY_DEG, so 0 is deployed: stowing is -82 deg on
         # the left wing and +82 on the right (mirrored hinges, one X axis).
         limits = (-82, 13) if sign > 0 else (-13, 82)
-        mates.append(cadgen.revolute(
-            f"solar_{side}", parent=chassis, child=f"#solar_wing_{side}",
-            origin=hinge, direction=_X_AXIS, limits=limits))
+        _mate(chassis, groups[f"solar_wing_{side}"], f"solar_{side}", hinge, _X_AXIS, limits)
 
-    # -- cutaway hardware ----------------------------------------------------
-    # Real motion of real parts, kept as mates; the opacity/emissive half of
-    # the retired `cutaway_fraction` driver was presentation and is gone.
-    mates.append(cadgen.slider(
-        "lid_lift", parent=chassis, child="#deck_lid",
-        origin=(575.0, 255.0, deck_z), direction=_Z_AXIS, limits=(0, 420)))
-    mates.append(cadgen.revolute(
-        "panel_swing", parent=chassis, child="#side_panel_left",
-        origin=_PANEL_HINGE, direction=_X_AXIS, limits=(-75, 0)))
+    # -- cutaway hardware: the lid lifts, the left side panel swings clear ----
+    _mate(chassis, groups["deck_lid"], "lid_lift", (575.0, 255.0, deck_z), _Z_AXIS, (0, 420), linear=True)
+    _mate(chassis, groups["side_panel_left"], "panel_swing", _PANEL_HINGE, _X_AXIS, (-75, 0))
 
-    couplings = [
-        # One knob rolls all six wheels: same diameter, same axis, ratio 1.
-        cadgen.couple("drive", {name: 1.0 for name, *_rest in _WHEEL_STATIONS},
-                      limits=(0, 360)),
-        # Ackermann-ish coordinated steer: the retired grand tour swept the
-        # front pair 48/38 deg and the rear pair the other way, which is this
-        # gear set with the front-left as the unit.
-        cadgen.couple("steer", {"steer_front_left": 1.0, "steer_front_right": 0.79,
-                                "steer_rear_left": -1.0, "steer_rear_right": -0.79},
-                      limits=(-48, 48)),
-        # Crab walk: every corner to the same heading.
-        cadgen.couple("crab", {name: 1.0 for name, *_rest in _STEER_STATIONS},
-                      limits=(-60, 60)),
-        # Rockers counter-rotate and the differential bar takes half the split,
-        # which is exactly the retired {"kind": "ratio", ..., "ratio": 0.5}.
-        cadgen.couple("rocker_split",
-                      {"rocker_left": 1.0, "rocker_right": -1.0, "differential": 0.5},
-                      limits=(-12, 12)),
-        cadgen.couple("bogie_pitch", {"bogie_left": 1.0, "bogie_right": 1.0},
-                      limits=(-15, 15)),
-        # Mirrored hinges, so one deploy knob drives the wings apart.
-        cadgen.couple("solar_deploy", {"solar_left": 1.0, "solar_right": -1.0},
-                      limits=(-82, 13)),
-        # The retired cutaway_fraction geared the lid 420 mm up and swung the
-        # left panel 75 deg out; same two numbers, now over real DOFs.
-        cadgen.couple("cutaway", {"lid_lift": 420.0, "panel_swing": -75.0},
-                      limits=(0, 1)),
-    ]
-
-    poses = {
-        # Cruise stage / launch configuration: wings folded in, arm tucked,
-        # mast down, HGA parked.
-        "stowed": {"solar_deploy": -82, "arm_shoulder": 35, "arm_elbow": -75,
-                   "arm_wrist": 60, "mast_pitch": -60, "hga_elev": -15},
-        # On-surface science attitude: HGA on Earth, mast scanning off to port.
-        "deployed": {"hga_elev": 35, "mast_yaw": -60, "mast_pitch": 12},
-        # Arm out over a target ahead of the front-left wheel, turret presenting
-        # the drill.
-        "arm_reach": {"arm_azim": -18, "arm_shoulder": -30, "arm_elbow": 40,
-                      "arm_wrist": -25, "arm_turret": 90},
-        # Deck open for the internals.
-        "cutaway_open": {"cutaway": 1},
-    }
-
-    return {"mates": mates, "couplings": couplings, "poses": poses}
-
-
-KINEMATICS = _rover_kinematics()
 
 # ---------------------------------------------------------------------------
-# Assembly
+# The heave: the chassis on the terrain.
+#
+# `driveAround` heaves the whole body over the terrain, which stays put: the
+# chassis rides a prismatic joint of the terrain (`heave`), the rover on the
+# ground, so the terrain is the ground, and everything the chassis carries heaves
+# with it -- the jointed groups through their joints, the static ones (body,
+# internals, payloads, harness, dust, antennas, RTG) fastened to it.
+#
+# `explodedAssembly` is a GLB animation: every group but the chassis and the
+# terrain moves along its own world vector, the jointed ones too, by its own
+# vector, not its holder's plus its own (the rover's groups are siblings in its
+# tree, so each translation is its group's alone).
 # ---------------------------------------------------------------------------
 
-ANIMATION_JS = r'''// Choreography for the Mars rover concept (copied into the sidecar at build;
-// the viewer's Animation tab is the only consumer).
-//
-// Animation knows nothing of the mate graph by design, so the suspension and
-// arm chains are re-described here as raw transforms. That is cheap because
-// the handle API PREMULTIPLIES: a part turns about its own pivot first, then
-// each successive call wraps it in the next link outward, which is forward
-// kinematics written parent-last.
-//
-// Targets are OCCURRENCE IDS rather than labels, because every articulated
-// member here is a group (`rocker_left` is a subassembly, not a rendered part)
-// and an id ref matches everything beneath it. The table below is the model's
-// documented top-level child order — renumber it in the same commit as any
-// change to that list.
+_HEAVE_RANGE = (-40.0, 40.0)
+# Each group's direction and length per mm of the explode's 520 mm peak, the old
+# clip's vectors.
+_EXPLODE_VECTORS = {
+    "body_core": (0, 0, 0.35), "body_shell": (0, 0, 0.5),
+    "deck_lid": (0, 0, 1.15), "side_panel_left": (0, 0.9, 0.15),
+    "access_panels": (0, -0.8, 0.1), "thermal_control": (0, -0.35, 0.75),
+    "internals_avionics": (0, 0, 0.85), "internals_power": (0.15, -0.2, 0.75),
+    "science_payloads": (-0.2, 0.15, 0.95), "cable_harness": (0, 0, 0.3),
+    "dust_covers": (0, 0, -0.4), "dust_layer": (0, 0, 1.35),
+    "rocker_left": (0, 0.45, 0), "rocker_right": (0, -0.45, 0),
+    "bogie_left": (0, 0.6, 0), "bogie_right": (0, -0.6, 0),
+    "differential": (0, 0, 0.9),
+    "steering_front_left": (0.15, 0.75, 0.1), "steering_front_right": (0.15, -0.75, 0.1),
+    "steering_rear_left": (-0.15, 0.75, 0.1), "steering_rear_right": (-0.15, -0.75, 0.1),
+    "wheel_front_left": (0.15, 1, 0), "wheel_front_right": (0.15, -1, 0),
+    "wheel_middle_left": (0, 1, 0), "wheel_middle_right": (0, -1, 0),
+    "wheel_rear_left": (-0.15, 1, 0), "wheel_rear_right": (-0.15, -1, 0),
+    "mast_base": (0, 0, 0.7), "mast_head": (0, 0, 1.25),
+    "arm_azimuth": (0.5, 0, 0.35), "arm_shoulder": (0.8, 0, 0.5),
+    "arm_elbow": (1.05, 0, 0.6), "arm_wrist": (1.25, 0, 0.68),
+    "arm_turret": (1.45, 0, 0.78),
+    "antenna_hga_mast": (-0.3, 0.5, 0.5), "antenna_hga_dish": (-0.45, 0.75, 0.85),
+    "antenna_uhf": (-0.35, -0.6, 0.6), "antenna_whips": (-0.5, -0.8, 0.45),
+    "solar_wing_left": (0, 0.85, 0.3), "solar_wing_right": (0, -0.85, 0.3),
+    "power_rtg": (-0.95, 0, 0.15),
+}
+_EXPLODE_PEAK = 520.0
+# The groups no joint moves: each fastened to the chassis.
+_STATIC_GROUPS = (
+    "body_core", "body_shell", "access_panels", "thermal_control", "internals_avionics", "internals_power",
+    "science_payloads", "cable_harness", "dust_covers", "dust_layer", "antenna_uhf", "antenna_whips", "power_rtg",
+)
 
-const REF = {
-  terrain: "o1.1",
-  chassis: "o1.2",
-  bodyCore: "o1.3",
-  bodyShell: "o1.4",
-  deckLid: "o1.5",
-  sidePanelLeft: "o1.6",
-  accessPanels: "o1.7",
-  thermalControl: "o1.8",
-  internalsAvionics: "o1.9",
-  internalsPower: "o1.10",
-  sciencePayloads: "o1.11",
-  cableHarness: "o1.12",
-  dustCovers: "o1.13",
-  dustLayer: "o1.14",
-  rockerLeft: "o1.15",
-  rockerRight: "o1.16",
-  bogieLeft: "o1.17",
-  bogieRight: "o1.18",
-  differential: "o1.19",
-  steerFrontLeft: "o1.20",
-  steerFrontRight: "o1.21",
-  steerRearLeft: "o1.22",
-  steerRearRight: "o1.23",
-  wheelFrontLeft: "o1.24",
-  wheelFrontRight: "o1.25",
-  wheelMiddleLeft: "o1.26",
-  wheelMiddleRight: "o1.27",
-  wheelRearLeft: "o1.28",
-  wheelRearRight: "o1.29",
-  mastBase: "o1.30",
-  mastHead: "o1.31",
-  armAzimuth: "o1.32",
-  armShoulder: "o1.33",
-  armElbow: "o1.34",
-  armWrist: "o1.35",
-  armTurret: "o1.36",
-  hgaMast: "o1.37",
-  hgaDish: "o1.38",
-  antennaUhf: "o1.39",
-  antennaWhips: "o1.40",
-  solarLeft: "o1.41",
-  solarRight: "o1.42",
-  rtg: "o1.43"
-};
 
-// Everything bolted to the warm body: it rides the chassis bob but has no
-// articulation of its own. Terrain is deliberately absent — the ground stays
-// put while the rover works over it.
-const BODY = [
-  REF.chassis, REF.bodyCore, REF.bodyShell, REF.deckLid, REF.sidePanelLeft,
-  REF.accessPanels, REF.thermalControl, REF.internalsAvionics, REF.internalsPower,
-  REF.sciencePayloads, REF.cableHarness, REF.dustCovers, REF.dustLayer,
-  REF.mastBase, REF.mastHead, REF.armAzimuth, REF.armShoulder, REF.armElbow,
-  REF.armWrist, REF.armTurret, REF.hgaMast, REF.hgaDish, REF.antennaUhf,
-  REF.antennaWhips, REF.solarLeft, REF.solarRight, REF.rtg
-].join(",");
+def _fasten(label: str, holder: bd.Shape, rider: bd.Shape) -> None:
+    """``rider`` fastened to ``holder`` where both stand: a rigid pair of one label."""
+    for part in (holder, rider):
+        if not hasattr(part, "joints"):  # `transformed` makes a plain bd.Shape: no joints of its own
+            part.joints = {}
+        bd.RigidJoint(label, part, bd.Location())
 
-const X = [1, 0, 0];
-const Y = [0, 1, 0];
-const Z = [0, 0, 1];
 
-// Layout constants mirrored from the model's derived layout. Plain numbers,
-// because this file is delivered on its own, inlined in the sidecar.
-const ROCKER_PIVOT = { left: [150, 760, 800], right: [150, -760, 800] };
-const BOGIE_PIVOT = { left: [-700, 760, 430], right: [-700, -760, 430] };
-const DIFF_PIVOT = [430, 0, 1235];
-const MAST_ORIGIN = [780, -380, 1180];
-const HEAD_PIVOT = [780, -380, 2200];
-const PANEL_HINGE = [0, 650, 570];
-const HGA_PIVOT = [-520, 420, 1360];
-const SOLAR_HINGE = { left: [-150, 650, 1186], right: [-150, -650, 1186] };
-const ARM_LINKS = [
-  { ref: REF.armAzimuth, axis: Z, origin: [1160, 200, 715], key: "azim" },
-  { ref: REF.armShoulder, axis: Y, origin: [1160, 200, 760], key: "shoulder" },
-  { ref: REF.armElbow, axis: Y, origin: [1761.4, 200, 541.1], key: "elbow" },
-  { ref: REF.armWrist, axis: Y, origin: [2268.9, 200, 304.4], key: "wrist" },
-  { ref: REF.armTurret, axis: [0.5, 0, -0.866], origin: [2343.9, 200, 174.5], key: "turret" }
-];
+def _ride_joints(groups: dict[str, bd.Shape]) -> None:
+    """``heave`` (the chassis on the terrain), and the groups no joint moves fastened to the
+    chassis, the HGA mast (which holds the dish's joint) with them, so they heave with it."""
+    terrain, chassis = groups["terrain"], groups["chassis_frame"]
+    bd.LinearJoint("heave", terrain, axis=bd.Axis((0.0, 0.0, 0.0), _Z_AXIS), linear_range=_HEAVE_RANGE)
+    bd.RigidJoint("heave", chassis, bd.Location())
+    for label in (*_STATIC_GROUPS, "antenna_hga_mast"):
+        _fasten(f"{label}_rides", chassis, groups[label])
 
-// Axle center per station, and which suspension member carries it.
-const WHEELS = [
-  { ref: REF.wheelFrontLeft, center: [1250, 990, 260], side: "left", fork: REF.steerFrontLeft, onBogie: false },
-  { ref: REF.wheelFrontRight, center: [1250, -990, 260], side: "right", fork: REF.steerFrontRight, onBogie: false },
-  { ref: REF.wheelMiddleLeft, center: [-150, 990, 260], side: "left", fork: null, onBogie: true },
-  { ref: REF.wheelMiddleRight, center: [-150, -990, 260], side: "right", fork: null, onBogie: true },
-  { ref: REF.wheelRearLeft, center: [-1250, 990, 260], side: "left", fork: REF.steerRearLeft, onBogie: true },
-  { ref: REF.wheelRearRight, center: [-1250, -990, 260], side: "right", fork: REF.steerRearRight, onBogie: true }
-];
 
-const clamp01 = (u) => Math.min(1, Math.max(0, u));
-const ease = {
-  sine: (u) => 0.5 - 0.5 * Math.cos(Math.PI * 2 * u),
-  smooth: (u) => {
-    const c = clamp01(u);
-    return c * c * (3 - 2 * c);
-  },
-  // 0 -> 1 -> 0 across a window of the master ramp
-  bump: (u, from, to) => (u <= from || u >= to ? 0 : ease.sine((u - from) / (to - from)))
-};
+# ---------------------------------------------------------------------------
+# The clips: motions of time over the joints
+# ---------------------------------------------------------------------------
 
-// One frame of the rocker-bogie chain, folded by hand in the same parent order
-// the mates declare: wheel -> fork -> bogie -> rocker -> body.
-function suspension(m, q) {
-  const heave = [0, 0, q.heave];
-  const rockerDeg = (side) => (side === "left" ? q.rockerSplit : -q.rockerSplit);
+def _sine(u: float) -> float:
+    return 0.5 - 0.5 * math.cos(math.tau * u)
 
-  m.get(BODY).translate(heave);
 
-  for (const side of ["left", "right"]) {
-    const rocker = m.get(side === "left" ? REF.rockerLeft : REF.rockerRight);
-    rocker.rotate(Y, rockerDeg(side), ROCKER_PIVOT[side]);
-    rocker.translate(heave);
+def _smooth(u: float) -> float:
+    c = min(1.0, max(0.0, u))
+    return c * c * (3 - 2 * c)
 
-    const bogie = m.get(side === "left" ? REF.bogieLeft : REF.bogieRight);
-    bogie.rotate(Y, q.bogiePitch, BOGIE_PIVOT[side]);
-    bogie.rotate(Y, rockerDeg(side), ROCKER_PIVOT[side]);
-    bogie.translate(heave);
-  }
 
-  // The differential bar splits the two rockers at half rate.
-  const diff = m.get(REF.differential);
-  diff.rotate(Z, q.rockerSplit * 0.5, DIFF_PIVOT);
-  diff.translate(heave);
+def _bump(u: float, start: float, end: float) -> float:
+    """0 -> 1 -> 0 across ``start``..``end`` of the master ramp."""
+    return 0.0 if u <= start or u >= end else _sine((u - start) / (end - start))
 
-  for (const wheel of WHEELS) {
-    const { side, fork, onBogie, center } = wheel;
-    const steerDeg = fork ? q.steer[fork] || 0 : 0;
 
-    if (fork) {
-      const handle = m.get(fork);
-      handle.rotate(Z, steerDeg, center);
-      if (onBogie) {
-        handle.rotate(Y, q.bogiePitch, BOGIE_PIVOT[side]);
-      }
-      handle.rotate(Y, rockerDeg(side), ROCKER_PIVOT[side]);
-      handle.translate(heave);
+def _drive_around(t: float) -> dict:
+    """A lap: the body heaves over the terrain, the rockers split, the bogies pitch, the
+    corners steer (`_steer`, the old Ackermann gearing), every wheel rolls four turns,
+    and the mast looks into the turn."""
+    u = t / 18
+    steer = 34 * math.sin(u * math.tau * 2)
+    bogie = 8 * math.sin(u * math.tau * 5 + 1.1)
+    values = {
+        "heave": 18 * math.sin(u * math.tau * 10),
+        "rocker_split": 6 * math.sin(u * math.tau * 5),
+        "bogie_left": bogie,
+        "bogie_right": bogie,
+        **_steer(steer),
+        "mast_yaw": -1.6 * steer,
+        "mast_pitch": 8 * math.sin(u * math.tau),
+    }
+    for name, *_rest in _WHEEL_STATIONS:
+        values[name] = u * _DRIVE_TURNS * 360
+    return values
+
+
+def _arm(azim: float, shoulder: float, elbow: float, wrist: float, turret: float) -> dict:
+    return {"arm_azim": azim, "arm_shoulder": shoulder, "arm_elbow": elbow, "arm_wrist": wrist,
+            "arm_turret": turret}
+
+
+def _arm_cycle(t: float) -> dict:
+    """Reach out, dwell over the target while the turret indexes tools, come back; the
+    mast watches. Angles are deltas from the modelled sampling hover."""
+    u = t / 12
+    reach = _bump(u, 0, 0.86)
+    turret = 90 * _smooth((u - 0.3) / 0.25) - 90 * _smooth((u - 0.62) / 0.2)
+    return {**_arm(-18 * reach, -30 * reach, 40 * reach, -25 * reach, turret),
+            "mast_yaw": -14 * reach, "mast_pitch": 22 * reach}
+
+
+def _deploy_sequence(t: float) -> dict:
+    """Staged the way the real thing would come alive: wings out, HGA up, mast raised and
+    panned, arm checked out, deck opened."""
+    u = t / 20
+    wings = _smooth(u / 0.22)
+    hga = _smooth((u - 0.2) / 0.18)
+    mast = _smooth((u - 0.36) / 0.18)
+    arm = _bump(u, 0.5, 0.78)
+    cutaway = _bump(u, 0.74, 1)
+    return {
+        # folded (-82 deg on the left hinge) out to the modelled deploy angle, this model's zero
+        **_solar(-82 * (1 - wings)),
+        "hga_elev": -15 + 50 * hga,
+        "mast_yaw": 150 * mast * math.sin(u * math.tau),
+        "mast_pitch": -60 * (1 - mast),
+        **_arm(-12 * arm, -22 * arm, 30 * arm, -18 * arm, 180 * arm),
+        # the deck lid lifts clear and the port panel swings out
+        **_cutaway(cutaway),
     }
 
-    const w = m.get(wheel.ref);
-    w.rotate(Y, q.drive, center); // its own axle
-    w.rotate(Z, steerDeg, center); // the steering fork
-    if (onBogie) {
-      w.rotate(Y, q.bogiePitch, BOGIE_PIVOT[side]);
-    }
-    w.rotate(Y, rockerDeg(side), ROCKER_PIVOT[side]);
-    w.translate(heave);
-  }
+
+def _exploded_assembly(rover: bd.Compound) -> None:
+    """`explodedAssembly`, a GLB animation: one ramp out and back over 12 s, each group along
+    its own vector, at the 520 mm peak."""
+    show = animation(rover, "explodedAssembly", duration=12)
+    for label, vector in _EXPLODE_VECTORS.items():
+        out = tuple(v * _EXPLODE_PEAK for v in vector)
+        show.translation(label, by=out, start=0, end=6)
+        show.translation(label, by=tuple(-v for v in out), start=6, end=12)
+
+
+# One control each, driving several joints by ratio: name -> (range, ratios).
+# The one real linkage: the differential bar makes the rockers counter-rotate,
+# taking half the split itself. A constraint: the rockers and the bar move only
+# through it, its range the rockers' limits (+-12 deg).
+_COUPLINGS = {
+    "rocker_split": {"rocker_left": 1.0, "rocker_right": -1.0, "differential": 0.5},
 }
 
-// The arm chain, folded shoulder-outward. Angles are deltas from the modeled
-// sampling hover, so all-zero is the artifact as written.
-function armChain(m, q) {
-  ARM_LINKS.forEach((link, index) => {
-    const handle = m.get(link.ref);
-    handle.rotate(link.axis, q[link.key] || 0, link.origin);
-    // Each ancestor applied outward is what makes the chain a chain: later
-    // calls premultiply, so the parent wraps the child.
-    for (let up = index - 1; up >= 0; up -= 1) {
-      handle.rotate(ARM_LINKS[up].axis, q[ARM_LINKS[up].key] || 0, ARM_LINKS[up].origin);
-    }
-  });
+
+def _steer(heading: float) -> dict:
+    """The four corners' Ackermann-ish steer at ``heading`` on the front-left fork (the old
+    `steer` coupling's gearing, now set joint by joint)."""
+    return {name: ratio * heading for name, ratio in _STEER_GEARS.items()}
+
+
+def _solar(deploy: float) -> dict:
+    """Both wings at ``deploy`` on the left hinge (mirrored hinges: the right takes -deploy)."""
+    return {"solar_left": deploy, "solar_right": -deploy}
+
+
+def _cutaway(open_: float) -> dict:
+    """The deck lid lifted and the left side panel swung out, ``open_`` of the way (0..1)."""
+    return {"lid_lift": 420.0 * open_, "panel_swing": -75.0 * open_}
+
+
+_POSES = {
+    # Cruise stage / launch configuration: wings folded in, arm tucked,
+    # mast down, HGA parked.
+    "stowed": {**_solar(-82), "arm_shoulder": 35, "arm_elbow": -75,
+               "arm_wrist": 60, "mast_pitch": -60, "hga_elev": -15},
+    # On-surface science attitude: HGA on Earth, mast scanning off to port.
+    "deployed": {"hga_elev": 35, "mast_yaw": -60, "mast_pitch": 12},
+    # Arm out over a target ahead of the front-left wheel, turret presenting
+    # the drill.
+    "arm_reach": {"arm_azim": -18, "arm_shoulder": -30, "arm_elbow": 40,
+                  "arm_wrist": -25, "arm_turret": 90},
+    # Deck open for the internals.
+    "cutaway_open": _cutaway(1),
 }
 
-// Azimuth turns the column, elevation pitches the head on top of it.
-function mastScan(m, yawDeg, pitchDeg) {
-  m.get(REF.mastBase).rotate(Z, yawDeg, MAST_ORIGIN);
-  const head = m.get(REF.mastHead);
-  head.rotate(Y, pitchDeg, HEAD_PIVOT);
-  head.rotate(Z, yawDeg, MAST_ORIGIN);
-}
 
-export const clips = {
-  driveAround: {
-    label: "Drive-around",
-    duration: 18,
-    update(t, m) {
-      const u = t / 18;
-      // Four wheel revolutions a lap, wrapped: 360 reads the same as 0.
-      const drive = (u * 4 * 360) % 360;
-      const steerDeg = 34 * Math.sin(u * Math.PI * 2 * 2);
-      suspension(m, {
-        heave: 18 * Math.sin(u * Math.PI * 2 * 10),
-        rockerSplit: 6 * Math.sin(u * Math.PI * 2 * 5),
-        bogiePitch: 8 * Math.sin(u * Math.PI * 2 * 5 + 1.1),
-        drive,
-        steer: {
-          [REF.steerFrontLeft]: steerDeg,
-          [REF.steerFrontRight]: steerDeg * 0.79,
-          [REF.steerRearLeft]: -steerDeg,
-          [REF.steerRearRight]: -steerDeg * 0.79
-        }
-      });
-      // The mast looks into the turn. It rides the body handle above, so only
-      // its own two rotations are described here.
-      mastScan(m, -1.6 * steerDeg, 8 * Math.sin(u * Math.PI * 2));
-    }
-  },
-
-  armCycle: {
-    label: "Arm sampling cycle",
-    duration: 12,
-    update(t, m) {
-      const u = t / 12;
-      // Reach out, dwell over the target while the turret indexes tools, come
-      // back. The dwell is where the drill would be on the rock.
-      const reach = ease.bump(u, 0, 0.86);
-      armChain(m, {
-        azim: -18 * reach,
-        shoulder: -30 * reach,
-        elbow: 40 * reach,
-        wrist: -25 * reach,
-        turret: 90 * ease.smooth((u - 0.3) / 0.25) - 90 * ease.smooth((u - 0.62) / 0.2)
-      });
-      mastScan(m, -14 * reach, 22 * reach);
-    }
-  },
-
-  deploySequence: {
-    label: "Deploy sequence",
-    duration: 20,
-    update(t, m) {
-      const u = t / 20;
-      // Staged the way the real thing would come alive: wings out, HGA up,
-      // mast raised and panned, arm checked out, deck opened.
-      const wings = ease.smooth(u / 0.22);
-      const hga = ease.smooth((u - 0.2) / 0.18);
-      const mast = ease.smooth((u - 0.36) / 0.18);
-      const arm = ease.bump(u, 0.5, 0.78);
-      const cutaway = ease.bump(u, 0.74, 1);
-
-      // Wings start folded (-82 deg on the left hinge) and open to the modeled
-      // deploy angle, which is this model's zero.
-      m.get(REF.solarLeft).rotate(X, -82 * (1 - wings), SOLAR_HINGE.left);
-      m.get(REF.solarRight).rotate(X, 82 * (1 - wings), SOLAR_HINGE.right);
-
-      m.get(REF.hgaDish).rotate(Y, -15 + 50 * hga, HGA_PIVOT);
-
-      mastScan(m, 150 * mast * Math.sin(u * Math.PI * 2), -60 * (1 - mast));
-
-      armChain(m, {
-        azim: -12 * arm, shoulder: -22 * arm, elbow: 30 * arm,
-        wrist: -18 * arm, turret: 180 * arm
-      });
-
-      // The deck lid lifts clear and the port panel swings out. The retired
-      // pose block also faded the shell and lit the internals here; the handle
-      // API has opacity but no emissive, so the dust film thins and the rest
-      // of that styling is simply gone.
-      m.get(REF.deckLid).translate([0, 0, 420 * cutaway]);
-      m.get(REF.sidePanelLeft).rotate(X, -75 * cutaway, PANEL_HINGE);
-      m.get(REF.dustLayer).opacity(1 - 0.85 * cutaway);
-    }
-  },
-
-  explodedAssembly: {
-    label: "Exploded assembly",
-    duration: 12,
-    update(t, m) {
-      // The retired `exploded_distance` driver restated: one ramp out and
-      // back, each group along its own direction, at the 520 mm peak the old
-      // grand tour used.
-      const d = ease.sine(t / 12) * 520;
-      const vectors = {
-        [REF.bodyCore]: [0, 0, 0.35], [REF.bodyShell]: [0, 0, 0.5],
-        [REF.deckLid]: [0, 0, 1.15], [REF.sidePanelLeft]: [0, 0.9, 0.15],
-        [REF.accessPanels]: [0, -0.8, 0.1], [REF.thermalControl]: [0, -0.35, 0.75],
-        [REF.internalsAvionics]: [0, 0, 0.85], [REF.internalsPower]: [0.15, -0.2, 0.75],
-        [REF.sciencePayloads]: [-0.2, 0.15, 0.95], [REF.cableHarness]: [0, 0, 0.3],
-        [REF.dustCovers]: [0, 0, -0.4], [REF.dustLayer]: [0, 0, 1.35],
-        [REF.rockerLeft]: [0, 0.45, 0], [REF.rockerRight]: [0, -0.45, 0],
-        [REF.bogieLeft]: [0, 0.6, 0], [REF.bogieRight]: [0, -0.6, 0],
-        [REF.differential]: [0, 0, 0.9],
-        [REF.steerFrontLeft]: [0.15, 0.75, 0.1], [REF.steerFrontRight]: [0.15, -0.75, 0.1],
-        [REF.steerRearLeft]: [-0.15, 0.75, 0.1], [REF.steerRearRight]: [-0.15, -0.75, 0.1],
-        [REF.wheelFrontLeft]: [0.15, 1, 0], [REF.wheelFrontRight]: [0.15, -1, 0],
-        [REF.wheelMiddleLeft]: [0, 1, 0], [REF.wheelMiddleRight]: [0, -1, 0],
-        [REF.wheelRearLeft]: [-0.15, 1, 0], [REF.wheelRearRight]: [-0.15, -1, 0],
-        [REF.mastBase]: [0, 0, 0.7], [REF.mastHead]: [0, 0, 1.25],
-        [REF.armAzimuth]: [0.5, 0, 0.35], [REF.armShoulder]: [0.8, 0, 0.5],
-        [REF.armElbow]: [1.05, 0, 0.6], [REF.armWrist]: [1.25, 0, 0.68],
-        [REF.armTurret]: [1.45, 0, 0.78],
-        [REF.hgaMast]: [-0.3, 0.5, 0.5], [REF.hgaDish]: [-0.45, 0.75, 0.85],
-        [REF.antennaUhf]: [-0.35, -0.6, 0.6], [REF.antennaWhips]: [-0.5, -0.8, 0.45],
-        [REF.solarLeft]: [0, 0.85, 0.3], [REF.solarRight]: [0, -0.85, 0.3],
-        [REF.rtg]: [-0.95, 0, 0.15]
-      };
-      for (const [ref, vector] of Object.entries(vectors)) {
-        m.get(ref).translate(vector.map((c) => c * d));
-      }
-    }
-  }
-};
-'''
-
-
-@step(out="../../STEP/mars_rover_concept/mars_rover_concept.step", kinematics=KINEMATICS, animation=ANIMATION_JS)
+@model
 def mars_rover_concept():
-    # Top-level child order is the animation module's ref contract (#o1.N);
-    # the mates address these same groups by LABEL, so only the .anim.js file
-    # has to be renumbered if the child list ever changes:
+    # Top-level children, in order (the joints address them by label):
     #  1 terrain            2 chassis_frame     3 body_core        4 body_shell
     #  5 deck_lid           6 side_panel_left   7 access_panels    8 thermal_control
     #  9 internals_avionics 10 internals_power  11 science_payloads 12 cable_harness
@@ -1623,7 +1430,19 @@ def mars_rover_concept():
         solar_wing(-1.0, "right"),
         power_rtg(),
     ]
-    return group("mars_rover_concept", children)
+    by_label = {child.label: child for child in children}
+    _connect(by_label)
+    _ride_joints(by_label)
+    rover = group("mars_rover_concept", children)
+    for name, ratios in _COUPLINGS.items():
+        gear_pair(rover, name, **ratios)
+    for name, values in _POSES.items():
+        mechanism_state(rover, name, **values)
+    configuration_sequence(rover, "driveAround", _drive_around, duration=18)
+    configuration_sequence(rover, "armCycle", _arm_cycle, duration=12)
+    configuration_sequence(rover, "deploySequence", _deploy_sequence, duration=20)
+    _exploded_assembly(rover)
+    return rover
 
 
 if __name__ == "__main__":

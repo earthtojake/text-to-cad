@@ -37,7 +37,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
+
+from cadgen import memo
 
 from lib import castings as C
 from lib import fasteners as F
@@ -115,12 +117,29 @@ def _pchip(xs, ys):
     return PchipInterpolator(np.asarray(xs, float), np.asarray(ys, float))
 
 
+# The interpolants are made where they are evaluated, from these plain numbers: an
+# interpolator object at module level is a value the memo cannot key.
 _CY_SQ = np.sqrt(np.array(_CY_X) / 100.0)
-_U = _pchip(_CY_SQ, np.array(_CY_U) / 100.0)
-_L = _pchip(_CY_SQ, np.array(_CY_L) / 100.0)
+_CHORD_S = [190, 260, 330, 400, 470, 560, 650, 800, 950, 1080]
+_CHORD_MM = [92, 128, 160, 185, 203, 218, 228, 235, 233, 222]
+_TC_S = [190, 260, 330, 400, 470, 560, 700, 900, 1100, 1300]
+_TC_RATIO = [0.84, 0.58, 0.42, 0.32, 0.25, 0.19, 0.13, 0.092, 0.074, 0.062]
 
-_CHORD = _pchip([190, 260, 330, 400, 470, 560, 650, 800, 950, 1080], [92, 128, 160, 185, 203, 218, 228, 235, 233, 222])
-_TC = _pchip([190, 260, 330, 400, 470, 560, 700, 900, 1100, 1300], [0.84, 0.58, 0.42, 0.32, 0.25, 0.19, 0.13, 0.092, 0.074, 0.062])
+
+def _U(x):
+    return _pchip(_CY_SQ, np.array(_CY_U) / 100.0)(x)
+
+
+def _L(x):
+    return _pchip(_CY_SQ, np.array(_CY_L) / 100.0)(x)
+
+
+def _CHORD(s):
+    return _pchip(_CHORD_S, _CHORD_MM)(s)
+
+
+def _TC(s):
+    return _pchip(_TC_S, _TC_RATIO)(s)
 TIP_S0 = 1080.0
 
 
@@ -260,9 +279,11 @@ def _blade_surface():
     return Geom_BSplineSurface(poles, uk, vk, um, vm, c0.Degree(), r0.Degree())
 
 
+@memo
 def blade_proto():
     """One B-spline surface interpolated through the section grid (contour x
-    span), a ruled trailing-edge strip, planar root and tip caps, sewn."""
+    span), a ruled trailing-edge strip, planar root and tip caps, sewn. OCCT's own
+    makers, which no key names: a `@memo` call keys the solid they make."""
     from OCP.BRep import BRep_Tool
     from OCP.BRepBuilderAPI import (BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace,
                                     BRepBuilderAPI_MakeSolid, BRepBuilderAPI_MakeWire,

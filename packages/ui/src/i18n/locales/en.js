@@ -6,12 +6,46 @@
  * fills in.
  */
 export default {
+  "export.button": "Export",
+  "export.heading": "Export model",
+  "export.preview": "Preview exports the authored model.",
+  "export.geometry": "Visibility, clipping and explode do not affect the export. GLB includes authored animations.",
+  "export.format": "Format",
+  "export.original": "Download original XBF",
+  "export.checking": "Checking available formats…",
+  "export.start": "Export and download",
+  "export.open": "Open a STEP, XBF or live model to export.",
+  "export.show": "Show exports ({count})",
+  "export.jobs": "Export jobs",
+  "export.toast": "Export {name}",
+  "export.dismiss": "Dismiss export status",
+  "export.submitting": "Submitting export",
+  "export.until": "Available to download again until {time}.",
+  "export.cancel": "Cancel",
+  "export.again": "Download again",
+  "export.remove": "Remove",
+  "export.reconnecting": "Connection interrupted. Reconnecting; your export may still be running.",
+  "export.cancelRequested": "Cancellation requested…",
+  "export.cancelError": "Could not confirm cancellation: {message}",
+  "export.queued": "Waiting to start",
+  "export.running": "Exporting",
+  "export.cancelling": "Cancelling after the current step",
+  "export.cancelled": "Cancelled",
+  "export.failed": "Export failed",
+  "export.expired": "Expired",
+  "export.downloaded": "Download started",
+  "export.fetched": "Downloaded",
+  "export.exportAgain": "Export again",
+
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "The CAD Viewer is not answering",
+  "app.engine.notRunning": "The engine is not running.",
+  "app.engine.runAgain": "Run cadgen viewer again.",
 
   // The file view: opening, and the states where it stops.
   "file.opening": "Opening…",
   "file.missing": "File does not exist",
+  "file.notHeld": "This model is no longer held",
   "file.openFailed": "Could not open that file",
   "file.displayFailed": "Could not display that file",
   "file.goHome": "Go home",
@@ -22,6 +56,8 @@ export default {
   "navbar.back": "Back",
   "navbar.forward": "Forward",
   "navbar.fileActions": "File actions",
+  "navbar.fullSize": "Full size",
+  "navbar.openInBrowser": "Open in browser",
 
   // The ⋯ menu's actions on the file.
   "file.copyPath": "Copy path",
@@ -75,6 +111,7 @@ export default {
   "home.byline": "Build anything.",
   "home.bylineOpenSource": "100% open source and free.",
   "home.recentFiles": "Recent Files",
+  "home.launchFolder": "Launch folder",
   "home.searchAria": "Search models",
   "home.searchPlaceholder": "Search",
   "home.layout": "Layout",
@@ -126,6 +163,8 @@ export default {
   "alert.copyFailed": "The details could not be copied. Select them above and copy them.",
   "alert.retry": "Retry",
   "alert.reportIssue": "Report Issue",
+  "alert.stale.title": "The code changed since this was built",
+  "alert.stale.message": "You’re viewing the last build: nothing reran. To build it again, run:",
 
   // The loading indicator under the loading mark.
   "loading.lastStep": "Last step: {label}",

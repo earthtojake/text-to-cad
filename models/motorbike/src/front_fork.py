@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import step
+import build123d as bd
+from cadgen import model
 
 from lib import frontend as B
 
 
-@step(out="../STEP/front_fork.step")
+@model
 def front_fork():
     built = B.build_front_fork()
     if isinstance(built, list):

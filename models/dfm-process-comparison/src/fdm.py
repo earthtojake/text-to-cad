@@ -1,10 +1,14 @@
-from cadgen import step, stl
+from cadgen import materials, model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/fdm.step")
-@stl(out="../STL/fdm.stl")
+
+@model
 def fdm():
-    return tray("fdm")
+    part = tray("fdm")
+    # printed upright: PLA (README)
+    part.material = materials.pla
+    return part
+
 
 if __name__ == "__main__":
     fdm()

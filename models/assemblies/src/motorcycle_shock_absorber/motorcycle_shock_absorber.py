@@ -9,9 +9,10 @@ Single-tube coilover damper in its static design pose.
 * Damper axis: global Z; +Z points from the body toward the piston rod.
 * Mounting eye bores run along global Y so the shock drops straight into a
   swingarm/linkage side view drawn in XZ.
-* Fixed root: the damper body module. The piston-rod cartridge carries a
-  native linear joint along Z (the damper stroke axis); the coil spring is
-  seated face-to-face on both spring perches.
+* Fixed root: the damper body module. The piston-rod cartridge rides a
+  build123d linear joint along Z (`damper_stroke`, the damper's travel); the
+  coil spring is seated on the body's lower perch and bears on the rod's
+  upper perch where it stands.
 
 `inspect interfere` reports overlaps at every threaded/blind joint (collar
 on tube, gland cap, eye shank, rod entering the tube, spring ends on the
@@ -20,13 +21,12 @@ the only moving joint (rod stroke along Z) stays coaxial and clear.
 """
 
 from __future__ import annotations
-from cadgen import step
+from cadgen import model
 
 from math import cos, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
-from cadgen.assembly import AssemblyHelper, label_shape
 
 
 DISPLAY_NAME = "Motorcycle rear shock absorber"
@@ -87,12 +87,12 @@ DAMPER_STROKE = 30.0        # native linear joint travel range
 
 
 COLORS = {
-    "graphite": (0.05, 0.05, 0.06, 1.0),
-    "anodized_red": (0.62, 0.05, 0.05, 1.0),
-    "brushed_bronze": (0.55, 0.38, 0.16, 1.0),
-    "chrome": (0.78, 0.80, 0.82, 1.0),
-    "pale_aluminum": (0.74, 0.76, 0.75, 1.0),
-    "spring_yellow": (0.98, 0.72, 0.02, 1.0),
+    "graphite": "#3f3f45",
+    "anodized_red": "#ce3f3f",
+    "brushed_bronze": "#c4a66f",
+    "chrome": "#e5e7ea",
+    "pale_aluminum": "#dfe2e1",
+    "spring_yellow": "#fddd27",
 }
 
 
@@ -102,7 +102,9 @@ COLORS = {
 
 
 def _part(shape, name, *details, color_name):
-    return label_shape(shape, name, *details, color=bd.Color(*COLORS[color_name]))
+    shape.label = ":".join("_".join(str(token).strip().replace(":", "_").split()) for token in (name, *details))
+    shape.color = bd.Color(COLORS[color_name])
+    return shape
 
 
 def _axis_cylinder(center, axis, radius, height):
@@ -264,47 +266,31 @@ def _spring_part():
 
 
 def _build():
-    asm = AssemblyHelper("motorcycle_shock_absorber")
+    body_module = bd.Compound(children=_damper_body_children(), label="damper_body")
+    rod_module = bd.Compound(children=_piston_rod_children(), label="piston_rod_cartridge")
+    spring = _spring_part()
+    spring.label = "coil_spring"
 
-    body_module = asm.add_module("damper_body", _damper_body_children())
-    rod_module = asm.add_module("piston_rod_cartridge", _piston_rod_children())
-    spring = asm.add(_spring_part(), "coil_spring")
+    # damper stroke: the rod slides on the tube axis (static design pose = 0 travel).
+    # The moving side is a rigid frame, as build123d's LinearJoint.connect_to takes.
+    bd.LinearJoint("damper_stroke", body_module,
+                   axis=bd.Axis((0.0, 0.0, GLAND_CAP_TOP_Z), (0.0, 0.0, 1.0)),
+                   linear_range=(0.0, DAMPER_STROKE))
+    bd.RigidJoint("damper_axis", rod_module, bd.Location((0.0, 0.0, GLAND_CAP_TOP_Z)))
+    body_module.joints["damper_stroke"].connect_to(rod_module.joints["damper_axis"], position=0.0)
 
-    # damper stroke: rod slides on the tube axis (static design pose = 0 travel)
-    body_guide = asm.linear_frame(
-        body_module, "rod_guide_axis",
-        bd.Axis((0.0, 0.0, GLAND_CAP_TOP_Z), (0.0, 0.0, 1.0)),
-        linear_range=(0.0, DAMPER_STROKE),
-    )
-    # the moving side must be a rigid frame for LinearJoint.connect_to in this
-    # build123d version; travel range lives on the body-side linear joint
-    rod_axis = asm.rigid_frame(
-        rod_module, "damper_axis",
-        bd.Location((0.0, 0.0, GLAND_CAP_TOP_Z)),
-    )
-    asm.linear(body_guide, rod_axis, position=0.0, label="damper_stroke")
+    # The spring seats on the body's lower perch. Its top coil bears on the
+    # rod's upper perch (SPRING_TOP_Z) where it stands, unjointed: the coil
+    # compresses with the stroke, and a second rigid seat would weld the rod
+    # to the body.
+    bd.RigidJoint("lower_perch_face", body_module, bd.Location((0.0, 0.0, SPRING_BOTTOM_Z)))
+    bd.RigidJoint("spring_base_coil", spring, bd.Location((0.0, 0.0, SPRING_BOTTOM_Z)))
+    body_module.joints["lower_perch_face"].connect_to(spring.joints["spring_base_coil"])
 
-    # spring bears on both perches
-    lower_perch = asm.rigid_frame(
-        body_module, "lower_perch_face", bd.Location((0.0, 0.0, SPRING_BOTTOM_Z)),
-    )
-    spring_base = asm.rigid_frame(
-        spring, "spring_base_coil", bd.Location((0.0, 0.0, SPRING_BOTTOM_Z)),
-    )
-    asm.face_to_face(lower_perch, spring_base, label="spring_lower_seat")
-
-    upper_perch = asm.rigid_frame(
-        rod_module, "upper_perch_face", bd.Location((0.0, 0.0, SPRING_TOP_Z)),
-    )
-    spring_top = asm.rigid_frame(
-        spring, "spring_top_coil", bd.Location((0.0, 0.0, SPRING_TOP_Z)),
-    )
-    asm.face_to_face(upper_perch, spring_top, label="spring_upper_seat")
-
-    return asm.build()
+    return bd.Compound(children=[body_module, rod_module, spring], label="motorcycle_shock_absorber")
 
 
-@step(out="../../STEP/motorcycle_shock_absorber/motorcycle_shock_absorber.step")
+@model
 def motorcycle_shock_absorber():
     return _build()
 

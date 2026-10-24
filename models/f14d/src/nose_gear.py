@@ -1,21 +1,16 @@
-"""F-14D system model: nose_gear — leg, wheels, launch bar, doors, bay.
+"""F-14D system: nose_gear — leg, wheels, launch bar, doors, bay.
 
-The group `lib/nose_gear.py` builds, already on its gear stance, as one model
-with its own STEP, record and worker. `f14d.py` links it as occurrence
-`o1.8`; rebuild `f14d.py` to pick up a change here.
+A stage of the aircraft: the group `lib/nose_gear.py` builds, already on its gear
+stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
+not reach its code replays it from the worker's memory instead of running it.
 """
 
-from __future__ import annotations
-
-from cadgen import step
+from cadgen import memo
 
 from lib import nose_gear as nose_gear_lib
 
 
-@step(out="../STEP/nose_gear.step")
+@memo
 def nose_gear():
-    return nose_gear_lib.build()
-
-
-if __name__ == "__main__":
-    nose_gear()
+    group = nose_gear_lib.build()
+    return group

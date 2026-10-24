@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { robotOf, parseArmUrdf } from "../urdf/__tests__/robotFixtures.js";
+import { robotOf, ARM } from "../urdf/__tests__/robotFixtures.js";
 import { createRobotScene } from "../urdf/robotScene.js";
 import { createGlbScene } from "./glbScene.js";
+import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "./glbAnimationRuntime.js";
 import { createMeshScene } from "./meshScene.js";
 import { isSharedGeometry, releaseGeometry, shareGeometry } from "./sharedGeometry.js";
 
@@ -86,18 +87,87 @@ test("a GLB scene's sibling wears the file's authored materials, whatever the so
   scene.dispose();
 });
 
+test("a GLB sibling starts at its authored pose, with its own bones and morph weights, while the editor holds a routine frame", () => {
+  const root = new THREE.Group();
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  geometry.morphAttributes.position = [geometry.attributes.position.clone()];
+  const body = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+  body.name = "body";
+  body.position.set(2, 3, 4); // Authored rest deliberately differs from the clip's frame zero.
+  body.morphTargetInfluences[0] = 0.25;
+  Object.assign(body.userData, { gltfNode: 0, gltfNodePath: "1" });
+  const bone = new THREE.Bone();
+  bone.name = "pivot";
+  const skin = new THREE.SkinnedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
+  skin.add(bone);
+  skin.bind(new THREE.Skeleton([bone]));
+  const matrixNode = new THREE.Group();
+  matrixNode.matrixAutoUpdate = false;
+  matrixNode.matrix.makeTranslation(7, 8, 9);
+  root.add(body, skin, matrixNode);
+  const turned = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2).toArray();
+  const clip = new THREE.AnimationClip("move", 1, [
+    new THREE.VectorKeyframeTrack("body.position", [0, 1], [0, 0, 0, 10, 20, 30]),
+    new THREE.QuaternionKeyframeTrack("pivot.quaternion", [0, 1], [0, 0, 0, 1, ...turned]),
+    new THREE.NumberKeyframeTrack("body.morphTargetInfluences[0]", [0, 1], [0, 1])
+  ]);
+  const scene = createGlbScene(THREE, { scene: root, clips: [clip], cadRootMatrix: new THREE.Matrix4().toArray(),
+    restBounds: { min: [0, 0, 0], max: [3, 4, 5] }, animatedBounds: null });
+  const editor = createGlbAnimationRuntime(THREE, root, clip);
+  setGlbAnimationTime(editor, 1);
+  matrixNode.matrix.makeTranslation(70, 80, 90);
+  scene.setHighlight({ selected: ["n0"] }); // An overlay added after baseline capture must not be cloned.
+  const sibling = scene.createSibling();
+  const copy = sibling.document.scene.getObjectByName("body");
+  const copyBone = sibling.document.scene.getObjectByName("pivot");
+  assert.deepEqual(copy.position.toArray(), [2, 3, 4]);
+  assert.deepEqual(copyBone.quaternion.toArray(), [0, 0, 0, 1]);
+  assert.deepEqual(copy.morphTargetInfluences, [0.25]);
+  assert.notEqual(copy.morphTargetInfluences, body.morphTargetInfluences);
+  assert.deepEqual(sibling.document.scene.children[2].matrix.elements.slice(12, 15), [7, 8, 9]);
+  assert.equal(sibling.document.scene.children[2].matrixAutoUpdate, false);
+  assert.equal(meshes(sibling.object3D).length, 2, "no editor selection ghost in Preview");
+  assert.equal(copy.geometry.attributes.position, body.geometry.attributes.position);
+  assert.deepEqual(body.position.toArray(), [10, 20, 30], "opening Preview leaves the editor's held frame alone");
+  const preview = createGlbAnimationRuntime(THREE, sibling.document.scene, clip);
+  setGlbAnimationTime(preview, 0);
+  assert.deepEqual(copy.position.toArray(), [0, 0, 0], "Preview's routine can claim its own frame zero");
+  assert.deepEqual(body.position.toArray(), [10, 20, 30]);
+  disposeGlbAnimationRuntime(preview);
+  sibling.dispose();
+  assert.deepEqual(body.position.toArray(), [10, 20, 30], "closing Preview preserves the editor");
+  const reopened = scene.createSibling();
+  assert.deepEqual(reopened.document.scene.getObjectByName("body").position.toArray(), [2, 3, 4], "reopening starts at authored rest again");
+  reopened.dispose();
+  disposeGlbAnimationRuntime(editor);
+  scene.dispose();
+});
+
 test("a robot scene's sibling is posed apart, over the same buffers", () => {
-  const robot = robotOf(parseArmUrdf());
+  const robot = robotOf(ARM);
   const scene = createRobotScene(THREE, robot);
   const sibling = scene.createSibling();
   const own = meshes(scene.object3D), theirs = meshes(sibling.object3D);
   assert.equal(theirs.length, own.length);
   assert.equal(theirs[0].geometry.attributes.position, own[0].geometry.attributes.position);
-  const joint = robot.description.joints.find(candidate => candidate.type === "revolute" || candidate.type === "continuous");
-  sibling.setJointValues({ [joint.name]: 1 });
-  assert.notEqual(sibling.jointValue(joint.name), scene.jointValue(joint.name), "posing the sibling leaves the source as it was");
+  sibling.setControlValues({ yaw: 60 });
+  assert.notEqual(sibling.jointRow("yaw").turn, scene.jointRow("yaw").turn, "posing the sibling leaves the source as it was");
   const freed = freedOnDispose(theirs[0].geometry);
   sibling.dispose();
   assert.deepEqual(freed, []);
   scene.dispose();
+});
+
+
+test("a robot's source scene may close before Preview without freeing its borrowed buffers", () => {
+  const scene = createRobotScene(THREE, robotOf(ARM));
+  const sibling = scene.createSibling();
+  const [source] = meshes(scene.object3D);
+  let disposed = 0;
+  source.geometry.addEventListener("dispose", () => { disposed += 1; });
+  scene.dispose();
+  assert.equal(disposed, 0, "Preview still owns the buffers");
+  assert.ok(sibling.pick(new THREE.Ray(new THREE.Vector3(-1, 0, 0.05), new THREE.Vector3(1, 0, 0))));
+  sibling.dispose();
+  assert.equal(disposed, 1, "the final scene frees them exactly once");
 });

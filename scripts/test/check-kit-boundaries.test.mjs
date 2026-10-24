@@ -160,8 +160,8 @@ test('a viewer renderer that builds its own scene is refused as well', () => sha
 
 test('the snapshot entry routes families through the shared scenes and reaches for no mesh flattener', () => sharedFixture((files) => {
   files[HEADLESS_ENTRY] = "import { buildModel } from './cadScene.js';\n";
-  files['packages/core/src/common/source.js'] = "import { buildMeshDataFromGlbBuffer } from '../lib/render/glbMeshData.js';\n";
+  files['packages/core/src/common/renderMeshScene.js'] = "import { buildMeshDataFromGlbBuffer } from '../lib/render/glbMeshData.js';\n";
 }, result => assert.deepEqual(result.errors, [
   `${HEADLESS_ENTRY} does not route a family's job through headlessSceneFamily (${HEADLESS_SCENE})`,
-  'packages/core/src/common/source.js imports buildMeshDataFromGlbBuffer: the snapshot draws a family with its shared builder, never a copy flattened for it'
+  'packages/core/src/common/renderMeshScene.js imports buildMeshDataFromGlbBuffer: the snapshot draws a family with its shared builder, never a copy flattened for it'
 ])));

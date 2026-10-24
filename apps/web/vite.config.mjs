@@ -15,7 +15,7 @@ import {
   scheduleProcessShutdown,
 } from "./scripts/serverLifetime.mjs";
 
-// Dev deliberately lives on Vite's own canonical port, NOT the launcher's 3245:
+// Vite owns its development port; the engine chooses a separate HTTP port:
 // dev is a hand-managed foreground process that no launch reuses or replaces,
 // so it must not look like (or collide with) a launched Viewer. Taken port →
 // pick another with --port; nothing reuses here.
@@ -50,46 +50,34 @@ function resolveDirectoryRoot() {
   });
 }
 
-// Dev runs the SAME backend as production — `cadgen viewer`, spawned as
-// `python -m cadgen.viewer` — but as a second process that Vite proxies to,
-// because a Python server cannot be in-process Vite middleware. `npm run dev`
-// stays ONE command: this plugin spawns the backend on an ephemeral port, reads
-// the port off its {url,port,action} line, and hands it to the proxy in the
-// server block.
-//
-// The backend runs --new --api-only. --new is a CORRECTNESS requirement, not
-// tidiness: on the launcher's port, a later `cadgen viewer` launch would find
-// this backend and reuse it (or replace it), handing an agent a URL served by
-// Vite's proxy target instead of a real Viewer; --new binds a port of its own
-// that no launch asks about. --api-only is what makes dev
-// work on a checkout that has never been built: Vite serves the client here, so
-// this backend needs no dist/ — and dist/ is gitignored, so without it
-// `npm run dev` failed on every fresh clone with a complaint about a missing
-// build.
-//
-// VIEWER_PYTHON names the interpreter that has cadgen installed, defaulting to
-// python3 — usually WRONG in a checkout, where that interpreter is the repo
-// venv. The resolved interpreter is logged at startup so an exit is
-// attributable. See CONTRIBUTING.md for the checkout recipe.
-//
-// VIEWER_BACKEND_URL attaches to a backend you started yourself, which is also
-// how you put a debugger on it.
-// Resolved during CONFIG, not in configureServer: Vite builds the proxy
-// middleware from `server.proxy` while creating the server, and http-proxy
-// wants a plain string target — so the port has to be known before the config
-// object exists. Vite supports an async config function, which is what makes
-// that possible.
+// Vite obtains the API endpoint of this installation's engine (its one page's), then
+// proxies /__cad with its token. Closing Vite leaves the engine and its other clients alive.
+// VIEWER_PYTHON names the editable installation's interpreter. An explicit
+// VIEWER_BACKEND_URL (the launcher's apiUrl) also needs CAD_ENGINE_TOKEN: the token is
+// named outside the client's envPrefix (VIEWER_), which Vite hands to the page.
+const ENV_PREFIX = "VIEWER_";
+const TOKEN_VARIABLE = "CAD_ENGINE_TOKEN";
+
+// A secret the page would be handed: the engine's token under the client's prefix.
+function refuseClientTokens(env = process.env) {
+  const exposed = Object.keys(env).filter((name) => name.startsWith(ENV_PREFIX) && /TOKEN|SECRET|KEY/u.test(name));
+  if (exposed.length) {
+    throw new Error(`${exposed.join(", ")}: Vite hands every ${ENV_PREFIX} variable to the page. `
+      + `Name the engine token ${TOKEN_VARIABLE} instead.`);
+  }
+}
+
 async function startDevBackend() {
   const external = String(process.env.VIEWER_BACKEND_URL || "").trim();
   if (external) {
     const target = external.replace(/\/+$/u, "");
     console.info(`CAD Viewer backend: ${target} (VIEWER_BACKEND_URL)`);
-    return target;
+    return { target, token: process.env[TOKEN_VARIABLE] };
   }
 
   const python = process.env.VIEWER_PYTHON || "python3";
-  // The backend serves every file by absolute path. Where it starts is only where
-  // a developer's relative ?file= resolves (`serverInfo.start`): where
+  // The backend serves every file by absolute path. Where it starts is the launch
+  // folder the home shows (`serverInfo.start`, replacing the last launch's): where
   // `npm run dev` was run (scripts/directoryRoot.mjs reads INIT_CWD, which npm
   // sets), handed over as the child's cwd.
   const child = spawn(
@@ -99,36 +87,15 @@ async function startDevBackend() {
       "cadgen.viewer",
       "--host",
       "127.0.0.1",
-      "--new",
       "--api-only",
       "--json",
     ],
     { cwd: directoryRoot, stdio: ["ignore", "pipe", "inherit"] },
   );
-  // The backend's stderr is INHERITED, so whatever it printed is already above
-  // this line. Say only what the exit code cannot: which interpreter ran, so a
-  // version or import failure is attributable. Guessing at a cause here was
-  // actively harmful — it used to blame a missing cadgen for every exit,
-  // including the ones that had nothing to do with cadgen.
-  child.once("exit", (code, signal) => {
-    if (signal === "SIGTERM") {
-      return; // our own teardown, below
-    }
-    console.error(
-      `CAD Viewer backend (${python}) exited ${code === null ? `on ${signal}` : `with code ${code}`}. ` +
-        "Its error is printed above; VIEWER_PYTHON selects the interpreter.",
-    );
-  });
-  // Vite's own exit is the only teardown that always runs; a killed dev server
-  // must not leave the backend holding a port.
-  for (const signal of ["exit", "SIGINT", "SIGTERM"]) {
-    process.once(signal, () => child.kill("SIGTERM"));
-  }
-
   const announced = await readFirstJsonLine(child.stdout);
-  const target = String(announced.url || "").replace(/\/+$/u, "");
+  const target = String(announced.apiUrl || "").replace(/\/+$/u, "");
   console.info(`CAD Viewer backend: ${target} (${python}, started in ${directoryRoot})`);
-  return target;
+  return { target, token: announced.token };
 }
 
 function readFirstJsonLine(stream) {
@@ -220,9 +187,10 @@ function chunkIdsPlugin() {
   };
 }
 
-export default defineConfig(async ({ command }) => ({
+export default defineConfig(async ({ command }) => (refuseClientTokens(), {
   root: viewerAppRoot,
-  envPrefix: "VIEWER_",
+  base: "./",
+  envPrefix: ENV_PREFIX,
   // Which build this is, for the version the app menu shows (src/host/viewerLinks.js): none for
   // the release's own, this checkout's commit for any other (@text-to-cad/ui/build-id).
   define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
@@ -255,6 +223,10 @@ export default defineConfig(async ({ command }) => ({
     // reuses or replaces; dev stays out of that.)
     strictPort: true,
     allowedHosts: viewerAllowedHosts,
+    // No CORS: the client is this origin's own, and the /__cad proxy below adds the engine's
+    // token to what it forwards, so no other origin (another localhost port among them) may
+    // read what it answers. Vite's default lets every localhost origin.
+    cors: false,
     // The two API prefixes go to the Python backend; everything else is the
     // client, served by Vite with HMR. Neither prefix collides with Vite's own
     // reserved /@vite/, /@fs/ or /@id/.
@@ -269,10 +241,9 @@ export default defineConfig(async ({ command }) => ({
     proxy:
       command === "serve"
         ? await (async () => {
-            const target = await startDevBackend();
+            const { target, token } = await startDevBackend();
             return {
-              "/__cad": { target, changeOrigin: false },
-              "/__tess_cache": { target, changeOrigin: false },
+              "/__cad": { target, changeOrigin: false, headers: token ? { Authorization: `Bearer ${token}` } : {} },
             };
           })()
         : undefined,

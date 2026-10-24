@@ -1,51 +1,42 @@
-"""Recently opened models: one library for everywhere a person opens models.
+"""Recents: the engine's registry of documents, as every CAD view's home lists it.
 
 Every CAD view writes here -- the MCP app's views and the CAD Viewer -- and every
 home shows all of it (``GET /__cad/recents``, which the MCP app's views reach
 through its tunnel).
 
-The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
-``remove``, ``picture`` -- folded into a list on read. It is user state, not a
-derived artifact, so it lives in the state directory and never in the cadgen
-cache (the cache holds only what file bytes imply).
+Recents is a view of the registry (``cadgen.engine.registry``, ``<state>/documents/<id>/document.json``):
+a CAD file opened on a page is a record of its own (``kind: "file"``: its path, when it was opened,
+whether it is pinned), and every model a script built is one already (``kind: "model"``, which the
+engine writes when it registers the build). ``memory`` documents have none, so they are never
+listed. The home's picture of each is UI state on its record (``preview``), the PNG under
+``recents/thumbnails`` named by its content. Removing an entry deletes its record, and a copied
+model's bundle with it; nothing is removed on its own: a model whose script is gone stays listed,
+``missing``, until the person removes it.
 
-Several processes append at once: an MCP server per thread, the Viewer, and
-after an update, old and new versions side by side. So each write appends
-one line under an exclusive lock, readers skip lines they cannot parse and events
-they do not know, and compaction writes a new file and renames it into place
-under the same lock. Nothing is ever migrated in place.
+A file is named by its canonical path (``cadgen.engine.ids.canonical``), the engine's, and its
+record by that path's id, so a symlink and its target, or two spellings of one file, are one
+entry. A model is named by its id, which is also the ``path`` the home opens it by (``/<id>``).
 
-A model's picture is a ``picture`` event: the model framed whole from the default
-direction at a card's size, on transparency, taken once its view has settled; its
-time is when it was taken (``pictured``), so a file changed since has an old one.
-Every rebuilt revision a view pictures adds a PNG, so a picture no listed model
-shows is deleted once it is old enough that no writer can still be about to name
-it (a writer saves the PNG, then appends its event). The
-screenshots of whatever the view showed that came before it were ``thumb`` events,
-which this reader does not know, so a model shows no picture until a view shows it
-again -- then its canonical one.
+Every write goes through the registry's one owner of the state folder (``registry.Folder``), and
+lands whole. Each record is its own file, so two processes opening different files never meet; a
+change of one record is a read and a write under the registry's lock.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import stat
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-from cadgen._internal.atomic_replace import write_bytes_atomic
-from cadgen._internal.file_lock import exclusive
-
-SCHEMA = 1
 LIMIT = 200
-COMPACT_AFTER = 2000
 MAX_THUMBNAIL_BYTES = 512 * 1024
 THUMBNAIL_GRACE_SECONDS = 600
+THUMBNAILS = "recents/thumbnails"
 
 
 def thumbnail_png(encoded) -> bytes:
@@ -74,154 +65,176 @@ def state_dir() -> Path:
     return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "cadgen"
 
 
+def cache_dir() -> Path:
+    """Where the engine caches documents' bytes (``documents/<id>/document.xbf``): the platform's
+    cache location, which the system and the person treat as disposable -- wiping it loses no
+    state, the records stay in ``state_dir``. ``CADGEN_CACHE_DIR`` when set (a relative one made
+    absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
+    ``$XDG_CACHE_HOME/cadgen`` on POSIX or ``%LOCALAPPDATA%\\cadgen`` on Windows when set, else
+    ``~/.cache/cadgen``: the folder cadgen 0.7 kept its store in, by the same rule."""
+    override = os.environ.get("CADGEN_CACHE_DIR", "").strip()
+    if override:
+        root = Path(override).expanduser()
+        if not root.is_absolute():
+            root = (Path.cwd() / root).resolve()
+            os.environ["CADGEN_CACHE_DIR"] = str(root)
+        return root
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA", "").strip()
+        if local:
+            return Path(local) / "cadgen"
+    else:
+        xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
+        if xdg:
+            return Path(xdg) / "cadgen"
+    return Path.home() / ".cache" / "cadgen"
+
+
 @dataclass
 class Recent:
+    """One entry of Recents: a file's (``path`` its canonical path) or a model's (``path`` its id)."""
+
     path: str
     opened: float
     pinned: bool = False
     thumbnail: str | None = None
     # When the picture was taken, in seconds: a file changed since has an old one.
     pictured: float | None = None
+    kind: str = "file"
+    # A model's: its name, its script, and the command that builds it again.
+    name: str | None = None
+    script: str | None = None
+    rebuild: str | None = None
+    # A shape handed over (``store: "shape"``): its home is the script or the folder it was handed
+    # over from, nothing builds it again, and ``shown`` says so; ``built`` is when it was handed over.
+    store: str | None = None
+    shown: str | None = None
+    built: float | None = None
 
     def public(self) -> dict[str, Any]:
+        on_disk = self.script if self.kind == "model" else self.path
         try:
-            status = os.stat(self.path)
+            status = os.stat(on_disk) if on_disk else None
         except OSError:
             status = None
         exists = status is not None and stat.S_ISREG(status.st_mode)
-        return {
+        shape = self.kind == "model" and self.store == "shape"
+        if shape:
+            # Its document is the engine's, not its home's: a folder home (a REPL's) is where it came
+            # from, and nothing of it goes missing (``registry.detached``).
+            exists = True
+            status = status if status is not None and stat.S_ISREG(status.st_mode) else None
+        found = {
             "path": self.path,
-            "name": os.path.basename(self.path),
-            "folder": os.path.dirname(self.path),
+            "name": self.name or os.path.basename(self.path),
+            "folder": os.path.dirname(on_disk or ""),
             "opened": self.opened,
-            # When the file last changed, in seconds, for "Edited 16h ago"; None once it is gone.
-            "modified": status.st_mtime if exists else None,
+            # When the file (a model's script) last changed, in seconds, for "Edited 16h ago"; None once it is gone.
+            "modified": (status.st_mtime if status is not None else self.built) if shape else
+            status.st_mtime if exists else None,
             "pinned": self.pinned,
+            # A file that is gone, or a model whose script is (``detached``): listed, and removable.
             "missing": not exists,
             "thumbnail": self.thumbnail,
             "pictured": self.pictured,
         }
+        if self.kind == "model":
+            found.update(kind="model", id=self.path, script=self.script, rebuild=self.rebuild)
+        if shape:
+            found.update(store="shape", shown=self.shown or "a shape handed over: no script to rerun")
+        return found
 
 
 class RecentStore:
+    """Recents over the registry of the state folder ``root`` (``state_dir()`` by default)."""
+
     def __init__(self, root: Path | None = None) -> None:
-        self.root = (root or state_dir()) / "recents"
-        self.log = self.root / "recents.jsonl"
-        self.thumbnails = self.root / "thumbnails"
+        from cadgen.engine.registry import Folder, Registry
+
+        self.state = Folder(root or state_dir())
+        self.registry = Registry(self.state, cache=cache_dir())
+        self.root = self.state.root / "recents"
+        self.thumbnails = self.state.path(THUMBNAILS)
 
     # -- writes ----------------------------------------------------------------
 
     def opened(self, path: str) -> None:
-        self._append({"op": "open", "path": path})
+        """A CAD file opened on a page: its record, opened now."""
+        from cadgen.engine.ids import canonical, file_id
+
+        found = canonical(path)
+        now = time.time()
+
+        def change(record):
+            record = dict(record or {"id": file_id(found), "kind": "file"})
+            record.update(root=os.path.dirname(found), home=os.path.basename(found),
+                          format=os.path.splitext(found)[1].lower().lstrip("."), opened=now)
+            return record
+
+        self.registry.update(file_id(found), change)
 
     def pin(self, path: str, pinned: bool) -> None:
-        self._append({"op": "pin" if pinned else "unpin", "path": path})
+        self._change(path, lambda record: {**record, "pinned": bool(pinned)})
 
     def remove(self, path: str) -> None:
-        self._append({"op": "remove", "path": path})
+        """Forget an entry: its record."""
+        self.registry.delete(self._ident(path))
 
     def thumbnail(self, path: str, png: bytes) -> str:
-        """Keep a PNG for ``path``; return its content name."""
+        """Keep a PNG for an entry (a file's path, or a model's id): its content name."""
         name = hashlib.sha256(png).hexdigest()[:32] + ".png"
-        target = self.thumbnails / name
-        if not target.exists():
-            write_bytes_atomic(target, png)
-        self._append({"op": "picture", "path": path, "thumbnail": name}, sweep=True)
+        if not (self.thumbnails / name).exists():
+            self.state.write(f"{THUMBNAILS}/{name}", png)
+        self._change(path, lambda record: {**record, "preview": {"thumbnail": name, "pictured": time.time()}})
+        self._sweep_thumbnails()
         return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
         if not name or "/" in name or "\\" in name or not name.endswith(".png"):
             return None
-        try:
-            return (self.thumbnails / name).read_bytes()
-        except OSError:
-            return None
+        return self.state.read(f"{THUMBNAILS}/{name}")
+
+    def _ident(self, path: str) -> str:
+        from cadgen.engine.ids import file_id, is_id
+
+        return path if is_id(path) else file_id(path)
+
+    def _change(self, path: str, change) -> None:
+        """A change to an entry's record, when it has one (a file not opened has none)."""
+        self.registry.update(self._ident(path), lambda record: change(record) if record is not None else None)
 
     # -- reads -----------------------------------------------------------------
 
     def list(self) -> list[Recent]:
-        """Pinned first, then most recently opened; at most ``LIMIT``."""
-        entries: dict[str, Recent] = {}
-        for event in self._events():
-            path, op = event.get("path"), event.get("op")
-            if not isinstance(path, str):
-                continue
-            if op == "open":
-                entry = entries.get(path)
-                if entry is None:
-                    entries[path] = Recent(path=path, opened=float(event.get("t", 0)))
-                else:
-                    entry.opened = float(event.get("t", entry.opened))
-            elif op in ("pin", "unpin") and path in entries:
-                entries[path].pinned = op == "pin"
-            elif op == "remove":
-                entries.pop(path, None)
-            elif op == "picture" and path in entries and isinstance(event.get("thumbnail"), str):
-                entries[path].thumbnail = event["thumbnail"]
-                entries[path].pictured = float(event.get("t", 0)) or None
-        ordered = sorted(entries.values(), key=lambda entry: (not entry.pinned, -entry.opened))
+        """Pinned first, then most recently opened or built; at most ``LIMIT``."""
+        from cadgen.engine import registry as registering
+
+        entries = []
+        for record in self.registry.list():
+            preview = record.get("preview") or {}
+            common = {"pinned": bool(record.get("pinned")), "thumbnail": preview.get("thumbnail"),
+                      "pictured": preview.get("pictured")}
+            if record.get("kind") == "file" and record.get("opened"):
+                entries.append(Recent(path=str(registering.home(self.registry, record)), opened=float(record["opened"]),
+                                      **common))
+            elif record.get("kind") == "model":
+                entries.append(Recent(path=record["id"], kind="model", name=record.get("label") or record.get("entry"),
+                                      script=str(registering.home(self.registry, record)),
+                                      rebuild=registering.command(self.registry, record),
+                                      store=record.get("store"), shown=record.get("shown"), built=record.get("built"),
+                                      opened=float(max(record.get("opened") or 0, record.get("built") or 0)), **common))
+        ordered = sorted(entries, key=lambda entry: (not entry.pinned, -entry.opened))
         return ordered[:LIMIT]
 
-    def _events(self) -> Iterator[dict[str, Any]]:
-        try:
-            lines = self.log.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            return
-        for line in lines:
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue  # a torn or foreign line
-            if isinstance(event, dict) and event.get("v") == SCHEMA:
-                yield event
-
-    # -- the log ---------------------------------------------------------------
-
-    def _append(self, event: dict[str, Any], *, sweep: bool = False) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        line = json.dumps({"v": SCHEMA, "t": time.time(), **event}, separators=(",", ":")) + "\n"
-        with self._locked():
-            with open(self.log, "a+b") as handle:
-                handle.seek(0, os.SEEK_END)
-                if handle.tell():
-                    handle.seek(-1, os.SEEK_END)
-                    if handle.read(1) != b"\n":
-                        handle.write(b"\n")
-                handle.write(line.encode("utf-8"))
-            self._compact_if_long()
-            if sweep:
-                self._sweep_thumbnails()
-
     def _sweep_thumbnails(self) -> None:
-        shown = {entry.thumbnail for entry in self.list() if entry.thumbnail}
+        """A picture no record shows goes once it is old enough that no writer can still be about to
+        name it (a writer saves the PNG, then writes its record)."""
+        shown = {(record.get("preview") or {}).get("thumbnail") for record in self.registry.list()}
         cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
-        try:
-            pictures = list(self.thumbnails.glob("*.png"))
-        except OSError:
-            return
-        for picture in pictures:
+        for name in self.state.names(THUMBNAILS):
             try:
-                if picture.name not in shown and picture.stat().st_mtime < cutoff:
-                    picture.unlink()
+                if name.endswith(".png") and name not in shown and (self.thumbnails / name).stat().st_mtime < cutoff:
+                    self.state.remove(f"{THUMBNAILS}/{name}")
             except OSError:
                 continue
 
-    def _compact_if_long(self) -> None:
-        try:
-            with open(self.log, encoding="utf-8", errors="replace") as handle:
-                count = sum(1 for _ in handle)
-        except OSError:
-            return
-        if count <= COMPACT_AFTER:
-            return
-        folded = []
-        for entry in reversed(self.list()):
-            folded.append({"v": SCHEMA, "t": entry.opened, "op": "open", "path": entry.path})
-            if entry.pinned:
-                folded.append({"v": SCHEMA, "t": entry.opened, "op": "pin", "path": entry.path})
-            if entry.thumbnail:
-                folded.append({"v": SCHEMA, "t": entry.pictured or entry.opened, "op": "picture", "path": entry.path, "thumbnail": entry.thumbnail})
-        write_bytes_atomic(self.log, "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded).encode("utf-8"))
-
-    def _locked(self):
-        return exclusive(self.root / "recents.lock")

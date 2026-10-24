@@ -1,17 +1,16 @@
 """Who imported the CAD kernel first, for the eager-import hint.
 
-``@step`` wants a model's module body to stay kernel-free so a current build
-can be skipped, or handed to the warm daemon, before OCP's ~2.5 s import is
-paid. When the kernel IS loaded by the time the decorator runs, the useful
+A model script wants its module body to stay kernel-free so its run can be
+handed to the warm daemon before OCP's ~2.5 s import is paid. When the kernel IS loaded by the time the decorator runs, the useful
 message is not "you imported it" but WHERE: a ``from build123d import ...``
-at module top is one cause, and ``from cadgen import build123d as bd`` does
-not prevent the other -- a module-level ``bd.Align.CENTER`` default or a
-palette constant built from a kernel type resolves an attribute at import
-time and triggers the real import through the lazy proxy.
+at module top is one cause, and ``import build123d as bd`` -- bound lazily
+(``lazy_kernel``) -- does not prevent the other: a module-level
+``bd.Align.CENTER`` default or a palette constant built from a kernel type
+resolves an attribute at import time and loads the kernel there.
 
 A ``sys.meta_path`` finder that never finds anything: it only notes the first
 request for ``build123d`` or ``OCP`` and the innermost frame outside cadgen's
-own package -- the lazy proxy is one route in, but any other cadgen-internal
+own package -- the lazy module is one route in, but any other cadgen-internal
 module that happens to import the kernel at its own top level (e.g. a module
 under ``cadgen/_internal`` reached transitively from a model's own import) is
 just as much cadgen's business, not the model author's; naming that internal
@@ -21,7 +20,7 @@ place before any model module body runs.
 
 One route the finder can never see is the kernel imported BEFORE cadgen --
 exactly what an import sorter writes for a model that reaches for the kernel
-directly, since ``import build123d`` sorts above ``from cadgen import step``.
+directly, since ``import build123d`` sorts above ``from cadgen import xbf``.
 There is no frame left to read by then, so ``install`` parses the file that
 was importing cadgen and names the kernel import statement written there.
 """

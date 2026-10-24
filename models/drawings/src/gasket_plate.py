@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
-from cadgen import dxf
+from cadgen import model
+
+import build123d as bd
 
 WIDTH_MM = 80.0
 HEIGHT_MM = 50.0
@@ -16,7 +17,7 @@ CENTER_CUTOUT_DIAMETER_MM = 24.0
 CROSSHAIR_LENGTH_MM = 32.0
 
 
-@dxf(out="../DXF/gasket_plate.dxf")
+@model
 def gasket_plate():
     with bd.BuildSketch() as cut:
         bd.RectangleRounded(WIDTH_MM, HEIGHT_MM, CORNER_RADIUS_MM)
@@ -30,9 +31,12 @@ def gasket_plate():
 
     # Open geometry, so it belongs on a marking layer: the cut layer must close.
     half = CROSSHAIR_LENGTH_MM / 2.0
-    crosshair = [bd.Line((-half, 0), (half, 0)), bd.Line((0, -half), (0, half))]
+    crosshair = bd.Compound([bd.Line((-half, 0), (half, 0)), bd.Line((0, -half), (0, half))])
 
-    return {"CUT": cut.sketch, "ENGRAVE": crosshair}
+    # A part per layer, named by its label.
+    plate = cut.sketch
+    plate.label, crosshair.label = "CUT", "ENGRAVE"
+    return bd.Compound(children=[plate, crosshair], label="gasket_plate")
 
 
 if __name__ == "__main__":

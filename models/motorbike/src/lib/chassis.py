@@ -8,7 +8,7 @@ pan. The center stand is shown folded up under the floor pan.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import lib as L
 from lib import spec as S
@@ -115,7 +115,7 @@ def build_frame():
         ],
     ]
     frame = frame.cut(*cutters)
-    return L.paint(frame, "frame", "underbone", color=S.FRAME_BLACK)
+    return L.paint(frame, "frame", "underbone", color=S.FRAME_BLACK, material=S.PAINTED_STEEL)
 
 
 def build_center_stand():
@@ -151,4 +151,4 @@ def build_center_stand():
             for sign in (-1.0, 1.0)
         ]
     )
-    return L.paint(stand, "center_stand", "folded", color=S.FRAME_BLACK)
+    return L.paint(stand, "center_stand", "folded", color=S.FRAME_BLACK, material=S.PAINTED_STEEL)

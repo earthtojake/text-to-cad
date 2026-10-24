@@ -8,6 +8,12 @@ export type { LanguageSetting };
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export interface FileEntry { path: string; name: string; kind: "file" | "directory" }
 export interface FileMetadata extends FileEntry {
+  /**
+   * The on-disk file to browse from and act on (Select File, copy path, Reveal); omitted it is
+   * `path`. Null for a document with no file of its own (a model's, by its id): no Select File and no
+   * file menu.
+   */
+  navigationPath?: string | null;
   size: number;
   extension: string;
   mime?: string;
@@ -141,6 +147,9 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
+  /** Additive host actions at the navbar right, and persistent feedback below it. */
+  navbarActions?: ReactNode;
+  overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;
   host: ViewerHost;
@@ -163,19 +172,24 @@ export interface FileViewerProps {
   update?: ReactNode;
   /**
    * The host's Full size button, where the host shows the view small (inline in a conversation):
-   * last at the navbar's right end.
+   * at the navbar's right end, before the renderer's view controls.
    */
   fullSize?: ReactNode;
+  /**
+   * The host's way to open what is shown in a page of its own outside the host (the CAD app's Open
+   * in browser), where it has one: last at the navbar's right end, over every file and on the home.
+   */
+  openInBrowser?: ReactNode;
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
   history?: ViewerHistory;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   onError?: (error: Error) => void;
   presentation?: {
-    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward, update and Full size there. */
+    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward, update, Full size and Open in browser there. */
     home?: ReactNode;
     loading?: ReactNode;
-    /** A file that will not open: `missing` when it does not exist. */
-    error?: (failure: { message: string; missing: boolean }) => ReactNode;
+    /** A file that will not open: `missing` when it does not exist; `reload` rereads only this file. */
+    error?: (failure: { message: string; missing: boolean; reload?: () => void }) => ReactNode;
   };
 }

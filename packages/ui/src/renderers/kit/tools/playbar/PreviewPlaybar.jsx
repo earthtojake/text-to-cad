@@ -8,7 +8,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import PlaybackMenu from "../PlaybackMenu.jsx";
-import { AnimationTimeControl, animationControlsHaveContent } from "./AnimationTimeControl.js";
+import { AnimationTimeControl, animationControlsHaveContent, formatSeconds } from "./AnimationTimeControl.js";
 
 const ROUTINES_TRIGGER_CLASS = cn(TOOLBAR_ICON_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
 
@@ -16,18 +16,22 @@ const ROUTINES_TRIGGER_CLASS = cn(TOOLBAR_ICON_BUTTON_CLASS, "aria-expanded:bg-s
 function RoutineMenu({ runtime, disabled }) {
   const clips = runtime?.clips || [];
   if (clips.length < 2) return null;
+  const name = runtime.noun && runtime.noun !== "Animation" ? `${runtime.noun}s` : "Routines";
   return <DropdownMenu modal={false}>
-    <TooltipHint content="Routines" side="top">
+    <TooltipHint content={name} side="top">
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Routines" disabled={disabled} className={ROUTINES_TRIGGER_CLASS}>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={name} disabled={disabled} className={ROUTINES_TRIGGER_CLASS}>
           <ListVideo className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
     </TooltipHint>
-    <DropdownMenuContent side="top" align="start" sideOffset={6} collisionPadding={8} aria-label="Routines"
+    <DropdownMenuContent side="top" align="start" sideOffset={6} collisionPadding={8} aria-label={name}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuRadioGroup value={runtime.activeClipId} onValueChange={id => runtime.onClipSelect?.(id)}>
-        {clips.map(clip => <DropdownMenuRadioItem key={clip.id} value={clip.id}><span className="min-w-0 truncate">{clip.label}</span></DropdownMenuRadioItem>)}
+        {clips.map(clip => <DropdownMenuRadioItem key={clip.id} value={clip.id}>
+          <span className="min-w-0 truncate">{clip.label}</span>
+          {Number(clip.duration) > 0 ? <span className="ml-auto pl-2 tabular-nums text-muted-foreground">{formatSeconds(clip.duration)}</span> : null}
+        </DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
     </DropdownMenuContent>
   </DropdownMenu>;
@@ -45,10 +49,11 @@ function RoutineMenu({ runtime, disabled }) {
 export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, disabled = false }) {
   if (!animationControlsHaveContent(runtime)) return null;
   const playing = runtime.playing === true;
-  return <div role="toolbar" aria-label="Animation playback" data-preview-playbar=""
+  const noun = runtime.noun || "Animation";
+  return <div role="toolbar" aria-label={`${noun} playback`} data-preview-playbar=""
     className="pointer-events-auto absolute bottom-4 left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 px-2 py-1">
     <RoutineMenu runtime={runtime} disabled={disabled} />
-    <ToolbarButton tooltip={false} disabled={disabled} label={`${playing ? "Pause" : "Play"} animation`} onClick={() => runtime.onPlayToggle?.()}>
+    <ToolbarButton tooltip={false} disabled={disabled} label={`${playing ? "Pause" : "Play"} ${noun.toLowerCase()}`} onClick={() => runtime.onPlayToggle?.()}>
       {playing ? <Pause className="size-3.5" strokeWidth={1.5} aria-hidden="true" /> : <Play className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
     </ToolbarButton>
     <div className="min-w-0 flex-1 px-1">

@@ -23,18 +23,7 @@ test("a prompt saves JSON in one request without polling; a JSON file is read by
   assert.equal(calls.at(-1).url, 'http://cad.invalid/__cad/prompt-files/a-1.snapshot.json');
 });
 
-test("a chip's copy is saved as a file at once, and answered with its path", async () => {
-  const calls = [];
-  const files = createHttpPromptFiles({ origin: 'http://cad.invalid', fetch: async (url, options) => {
-    calls.push({ url, method: options.method, body: JSON.parse(options.body), guard: options.headers['x-cadgen-viewer'] });
-    return Response.json({ ok: true, path: '/tmp/p/a-3.annotation.json' });
-  } });
-  const data = { units: 'mm', marks: [] };
-  assert.equal(await files.save({ name: 'a.step', kind: 'annotation', data }), '/tmp/p/a-3.annotation.json');
-  assert.deepEqual(calls, [{ url: 'http://cad.invalid/__cad/prompt-files/save', method: 'POST', body: { name: 'a.step', kind: 'annotation', data }, guard: '1' }]);
-});
-
-test("a refused save says why", async () => {
+test("a refused packet says why", async () => {
   const files = createHttpPromptFiles({ fetch: async () => Response.json({ ok: false, error: 'annotation: marks must be an array' }, { status: 400 }) });
   await assert.rejects(files.create({ name: 'a.step', input: '/m/a.step', views: [], annotation: {} }), /marks must be an array/);
 });

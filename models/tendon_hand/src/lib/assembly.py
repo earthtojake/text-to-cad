@@ -5,7 +5,7 @@ module data export. It currently represents an integration study; completeness
 is asserted separately before the hand is eligible for final acceptance.
 """
 from dataclasses import dataclass
-from cadgen import build123d as bd
+import build123d as bd
 from lib.layout import FINGERS, JOINTS, THUMB_CMC, THUMB_LENGTHS, THUMB_DIRECTION, TENDONS, assembled_transforms, finger_fan_matrix, drive_pulley_offset
 from lib.phalanx import make_phalanx
 from lib.pulley import make_pulley
@@ -196,12 +196,12 @@ def posed_bodies(bodies,pose):
 
 
 def compound(bodies,label='tendon_hand_integration_study'):
-    from lib.palette import finish_for
-    grouped = {}
+    """The bodies under one compound, each given its palette bucket's material.
+
+    The original grouped them by bucket (``material_<bucket>`` compounds) for its
+    decorator's ``materials=`` to target; the material is set on each part here."""
+    from lib.palette import MATERIALS, finish_for
     for body in bodies:
-        bucket, _color, _material, _alpha = finish_for(body.name, body.kind)
-        grouped.setdefault(bucket, []).append(body.shape)
-    return bd.Compound(label=label, children=[
-        bd.Compound(label=f'material_{bucket}', children=grouped[bucket])
-        for bucket in grouped
-    ])
+        bucket, _color, _look, _alpha = finish_for(body.name, body.kind)
+        body.shape.material = MATERIALS[bucket]
+    return bd.Compound(label=label, children=[body.shape for body in bodies])

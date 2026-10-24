@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
@@ -140,7 +140,10 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, links, onError }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, links, onError, sections, after }: {
+  sections?: ReactNode;
+  /** What the host shows under the recent files (the folder of the most recent launch). */
+  after?: ReactNode;
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
@@ -252,6 +255,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {links ? <nav className="cad-library-links" aria-label={t("home.linksAria")}>
         <HomeLinks links={links} onError={onError} />
       </nav> : null}
+      {sections}
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">{t("home.recentFiles")}</h1>
         <div className="cad-library-controls">
@@ -279,6 +283,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             </li></ul>
             : <p className="cad-library-empty">{t("home.emptyNoPicker")}</p>)
             : models}
+      {after}
     </main>
   </div>;
 }

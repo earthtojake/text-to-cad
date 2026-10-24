@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { rowsOf, uuidV5 } from './events.mjs';
-import { EVENTS, missingSettings, posthogStore, SETTINGS, settingsOf } from './posthog.mjs';
+import { EVENTS, missingSettings, posthogStore, READY_TTL_MS, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -197,6 +197,29 @@ test('health asks for the project with the personal key, and finds the capture k
   const project = token => posthogStore(SETTINGS_EU, { fetch: async () => new Response(JSON.stringify({ api_token: token })) });
   await project('phc_project').ready();
   await assert.rejects(project('phc_another').ready(), { code: 'posthog_project_key' });
+});
+
+test("health's answer is kept a minute per instance: a burst asks PostHog once, failure or not, then asks again", async () => {
+  let at = 0;
+  let calls = 0;
+  let status = 200;
+  const fetch = async () => { calls += 1; return new Response('{}', { status }); };
+  const store = posthogStore(SETTINGS_EU, { fetch, now: () => at });
+  await Promise.all(Array.from({ length: 20 }, () => store.ready()));
+  assert.equal(READY_TTL_MS, 60_000);
+  assert.equal(calls, 1);
+  at += READY_TTL_MS - 1;
+  await store.ready();
+  assert.equal(calls, 1);
+  at += 1;
+  status = 401;
+  await assert.rejects(store.ready(), { code: 'posthog_401' });
+  await assert.rejects(store.ready(), { code: 'posthog_401' }); // a failure is kept too
+  assert.equal(calls, 2);
+  at += READY_TTL_MS;
+  status = 200;
+  await store.ready();
+  assert.equal(calls, 3);
 });
 
 test('the host names its settings, and health names any missing or not what PostHog takes', () => {

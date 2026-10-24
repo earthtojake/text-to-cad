@@ -71,7 +71,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 from lib import finishing as F
@@ -478,7 +478,7 @@ def _make_link(
     )
     body = body - tools
     body = _chamfer_link(body)
-    body.color = bd.Color(*color)
+    body.color = bd.Color(color)
     return body
 
 
@@ -530,7 +530,7 @@ def make_pin(length):
         if (e.bounding_box().max.X - e.bounding_box().min.X) < 0.01
     ]
     pin, _ = F.safe_chamfer(pin, ends, 0.05)
-    pin.color = bd.Color(*S.STEEL_DARK)
+    pin.color = bd.Color(S.STEEL_DARK)
     return pin
 
 
@@ -551,7 +551,7 @@ def make_spring_bar():
         if (e.bounding_box().max.X - e.bounding_box().min.X) < 0.01
     ]
     bar, _ = F.safe_chamfer(bar, ends, 0.2)
-    bar.color = bd.Color(*S.STEEL_DARK)
+    bar.color = bd.Color(S.STEEL_DARK)
     return bar
 
 
@@ -691,7 +691,7 @@ def make_end_link():
                        0.0, half_w - BEVEL, CROWN_SAG, 0.0)
     )
     body = body - [frame * t for t in grain]
-    body.color = bd.Color(*S.BRACELET_OUTER)
+    body.color = bd.Color(S.BRACELET_OUTER)
     return body
 
 
@@ -809,7 +809,7 @@ def make_clasp():
         and e.length > 0.6
     ]
     body, _ = F.safe_chamfer(body, short_edges, 0.12)
-    body.color = bd.Color(*S.BRACELET_OUTER)
+    body.color = bd.Color(S.BRACELET_OUTER)
     parts.append((body, "clasp_body"))
 
     # --- inner cover plate (folded closed under the outer plate) ------------
@@ -817,12 +817,12 @@ def make_clasp():
     # the outer plate); no post chamfer
     cover = _crowned_band(CLASP_R - 2.3, CLASP_R - 3.5, 4.0, 29.5, 7.0,
                           0.18, 0.10, grain=True)
-    cover.color = bd.Color(*S.BRACELET_OUTER)
+    cover.color = bd.Color(S.BRACELET_OUTER)
     parts.append((cover, "clasp_cover"))
 
     # --- internal spring blade ----------------------------------------------
     blade = _band(CLASP_R - 2.06, CLASP_R - 2.24, 8.0, 20.0, 2.0)
-    blade.color = bd.Color(*S.STEEL_DARK)
+    blade.color = bd.Color(S.STEEL_DARK)
     parts.append((blade, "clasp_spring_blade"))
 
     # --- flank pushers -------------------------------------------------------
@@ -837,7 +837,7 @@ def make_clasp():
             if (e.bounding_box().max.X - e.bounding_box().min.X) < 0.01
         ]
         push, _ = F.safe_chamfer(push, ends, 0.3)
-        push.color = bd.Color(*S.BRACELET_CENTER)
+        push.color = bd.Color(S.BRACELET_CENTER)
         parts.append((push, f"clasp_pusher_{side}"))
 
     # --- fold hinge knuckle --------------------------------------------------
@@ -849,7 +849,7 @@ def make_clasp():
         if (e.bounding_box().max.X - e.bounding_box().min.X) < 0.01
     ]
     knuckle, _ = F.safe_chamfer(knuckle, ends, 0.15)
-    knuckle.color = bd.Color(*S.STEEL_DARK)
+    knuckle.color = bd.Color(S.STEEL_DARK)
     parts.append((knuckle, "clasp_hinge_knuckle"))
 
     # --- flip-lock bow (polished stirrup hugging the outer plate) -----------
@@ -871,7 +871,7 @@ def make_clasp():
         )
 
     bow, _ = F.safe_chamfer(bow, [e for e in bow.edges() if _in_window(e)], 0.08)
-    bow.color = bd.Color(*S.BRACELET_CENTER)
+    bow.color = bd.Color(S.BRACELET_CENTER)
     parts.append((bow, "clasp_flip_lock"))
 
     return parts

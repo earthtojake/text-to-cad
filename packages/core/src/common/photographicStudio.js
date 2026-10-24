@@ -356,8 +356,8 @@ function updateGround(THREE, state, configuration, bounds, extentBounds = bounds
   const stageSize = 2 * reach * PHOTOGRAPHIC_STUDIO_FLOOR_FADE.outer;
   state.floorFade.value = PHOTOGRAPHIC_STUDIO_FLOOR_FADE.inner / PHOTOGRAPHIC_STUDIO_FLOOR_FADE.outer;
   // Geometry keeps its authored coordinates: the PLANE moves, never the model.
-  // The default pins the floor to the document's Z=0; "lowest" follows the
-  // current bounds. Neither placement clips the model.
+  // "lowest", the default, follows the current bounds' lowest point; "origin"
+  // pins the floor to the document's Z=0. Neither placement clips the model.
   const groundZ = configuration.backdrop.groundPlacement === "origin" ? 0 : bounds.min[2];
   state.ground.scale.set(stageSize, stageSize, 1);
   state.ground.position.set(extentBounds.center[0], extentBounds.center[1], groundZ);
