@@ -355,6 +355,14 @@ for finding in validate_dxf_file("path/to/file.dxf"):
     print(finding.render())
 ```
 
+Or validate a DXF file directly from the command line:
+
+```bash
+cadgen dxf validate path/to/file.dxf
+```
+
+Pass `--strict` to treat warnings as blocking, or `--json` for structured findings.
+
 Beyond the built-in checks, verify requested dimensions with targeted `ezdxf` reads
 (entity counts by layer, drawing extents, every dimension the user specified) against
 the generated sibling `.dxf` (or the `out=` path when one is declared), and
