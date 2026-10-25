@@ -41,7 +41,7 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cadgen.stl": ("build", "snapshot"),
     "cadgen.threemf": ("build", "snapshot"),
     "cadgen.glb": ("build", "snapshot"),
-    "cadgen.dxf": ("snapshot",),
+    "cadgen.dxf": ("snapshot", "validate"),
     "cadgen.urdf": ("snapshot", "validate"),
     # An SRDF's geometry comes from the URDF beside it, so it has no snapshot
     # door of its own; `cadgen snapshot` still routes one by suffix.
@@ -62,6 +62,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "stl build": ("cadgen.stl", "build"),
     "3mf build": ("cadgen.threemf", "build"),
     "glb build": ("cadgen.glb", "build"),
+    "dxf validate": ("cadgen.dxf", "validate"),
     "sdf validate": ("cadgen.sdf", "validate"),
     "srdf validate": ("cadgen.srdf", "validate"),
     # Snapshot was the schema's LAST adapter. Its rich options are typed

@@ -56,6 +56,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # the product, made by running its script (python <drawing>.py), and
     # `dxf snapshot` meshes it on demand.
     "dxf snapshot": ("cadgen.cli.dxf_snapshot", "render a DXF to an image"),
+    "dxf validate": ("cadgen.cli.dxf_validate", "validate a DXF drawing or cut layout"),
     # Robot descriptions
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
     "urdf snapshot": ("cadgen.cli.urdf_snapshot", "render a URDF to an image"),
