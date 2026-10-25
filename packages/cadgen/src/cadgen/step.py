@@ -32,9 +32,9 @@ from pathlib import Path
 
 from cadgen._internal.format_namespace import callable_namespace
 from cadgen._internal.snapshot_door import step_snapshot_verb
-from cadgen.results import BuildResult, CompileResult
+from cadgen.results import BuildResult, CompileResult, ValidationResult
 
-__all__ = ["build", "compile", "snapshot"]
+__all__ = ["build", "compile", "snapshot", "validate"]
 
 #: ``cadgen step snapshot``'s verb: render a STEP/STP document. Mesh inputs
 #: belong to their own doors (``cadgen.stl.snapshot`` and friends).
@@ -146,6 +146,60 @@ def build(
         skipped=bool(payload.get("skipped")),
         sidecar_only=bool(payload.get("sidecarOnly")),
     )
+
+
+def validate(
+    target: Path,
+    *,
+    strict: bool = False,
+    verbose: bool = False,
+) -> ValidationResult:
+    """Check one STEP/STP document for geometric and topological conformance.
+
+    Loads the document, runs topology error analysis (BRepCheck), validates
+    manifoldness and boundary edges, verifies boolean soundness and checks
+    mass properties (non-zero positive volume). Errors always block; under
+    ``strict`` warnings do too.
+
+    target: the STEP/STP document to validate.
+    strict: treat warnings as blocking.
+    verbose: narrate the target on stderr.
+    """
+    import sys
+
+    from cadgen._internal.doors import STEP_SUFFIXES
+    from cadgen._internal.validation_door import (
+        blocks,
+        display_path,
+        failed,
+        resolved_target,
+        result_from_findings,
+    )
+    from cadgen.step_validation import validate_step_document
+
+    step_path = resolved_target(target, label="step")
+    if verbose:
+        print(f"[step] validating {step_path}", file=sys.stderr)
+    if step_path.suffix.lower() not in STEP_SUFFIXES:
+        return failed(step_path, f"target must be a {' or '.join(STEP_SUFFIXES)} file")
+    if not step_path.is_file():
+        return failed(step_path, "file not found")
+    if step_path.stat().st_size == 0:
+        return failed(step_path, "file is empty", code="empty_file")
+
+    findings, stats = validate_step_document(step_path)
+    findings = findings.deduplicated()
+
+    summary = ""
+    if not blocks(findings, strict=strict):
+        solids = stats.get("solids", 0)
+        faces = stats.get("faces", 0)
+        volume = stats.get("volume", 0.0)
+        solid_desc = f"{solids} solid" if solids == 1 else f"{solids} solids"
+        face_desc = f"{faces} face" if faces == 1 else f"{faces} faces"
+        summary = f"OK {display_path(step_path)}: {solid_desc}, {face_desc}, volume {volume:g} mm³"
+
+    return result_from_findings(step_path, findings, strict=strict, summary=summary)
 
 
 def __getattr__(name: str):

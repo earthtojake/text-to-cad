@@ -37,7 +37,7 @@ from cadgen._internal.cli_from_function import (
 
 # The manifest: format namespace -> exactly the verbs it exports.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
-    "cadgen.step": ("build", "compile", "snapshot"),
+    "cadgen.step": ("build", "compile", "snapshot", "validate"),
     "cadgen.stl": ("build", "snapshot"),
     "cadgen.threemf": ("build", "snapshot"),
     "cadgen.glb": ("build", "snapshot"),
@@ -59,6 +59,7 @@ DECORATOR_NAMESPACES = ("step", "dxf", "stl", "threemf", "glb")
 MIRRORS: dict[str, tuple[str, str]] = {
     "step build": ("cadgen.step", "build"),
     "step compile": ("cadgen.step", "compile"),
+    "step validate": ("cadgen.step", "validate"),
     "stl build": ("cadgen.stl", "build"),
     "3mf build": ("cadgen.threemf", "build"),
     "glb build": ("cadgen.glb", "build"),
