@@ -43,6 +43,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     ),
     "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
+    "step validate": ("cadgen.cli.step_validate", "validate a STEP document's geometry and topology"),
     # Mesh formats — one door each: `build` tessellates a STEP DOCUMENT into this
     # format (the sibling default, or OUT) and reads no model declaration;
     # `snapshot` renders a mesh file. One format, one door.

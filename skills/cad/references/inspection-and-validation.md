@@ -18,6 +18,16 @@ Report what was measured, the units, the threshold and the selected geometry.
 A failed computation is not a passing check, and an untested relationship has
 no verdict. Run the model first when you want to check newly authored geometry.
 
+## Fast CLI validation
+
+To check a saved `.step` or `.stp` document for topological faults, manifold closure (open shells), boolean soundness, and mass properties without writing a custom script, use:
+
+```bash
+cadgen step validate STEP/bracket.step
+```
+
+Pass `--strict` to treat warnings as blocking, `--verbose` for detailed progress, or `--json` for machine-readable JSON output suitable for automated agent repair loops.
+
 ## Opening and selecting geometry
 
 ```python
