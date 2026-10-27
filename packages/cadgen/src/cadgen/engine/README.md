@@ -2133,8 +2133,10 @@ Every edge has a class read from the B-rep: 1 feature (two faces at an angle),
 out.
 
 Inspection and the build delta measure bounds without tessellation or changing the shape.
-For free-form faces, `kernel.bounds.optimal_box` measures native distances to six finite
-support planes outside the kernel's conservative box. This avoids OCCT 8's spline-grid
+For free-form faces, `kernel.bounds.optimal_box` measures native distances from the boundary
+to six finite support planes outside the kernel's conservative box. It copies topology before
+collecting faces and loose edges/vertices, so neither solid containment nor input flags affect
+the measurement. This avoids OCCT 8's spline-grid
 refinement missing symmetric extrema (`BRepBndLib.AddOptimal`); analytic surfaces and
 shapes without faces still use `AddOptimal`. A failed distance measurement is an error.
 

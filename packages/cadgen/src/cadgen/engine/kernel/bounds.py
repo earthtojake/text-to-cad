@@ -43,10 +43,14 @@ def optimal_box(shape):
 
 def _support_box(shape):
     from OCP.Bnd import Bnd_Box
+    from OCP.BRep import BRep_Builder
     from OCP.BRepBndLib import BRepBndLib
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy, BRepBuilderAPI_MakeFace
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape
     from OCP.Precision import Precision
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHAPE, TopAbs_VERTEX
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS_Compound
     from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 
     box = Bnd_Box()
@@ -56,6 +60,19 @@ def _support_box(shape):
     limits = box_limits(box)
     if not all(math.isfinite(value) for value in limits):
         raise ValueError("cannot measure a non-finite shape's bounds")
+    # Measure the boundary, not the solid's interior. DistShapeShape's solid
+    # classifier can report exterior planes as contained by a spline solid;
+    # a reversed shell's interior is unbounded too, but its box is unchanged.
+    # Copy topology before adding faces so the builder changes no input flags.
+    copied = BRepBuilderAPI_Copy(shape, False, False).Shape()
+    boundary = TopoDS_Compound()
+    builder = BRep_Builder()
+    builder.MakeCompound(boundary)
+    for kind, avoid in ((TopAbs_FACE, TopAbs_SHAPE), (TopAbs_EDGE, TopAbs_FACE), (TopAbs_VERTEX, TopAbs_EDGE)):
+        elements = TopExp_Explorer(copied, kind, avoid)
+        while elements.More():
+            builder.Add(boundary, elements.Current())
+            elements.Next()
     center = [(limits[axis] + limits[axis + 3]) / 2 for axis in range(3)]
     reach = max(max(limits[axis + 3] - limits[axis] for axis in range(3)), 1.0) * 2
     measured = [0.0] * 6
@@ -67,8 +84,8 @@ def _support_box(shape):
             origin[axis] += side * reach
             plane = gp_Pln(gp_Pnt(*origin), gp_Dir(*direction))
             face = BRepBuilderAPI_MakeFace(plane, -reach, reach, -reach, reach).Face()
-            distance = BRepExtrema_DistShapeShape(shape, face, Precision.Confusion_s())
-            if not distance.IsDone() or not math.isfinite(distance.Value()):
+            distance = BRepExtrema_DistShapeShape(boundary, face, Precision.Confusion_s())
+            if not distance.IsDone() or distance.InnerSolution() or not math.isfinite(distance.Value()):
                 raise ValueError("the kernel could not measure a shape's support plane distance")
             measured[axis + offset] = origin[axis] - side * distance.Value()
     result = Bnd_Box()

@@ -303,6 +303,22 @@ class SurfaceFactsTest(unittest.TestCase):
                             self.assertAlmostEqual(actual, wanted, places=6)
                 self.assertEqual(mesh.shape_bytes(shape), before, "inspection must not mesh or alter the shape")
 
+    def test_bounds_measure_a_reversed_shell_and_loose_geometry_without_classifying_its_interior(self) -> None:
+        import build123d as bd
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
+        from OCP.TopoDS import TopoDS
+
+        ellipsoid = bd.Sphere(1).transform_geometry(bd.Matrix([
+            [20, 0, 0, 0], [0, 10, 0, 0], [0, 0, 5, 0], [0, 0, 0, 1],
+        ]))
+        inverted = BRepBuilderAPI_MakeSolid(TopoDS.Shell(ellipsoid.shells()[0].wrapped.Reversed())).Solid()
+        shape = bd.Compound([bd.Solid(inverted), bd.Line((30, 0, 0), (40, 0, 0)), bd.Vertex(-31, 0, 0)])
+        before = mesh.shape_bytes(shape.wrapped)
+        bounds = mesh.measured(before)["box"]
+        for actual, wanted in zip(bounds["min"] + bounds["max"], [-31, -10, -5, 40, 10, 5]):
+            self.assertAlmostEqual(actual, wanted, places=6)
+        self.assertEqual(mesh.shape_bytes(shape.wrapped), before)
+
     def test_every_face_of_curved_solids_answers_its_facts(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="engine-mesh-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
