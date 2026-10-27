@@ -555,9 +555,9 @@ def _movement_ring():
     cased movement spans watch z 0.96..7.7."""
     ring = bd.Pos(0, 0, 1.0) * bd.Cylinder(15.6, 6.7, align=(None, None, None)) - bd.Pos(0, 0, 0.9) * bd.Cylinder(
         S.MOVEMENT_DIAMETER / 2 + 0.05, 7.0, align=(None, None, None))
-    ring.color = bd.Color(S.STEEL_DARK)
     ring.label = "movement_ring"
     ring.material = M.FINISHES["satin_steel"]
+    ring.color = bd.Color(S.STEEL_DARK)
     return ring
 
 
