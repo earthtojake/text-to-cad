@@ -489,9 +489,9 @@ class VertexNamesTest(NamingCase):
         prototype = loaded.prototypes[0]
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-        vertices = TopTools_IndexedMapOfShape()
+        vertices = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(prototype.shape, TopAbs_VERTEX, vertices)
         self.assertEqual(sorted(prototype.vertex_names), list(range(1, vertices.Extent() + 1)))
         self.assertTrue(all(name.startswith("v:block.") for name in prototype.vertex_names.values()))
@@ -529,7 +529,7 @@ class RunOrderTest(unittest.TestCase):
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
         from OCP.TopExp import TopExp
         from OCP.TopoDS import TopoDS
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
         folder = Path(tempfile.mkdtemp(prefix="engine-run-order-")).resolve()
         self.addCleanup(lambda: shutil.rmtree(folder, ignore_errors=True))
@@ -538,7 +538,7 @@ class RunOrderTest(unittest.TestCase):
 
         def where(element, kind) -> tuple:
             if kind == TopAbs_VERTEX:
-                return tuple(round(value, 4) for value in BRep_Tool.Pnt_s(TopoDS.Vertex_s(element)).Coord())
+                return tuple(round(value, 4) for value in BRep_Tool.Pnt_s(TopoDS.Vertex(element)).Coord())
             props = GProp_GProps()
             (BRepGProp.SurfaceProperties_s if kind == TopAbs_FACE else BRepGProp.LinearProperties_s)(element, props)
             return tuple(round(value, 4) for value in props.CentreOfMass().Coord())
@@ -554,7 +554,7 @@ class RunOrderTest(unittest.TestCase):
             found = {}
             for kind, names in ((TopAbs_FACE, prototype.face_names), (TopAbs_EDGE, prototype.edge_names),
                                 (TopAbs_VERTEX, prototype.vertex_names)):
-                elements = TopTools_IndexedMapOfShape()
+                elements = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
                 TopExp.MapShapes_s(prototype.shape, kind, elements)
                 for ordinal, name in names.items():
                     found[(int(kind), where(elements.FindKey(ordinal), kind))] = name

@@ -166,18 +166,18 @@ def _vertices(loaded: document.Loaded, name: str, matrices: list | None = None) 
     ``matrices``, the structure's instance matrices at a pose, do)."""
     from OCP.TopAbs import TopAbs_VERTEX
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.BRep import BRep_Tool
     from OCP.TopoDS import TopoDS
 
     index, instance = next((at, i) for at, i in enumerate(loaded.instances) if i.path[-1] == name)
     shape = loaded.prototypes[instance.prototype].shape
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_VERTEX, mapped)
     matrix = np.array(instance.matrix if matrices is None else matrices[index]).reshape(4, 4).T
     points = []
     for at in range(1, mapped.Extent() + 1):
-        point = BRep_Tool.Pnt_s(TopoDS.Vertex_s(mapped.FindKey(at)))
+        point = BRep_Tool.Pnt_s(TopoDS.Vertex(mapped.FindKey(at)))
         points.append((matrix @ np.array([point.X(), point.Y(), point.Z(), 1.0]))[:3])
     return np.array(points)
 
@@ -913,7 +913,7 @@ class ReaderTest(unittest.TestCase):
     (ground, pair links, states, a motion's configuration and values, a coupling) unchanged."""
 
     def test_read_copies_reference_lists_without_iterating(self) -> None:
-        from OCP.TDF import TDF_LabelList
+        from OCP.collections import List_TDF_Label
 
         pairs = [mechanism.Pair("a", "revolute", (0, 1), None, ((0.0, 90.0),)),
                  mechanism.Pair("b", "revolute", (1, 2), None, ((None, None),))]
@@ -924,16 +924,16 @@ class ReaderTest(unittest.TestCase):
             couplings={"pair": mechanism.Coupling("pair", {"a": (1.0,), "b": (-2.0,)})})
         doc = document._new_document()
         mechanism.write(doc, written, lambda path: [])
-        iterate = TDF_LabelList.__iter__
+        iterate = List_TDF_Label.__iter__
 
         def refused(_self: Any) -> Any:
             raise AssertionError("a reference list iterated from Python")
 
-        TDF_LabelList.__iter__ = refused
+        List_TDF_Label.__iter__ = refused
         try:
             read = mechanism.read(doc, {})
         finally:
-            TDF_LabelList.__iter__ = iterate
+            List_TDF_Label.__iter__ = iterate
         self.assertEqual(read.signature(), written.signature())
         self.assertEqual((read.as_built, read.configurations), (written.as_built, written.configurations))
         self.assertEqual(read.motions, written.motions)

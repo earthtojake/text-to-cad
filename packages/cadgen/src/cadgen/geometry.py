@@ -303,41 +303,6 @@ def _result_statuses(result) -> list:
     return _items(result.Status())
 
 
-def _probed_statuses(entity) -> list:
-    """The ``BRepCheck_Status`` values the per-type checkers report for one entity.
-
-    Each checker answers one question with one status -- is the shell closed, are
-    the face's wires oriented, do they intersect -- so the faults it can name are
-    fewer than a result's status list, but every one of them is named exactly.
-    Edges and vertices have no such question: the analyzer still says they are
-    invalid, and the shell or face they belong to reports the fault."""
-    from OCP.BRepCheck import (
-        BRepCheck_Face,
-        BRepCheck_NoError,
-        BRepCheck_Shell,
-        BRepCheck_UnorientableShape,
-        BRepCheck_Wire,
-    )
-    from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_WIRE
-    from cadgen._internal.ocp_compat import topods_face, topods_shell, topods_wire
-
-    kind = entity.ShapeType()
-    statuses = []
-    if kind == TopAbs_SHELL:
-        checker = BRepCheck_Shell(topods_shell(entity))
-        statuses += [checker.Closed(False), checker.Orientation(False)]
-        if checker.IsUnorientable():
-            statuses.append(BRepCheck_UnorientableShape)
-    elif kind == TopAbs_FACE:
-        checker = BRepCheck_Face(topods_face(entity))
-        statuses += [checker.IntersectWires(False), checker.ClassifyWires(False), checker.OrientationOfWires(False)]
-        if checker.IsUnorientable():
-            statuses.append(BRepCheck_UnorientableShape)
-    elif kind == TopAbs_WIRE:
-        statuses.append(BRepCheck_Wire(topods_wire(entity)).Closed(False))
-    return [status for status in statuses if status != BRepCheck_NoError]
-
-
 def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
     """BRepCheck topology/geometry faults, with affected owned entities.
 
@@ -346,8 +311,9 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
     boolean self-intersection testing are separate questions.
     """
     from OCP.BRepCheck import BRepCheck_Analyzer, BRepCheck_NoError
+    from cadgen.engine.kernel.checks import probed_statuses
     from OCP.TopExp import TopExp
-    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     wrapped = _wrapped(shape)
     try:
@@ -355,7 +321,7 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
         analyzer = BRepCheck_Analyzer(private)
         if analyzer.IsValid():
             return ()
-        entities = TopTools_IndexedMapOfShape()
+        entities = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(private, entities)
         issues = []
         for i in range(1, entities.Extent() + 1):
@@ -377,7 +343,7 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
                 # OCP 8 binds no NCollection_List<BRepCheck_Status>, so the result's
                 # lists are unreadable there. The per-type checkers answer one
                 # question each with one status, which is enough to name the fault.
-                collect(_probed_statuses(entity))
+                collect(probed_statuses(entity))
                 continue
             collect(statuses)
             result.InitContextIterator()
@@ -402,7 +368,7 @@ def boundary_edges(shell: Shell) -> tuple[Edge, ...]:
     from OCP.ShapeAnalysis import ShapeAnalysis_Shell
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp
-    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     wrapped = _wrapped(shell, Shell)
     try:
@@ -410,7 +376,7 @@ def boundary_edges(shell: Shell) -> tuple[Edge, ...]:
         private = _copy(wrapped)
         analyzer.LoadShells(private)
         analyzer.CheckOrientedShells(private, True)
-        edges = TopTools_IndexedMapOfShape()
+        edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(analyzer.FreeEdges(), TopAbs_EDGE, edges)
         return tuple(_cast(edges.FindKey(i)) for i in range(1, edges.Extent() + 1))
     except Exception as exc:

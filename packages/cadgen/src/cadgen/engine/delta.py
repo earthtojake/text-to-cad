@@ -40,6 +40,8 @@ import math
 from collections import OrderedDict
 from typing import Any
 
+from cadgen.engine.kernel.bounds import box_limits
+
 # Per part geometry key, what is known of its box in its own frame (``_Box``), or None for no geometry.
 _BOXES: "OrderedDict[str, _Box | None]" = OrderedDict()
 _BOXES_HELD = 1 << 16
@@ -183,13 +185,13 @@ def _vertices(shape: Any) -> tuple[float, ...] | None:
     from OCP.TopAbs import TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    found = TopTools_IndexedMapOfShape()
+    found = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_VERTEX, found)
     if not found.Extent():
         return None
-    points = [BRep_Tool.Pnt_s(TopoDS.Vertex_s(found.FindKey(at))) for at in range(1, found.Extent() + 1)]
+    points = [BRep_Tool.Pnt_s(TopoDS.Vertex(found.FindKey(at))) for at in range(1, found.Extent() + 1)]
     xs, ys, zs = [p.X() for p in points], [p.Y() for p in points], [p.Z() for p in points]
     return min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)
 
@@ -217,7 +219,7 @@ def _got(box: Any) -> tuple[float, ...]:
     """A box's six values without its gap: the kernel enlarges a quick box by each element's
     tolerance, which is no geometry (an exact box has none)."""
     box.SetGap(0.0)
-    return tuple(box.Get())
+    return tuple(box_limits(box))
 
 
 def _cut(bound: Any, tighter: tuple[float, ...]) -> tuple[float, ...]:
@@ -259,7 +261,7 @@ def _bound(element: Any) -> tuple[tuple[float, ...] | None, int]:
     found = _got(box)
     if element.ShapeType() != TopAbs_FACE:
         return found, 0
-    surface = BRepAdaptor_Surface(TopoDS.Face_s(element), False)
+    surface = BRepAdaptor_Surface(TopoDS.Face(element), False)
     kind = surface.GetType()
     if kind == GeomAbs_Torus:
         # Along a unit direction whose cosine with the axis is c, a torus reaches no farther from
@@ -305,7 +307,7 @@ def _patch(face: Any) -> tuple[Any, float, float, float, float] | None:
     from OCP.GeomConvert import GeomConvert
     from OCP.TopoDS import TopoDS
 
-    face = TopoDS.Face_s(face)
+    face = TopoDS.Face(face)
     try:
         surface = GeomConvert.SurfaceToBSplineSurface_s(BRep_Tool.Surface_s(face))
         low_u, high_u, low_v, high_v = BRepTools.UVBounds_s(face)

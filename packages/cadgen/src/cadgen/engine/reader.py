@@ -78,11 +78,12 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
     from OCP.Quantity import Quantity_ColorRGBA
-    from OCP.TDF import TDF_Label, TDF_LabelSequence
+    from OCP.TDF import TDF_Label
+    from OCP.collections import Sequence_TDF_Label
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS_Iterator
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.XCAFDoc import XCAFDoc_ColorCurv, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorTool
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
@@ -146,7 +147,7 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
         """An xbf part's painted faces and face materials, by ordinal."""
         paints: dict[str, list[float]] = {}
         given: dict[str, Any] = {}
-        subs = TDF_LabelSequence()
+        subs = Sequence_TDF_Label()
         XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
         faces = None
         for at in range(1, subs.Length() + 1):
@@ -155,7 +156,7 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
             if held.IsNull() or held.ShapeType() != TopAbs_FACE:
                 continue
             if faces is None:
-                faces = TopTools_IndexedMapOfShape()
+                faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
                 TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
             ordinal = faces.FindIndex(held)
             if not ordinal:
@@ -189,7 +190,7 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
         found = index[key] = len(products)
         products.append(record)
         if assembly:
-            components = TDF_LabelSequence()
+            components = Sequence_TDF_Label()
             XCAFDoc_ShapeTool.GetComponents_s(label, components, False)
             record["components"] = [component(components.Value(at)) for at in range(1, components.Length() + 1)]
         else:
@@ -214,7 +215,7 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
         return {"product": product(referred), "name": name_of(label) if own else "",
                 "color": label_color(label) if own else None, "location": at}
 
-    free = TDF_LabelSequence()
+    free = Sequence_TDF_Label()
     tool.GetFreeShapes(free)
     roots = [component(free.Value(at)) for at in range(1, free.Length() + 1)]
     return {"products": products, "roots": roots}, shapes, locations

@@ -1964,6 +1964,12 @@ roughness by finish (polished 0.2, machined 0.35-0.45, cast 0.6), brushed alumin
 stainless anisotropic, plastics dielectric, glass and the clear plastics transmissive, rubber
 rough.
 
+build123d 0.13's `Shape.material` property accepts native materials and sets their colour.
+The engine's [material integration](kernel/material.py), installed when build123d loads,
+keeps a cadgen `Material` as an authored value instead: explicit colour and document
+inheritance retain their existing precedence. Native assignments still use build123d's
+property, and `None` clears either kind.
+
 In the file a material is XCAF's own `XCAFDoc_Material` (name, description, density) and
 `XCAFDoc_VisMaterial` (PBR: colour and alpha, metallic, roughness, emissive, IOR), and every
 other field in one `TDataStd_NamedData` on the material's label, named as the schema names it
@@ -2645,7 +2651,7 @@ no git. It names what the document was built from and what built it, the toolcha
 schema    "cadgen.engine closure/2"
 engine    {"release": "cadgen 0.8.0", "format": "xbf/8", "digest": ...}   the format (keyed); the release and
                                                                      the engine's code digest (information only)
-libs      {"build123d": "0.11.1", "OCP": "7.9.3.1.1"}                 what decides the geometry (keyed): OCP's
+libs      {"build123d": "0.13.0", "OCP": "8.0.1.1"}                 what decides the geometry (keyed): OCP's
                                                                      version leads with the OCCT it wraps
 platform  {"python": "3.12.10", "system": "Darwin", "arch": "arm64"}  the system and architecture (keyed),
                                                                      Python (information only):

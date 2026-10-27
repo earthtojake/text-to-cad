@@ -117,7 +117,8 @@ def _usages_apart(doc: Any) -> Iterator[None]:
     would be another's key is given a datum of its own, of the same transformation, written as
     the same numbers; the components and their assemblies' compounds are set back after, each
     compound's named shape at the version it had, so the document saves to the bytes it did."""
-    from OCP.TDF import TDF_AttributeIterator, TDF_Label, TDF_LabelSequence
+    from OCP.TDF import TDF_AttributeIterator, TDF_Label
+    from OCP.collections import Sequence_TDF_Label
     from OCP.TNaming import TNaming_NamedShape
     from OCP.TopLoc import TopLoc_Location
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Location, XCAFDoc_ShapeTool
@@ -125,7 +126,7 @@ def _usages_apart(doc: Any) -> Iterator[None]:
     from cadgen.engine.document import _entry
 
     tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
-    labels = TDF_LabelSequence()
+    labels = Sequence_TDF_Label()
     tool.GetShapes(labels)
     placed: dict[tuple[str, int], list] = {}
     moved: list[tuple[Any, Any]] = []
@@ -135,7 +136,7 @@ def _usages_apart(doc: Any) -> Iterator[None]:
         if not XCAFDoc_ShapeTool.IsAssembly_s(assembly):
             continue
         assemblies.append(assembly)
-        components = TDF_LabelSequence()
+        components = Sequence_TDF_Label()
         XCAFDoc_ShapeTool.GetComponents_s(assembly, components, False)
         for place in range(1, components.Length() + 1):
             component = components.Value(place)

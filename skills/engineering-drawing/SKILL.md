@@ -27,11 +27,11 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 Run cadgen through the `cadgen` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.0` (`~/.local/bin/cadgen +0.8.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.0 run`
+- `cadgen` below means `cadgen +0.8.1` (`~/.local/bin/cadgen +0.8.1` where `~/.local/bin` is not on your PATH)
+- `python` below means `cadgen +0.8.1 run`
 
-If `cadgen` is not on your PATH, or it says 0.8.0 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen doctor` once,
+If `cadgen` is not on your PATH, or it says 0.8.1 is not installed, run
+`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.1 cadgen doctor` once,
 outside any sandbox or with its permission: it installs cadgen, registers it, writes the
 `cadgen` command and starts the engine. With the CAD app's server running, nothing else
 needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed

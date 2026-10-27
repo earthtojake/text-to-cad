@@ -1651,9 +1651,9 @@ def _label(parent: Any, tag: int, name: str, entity: str | None = None) -> Any:
 
 
 def _reals(values: Any) -> Any:
-    from OCP.TColStd import TColStd_HArray1OfReal
+    from OCP.collections import HArray1_double
 
-    array = TColStd_HArray1OfReal(1, len(values))
+    array = HArray1_double(1, len(values))
     for at, value in enumerate(values, 1):
         array.SetValue(at, float(value))
     return array
@@ -1680,7 +1680,7 @@ def write(doc: Any, mechanism: Mechanism, occurrence: Callable[[tuple[int, ...]]
     is an occurrence's labels: the root's, then each component's down to it."""
     from OCP.Standard import Standard_GUID
     from OCP.TCollection import TCollection_AsciiString
-    from OCP.TColStd import TColStd_ListOfAsciiString
+    from OCP.collections import List_TCollection_AsciiString
     from OCP.TDataStd import TDataStd_NamedData, TDataStd_ReferenceList, TDataStd_UAttribute
     from OCP.XCAFDoc import XCAFDoc_AssemblyItemId, XCAFDoc_AssemblyItemRef
 
@@ -1699,7 +1699,7 @@ def write(doc: Any, mechanism: Mechanism, occurrence: Callable[[tuple[int, ...]]
     for at, link in enumerate(mechanism.links, 1):
         label = _label(links_label, at, link.name, "KINEMATIC_LINK")
         for member_at, path in enumerate(link.members, 1):
-            entries = TColStd_ListOfAsciiString()
+            entries = List_TCollection_AsciiString()
             for step in occurrence(path):
                 entries.Append(TCollection_AsciiString(_entry(step)))
             XCAFDoc_AssemblyItemRef.Set_s(label.FindChild(member_at, True), XCAFDoc_AssemblyItemId(entries))
@@ -1891,14 +1891,14 @@ def _references(label: Any) -> list[str]:
     ``RemoveFirst``: the bound list's Python iterator ends in a C++ exception, about 3 ms a
     list, which over a large mechanism's thousands of lists was most of a read."""
     from OCP.TDataStd import TDataStd_ReferenceList
-    from OCP.TDF import TDF_LabelList
+    from OCP.collections import List_TDF_Label
 
     from cadgen.engine.document import _entry, _find
 
     found = TDataStd_ReferenceList()
     if not _find(label, found, TDataStd_ReferenceList.GetID_s()):
         return []
-    rest = TDF_LabelList()
+    rest = List_TDF_Label()
     rest.Assign(found.List())
     entries = []
     while not rest.IsEmpty():

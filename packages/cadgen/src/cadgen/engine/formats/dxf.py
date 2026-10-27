@@ -316,8 +316,8 @@ def _spline(entity: Entity) -> np.ndarray | None:
     weights = [float(value) for value in entity.all(41)]
     if len(controls) >= 2 and len(knots) == len(controls) + degree + 1:
         from OCP.Geom import Geom_BSplineCurve
-        from OCP.TColgp import TColgp_Array1OfPnt
-        from OCP.TColStd import TColStd_Array1OfInteger, TColStd_Array1OfReal
+        from OCP.collections import Array1_gp_Pnt
+        from OCP.collections import Array1_int, Array1_double
         from OCP.gp import gp_Pnt
 
         unique, mults = [], []
@@ -327,16 +327,16 @@ def _spline(entity: Entity) -> np.ndarray | None:
             else:
                 unique.append(knot)
                 mults.append(1)
-        poles = TColgp_Array1OfPnt(1, len(controls))
+        poles = Array1_gp_Pnt(1, len(controls))
         for at, (x, y) in enumerate(controls, 1):
             poles.SetValue(at, gp_Pnt(x, y, 0.0))
-        knot_array, mult_array = TColStd_Array1OfReal(1, len(unique)), TColStd_Array1OfInteger(1, len(mults))
+        knot_array, mult_array = Array1_double(1, len(unique)), Array1_int(1, len(mults))
         for at, (knot, mult) in enumerate(zip(unique, mults), 1):
             knot_array.SetValue(at, knot)
             mult_array.SetValue(at, mult)
         try:
             if len(weights) == len(controls) and any(abs(weight - 1) > 1e-12 for weight in weights):
-                weight_array = TColStd_Array1OfReal(1, len(weights))
+                weight_array = Array1_double(1, len(weights))
                 for at, weight in enumerate(weights, 1):
                     weight_array.SetValue(at, weight)
                 curve = Geom_BSplineCurve(poles, weight_array, knot_array, mult_array, degree)
@@ -437,7 +437,7 @@ def _triangulated(loops: list[np.ndarray]) -> np.ndarray | None:
     found = []
     explorer = TopExp_Explorer(face, TopAbs_FACE)
     while explorer.More():
-        piece = TopoDS.Face_s(explorer.Current())
+        piece = TopoDS.Face(explorer.Current())
         location = TopLoc_Location()
         triangulation = BRep_Tool.Triangulation_s(piece, location)
         if triangulation is not None:

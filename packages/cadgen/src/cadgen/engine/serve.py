@@ -764,7 +764,7 @@ def _read_foreign(path: str, digest: str, progress: str | None = None) -> dict[s
     whether the document is named by the file's stem (several free shapes), the seconds the read
     took and the process that made it. A reader process's job. ``progress``: where it says how
     many parts it has collected (``_ImportProgress``)."""
-    from OCP.TDF import TDF_LabelSequence
+    from OCP.collections import Sequence_TDF_Label
     from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
     from cadgen.engine.document import Loaded
@@ -781,7 +781,7 @@ def _read_foreign(path: str, digest: str, progress: str | None = None) -> dict[s
     for index, p in enumerate(prototypes, 1):
         shapes[keys[p.key]] = shape_bytes(p.shape, read=True)
         report.say(index, len(prototypes), final=index == len(prototypes))
-    free = TDF_LabelSequence()
+    free = Sequence_TDF_Label()
     XCAFDoc_DocumentTool.ShapeTool_s(loaded.doc.Main()).GetFreeShapes(free)
     return {"structure": structure, "shapes": shapes, "stem": free.Length() != 1,
             "seconds": round(time.perf_counter() - started, 4), "process": os.getpid()}

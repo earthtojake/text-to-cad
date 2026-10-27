@@ -27,7 +27,7 @@ def warm_host():
     reader = STEPControl_Reader()
     reader.ReadStream("phalanx_continuous_r5.step", buffer)
     reader.TransferRoots()
-    return bd.Solid(TopoDS.Solid_s(reader.OneShape()))
+    return bd.Solid(TopoDS.Solid(reader.OneShape()))
 
 
 def make_phalanx(length, width, *args, **kwargs):

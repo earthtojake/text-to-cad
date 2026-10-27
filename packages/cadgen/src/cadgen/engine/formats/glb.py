@@ -225,7 +225,8 @@ def _vis_material(label: Any, authored: list[dict[str, Any]]) -> tuple[tuple, di
         alpha = pbr.BaseColor.Alpha() if material.AlphaMode() == Graphic3d_AlphaMode.Graphic3d_AlphaMode_Blend else 1.0
         colour = (rgb.Red(), rgb.Green(), rgb.Blue(), alpha)
         metallic, roughness, ior = float(pbr.Metallic), float(pbr.Roughness), float(pbr.RefractionIndex)
-        emissive = [float(pbr.EmissiveFactor.x()), float(pbr.EmissiveFactor.y()), float(pbr.EmissiveFactor.z())]
+        glow = material.ConvertToCommonMaterial().EmissiveColor
+        emissive = [float(glow.Red()), float(glow.Green()), float(glow.Blue())]
     else:  # a material OCCT read as the common (Phong) model: its diffuse colour
         common = material.CommonMaterial()
         rgb = common.DiffuseColor
@@ -260,7 +261,8 @@ def _scale(matrix: np.ndarray) -> float:
 
 def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list[str]]:
     """The GLB at ``path`` as parts, their placements, the tree and the warnings (see the module docstring)."""
-    from OCP.TDF import TDF_Label, TDF_LabelSequence
+    from OCP.TDF import TDF_Label
+    from OCP.collections import Sequence_TDF_Label
     from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopoDS import TopoDS
@@ -307,7 +309,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
                          name or _name(referred))
         if XCAFDoc_ShapeTool.IsAssembly_s(label):
             node: dict[str, Any] = {"name": name, "children": []}
-            components = TDF_LabelSequence()
+            components = Sequence_TDF_Label()
             XCAFDoc_ShapeTool.GetComponents_s(label, components, False)
             for at in range(1, components.Length() + 1):
                 component = components.Value(at)
@@ -325,7 +327,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
         placements.append((leaves[key], world @ _matrix(shape.Location()), "/".join(names)))
         return {"name": name, "prototype": leaves[key], "instance": len(placements) - 1}
 
-    free = TDF_LabelSequence()
+    free = Sequence_TDF_Label()
     shapes.GetFreeShapes(free)
     roots = []
     for at in range(1, free.Length() + 1):
@@ -345,7 +347,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
     for index, label in enumerate(sources):
         shape = XCAFDoc_ShapeTool.GetShape_s(label)
         own = _material_label(label)
-        subs = TDF_LabelSequence()
+        subs = Sequence_TDF_Label()
         XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
         by_face = {}
         for at in range(1, subs.Length() + 1):
@@ -356,7 +358,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
         faces, materials_of = [], []
         explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while explorer.More():
-            face = TopoDS.Face_s(explorer.Current())
+            face = TopoDS.Face(explorer.Current())
             faces.append(face)
             materials_of.append(by_face.get(face.TShape(), own))
             explorer.Next()

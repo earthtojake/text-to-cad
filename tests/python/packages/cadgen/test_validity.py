@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from build123d import Compound, Pos, Shell, Solid, Wire
-from cadgen._internal.ocp_compat import topods_solid
+from OCP.TopoDS import TopoDS
 from cadgen.geometry import GeometryError, boundary_edges, is_sound, self_intersections, topology_errors
 
 
@@ -36,7 +36,7 @@ class GeometryDiagnosticsTests(unittest.TestCase):
         self.assertEqual(topology_errors(self.box), ())
         opened = Shell(self.box.faces()[1:])
         self.assertEqual(topology_errors(opened), ())
-        reversed_solid = Solid(topods_solid(self.box.wrapped.Reversed()))
+        reversed_solid = Solid(TopoDS.Solid(self.box.wrapped.Reversed()))
         self.assertEqual(topology_errors(reversed_solid), ())
         self.assertLess(reversed_solid.volume, 0)
 
@@ -92,8 +92,8 @@ class GeometryDiagnosticsTests(unittest.TestCase):
                 self_intersections(self.box)
         checker.HasErrors.return_value = False
         checker.IsValid.return_value = False
-        from cadgen._internal.ocp_compat import BOPAlgo_ListOfCheckResult
-        checker.Result.return_value = BOPAlgo_ListOfCheckResult()
+        from OCP.collections import List_BOPAlgo_CheckResult
+        checker.Result.return_value = List_BOPAlgo_CheckResult()
         with mock.patch("OCP.BRepAlgoAPI.BRepAlgoAPI_Check", return_value=checker):
             with self.assertRaisesRegex(GeometryError, "without diagnostics"):
                 self_intersections(self.box)

@@ -276,14 +276,15 @@ class Canvas:
         """The view's pixels in one rectangle of the frame (``left``, ``top`` from its top-left),
         drawn alone: a camera tile keeps the whole frame's projection, so the pixels are the
         frame's there (to a level at an edge's multisample) at the cost of the rectangle."""
-        from OCP.Graphic3d import Graphic3d_BufferType, Graphic3d_CameraTile, Graphic3d_Vec2i
+        from OCP.Graphic3d import Graphic3d_BufferType, Graphic3d_CameraTile
+        from OCP.collections import Vec2_int
         from OCP.Image import Image_AlienPixMap
 
         camera = self.view.Camera()
         tile = Graphic3d_CameraTile()
-        tile.TotalSize = Graphic3d_Vec2i(self.width, self.height)
-        tile.TileSize = Graphic3d_Vec2i(width, height)
-        tile.Offset = Graphic3d_Vec2i(left, self.height - top - height)  # counted from the lower left
+        tile.TotalSize = Vec2_int(self.width, self.height)
+        tile.TileSize = Vec2_int(width, height)
+        tile.Offset = Vec2_int(left, self.height - top - height)  # counted from the lower left
         camera.SetTile(tile)
         try:
             image = Image_AlienPixMap()

@@ -17,6 +17,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from cadgen.engine.kernel.bounds import box_limits
 from tests.python.support import engine_daemon
 
 SRC = Path(__file__).resolve().parents[5] / "packages" / "cadgen" / "src"
@@ -81,7 +82,7 @@ class BoundsTest(unittest.TestCase):
         for shape, location in placed:
             box = Bnd_Box()
             BRepBndLib.AddOptimal_s(shape.wrapped, box, False, False)
-            x0, y0, z0, x1, y1, z1 = box.Get()
+            x0, y0, z0, x1, y1, z1 = box_limits(box)
             for x in (x0, x1):
                 for y in (y0, y1):
                     for z in (z0, z1):

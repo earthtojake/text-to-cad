@@ -71,9 +71,9 @@ def _common_volume(a, b):
     try:
         from lib import geo
         from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-        from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
-        args = TopTools_ListOfShape(); args.Append(a.wrapped)
-        tools = TopTools_ListOfShape(); tools.Append(b.wrapped)
+        from OCP.collections import List_TopoDS_Shape
+        args = List_TopoDS_Shape(); args.Append(a.wrapped)
+        tools = List_TopoDS_Shape(); tools.Append(b.wrapped)
         op = BRepAlgoAPI_Common(); op.SetArguments(args); op.SetTools(tools)
         op.SetFuzzyValue(1e-3); op.Build()
         if op.IsDone():

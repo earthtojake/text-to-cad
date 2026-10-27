@@ -56,7 +56,7 @@ from typing import Any, Callable, Iterator
 from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_VERTEX, TopAbs_WIRE
 from OCP.TopExp import TopExp
 from OCP.TopoDS import TopoDS_Shape
-from OCP.TopTools import TopTools_IndexedMapOfShape, TopTools_ListOfShape
+from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher, List_TopoDS_Shape
 
 __all__ = ["History", "KINDS", "by_ordinal", "compose", "install", "listed", "recording", "stats", "uninstall"]
 
@@ -312,7 +312,7 @@ def _note_inputs(record: _Record, values: Any) -> None:
         if isinstance(value, TopoDS_Shape):
             if not value.IsNull():
                 record.inputs.append(value.Located(value.Location()))
-        elif isinstance(value, TopTools_ListOfShape):
+        elif isinstance(value, List_TopoDS_Shape):
             record.inputs.extend(listed(value))
         elif type(value).__name__.startswith("TopTools_") and hasattr(value, "Length") and hasattr(value, "Value"):
             for index in range(1, value.Length() + 1):
@@ -322,13 +322,13 @@ def _note_inputs(record: _Record, values: Any) -> None:
 
 
 def listed(shapes: Any) -> list[Any]:
-    """A ``TopTools_ListOfShape``'s members, never iterated from Python (the exception that
+    """A ``List_TopoDS_Shape``'s members, never iterated from Python (the exception that
     ends an iteration costs milliseconds): none, its first, or its first and last -- what
     nearly every answer holds -- else the list copied and taken from the copy's head."""
     size = shapes.Size()
     if size < 3:
         return [] if size == 0 else [shapes.First()] if size == 1 else [shapes.First(), shapes.Last()]
-    copy = TopTools_ListOfShape()
+    copy = List_TopoDS_Shape()
     copy.Assign(shapes)
     found = []
     for _member in range(size):
@@ -432,7 +432,7 @@ _GENERATOR = _Adapter(_made, generator=True)
 _COPY = _Adapter(_copied)
 _WIRE = _Adapter(lambda maker: None)  # composed by its own rule (_wire_copies)
 
-# (module, class, adapter): the makers build123d 0.11.1's topology modules construct that
+# (module, class, adapter): the makers build123d 0.13.0's topology modules construct that
 # are given shapes. A class OCP no longer has is an error: the table is this version's.
 _ADAPTERS = (
     ("OCP.BRepAlgoAPI", "BRepAlgoAPI_Cut", _MAKER),
@@ -581,7 +581,7 @@ def _finisher(original: Any) -> Any:
 
 
 def _map(shape: Any, kind: Any) -> Any:
-    found = TopTools_IndexedMapOfShape()
+    found = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, kind, found)
     return found
 
@@ -696,7 +696,7 @@ def compose(inputs: list[Any], results: list[Any], records: list[_Record]) -> Hi
     if not taken:
         return History()
     given: list[list | None] = [None] * len(inputs)
-    reported = TopTools_IndexedMapOfShape()
+    reported = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     # Per reported shape, by its index there: the shape, its kind (an index of ``KINDS``)
     # and its origins by source element -- (how, place), merged as they come (``_merge``).
     shapes: list[Any] = []
@@ -884,7 +884,7 @@ def _copies(inputs: list[Any], results: list[Any], copied: list[tuple[_Record, C
     changed = None
 
     def tshapes(shape: Any) -> set:
-        mapped = TopTools_IndexedMapOfShape()
+        mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, mapped)
         return {mapped.FindKey(at).TShape() for at in range(1, mapped.Extent() + 1)}
 
@@ -928,7 +928,7 @@ def _places(shapes: list[Any], kinds: list[int], held: list[tuple[int, list[Any]
                 if ordinal and (position, ordinal) not in found[index]:
                     found[index].append((position, ordinal))
         return found
-    every = [TopTools_IndexedMapOfShape() for _kind in KINDS]
+    every = [IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher() for _kind in KINDS]
     places: list[list[list[tuple[int, int]]]] = [[] for _kind in KINDS]
     for position, maps in held:
         for kind in range(len(KINDS)):
@@ -985,7 +985,7 @@ def _wire_copies(record: _Record, source: Callable[[Any, int], tuple | None],
 
     def signature(edge: Any, alive: list) -> tuple | None:
         location = TopLoc_Location()
-        cast = TopoDS.Edge_s(edge)
+        cast = TopoDS.Edge(edge)
         curve = BRep_Tool.Curve_s(cast, location, 0.0, 0.0)
         if curve is None:
             return None
@@ -996,7 +996,7 @@ def _wire_copies(record: _Record, source: Callable[[Any, int], tuple | None],
         return (_object_key(curve), BRep_Tool.Range_s(cast),
                 tuple(value(row, column) for row in (1, 2, 3) for column in (1, 2, 3, 4)))
 
-    held = TopTools_IndexedMapOfShape()
+    held = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     inputs = []
     for shape in record.inputs:
         edges = _map(shape, TopAbs_EDGE)

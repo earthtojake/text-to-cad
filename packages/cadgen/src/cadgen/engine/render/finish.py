@@ -238,7 +238,7 @@ def aspect(found: dict[str, Any]) -> Any:
     """``finish``'s answer as an OCCT material: a PHYSIC aspect whose PBR material is the finish."""
     from OCP.Graphic3d import (Graphic3d_MaterialAspect, Graphic3d_NameOfMaterial, Graphic3d_PBRMaterial,
                                Graphic3d_TypeOfMaterial)
-    from OCP.gp import gp_Vec3f
+    from OCP.collections import Vec3_float
     from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TOC_RGB
 
     colour = Quantity_Color(*found["color"], Quantity_TOC_RGB)
@@ -251,7 +251,7 @@ def aspect(found: dict[str, Any]) -> Any:
     pbr.SetMetallic(found["metallic"])
     pbr.SetRoughness(occt_roughness(found["roughness"]))
     pbr.SetIOR(found["ior"])
-    pbr.SetEmission(gp_Vec3f(*(float(value) for value in found["emission"])))
+    pbr.SetEmission(Vec3_float(*(float(value) for value in found["emission"])))
     pbr.SetAlpha(found["alpha"])
     material.SetPBRMaterial(pbr)
     if found["alpha"] < 1:
