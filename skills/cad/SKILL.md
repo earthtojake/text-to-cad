@@ -56,7 +56,7 @@ host's server start timeout (Claude Code: 30 s by default, raised by setting `MC
 milliseconds; Codex: the plugin asks for 300 s); a restart resumes the download.
 
 A project venv can put its own `cadgen` ahead of the launcher on PATH, even when
-`~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.0 doctor` to diagnose that
+`~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.1 doctor` to diagnose that
 case and use that full launcher path for commands until PATH is corrected.
 
 One engine serves the installation: the first run starts it, every run and every
