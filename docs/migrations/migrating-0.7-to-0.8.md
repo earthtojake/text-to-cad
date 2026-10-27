@@ -930,10 +930,17 @@ second declaration of it is refused, naming both `file:line`, until the file tha
 is gone or has run again without it (`cadgen run <that file>`). Moving a name to another
 file of its folder keeps its document.
 
-**Current document formats rebuild from source.** cadgen 0.8.1 writes `xbf/9`;
-earlier engine XBF files are refused by ordinary format validation and cached documents
-of an earlier format are not reused. Run each model's source to write its current
-document. There is no material compatibility layer or in-place closure migration.
+**The 0.8.1 document baseline.** cadgen 0.8.1 writes `xbf/9`. This initial cutover requires
+source rebuilds: earlier engine XBF files are refused by format validation and their cached
+documents are not reused. Run each model's source to write its current document. There is no
+material compatibility layer or in-place closure migration. Reading an incompatible cached
+document removes that cached copy; an explicit XBF file is left untouched. Preserve older files
+or cache copies before upgrading if source is unavailable.
+
+From `xbf/9` onward, future format changes must preserve access to saved documents through
+backward reading or automatic data migrations. A new build may need to recompute geometry when
+its source or toolchain changes, but viewing and exporting the saved snapshot must not require
+that rebuild. See the [persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
 
 The independent startup identity pass still gives each JSON record its namespace and
 name, and a model's record the fingerprint of its script. A record that a `key=` named

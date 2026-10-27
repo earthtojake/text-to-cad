@@ -109,8 +109,14 @@ but the viewer, GLB export and snapshots explicitly refuse them until UV mapping
 supported.
 
 The XBF format is `xbf/9`; `bd_materials` and `threejs_materials` versions join the build
-key. Earlier engine XBF files are refused by ordinary format validation; rebuild models
-from source. There is no in-place format migration.
+key. This is the document compatibility baseline: future format changes must preserve access
+to saved documents through backward reading or automatic data migrations. For this initial
+cutover, earlier engine XBF files are refused by format validation; rebuild models from source.
+There is no in-place format migration. Reading an incompatible cached document removes that
+cached copy, while an explicit XBF file is left untouched. Preserve older files or cache copies
+before upgrading if source is unavailable. The
+[persisted-document policy](../../packages/cadgen/README.md#the-design-laws) separates saved
+document access from whether a new build can reuse its cache.
 
 OCP 8.0.1 also leaves `XCAFDoc_VisMaterialPBR.EmissiveFactor` unbound. To set it, put emission
 in `XCAFDoc_VisMaterialCommon.EmissiveColor`, call `ConvertToPbrMaterial()`, then set the other

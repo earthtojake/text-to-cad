@@ -2677,10 +2677,10 @@ x86-64 one write other bytes of one model; a system, architecture or library cha
 saying what moved (`rebuilt: arm64 became x86_64`). The cadgen release (`engine.release`) and
 Python version (`platform.python`) are recorded in the closure but not keyed: a change to either
 alone does not rebuild. The engine's code digest is information only too; an engine edit that
-leaves the written document alone keeps every xbf current. `FORMAT` is bumped by hand (`xbf/8` to
-`xbf/9`) when what an engine writes changes -- the document's structure, the attributes on its labels, the
-closure's fields, or what the key covers -- and then every xbf builds once, cleanly: a
-document of another format is "written by" another engine (`cache.reason`). The bumps so far:
+leaves the written document alone keeps every xbf current. `FORMAT` is bumped deliberately when
+the stored representation changes. A new format or build key can invalidate reuse for a new
+build; keeping a saved document readable is a separate obligation (**Document compatibility**
+below). Earlier formats also used this marker for changes to what the build key covers. The bumps so far:
 `xbf/2`, the key left the release, the engine digest and numpy, and the closure its commit;
 `xbf/3`, the mechanism subtree took AP242's form (**Kinematics**); `xbf/4`, a function
 motion's samples are made for linear interpolation (**Configuration sequences**); `xbf/5`, files read by motion
@@ -2691,10 +2691,31 @@ record on the main label, the closure counts none, and an animated document is t
 join the key; release and Python are recorded); `xbf/9`, materials use native bd_materials
 physics and `PbrProperties`, and both material libraries join the key.
 
-Documents from an earlier format are refused by the ordinary writer/format validation.
-Rebuild models from source to produce current documents; a cache of an earlier format is
-not reused. There is no in-place format migration or material payload adapter. The JSON
-identity migration (**Identity migration**) is independent of document contents.
+**Document compatibility.** The persisted-document exception to law 15 starts at `xbf/9`.
+Future format changes must provide backward reading or automatic data migrations so saved
+geometry, placements, appearance, names and mechanism data remain available for viewing and
+export without the model's source or execution. A cadgen version bump alone is not a reason to
+migrate a document. Additive fields with defaults may need only reader support; changed units,
+field meanings or label layouts need a versioned conversion when the new reader cannot interpret
+them directly. Changes only to build keys invalidate build reuse without making the saved
+snapshot unreadable.
+
+Future conversions must be tested against saved fixtures of the supported formats, including
+the underlying OCCT binary reader. They must preserve the document's meaning and original build
+provenance: converting metadata does not mean the geometry was built by the new kernel. A
+conversion must not execute model code or replace original bytes until it succeeds; an unsupported
+version or failed conversion must leave those bytes recoverable, including in the document cache.
+Retired Python material classes and authoring APIs need not remain available to do this.
+
+**The 0.8.1 baseline cutover.** Because the material representation had only just shipped,
+this transition deliberately provides no backward reader, in-place migration or material
+payload adapter for formats before `xbf/9`. Earlier cadgen XBF files are refused by format
+validation; rebuild models from source to produce current documents. On an explicit build an
+older cache is not reused. Reading an incompatible cached document removes that cached copy and
+asks for a rebuild; reading an explicit XBF file leaves the file untouched. Preserve older files
+or cache copies before this upgrade if source is unavailable. This is the exception for the
+initial baseline, not the policy for future format changes. The JSON identity migration
+(**Identity migration**) is independent of document contents.
 
 Before a body runs or is replayed, the build makes the closure again -- the script loaded,
 its modules digested, each input hashed again -- and compares its key with the one the model's

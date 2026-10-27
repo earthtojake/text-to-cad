@@ -173,13 +173,29 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     someone who only ran `pip install cadgen`. Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
     repository workflow does not.
-15. **No backwards compatibility.** Hard cutovers only. A retired surface does not exist: no
+15. **No backwards compatibility for authoring and runtime APIs.** Hard cutovers only.
+    A retired surface does not exist: no
     alias, no shim, and no error that recognizes its old spelling to explain what replaced it. A
     removed command, flag, argument, key, module or name gets what the current contract's
     ordinary validation says -- an unknown command, an unrecognized argument, an unknown key, an
     `ImportError`, an `AttributeError`.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name
     that never existed.
+
+    **Persisted-document exception.** Starting with `xbf/9`, future format changes must preserve
+    access to saved documents, including the engine's document cache, through backward reading or
+    automatic data migrations. Opening, viewing and exporting saved work must not require its
+    source or a rebuild just because cadgen was upgraded. Build-cache reuse is separate: changed
+    code or toolchains may require a new build when the model is explicitly run. A migration must
+    preserve the saved geometry and its meaning, keep its original build provenance, and retain
+    the original bytes if conversion is unsupported or fails; it must not execute model code.
+    This exception does not retain retired authoring APIs or classes.
+
+    **Baseline exception for 0.8.1.** The newly introduced material representation makes the
+    transition to `xbf/9` a deliberate hard cutover: earlier formats still require source rebuilds.
+    This release implements no backward reader or material migration. The engine's
+    [Build closure](src/cadgen/engine/README.md#build-closure) documents the current behavior
+    and the contract for future format changes.
 16. **Closed vocabularies.** Every declaration surface has a closed key/kind set. An unknown key
     is an error naming the supported set, never silently ignored.
 17. **Loud failure or correct output, nothing between.** The cardinal sin is plausible-wrong
