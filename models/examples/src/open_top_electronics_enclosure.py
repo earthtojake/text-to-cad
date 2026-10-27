@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cadgen import model
 import build123d as bd
 
 
@@ -63,7 +67,11 @@ def open_top_electronics_enclosure():
 
     part = enclosure.part
     part.label = "open_top_electronics_enclosure_bosses"
-    part.material = materials.abs
+    part.material = FinishedMaterial(
+        plastics.abs_().material,
+        pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', color='#767679ff',
+            metalness=0.0, roughness=0.55),
+    )
     return part
 
 

@@ -943,13 +943,15 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
             box = placed_facts({"box": facts["box"]}, instance["matrix"])["box"]
             low = [min(a, b) for a, b in zip(low, box["min"])]
             high = [max(a, b) for a, b in zip(high, box["max"])]
-        material = prototype.get("material")
+        material = (prototype.get("material") or {}).get("material")
         if not material:
             unweighed.append(instance["path"])
             continue
         row = materials.setdefault(material["name"], {"name": material["name"], "density": material.get("density"),
                                                       "parts": [], "mass": None})
         row["parts"].append(instance["path"])
+        if material.get("density") is None:
+            unweighed.append(instance["path"])
         if measured and material.get("density") is not None:
             row["mass"] = (row["mass"] or 0.0) + (facts.get("volume") or 0.0) * 1e-9 * material["density"]
     bounds = None if low[0] == math.inf else {"min": low, "max": high, "size": [b - a for a, b in zip(low, high)]}

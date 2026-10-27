@@ -30,13 +30,9 @@ or not the size its record says, is simply not cached.
 Once per revision: the record gains ``cache: {revision, bytes}``, and a document
 whose revision is the cache's is never written again.
 
-Moved, once: at its start, before it can be reached, the daemon moves each cache file of the closure
-before its own (``closure/1``, before the system and architecture were keyed) to its closure in place,
-and the record's revision and ``cache`` with it (``Cache.migrate``): the bytes a cold build here writes
-of a model nothing changed in, so its next run takes it with nothing run. Finding them reads each
-record and the first 64 KiB of each cache file; a start that finds none writes nothing.
-The key covers the format, library versions, system and architecture along with the model's code
-and inputs; the closure records the cadgen release and Python version without keying them.
+The key covers the format, native material and kernel library versions, system and architecture,
+along with the model's code and inputs. The closure records cadgen and Python versions without
+keying them. A format change rebuilds from source; older material payloads are not restamped.
 
 Read: at start the daemon indexes which records have a cache file (``Cache.ensure_index``: a listing
 and a stat each, no record and no byte read). A document with one answers every verb by loading its
@@ -85,23 +81,6 @@ def idle() -> float:
     return given if given > 0 else CACHE_IDLE_SECONDS
 
 
-def _moved(record: dict[str, Any] | None, meta: dict[str, Any], was: str | None, now: str | None,
-           size: int) -> dict[str, Any] | None:
-    """A document's record once its cache file is moved to this engine's closure (``Cache.migrate``):
-    its ``cache`` the file's size now, and its revision and its cache's, the key its closure held
-    (``was``), the key it holds now -- a model document's revision is its key (``models.revision``),
-    which its facts and its build time are kept by. None, and nothing written, for a record a build
-    wrote again since it was read: that build's record and file stand."""
-    if record is None or record.get("cache") != meta:
-        return None
-    moved = {**record, "cache": {**meta, "bytes": size}}
-    if was is not None and now is not None:
-        for field in (moved, moved["cache"]):
-            if field.get("revision") == was:
-                field["revision"] = now
-    return moved
-
-
 # --- the daemon's cache ------------------------------------------------------------------------
 
 
@@ -124,7 +103,6 @@ class Cache:
         self.working = 0  # writes taken from the queue and not yet done
         self.failures: collections.deque = collections.deque(maxlen=FAILURES_KEPT)
         self.written = 0
-        self.moved = 0  # the documents the start moved to this engine's closure (``migrate``)
         self.thread: threading.Thread | None = None
 
     # --- where -------------------------------------------------------------------------
@@ -236,58 +214,6 @@ class Cache:
                 self.index.pop(ident, None)
         return data
 
-    def migrate(self) -> int:
-        """At the engine's start, before anything is served or built: each cached document of the
-        closure before this engine's (``previous.EARLIER_SCHEMA``) moved to this one in place
-        (``previous.migrated``) -- its file, then its record's ``revision`` and ``cache``, which
-        name its key and its size -- so a model nothing changed in takes it with nothing run rather
-        than building again. Once: a document moved holds this closure, and the next start moves
-        none. One whose bytes do not read as a document this engine wrote is left as it is, for its
-        next build or read to find (``models.Models.unreadable``), and so is one a build wrote again
-        meanwhile (its record no longer the one read). Said in one line on the engine's log, and
-        counted in ``status`` (``moved``). How many it moved."""
-        from cadgen.engine import previous
-
-        held = self.registry()
-        if held is None:
-            return 0
-        moved, left = 0, 0
-        for record in held.list():
-            ident, meta = record["id"], record.get("cache")
-            if record.get("kind") not in ("model", "shape") or not isinstance(meta, dict):
-                continue
-            try:
-                with open(held.cache.path(self.inside(ident)), "rb") as handle:
-                    # Not the file its record names (not cached, ``found``), or not of the closure before.
-                    if (os.fstat(handle.fileno()).st_size != meta.get("bytes")
-                            or not previous.earlier(handle.read(previous.EARLIER_HEAD))):
-                        continue
-                    handle.seek(0)
-                    data = handle.read()
-                found = previous.migrated(data)
-            except FileNotFoundError:
-                continue  # not cached (``found``): its next build caches it
-            except Exception:  # noqa: BLE001 - bytes or a closure that do not read: left as they are
-                left += 1
-                continue
-            if found is None:
-                continue
-            made, closure, was = found
-            try:
-                held.cache.write(self.inside(ident), made)
-            except OSError as error:
-                self.failed(ident, f"its closure could not be moved: {error}")
-                left += 1
-                continue
-            held.update(ident, lambda current, meta=meta, was=was, now=closure["key"], size=len(made):
-                        _moved(current, meta, was, now, size))
-            moved += 1
-        self.moved = moved
-        if moved or left:
-            print(f"cadgen engine: moved {moved} cached document{'' if moved == 1 else 's'} to "
-                  f"{previous.SCHEMA} in place" + (f"; {left} left as they were, to build once" if left else ""),
-                  file=sys.stderr, flush=True)
-        return moved
 
     # --- when ----------------------------------------------------------------------------
 
@@ -451,7 +377,7 @@ class Cache:
         bytes in it, the saves done since start, and the failed saves."""
         held = self.registry()
         found = {"enabled": False, "root": None if held is None else str(held.cache.root), "documents": 0, "bytes": 0,
-                 "written": self.written, "moved": self.moved, "failures": list(self.failures), "idleSeconds": self.idle}
+                 "written": self.written, "failures": list(self.failures), "idleSeconds": self.idle}
         if held is None:
             return found
         self.ensure_index()

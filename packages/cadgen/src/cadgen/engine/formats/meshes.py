@@ -61,8 +61,11 @@ def _material(rgba: tuple, finish: dict | None) -> dict[str, Any] | None:
     """A 3MF display property (``pbmetallic``) as the structure's material: the finish over its colour."""
     if not finish:
         return None
-    return {"name": "3MF display properties", "color": list(rgba), "metallic": finish.get("metallic", 0.0),
-            "roughness": finish.get("roughness", 0.5), "ior": 1.5, "emissive": [0.0, 0.0, 0.0]}
+    from cadgen.engine.formats.gltf import material_of
+
+    return material_of({"name": "3MF display properties", "alphaMode": "BLEND" if rgba[3] < 1 else "OPAQUE",
+                        "pbrMetallicRoughness": {"baseColorFactor": rgba, "metallicFactor": finish.get("metallic", 0.0),
+                                                "roughnessFactor": finish.get("roughness", 0.5)}})
 
 
 def stl_file(path: Path) -> Foreign:

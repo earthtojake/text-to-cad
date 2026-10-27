@@ -2224,7 +2224,7 @@ def _argument(value: Any, state: _Run, budget: list[int], tshapes: list) -> Any:
         return found
     module = kind.__module__ or ""
     if (module.startswith("build123d") and kind.__name__ in _VALUE_TYPES) or (
-            module == "cadgen.engine.materials" and kind.__name__ == "Material"):
+            module == "bd_materials.finished" and kind.__name__ == "FinishedMaterial"):
         return _normalize(value, state)
     what = "a callable" if callable(value) else "an object"
     raise _Unkeyable(f"{what} argument ({module}.{kind.__qualname__}): not a value the memo keys")
@@ -2271,10 +2271,12 @@ def _logged_geometry(snapshot: Any) -> Any:
 
 
 def _shape_geometry(kind: str, attrs: dict, wrapped: Any, children: list) -> tuple:
+    from cadgen.engine.document import material_key
+
     color = attrs.get("_color")
     head = (kind, attrs.get("label"), None if color is None else tuple(color),
-            repr(sorted((attrs.get(FACE_COLORS) or {}).items())), repr(attrs.get("material")),
-            repr(sorted(dict(attrs.get(FACE_MATERIALS) or {}).items())),
+            repr(sorted((attrs.get(FACE_COLORS) or {}).items())), material_key(attrs.get("_material")),
+            tuple((o, material_key(m)) for o, m in sorted((attrs.get(FACE_MATERIALS) or {}).items())),
             None if wrapped is None else (_location_key(wrapped), int(wrapped.Orientation())))
     if children:
         return ("shape", head, tuple(children))
@@ -3713,8 +3715,10 @@ def _normalize(value: Any, state: _Run) -> Any:
         # Vector, Location, Rotation, Color: their components, in order.
         if hasattr(value, "__iter__"):
             return (type_name, _normalize(tuple(value), state))
-    if module == "cadgen.engine.materials" and type_name == "Material":
-        return ("Material", repr(value))  # a frozen value of strings and floats
+    if module == "bd_materials.finished" and type_name == "FinishedMaterial":
+        from cadgen.engine.document import material_key
+
+        return ("FinishedMaterial", material_key(value))
     raise _Unkeyable(f"unkeyable argument type: {module}.{type_name}")
 
 
@@ -3803,7 +3807,7 @@ def _shape_key(shape: Any, state: _Run) -> int:
     color_key = None if color is None else _normalize(tuple(color), state)
     face_colors = state_dict.get(FACE_COLORS) or {}
     # A compound's constructor holds its children's geometry, not their materials (``_build_key``).
-    material = None if getattr(_LOCAL, "bare", False) else state_dict.get("material")
+    material = None if getattr(_LOCAL, "bare", False) else state_dict.get("_material")
     face_materials = () if getattr(_LOCAL, "bare", False) else state_dict.get(FACE_MATERIALS) or ()
     attrs = (
         "attrs", label, color_key, bool(state_dict.get("for_construction")),
@@ -4340,7 +4344,12 @@ def _owned(attrs: dict) -> dict:
     """``attrs`` with every dict and list it holds copied: what the object holds of
     its own -- its joints, a decoded child's face colours and finish -- is the
     object's, and the model may change it in place without changing the snapshot."""
-    return {name: dict(value) if type(value) is dict else list(value) if type(value) is list else value
+    import copy
+
+    # Native FinishedMaterial and its PBR properties are mutable. Own their values
+    # both when capturing and when restoring, including finishes painted on faces.
+    return {name: copy.deepcopy(value) if name in ("_material", FACE_MATERIALS) else
+            dict(value) if type(value) is dict else list(value) if type(value) is list else value
             for name, value in attrs.items()}
 
 

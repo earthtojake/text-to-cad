@@ -37,6 +37,8 @@ classifiers = [
 # OCC operations now, with shapely only the fallback for the degenerate unions
 # OCC refuses -- but a fallback that is not installed is not a fallback.
 dependencies = [
+  "bd_materials>=0.2.5,<0.3",
+  "threejs-materials>=1.2.5,<1.3",
   # Bounded above on purpose. cadgen does not merely CALL build123d, it
   # reaches into it: the engine's determinism settings shadow `set` in its
   # topology modules and replace `Vertex.__hash__`, and its memo wraps the

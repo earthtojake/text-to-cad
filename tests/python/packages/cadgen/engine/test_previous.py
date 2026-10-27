@@ -482,8 +482,8 @@ class ClosureTest(unittest.TestCase):
         self.assertEqual(record["schema"], "cadgen.engine closure/2")
         version = (Path(__file__).resolve().parents[5] / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(record["engine"]["release"], f"cadgen {version}", "the release VERSION stamps")
-        self.assertEqual((record["engine"]["format"], len(record["engine"]["digest"])), ("xbf/8", 32))
-        self.assertEqual(set(record["libs"]), {"build123d", "OCP"})
+        self.assertEqual((record["engine"]["format"], len(record["engine"]["digest"])), ("xbf/9", 32))
+        self.assertEqual(set(record["libs"]), {"build123d", "OCP", "bd_materials", "threejs_materials"})
         self.assertEqual(record["platform"], {"python": platform.python_version(), "system": platform.system(),
                                               "arch": platform.machine()}, "the Python and the machine it ran on")
         self.assertEqual(record["source"], {"kind": "script", "path": "../plate.py", "function": "plate"})
@@ -574,10 +574,10 @@ class ClosureTest(unittest.TestCase):
             self.assertEqual(previous.key(copy(**{name: values})), record["key"], f"{name} {values} is recorded only")
         for name, values in (("engine", {"format": "xbf/1"}), ("libs", {"build123d": "0.0.1"}),
                              ("libs", {"OCP": "7.0.0"}),
+                             ("libs", {"bd_materials": "0.0.1"}), ("libs", {"threejs_materials": "0.0.1"}),
                              ("platform", {"system": "Plan 9"})):
             self.assertNotEqual(previous.key(copy(**{name: values})), record["key"], f"{name} {values} is keyed")
-        # The same closure on the same toolchain is the same key, made again anywhere: the key a move
-        # of an earlier closure computes (``previous.migrated``) is the one a build here computes.
+        # The same closure on the same toolchain is the same key, made again anywhere.
         self.assertEqual(previous.key(json.loads(previous.text(record))), record["key"])
         self.assertEqual(previous.key(copy(platform=previous._platform(), engine=previous._engine())), record["key"])
 
@@ -628,158 +628,6 @@ class ClosureTest(unittest.TestCase):
             self.assertEqual(previous._libraries(), {"build123d": "1.0", "OCP": "7.9.3.1"})
 
 
-class MigrationTest(unittest.TestCase):
-    """A cached document of the closure before the toolchain was keyed (closure/1, written as
-    xbf/7) is moved to this engine's at its start, in place (``cache.Cache.migrate``): its bytes are
-    the ones a cold build here writes, its record names its new key, a second start moves nothing,
-    and its model is taken with nothing run -- its declared file written from it. One whose bytes do
-    not read is left as it is, and builds."""
-
-    def setUp(self) -> None:
-        from cadgen.engine.kernel import memo
-        from cadgen.engine.registry import Registry
-
-        self.folder = Path(tempfile.mkdtemp(prefix="engine-migrate-")).resolve()
-        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.script = self.folder / "plate.py"
-        self.xbf = self.folder / "XBF/plate.xbf"
-        self.script.write_text(textwrap.dedent(PLATE), encoding="utf-8")
-        (self.folder / "dims.py").write_text(textwrap.dedent(HELPER.format(width=20, comment="", unused=1)),
-                                             encoding="utf-8")
-        (self.folder / "depth.json").write_text(json.dumps({"depth": 6}), encoding="utf-8")
-        self.registry = Registry(self.folder / "state", self.folder / "cache")
-        self.ident = model_id(self.script, "plate")
-        self.cached = self.folder / "cache" / "documents" / self.ident / "document.xbf"
-        self.restart()
-        self.addCleanup(self.restart)
-        memo.install()
-
-    def restart(self) -> None:
-        from cadgen.engine.kernel import memo
-
-        memo.clear()
-        engine_build._WRITTEN.clear()
-        engine_build._PARTS.clear()
-        engine_build._BUILT.clear()
-
-    def earlier(self, **libs: str):
-        """The engine before the toolchain was keyed, as its builds wrote a document: closure/1 on an
-        xbf/7 writer, no platform, the key over the format, the libraries and the code alone; with
-        ``libs``, built on those versions."""
-        from unittest import mock
-
-        made = previous.manifest
-
-        def manifest(*args, **kwargs) -> dict:
-            record = {name: value for name, value in made(*args, **kwargs).items() if name != "platform"}
-            record["libs"] = {**record["libs"], **libs}
-            record["schema"] = previous.EARLIER_SCHEMA
-            record["engine"] = {**record["engine"], "format": previous.EARLIER_FORMAT}
-            if record["key"] is not None:
-                keyed = {name: record["libs"].get(name) for name in previous.KEYED_LIBRARIES}
-                record["key"] = previous._digest([previous.EARLIER_SCHEMA, previous.EARLIER_FORMAT, keyed,
-                                                  record["source"], record["modules"], record["inputs"]])
-            return record
-
-        writer = document.WRITER.format(format=previous.EARLIER_FORMAT, release=previous.version())
-        return mock.patch.multiple(previous, manifest=manifest), mock.patch.object(document, "_writer", lambda: writer)
-
-    def plate(self) -> dict:
-        (report,) = engine_build.build(self.script, ["plate"], cwd=self.folder,
-                                       cache=str(self.folder / "cache" / "documents"))
-        self.assertTrue(report["ok"], report)
-        return report
-
-    def cache(self) -> Any:
-        """The daemon's cache of this test's registry, as the engine's start makes it."""
-        from cadgen.engine.cache import Cache
-
-        held = self.registry
-
-        class Models:
-            def registry(self) -> Any:
-                return held
-
-        return Cache(Models())
-
-    def built_earlier(self, **libs: str) -> bytes:
-        """The plate built cold by the engine before (on ``libs``), its document saved in the cache
-        and recorded as the daemon records it: its revision its key, its ``cache`` that revision and
-        its size."""
-        patches = self.earlier(**libs)
-        with patches[0], patches[1]:
-            report = self.plate()
-            data = keep(self.script, "plate", self.folder / "cache" / "documents").read_bytes()
-        self.restart()
-        key = report["closure"]["key"]
-        self.registry.put({"id": self.ident, "kind": "model", "root": str(self.folder), "home": "plate.py",
-                           "entry": "plate", "revision": key, "built": 1.0, "facts": {"parts": 1},
-                           "cache": {"revision": key, "bytes": len(data)}})
-        self.assertTrue(previous.earlier(data[:previous.EARLIER_HEAD]))
-        self.assertEqual(previous.of(self.cached)["key"], key, "read as it is: what that document holds")
-        return data
-
-    def test_an_earlier_closure_moves_in_place_to_a_cold_builds_bytes_and_its_model_runs_nothing(self) -> None:
-        earlier = self.built_earlier()
-        # A shape handed over: no closure, nothing to move.
-        shape = model_id(self.folder / "hand.py", "crate")
-        self.registry.put({"id": shape, "kind": "shape", "root": str(self.folder), "home": "hand.py",
-                           "entry": "crate", "revision": "h1", "cache": {"revision": "h1", "bytes": 10}})
-        self.registry.cache.write(f"documents/{shape}/document.xbf", b"x" * 10)
-        cache = self.cache()
-        self.assertEqual(cache.migrate(), 1)
-        self.assertEqual(cache.status()["moved"], 1)
-        moved = self.cached.read_bytes()
-        closure, record = previous.of(self.cached), self.registry.get(self.ident)
-        self.assertEqual((closure["schema"], closure["engine"]["format"], closure["platform"]),
-                         (previous.SCHEMA, previous.FORMAT, previous._platform()))
-        self.assertEqual(previous.read_record(document.read_bytes(moved)), (document._writer(), previous.text(closure)),
-                         "it reads whole, holding this engine's writer and the closure its head shows")
-        self.assertEqual((record["revision"], record["cache"]), (closure["key"], {"revision": closure["key"],
-                                                                                 "bytes": len(moved)}))
-        self.assertEqual((record["built"], record["facts"]), (1.0, {"parts": 1}), "kept by its revision")
-        self.assertEqual(self.registry.cache.read(f"documents/{shape}/document.xbf"), b"x" * 10)
-        # Once: the next start moves none, and writes nothing.
-        stamps = (self.cached.stat().st_mtime_ns, self.registry.get(self.ident))
-        self.assertEqual(self.cache().migrate(), 0)
-        self.assertEqual((self.cached.stat().st_mtime_ns, self.registry.get(self.ident)), stamps)
-        # Its model, nothing changed, is taken with nothing run; its declared xbf, an export of the
-        # document, is written from it.
-        report = self.plate()
-        self.assertEqual((report["cache"], report["memo"]["bodies_loaded"], report["closure"]["key"]),
-                         ({"used": True, "from": "cache"}, 1, record["revision"]))
-        self.assertTrue(report["files"][str(self.xbf)]["written"])
-        self.assertEqual(self.xbf.read_bytes(), moved)
-        # The bytes a cold build here writes, to the byte: only the closure and the writer moved.
-        self.restart()
-        self.cached.unlink()
-        self.xbf.unlink()
-        self.assertEqual(self.plate()["cache"]["reason"], "the engine's cache holds none of it")
-        self.assertEqual(self.xbf.read_bytes(), moved)
-        self.assertNotEqual(earlier, moved)
-
-    def test_a_library_that_moved_since_its_earlier_build_still_builds_and_says_so(self) -> None:
-        self.built_earlier(build123d="0.0.1")
-        self.assertEqual(self.cache().migrate(), 1)
-        self.assertEqual(previous.of(self.cached)["libs"]["build123d"], "0.0.1", "moved as it was built")
-        report = self.plate()
-        self.assertEqual(report["cache"]["changed"], [f"build123d 0.0.1 became {previous._libraries()['build123d']}"])
-        self.assertEqual(report["bodies"], {"plate.py::plate": "run"})
-
-    def test_an_earlier_document_that_does_not_read_is_left_and_builds(self) -> None:
-        earlier = self.built_earlier()
-        # Cut right after its closure, as a broken cache is cut above: the closure shows, its labels
-        # do not span the file.
-        prefix = b'{"schema":' + json.dumps(previous.EARLIER_SCHEMA).encode()
-        cut = earlier[: earlier.index(b"\x00", earlier.index(prefix)) + 1]
-        self.cached.write_bytes(cut)
-        self.registry.update(self.ident, lambda found: {**found, "cache": {**found["cache"], "bytes": len(cut)}})
-        record = self.registry.get(self.ident)
-        self.assertEqual(self.cache().migrate(), 0)
-        self.assertEqual((self.cached.read_bytes(), self.registry.get(self.ident)), (cut, record), "as it was")
-        report = self.plate()
-        self.assertEqual(report["cache"]["reason"], f"its cache was written by cadgen.engine {previous.EARLIER_FORMAT} "
-                                                    f"(cadgen {previous.version()})")
 
 
 # Models with no file: each body says it ran in a log it appends to (written, so never one of its

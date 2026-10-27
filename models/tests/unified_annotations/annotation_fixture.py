@@ -1,14 +1,25 @@
-from cadgen import Material, materials, model
+
+from bd_materials import FinishedMaterial, metals
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
+from cadgen import model
 from cadgen.ap242 import configuration_sequence, mechanism_state
 
 import math
 
 import build123d as bd
 
-# The old sidecar's two finishes. Steel keeps each part's own colour (`color=None`);
+# The old sidecar's two finishes. Steel assignments restore each part's authored colour;
 # the paint is a colour, so it carries one: blue, at opacity 0.5.
-STEEL = materials.steel.but(color=None, metallic=0.8, roughness=0.32, description="Brushed steel")
-PAINT = Material(name="Blue paint", family="other", color="#2469ac80", roughness=0.42)
+STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Brushed steel', metalness=0.8, roughness=0.32),
+)
+PAINT = FinishedMaterial(
+    RangeMaterial(name='Blue paint', density=None),
+    pbr=PbrProperties.create('Blue paint', color='#2469ac80', metalness=0.0, roughness=0.42),
+)
 ARM_GREEN = "#37966f99"  # "#37966F", alpha 0.6
 
 
@@ -23,7 +34,11 @@ def annotation_fixture():
     arm = bd.Pos(18, 0, 12) * bd.Box(44, 12, 8)
     base.label, shaft.label, arm.label = "base", "shaft", "arm"
     arm.color = ARM_GREEN
-    base.material = shaft.material = STEEL
+    # Native material assignment applies its color; retain the steel parts' authored colors.
+    for part in (base, shaft):
+        color = part.color
+        part.material = STEEL
+        part.color = color
     arm.material = PAINT
     pins = []
     for x in range(4):

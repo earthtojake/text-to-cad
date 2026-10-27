@@ -75,6 +75,10 @@ def describe(doc: Any, step: bool) -> tuple[dict[str, Any], list[Any], list[Any]
     and face materials carried."""
     import unicodedata
 
+    from cadgen.engine.document import check_format
+
+    check_format(doc)
+
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
     from OCP.Quantity import Quantity_ColorRGBA

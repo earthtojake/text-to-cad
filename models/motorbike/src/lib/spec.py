@@ -26,9 +26,13 @@ Modeling rules (repo memory):
   never accumulate pairwise.
 """
 
+from bd_materials import FinishedMaterial, glass, metals, plastics
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
+
 from math import cos, sin, radians
 
-from cadgen import Material, materials
 
 # ---------------------------------------------------------------------------
 # Palette (linear RGBA). Theme does not override source colors.
@@ -52,39 +56,78 @@ STEEL = "#cbcdd0"        # axles, fasteners, pipes
 
 # ---------------------------------------------------------------------------
 # Materials: what each part is made of, in the finish it wears. Every one is
-# `color=None`, so the palette above stays the colour that shows and the
-# material adds the finish. Paint is a dielectric (metallic 0) under a coat.
+# explicit scalar PBR. The paint helper sets the native material before the
+# authored palette colour, so the material adds only the finish. Paint is a dielectric (metallic 0) under a coat.
 # ---------------------------------------------------------------------------
 
-PAINTED_STEEL = materials.steel_1018.but(          # frame, fork, stand, bar, damper
-    color=None, metallic=0.0, roughness=0.5, coat=1.0, coat_roughness=0.1,
-    description="Steel tube, gloss black paint")
-PAINTED_ABS = materials.abs.but(                   # cream bodywork and fenders
-    color=None, roughness=0.45, coat=1.0, coat_roughness=0.06,
-    description="Moulded ABS panel, painted and clear-coated")
-LEATHER = Material(                                # saddle
-    "Leather", 860, family="other", source="typical: vegetable-tanned cowhide",
-    description="Saddle leather over the seat foam", roughness=0.65, coat=0.2, coat_roughness=0.4)
-TYRE_RUBBER = materials.nbr_70a.but(color=None)    # tires
-GRIP_RUBBER = materials.tpu_95a.but(color=None)    # bar grips
-CAST_ALUMINIUM = materials.aluminium_6061.but(     # rims, crankcase, covers, drum hub
-    color=None, roughness=0.6, anisotropy=0.0, description="Cast aluminium, as cast")
-FORGED_ALUMINIUM = materials.aluminium_6061.but(color=None)  # brake levers, machined
-POLISHED_STAINLESS = materials.stainless_304.but(  # exhaust, lamp, signal and mirror shells
-    color=None, roughness=0.1, anisotropy=0.0, description="Polished stainless")
-CHROMED_STEEL = materials.steel_4140.but(          # axles, damper rod
-    color=None, roughness=0.12, description="Hard-chromed alloy steel")
-DISC_STEEL = materials.steel_4140.but(             # brake disc
-    color=None, roughness=0.3, description="Ground brake disc")
-SPRING_STEEL = materials.steel_spring_1095.but(    # shock spring, powder-coated
-    color=None, metallic=0.0, roughness=0.35, coat=0.8, coat_roughness=0.15,
-    description="Spring steel, yellow powder coat")
-ABS_HOUSING = materials.abs.but(color=None)        # tail-light housing
-HEADLIGHT_LENS = materials.polycarbonate.but(color=None)
-SIGNAL_LENS = materials.acrylic_pmma.but(color=None)  # tail light and turn signals
-MIRROR_GLASS = materials.glass.but(                # silvered: a mirror reflects, it does not transmit
-    color=None, metallic=1.0, roughness=0.03, transmission=0.0,
-    description="Silvered mirror glass")
+PAINTED_STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Steel tube, gloss black paint', metalness=0.0, roughness=0.5, clearcoat=1.0,
+        clearcoat_roughness=0.1),
+)
+PAINTED_ABS = FinishedMaterial(
+    plastics.abs_().material,
+    pbr=PbrProperties.create('Moulded ABS panel, painted and clear-coated', metalness=0.0, roughness=0.45,
+        clearcoat=1.0, clearcoat_roughness=0.06),
+)
+LEATHER = FinishedMaterial(
+    RangeMaterial(name='Leather', density=860.0),
+    pbr=PbrProperties.create('Saddle leather over the seat foam', metalness=0.0, roughness=0.65,
+        clearcoat=0.2, clearcoat_roughness=0.4),
+)
+TYRE_RUBBER = FinishedMaterial(
+    RangeMaterial(name='NBR 70A', density=1250.0),
+    pbr=PbrProperties.create('Nitrile rubber: O-rings and oil seals', metalness=0.0, roughness=0.9),
+)    # tires
+GRIP_RUBBER = FinishedMaterial(
+    plastics.tpu().material,
+    pbr=PbrProperties.create('Thermoplastic polyurethane for flexible prints', metalness=0.0, roughness=0.6),
+)    # bar grips
+CAST_ALUMINIUM = FinishedMaterial(
+    metals.aluminum().material,
+    pbr=PbrProperties.create('Cast aluminium, as cast', metalness=1.0, roughness=0.6),
+)
+FORGED_ALUMINIUM = FinishedMaterial(
+    metals.aluminum().material,
+    pbr=PbrProperties.create('Aluminum 6061-T6', metalness=1.0, roughness=0.35, anisotropy=0.3),
+)  # brake levers, machined
+POLISHED_STAINLESS = FinishedMaterial(
+    metals.stainless().material,
+    pbr=PbrProperties.create('Polished stainless', metalness=1.0, roughness=0.1),
+)
+CHROMED_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Hard-chromed alloy steel', metalness=1.0, roughness=0.12),
+)
+DISC_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Ground brake disc', metalness=1.0, roughness=0.3),
+)
+SPRING_STEEL = FinishedMaterial(
+    RangeMaterial(name='Spring steel 1095', density=7850.0),
+    pbr=PbrProperties.create('Spring steel, yellow powder coat', metalness=0.0, roughness=0.35, clearcoat=0.8,
+        clearcoat_roughness=0.15),
+)
+ABS_HOUSING = FinishedMaterial(
+    plastics.abs_().material,
+    pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', metalness=0.0,
+        roughness=0.55),
+)        # tail-light housing
+HEADLIGHT_LENS = FinishedMaterial(
+    plastics.pc().material,
+    pbr=PbrProperties.create('Tough clear thermoplastic', metalness=0.0, roughness=0.08, ior=1.586,
+        transmission=0.9),
+)
+SIGNAL_LENS = FinishedMaterial(
+    plastics.pmma().material,
+    pbr=PbrProperties.create('Clear cast or extruded acrylic sheet', metalness=0.0, roughness=0.03, ior=1.49,
+        transmission=0.95),
+)  # tail light and turn signals
+MIRROR_GLASS = FinishedMaterial(
+    glass.soda_lime().material,
+    pbr=PbrProperties.create('Silvered mirror glass', metalness=1.0, roughness=0.03, ior=1.52,
+        attenuation_color=(0.822786, 0.930111, 0.871367), attenuation_distance=0.05),
+)
 
 # ---------------------------------------------------------------------------
 # Wheels / axles

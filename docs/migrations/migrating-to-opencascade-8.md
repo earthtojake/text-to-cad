@@ -58,11 +58,60 @@ arcs take `arc_size` in place of `end_angle`/`angular_direction`. `Vertex.X/Y/Z`
 read the native point live rather than the coordinates given at construction.
 
 
-build123d 0.13 adds a `Shape.material` property and shape provenance. cadgen still accepts
-its own `Material` on `.material`, with explicit colour taking precedence in either assignment
-order. Native build123d materials retain their native property behavior. Custom shape copying
-must retain `topo_path` and `_history` by reference, as build123d's own `__deepcopy__` does;
-the history contains kernel handles that cannot be pickled.
+build123d 0.13 adds a native `Shape.material` property and shape provenance.
+Custom shape copying must retain `topo_path` and `_history` by reference, as
+build123d's own `__deepcopy__` does; the history contains kernel handles that
+cannot be pickled.
+
+## Native materials
+
+cadgen 0.8.1 removes its `Material` class, `materials` catalogue and material-property
+patch. Use build123d's native `bd_materials.FinishedMaterial`, with physical properties
+in `.material` and native `threejs_materials.PbrProperties` in `.pbr`:
+
+```python
+from bd_materials import metals
+from cadgen import paint
+
+housing.material = metals.aluminum(metals.Alu.G6061_T6)
+housing.material.pbr = housing.material.pbr.override(
+    roughness=0.35, metalness=0.9, clearcoat=0.2)
+housing.color = "#606b78"
+paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
+```
+
+Set material after geometry, then set an explicit colour: native material assignment
+also sets shape colour. `PbrProperties.override` returns a new look to assign back;
+it replaces the old `.but(...)` pattern. Native family factories such as
+`metals.custom_metal` create custom physics.
+
+| cadgen 0.8.0 | Native material in 0.8.1 |
+| --- | --- |
+| `materials.aluminium_6061` | `metals.aluminum(metals.Alu.G6061_T6)` |
+| `material.name`, `material.density` | `material.material.name`, `material.material.density` |
+| `young_modulus` (Pa), `ultimate_strength` (Pa) | `modulus_of_elasticity` (GPa), `tensile_strength` (MPa), native ranges |
+| `metallic`, `coat`, `coat_roughness` | `.pbr` controls `metalness`, `clearcoat`, `clearcoat_roughness` |
+| `transmission_color`, `transmission_depth` | `attenuation_color`, `attenuation_distance` (metres) |
+| `emissive`, `emissive_strength` | `emissive`, `emissive_intensity` |
+| Colour alpha | `opacity`, or the alpha in a native PBR colour |
+
+Density stays kg/m³. When carrying custom physics across, divide modulus values in Pa by
+10⁹ and strength values in Pa by 10⁶. The corresponding native values are ranges in GPa
+and MPa; a native custom-material factory also accepts a number as an exact range. Native `shape.mass()` returns grams by default; `cadgen inspect` still
+reports kilograms. The physical material's `mass` helper also changes from cubic metres →
+kilograms to cubic millimetres → grams. Base-colour floats are sRGB ratios; emission and attenuation floats
+are linear RGB. Hex strings preserve the intended picked colour without that ambiguity.
+
+XBF keeps native physics and the complete resolved PBR data. Reading it returns a native
+finished material with that look, rather than recreating its finish recipe. Scalar
+clearcoat, anisotropy, transmission, attenuation and emission survive viewer and GLB paths;
+OCCT snapshots retain their documented approximations. Native texture maps survive XBF,
+but the viewer, GLB export and snapshots explicitly refuse them until UV mapping is
+supported.
+
+The XBF format is now `xbf/9`; `bd_materials` and `threejs_materials` versions also join
+the build key. Earlier engine XBF files are refused by ordinary format validation;
+rebuild models from source. There is no material adapter or in-place format migration.
 
 OCP 8.0.1 also leaves `XCAFDoc_VisMaterialPBR.EmissiveFactor` unbound. To set it, put emission
 in `XCAFDoc_VisMaterialCommon.EmissiveColor`, call `ConvertToPbrMaterial()`, then set the other

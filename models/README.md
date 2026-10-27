@@ -69,15 +69,19 @@ cache.
 The migration a user makes ([the migration guide](../docs/migrations/migrating-0.7-to-0.8.md)),
 and nothing more:
 
-- `from cadgen import step` -> `from cadgen import model` (and `memo`, `Material`,
-  `materials`, `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); cadgen's
+- `from cadgen import step` -> `from cadgen import model` (and `memo`,
+  `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); cadgen's
   build123d proxy -> `import build123d as bd`; `cadgen.ap242` for the mechanism and
   `cadgen.gltf` for a GLB's animations.
 - `@step(out=...)` -> `@model`, and nothing else, but where the table above keeps a file.
   Every script calls its models under `__main__`; a module of `@memo` stages or plain
   helpers calls nothing there.
-- `materials=` finishes -> `Material` values set on the parts (`part.material = ...`) and
-  `paint(part, faces, material)` for a face finish; colours as sRGB hex.
+- `materials=` finishes -> native `bd_materials.FinishedMaterial` values with
+  explicit `threejs_materials.PbrProperties`, set on the parts (`part.material = ...`) and
+  `paint(part, faces, material)` for a face finish; colours as sRGB hex. Native
+  material assignment applies its colour: restore a part’s authored colour after it
+  where the palette supplies the colour. Physical properties come from `bd_materials`
+  factories; `RangeMaterial` names the project-specific materials absent from them.
 - Mates (`AssemblyHelper` frames, `KINEMATICS` revolute/fastened) -> build123d joints
   (`RigidJoint`, `RevoluteJoint`, ...) placed with `connect_to`, or paired by label where
   `connect_to` cannot place a part in a nested assembly. The as-built pose is where the
@@ -130,8 +134,8 @@ marker costs a model body that is no longer one piece.
 | [`lyra`](lyra/src/README.md) | one script: the hand and its 17 URDF links, 18 models | 16 revolute joints connected at the relaxed pose (absolute angles, the URDF's travel as ranges), the SRDF's seven group states as configurations and the five clips as motions of time (joint-space already); each link a model whose 3MF `lyra.urdf` references `exports.py` writes; one `@memo` stage, `links()`, shared by all 18 (7.7 s cold against 11.1 s without it) |
 | [`falcon_heavy`](falcon_heavy/src/README.md) | 3 scripts -> one script, 3 models | the full stack, a 270° cutaway and an exploded view of one vehicle library: 85 parts in 2,142 placements, 27 engines as `moved` placements of one Merlin; two `@memo` stages, `engine_prototype()` (one Merlin per build, not nine) and `build_vehicle(cutaway)` (the exploded view's vehicle a placement of the stack's): 7.1 s cold with none, 5.0 s with both |
 | [`branding`](branding/src/README.md) | `logo_c`, `logo_cad`, `logo_texttocad`, and `exports.py` | plain models with the STEP each delivers (`exports.py`), extruded from a JSON input the body reads (`profiles.json`, a change to which rebuilds them); colours as sRGB hex |
-| [`tests`](tests/README.md) | the three manual cases the old `tests/README.md` listed (`joint_playground.urdf`, no model and named nowhere, kept in `unported/`) | manual-validation fixtures, never CI input: the Render floor, a 32-part rebuild during a load, and materials (a catalogue steel with `color=None`, a paint with its colour), a revolute and a prismatic joint (the shaft's lift, which the fixture's motion drives), a configuration and a motion on 11 parts |
-| [`w16`](w16/src/README.md) | 13 system files (`@memo` stages, 10-281 s cold each) + one model | a 2,575-occurrence (794-part) quad-turbo W16 whose museum cutaway is its own geometry; finishes as catalogue materials by colour (`color=None`); OCCT's fuzzy booleans run through build123d's, so the memo keys them; the crank train as 180 joints paired by label (prismatic pistons and valves; revolute crank, rods, cams, sprockets, followers, pump, pulleys, rotors) and rigid fastenings, the slider-crank and valve loops solved in Python: the `crank` motion, one 720-degree cycle, and the `explode` and `running_reveal` GLB animations, the old tables' translations on top of the running engine and the crankcase hidden |
+| [`tests`](tests/README.md) | the three manual cases the old `tests/README.md` listed (`joint_playground.urdf`, no model and named nowhere, kept in `unported/`) | manual-validation fixtures, never CI input: the Render floor, a 32-part rebuild during a load, and materials (a catalogue steel with the authored palette colour, a paint with its colour), a revolute and a prismatic joint (the shaft's lift, which the fixture's motion drives), a configuration and a motion on 11 parts |
+| [`w16`](w16/src/README.md) | 13 system files (`@memo` stages, 10-281 s cold each) + one model | a 2,575-occurrence (794-part) quad-turbo W16 whose museum cutaway is its own geometry; finishes as catalogue materials by colour (restored after native material assignment); OCCT's fuzzy booleans run through build123d's, so the memo keys them; the crank train as 180 joints paired by label (prismatic pistons and valves; revolute crank, rods, cams, sprockets, followers, pump, pulleys, rotors) and rigid fastenings, the slider-crank and valve loops solved in Python: the `crank` motion, one 720-degree cycle, and the `explode` and `running_reveal` GLB animations, the old tables' translations on top of the running engine and the crankcase hidden |
 | [`f14d`](f14d/src/README.md) | 10 system files (9 `@memo` stages, 2.4-574 s cold each; `nozzles` a plain function) + one model | a 2,392-occurrence (903-part) F-14D: one lofted skin cut by the diverter slots and the cockpit opening (574 s of a 644 s cold build); instanced fastener, wick and perforation rows as placed prototypes; `lib` made a package (a namespace package is never imported afresh: see its README); colours; the `teardown` and `explodedHold` clips as GLB animations of the systems and their act-2 groups |
 
 Each model's README (linked above) says what was ported and what was dropped.

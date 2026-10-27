@@ -105,12 +105,12 @@ class SignatureTest(unittest.TestCase):
 
         import build123d as bd
 
-        from cadgen.engine import Material
+        from cadgen.engine.colors import linear
 
         missing = _caught(_user_calls(lambda: bd.Boxx))
         self.assertIsInstance(missing, AttributeError)
         self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
-        not_a_colour = _caught(_user_calls(lambda: Material("x", color=0x2E3742)))
+        not_a_colour = _caught(_user_calls(lambda: linear(0x2E3742, "a shape's color")))
         self.assertIsInstance(not_a_colour, ValueError)
         self.assertIn("not 3028802", str(not_a_colour))
         for error in (missing, not_a_colour):

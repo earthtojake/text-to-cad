@@ -511,38 +511,46 @@ deformation; `.visible(false)` is `.hide`. Snapshots never play motion: 0.7's
 
 ### 6. Move materials into the body; make colours hex
 
-`materials=` on the decorator is gone. A material is a value on the part, set in the
-body after the part's last operation:
+`materials=` on the decorator is gone. Set a native build123d material in the body
+after the part's last geometric operation, then assign any explicit colour. These
+examples target cadgen 0.8.1 and build123d 0.13:
 
 ```python
 # 0.7
 @step(materials={"definitions": {"cast": {"name": "As-cast steel", "roughness": 0.85, "metalness": 0.2}},
                  "assignments": [{"targets": ["#housing"], "material": "cast"}]})
 
-# 0.8, in the body
-from cadgen import Material, materials, paint
+# 0.8.1, in the body
+from bd_materials import metals
+from cadgen import paint
 
-housing.material = materials.steel.but(name="As-cast steel", roughness=0.85, metallic=0.2)
+housing.material = metals.mild_steel()
+housing.material.pbr = housing.material.pbr.override(roughness=0.85, metalness=0.2)
+housing.color = "#2E3742"  # material assignment sets colour; apply an override after it
 ```
 
-`materials` is a catalogue of 44 common engineering materials (`materials.aluminium_6061`,
-`materials("6061-T6")`), and `Material(...)` makes a project's own. A definition's
-`metalness` is `metallic`, its `baseColor` the `color` as its hex, `clearcoat` and
-`clearcoatRoughness` are `coat` and `coat_roughness`, and `opacity` is the colour's alpha.
-An assignment to a group is the material set on that assembly, the default of every part
-below it that has none. `paint(part, faces, colour_or_material)` gives faces their own.
+`bd_materials` supplies the catalogue and native family factories for custom physics.
+Each `FinishedMaterial` holds physics in `.material` and its resolved look in `.pbr`.
+Use native PBR names: `metalness`, `color`, `clearcoat`, `clearcoat_roughness`,
+`transmission`, `attenuation_color`, `attenuation_distance` (metres), `emissive`, and
+`opacity`. An assembly material is inherited by children without one; assign it before
+reading their materials. `paint(part, faces, colour_or_material)` gives faces their own.
 
-**Colours are sRGB, as you pick them.** `shape.color`, `paint` and `Material(color=)`
-take a hex string (`"#2E3742"`, `"#38414D6B"` with alpha as a byte) or 0-255 integers;
-the engine stores them linear. Floats are refused by `paint` and `Material`.
+**Colours are sRGB, as you pick them.** Shape colours and plain paints take hex strings
+(`"#2E3742"`, `"#38414D6B"` with alpha as a byte), 0–255 integer tuples or build123d
+`Color`. Native PBR base-colour floats are sRGB ratios; emission and attenuation floats
+are linear. Hex strings avoid that distinction.
 
-| 0.7 | 0.8 |
+| 0.7 | 0.8.1 |
 | --- | --- |
 | `srgb("#2E3742")` | `"#2E3742"` |
 | `srgb("#38414D", 0.42)` | `"#38414D6B"` |
-| `Material(color=(0.2, 0.3, 0.9))` (linear floats), `transmission_color=`, `emissive=` | `Material(color="#7c95f3")`, the hex of what you see, or 0-255 integers |
-| `paint(shape, faces, (1, 0, 0))`, `paint(..., "orange")` | `paint(shape, faces, "#ff0000")`: a hex string, 0-255 integers, a build123d `Color` or a `Material` |
+| A linear base colour `(0.2, 0.3, 0.9)` in a material definition | `material.pbr.override(color="#7c95f3")`, the sRGB hex of the same look |
+| `paint(shape, faces, (1, 0, 0))`, `paint(..., "orange")` | `paint(shape, faces, "#ff0000")` or `"#ffa500"`: a hex string, 0–255 integers, a build123d `Color` or a native `FinishedMaterial` |
 | `shape.color = bd.Color(0.5, 0.5, 0.5)` meant as linear | read as build123d defines it, sRGB: `#808080`. For the old look, give the hex of the linear value (`"#bcbcbc"` for 0.5) |
+
+The cadgen `Material` class and `materials` catalogue shipped in 0.8.0 are removed.
+For those projects, follow the [native material changes](migrating-to-opencascade-8.md#native-materials).
 
 ### 7. Learn the one engine: ids, pages, links and commands
 
@@ -894,21 +902,16 @@ second declaration of it is refused, naming both `file:line`, until the file tha
 is gone or has run again without it (`cadgen run <that file>`). Moving a name to another
 file of its folder keeps its document.
 
-**The first start of 0.8.0 moves what the pre-release saved, and builds nothing.** Two passes
-run as the engine starts, before it can be reached, and have nothing left to do at the next
-start. Neither loads the CAD kernel, and `cadgen status` says what each did:
+**Current document formats rebuild from source.** cadgen 0.8.1 writes `xbf/9`;
+earlier engine XBF files are refused by ordinary format validation and cached documents
+of an earlier format are not reused. Run each model's source to write its current
+document. There is no material compatibility layer or in-place closure migration.
 
-- Cached documents written under the pre-release's earlier build closure (`closure/1`,
-  `xbf/7`) are moved in place to `closure/2` (`xbf/8`). The new closure names the toolchain:
-  its key covers the system and the architecture, beside the format, build123d and OCP, the
-  code and the inputs (the cadgen release and Python are recorded, not keyed). A moved
-  document is taken as it is (`took ... nothing ran`); one whose build123d or OCP changed
-  since builds once and says what moved (`build123d 0.10.0 became 0.11.1`). A document of an
-  older format builds once.
-- Each record gets its namespace and its name, and a model's record the fingerprint of its
-  script. A record that a `key=` named moves, with its saved document, to the id its folder
-  and name give. A record that cannot be read or moved stays as it is, is never deleted, and
-  is counted by `cadgen status`.
+The independent startup identity pass still gives each JSON record its namespace and
+name, and a model's record the fingerprint of its script. A record that a `key=` named
+moves, with its saved document, to the id its folder and name give. This changes identity,
+not the saved document's format. A record that cannot be read or moved stays as it is,
+is never deleted, and is counted by `cadgen status`.
 
 Rename `key=` to `name=` in the scripts. The models keep their ids. The other names the
 release renamed or removed:

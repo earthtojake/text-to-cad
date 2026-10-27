@@ -30,7 +30,12 @@ GLB animations (`cadgen.gltf`).
 
 from __future__ import annotations
 
-from cadgen import Material, materials, model
+from bd_materials import FinishedMaterial, metals, plastics
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
+
+from cadgen import model
 from cadgen.ap242 import configuration_sequence, gear_pair, mechanism_state
 from cadgen.gltf import animation
 
@@ -314,39 +319,96 @@ TUBE_BLACK = "#999ba0"  # dark gunmetal, reads against the cover
 # ---------------------------------------------------------------------------
 # Concept materials: what each part is made of, in the finish its colour above
 # names. Catalogue entries (the project's own where the catalogue has none),
-# each with color=None, so the palette stays the colour that shows and the
-# material adds the finish.
+# each with explicit scalar PBR. `_label` restores the authored palette colour
+# after setting the native material.
 # ---------------------------------------------------------------------------
-ANODIZED_AL = materials.aluminium_6061.but(  # housing, retainer, rear cover: bead-blasted, anodised
-    color=None, roughness=0.6, anisotropy=0.0, description="Bead-blasted 6061-T6, hard-anodised")
-MACHINED_AL = materials.aluminium_7075.but(color=None)  # carrier, output flange: stressed, machined
-TUBE_AL = materials.aluminium_6063.but(  # hollow-shaft cable tube
-    color=None, roughness=0.45, anisotropy=0.0, description="Extruded tube, dark anodised")
-SCREW_STEEL = materials.steel_4140.but(  # socket-head screws, 12.9
-    color=None, roughness=0.55, description="Alloy steel, black oxide")
-GEAR_STEEL = materials.steel_4140.but(color=None, roughness=0.3, description="Hardened and ground gear steel")
-BEARING_STEEL = materials.steel_4140.but(  # races, balls, rollers
-    color=None, roughness=0.12, description="Through-hardened bearing steel, ground")
-LAMINATION_STEEL = materials.steel_1018.but(  # stator stack
-    color=None, roughness=0.5, coat=0.3, coat_roughness=0.3, description="Laminated electrical steel, varnished")
-ROTOR_STEEL = materials.steel_1018.but(color=None, description="Rotor bell and back iron")
-MAGNET_WIRE = materials.copper_c110.but(  # windings
-    color=None, roughness=0.25, coat=1.0, coat_roughness=0.1, description="Enamelled magnet wire")
-NDFEB = materials.neodymium.but(color=None)  # rotor magnets, the pole colours above
-FERRITE_MAGNET = Material(  # encoder magnet ring
-    "Ferrite magnet", 4900, family="other", source="typical: sintered strontium ferrite",
-    description="Diametric encoder magnet ring", roughness=0.7)
-FR4_BOARD = materials.fr4.but(color=None)  # driver and encoder boards, under solder mask
-IC_PACKAGE = materials.abs.but(color=None)  # FETs, MCU, encoder IC
-CAPACITOR_AL = materials.aluminium_5052.but(color=None, description="Drawn aluminium capacitor can")
-CONNECTOR_NYLON = materials.nylon_pa6.but(color=None)  # connector bodies
-COLLAR_STEEL = materials.steel_1018.but(color=None, description="Connector coupling nut")
-O_RING_NBR = materials.nbr_70a.but(color=None)
-CONTACT_BRASS = materials.brass_c360.but(color=None, roughness=0.2, description="Gold-plated contacts")
-FLEXURE_TI = materials.titanium_grade5.but(color=None)  # torque-sensing flexure
-GAUGE_FOIL = Material(  # strain gauges
-    "Polyimide film", 1420, family="plastic", source="typical: polyimide (Kapton HN) film",
-    description="Foil strain gauge on a polyimide carrier", roughness=0.3, coat=0.5, coat_roughness=0.1)
+ANODIZED_AL = FinishedMaterial(
+    metals.aluminum().material,
+    pbr=PbrProperties.create('Bead-blasted 6061-T6, hard-anodised', metalness=1.0, roughness=0.6),
+)
+MACHINED_AL = FinishedMaterial(
+    metals.aluminum(metals.Alu.G7075_T6).material,
+    pbr=PbrProperties.create('High-strength zinc-alloyed aluminium for stressed parts', metalness=1.0,
+        roughness=0.35, anisotropy=0.3),
+)  # carrier, output flange: stressed, machined
+TUBE_AL = FinishedMaterial(
+    RangeMaterial(name='Aluminum 6063-T5', density=2700.0),
+    pbr=PbrProperties.create('Extruded tube, dark anodised', metalness=1.0, roughness=0.45),
+)
+SCREW_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Alloy steel, black oxide', metalness=1.0, roughness=0.55),
+)
+GEAR_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Hardened and ground gear steel', metalness=1.0, roughness=0.3),
+)
+BEARING_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Through-hardened bearing steel, ground', metalness=1.0, roughness=0.12),
+)
+LAMINATION_STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Laminated electrical steel, varnished', metalness=1.0, roughness=0.5,
+        clearcoat=0.3, clearcoat_roughness=0.3),
+)
+ROTOR_STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Rotor bell and back iron', metalness=1.0, roughness=0.4),
+)
+MAGNET_WIRE = FinishedMaterial(
+    metals.copper().material,
+    pbr=PbrProperties.create('Enamelled magnet wire', metalness=1.0, roughness=0.25, clearcoat=1.0,
+        clearcoat_roughness=0.1),
+)
+NDFEB = FinishedMaterial(
+    RangeMaterial(name='Neodymium magnet N42', density=7500.0),
+    pbr=PbrProperties.create('Sintered rare-earth magnet, nickel plated; brittle, no structural values',
+        metalness=1.0, roughness=0.2),
+)  # rotor magnets, the pole colours above
+FERRITE_MAGNET = FinishedMaterial(
+    RangeMaterial(name='Ferrite magnet', density=4900.0),
+    pbr=PbrProperties.create('Diametric encoder magnet ring', metalness=0.0, roughness=0.7),
+)
+FR4_BOARD = FinishedMaterial(
+    plastics.fr4().material,
+    pbr=PbrProperties.create('Woven glass and epoxy circuit-board laminate under green solder mask',
+        metalness=0.0, roughness=0.45, clearcoat=0.5, clearcoat_roughness=0.2),
+)  # driver and encoder boards, under solder mask
+IC_PACKAGE = FinishedMaterial(
+    plastics.abs_().material,
+    pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', metalness=0.0,
+        roughness=0.55),
+)  # FETs, MCU, encoder IC
+CAPACITOR_AL = FinishedMaterial(
+    metals.aluminum(metals.Alu.G5052_H32).material,
+    pbr=PbrProperties.create('Drawn aluminium capacitor can', metalness=1.0, roughness=0.4, anisotropy=0.3),
+)
+CONNECTOR_NYLON = FinishedMaterial(
+    plastics.nylon(plastics.Nylon.PA6).material,
+    pbr=PbrProperties.create('Polyamide 6, moulded or machined', metalness=0.0, roughness=0.6),
+)  # connector bodies
+COLLAR_STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Connector coupling nut', metalness=1.0, roughness=0.4),
+)
+O_RING_NBR = FinishedMaterial(
+    RangeMaterial(name='NBR 70A', density=1250.0),
+    pbr=PbrProperties.create('Nitrile rubber: O-rings and oil seals', metalness=0.0, roughness=0.9),
+)
+CONTACT_BRASS = FinishedMaterial(
+    metals.brass().material,
+    pbr=PbrProperties.create('Gold-plated contacts', metalness=1.0, roughness=0.2),
+)
+FLEXURE_TI = FinishedMaterial(
+    metals.titanium().material,
+    pbr=PbrProperties.create('Alpha-beta titanium alloy', metalness=1.0, roughness=0.4),
+)  # torque-sensing flexure
+GAUGE_FOIL = FinishedMaterial(
+    RangeMaterial(name='Polyimide film', density=1420.0),
+    pbr=PbrProperties.create('Foil strain gauge on a polyimide carrier', metalness=0.0, roughness=0.3,
+        clearcoat=0.5, clearcoat_roughness=0.1),
+)
 
 # ---------------------------------------------------------------------------
 # Consistency checks (concept-level fit, not tolerance engineering)
@@ -748,7 +810,6 @@ def make_cable_tube() -> bd.Part:
     return _tube_z(TUBE_OUTER_R, TUBE_INNER_R, TUBE_Z)
 
 
-
 # ---------------------------------------------------------------------------
 # Kinematics: the 4.5:1 planetary drive train's rates (the joints' limits)
 # ---------------------------------------------------------------------------
@@ -876,7 +937,9 @@ def _label(shape, name: str, *details: object, color=None, material=None):
     if color is not None:
         shape.color = color
     if material is not None:
+        color = shape.color
         shape.material = material
+        shape.color = color
     return shape
 
 

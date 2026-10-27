@@ -85,9 +85,9 @@ def write(view: Any, path: Path) -> None:
 
     def material(look: tuple, thickness: float) -> int:
         rgba, held = look
-        given = dict(held) if held is not None else None
+        given = json.loads(held) if held is not None else None
         # A transmissive look's volume is as thick as the part it is on (``KHR_materials_volume``).
-        key = (look, thickness if given is not None and given.get("transmission") else None)
+        key = (look, thickness if given is not None and given["pbr"]["values"].get("transmission") else None)
         found = material_at.get(key)
         if found is None:
             entry = _material(rgba, given, thickness)
@@ -115,7 +115,7 @@ def write(view: Any, path: Path) -> None:
         positions, normals, spans = shared[index]
         looks = groups(mesh, prototype, color)
         attributes = {"POSITION": positions, "NORMAL": normals}
-        if any(look[1] is not None and dict(look[1]).get("anisotropy") for look, _ in looks):
+        if any(look[1] is not None and json.loads(look[1])["pbr"]["values"].get("anisotropy") for look, _ in looks):
             # An anisotropic look runs along the mesh's tangents, which nothing else gives it.
             if "tangents" not in spans:
                 spans["tangents"] = add(np.ascontiguousarray(tangents(mesh.normals), "<f4"), 34962, "VEC4", 5126)
@@ -176,37 +176,24 @@ def write(view: Any, path: Path) -> None:
 def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> dict[str, Any]:
     """A look as a glTF material: PBR metallic-roughness and an extension for each part of the
     look past it (``materials``' table), each written only where it is not glTF's default."""
-    entry: dict[str, Any] = {"pbrMetallicRoughness": {
-        "baseColorFactor": list(rgba),
-        "metallicFactor": given["metallic"] if given is not None else 0.0,
-        "roughnessFactor": given["roughness"] if given is not None else 0.6},
-        "doubleSided": False, "alphaMode": "BLEND" if rgba[3] < 1.0 else "OPAQUE"}
     if given is None:
-        return entry
-    entry["name"] = given["name"]
-    extensions: dict[str, Any] = {}
-    if any(given.get("emissive") or ()):
-        entry["emissiveFactor"] = list(given["emissive"])
-        if given.get("emissiveStrength", 1.0) != 1.0:
-            extensions["KHR_materials_emissive_strength"] = {"emissiveStrength": given["emissiveStrength"]}
-    if given.get("ior", 1.5) != 1.5:
-        extensions["KHR_materials_ior"] = {"ior": given["ior"]}
-    if given.get("transmission"):
-        extensions["KHR_materials_transmission"] = {"transmissionFactor": given["transmission"]}
-        volume: dict[str, Any] = {"thicknessFactor": thickness}
-        if given.get("transmissionDepth") is not None:
-            # Metres: the root node's scale makes the scene's units metres.
-            volume["attenuationDistance"] = given["transmissionDepth"]
-            volume["attenuationColor"] = list(given.get("transmissionColor") or (1.0, 1.0, 1.0))
-        extensions["KHR_materials_volume"] = volume
-    if given.get("coat"):
-        extensions["KHR_materials_clearcoat"] = {"clearcoatFactor": given["coat"],
-                                                 "clearcoatRoughnessFactor": given.get("coatRoughness", 0.0)}
-    if given.get("anisotropy"):
-        extensions["KHR_materials_anisotropy"] = {"anisotropyStrength": given["anisotropy"],
-                                                  "anisotropyRotation": given.get("anisotropyRotation", 0.0)}
-    if extensions:
-        entry["extensions"] = extensions
+        return {"pbrMetallicRoughness": {"baseColorFactor": list(rgba), "metallicFactor": 0.0,
+                                         "roughnessFactor": 0.6},
+                "doubleSided": False, "alphaMode": "BLEND" if rgba[3] < 1.0 else "OPAQUE"}
+    from cadgen.engine.document import pbr_from_json
+
+    pbr = pbr_from_json(given["pbr"])
+    if pbr.maps.to_dict():
+        raise ValueError("GLB export of native material texture maps requires UV mapping; use a scalar PBR look")
+    pbr = pbr.override(metalness=0.0 if pbr.values.metalness is None else pbr.values.metalness,
+                       roughness=0.5 if pbr.values.roughness is None else pbr.values.roughness)
+    entry = json.loads(pbr.to_gltf().to_json())["materials"][0]
+    entry["name"] = given["material"]["name"]
+    entry["pbrMetallicRoughness"]["baseColorFactor"] = list(rgba)
+    entry["alphaMode"] = "BLEND" if rgba[3] < 1.0 else "OPAQUE"
+    if pbr.values.transmission:
+        volume = entry.setdefault("extensions", {}).setdefault("KHR_materials_volume", {})
+        volume["thicknessFactor"] = thickness
     return entry
 
 

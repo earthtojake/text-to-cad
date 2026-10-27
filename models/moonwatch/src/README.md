@@ -35,10 +35,10 @@ would not set, so no builder of the case is a `@memo`.
 
 ## Materials
 
-The original's `materials=` finishes (`lib/materials.py`) are `Material`
+The original's `materials=` finishes (`lib/materials.py`) are `FinishedMaterial`
 values set on the parts before they are composed, by the same leaf-label
 assignments (`apply_materials`). Each finish is the catalogue's entry for the
-metal, glass or rubber in the finish's look (`.but(...)`), or the project's own
+metal, glass or rubber in the finish's look (explicit scalar `PbrProperties`), or the project's own
 where the catalogue has none, with the old finish name as the description. A
 finish keeps the original's metallic, roughness and clearcoat (`coat`,
 `coat_roughness`), and takes the look fields its name implies:
@@ -60,7 +60,7 @@ finish keeps the original's metallic, roughness and clearcoat (`coat`,
 | rubber | NBR 70A | |
 | matte_print | `Matte Print`, no density | |
 
-Every finish has `color=None`, so parts keep their authored colours, and a
+Every finish uses explicit scalar PBR values; assignments restore authored colours, and a
 transmissive part's colour is its tint. One face finish is painted: the bezel
 ring is polished steel and its snailed top annulus satin (`paint(ring, faces,
 FINISHES["satin_steel"])` in `lib/watch.py`). The chronograph works, which had no

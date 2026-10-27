@@ -584,7 +584,7 @@ class MeshFileTest(FixtureTest):
         self.assertIsNone(plate["color"], "the generated default base material is no colour")
         linear = [round(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4, 6) for c in (0xE0 / 255, 0x30 / 255, 0x20 / 255)]
         self.assertEqual(list(plate["faceColors"].values()), [[*linear, 1.0]], "the top's colour group, linear")
-        self.assertEqual(peg["material"]["metallic"], 1, "the steel base material's display properties")
+        self.assertEqual(peg["material"]["pbr"]["values"]["metalness"], 1, "the steel base material's display properties")
         self.assertAlmostEqual(peg["color"][0], 0.246201, places=5)
         matrices = [np.array(instance["matrix"]).reshape(4, 4).T for instance in structure["instances"]]
         self.assertEqual([tuple(m[:3, 3]) for m in matrices], [(0, 0, 0), (-20, 5, 5), (20, 5, 5)], "centimetres")
@@ -608,8 +608,10 @@ class GlbTest(FixtureTest):
         box, plate = structure["prototypes"]
         checker = next(iter(box["faceMaterials"].values()))
         red = next(iter(plate["faceMaterials"].values()))
-        self.assertEqual((checker["name"], checker["roughness"]), ("checker", 0.6))
-        self.assertEqual((red["name"], red["color"][:3], red["coat"], red["coatRoughness"]), ("red", [0.8, 0.1, 0.1], 1.0, 0.1))
+        self.assertEqual((checker["material"]["name"], checker["pbr"]["values"]["roughness"]), ("checker", 0.6))
+        self.assertEqual((red["material"]["name"], plate["faceColors"]["1"][:3],
+                          red["pbr"]["values"]["clearcoat"], red["pbr"]["values"]["clearcoatRoughness"]),
+                         ("red", [0.8, 0.1, 0.1], 1.0, 0.1))
         textured = found.shapes[box["key"]]
         self.assertEqual(len(textured.textures), 1, "the checker's base colour texture, by its paint")
         self.assertNotIn(plate["key"], found.shapes, "an untextured part is made as a document's is")

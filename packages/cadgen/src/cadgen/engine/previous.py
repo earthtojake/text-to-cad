@@ -53,16 +53,8 @@ cold build's bytes, build after build. So what is written is always made from wh
 made in this process, and a document read is never written: an edit after a restart runs
 the model.
 
-One move is made of a document's bytes, never of a read document (``migrated``): a cached
-document of the closure before this one (``EARLIER_SCHEMA``, written as ``EARLIER_FORMAT``:
-no platform, the release not keyed) is given, once, at the engine's start
-(``cache.Cache.migrate``), the closure this toolchain makes of it -- the release, the format and
-the platform this engine's, which that closure did not key; its libraries, its code and its
-inputs as it holds them; the key made again over them -- and this engine's writer, both edited
-into its main label where they are (``document.relabel``), every other byte as it was: the bytes
-a cold build here writes of a model nothing changed. So every model whose code, inputs and
-libraries are as its last build left them takes its document with nothing run, and one whose
-library moved since builds, saying so.
+A document of another format is rebuilt from source. Material schemas are a hard cutover;
+the engine never relabels an older material payload as the current format.
 """
 
 from __future__ import annotations
@@ -76,8 +68,7 @@ from typing import Any
 
 SCHEMA = "cadgen.engine closure/2"
 # Bumped deliberately, never by a release: when the document an engine writes, or what the
-# key covers, changes. A document of another format is built again once (``build._previous``),
-# but one of ``EARLIER_FORMAT``, which is moved (``migrated``).
+# key covers, changes. A document of another format is built again once (``build._previous``).
 # xbf/2: the key covers the format alone of the engine, and no numpy; the closure holds no commit.
 # xbf/3: the kinematics are AP242's alone: couplings as its couplers, motions' interpolation, no
 # cadgen-only attribute, no gear pair.
@@ -86,18 +77,14 @@ SCHEMA = "cadgen.engine closure/2"
 # xbf/6: the closure counts the build's animations, and a document with any is not taken.
 # xbf/7: the build's animations are a record on the main label (``animations.record``); the closure counts none.
 # xbf/8: the closure names the toolchain that built it (closure/2): the system and architecture join the key.
-FORMAT = "xbf/8"
-# The closure and the format before the toolchain was keyed: a cached document of them is moved
-# to this closure in place, once (``migrated``), never built again for it.
-EARLIER_SCHEMA = "cadgen.engine closure/1"
-EARLIER_FORMAT = "xbf/7"
-# The libraries a key covers: what decides the geometry.
-KEYED_LIBRARIES = ("build123d", "OCP")
+# xbf/9: native bd_materials physics and PbrProperties replace the cadgen material schema.
+FORMAT = "xbf/9"
+# The libraries a key covers: what decides the geometry and native material payload.
+KEYED_LIBRARIES = ("build123d", "OCP", "bd_materials", "threejs_materials")
 # The keyed platform fields; the closure also records Python as information only.
 KEYED_PLATFORM = ("system", "arch")
-# The start of a closure's text: the schema first, so a head scan finds it; and an earlier one's.
+# The start of a closure's text: the schema first, so a head scan finds it.
 _PREFIX = f'{{"schema":"{SCHEMA}",'.encode()
-_EARLIER_PREFIX = f'{{"schema":"{EARLIER_SCHEMA}",'.encode()
 # How far into a document its main label's attributes are: right after the header.
 _HEAD_BYTES = 1 << 20
 
@@ -134,7 +121,8 @@ def _libraries() -> dict[str, str]:
 
     found = {}
     # OCP ships as two distributions, with VTK and without: either is the OCP a body runs on.
-    for shown, names in (("build123d", ("build123d",)), ("OCP", ("cadquery-ocp", "cadquery-ocp-novtk"))):
+    for shown, names in (("build123d", ("build123d",)), ("OCP", ("cadquery-ocp", "cadquery-ocp-novtk")),
+                         ("bd_materials", ("bd_materials",)), ("threejs_materials", ("threejs-materials",))):
         for name in names:
             try:
                 found[shown] = metadata.version(name)
@@ -368,56 +356,6 @@ def _head(head: bytes, schema: str | None = None) -> tuple[str | None, str | Non
         except ValueError:
             found = None
     return (writer.group(0).decode() if writer else None, found)
-
-
-# How much of a cached document says whether it is of the closure before (``earlier``): its main
-# label's first attributes are its writer and its closure, right after the file's header.
-EARLIER_HEAD = 1 << 16
-
-
-def earlier(head: bytes) -> bool:
-    """Whether a document's first bytes (``EARLIER_HEAD`` of them) are of the closure and the format
-    before this one's (``EARLIER_SCHEMA``, ``EARLIER_FORMAT``): what the engine's start moves
-    (``migrated``). A document of a format before that one builds once, as it always did."""
-    from cadgen.engine.document import written_format
-
-    if _EARLIER_PREFIX not in head:
-        return False
-    writer, _found = _head(head, EARLIER_SCHEMA)
-    return written_format(writer) == EARLIER_FORMAT
-
-
-def restamped(found: dict[str, Any]) -> dict[str, Any]:
-    """A closure of the schema before (``EARLIER_SCHEMA``) as this one: the release, the format and
-    the platform this engine's, which that closure did not key; its libraries, its source, its
-    modules, its symbols, its inputs and its bodies as it holds them, so a library that moved since
-    it was built still builds, saying so; the key made again over them, or none where it had none
-    (a closure that cannot say all the model is made of). The fields in ``manifest``'s order, so
-    its text is the one a build here writes of a model nothing changed."""
-    record = {"schema": SCHEMA, "engine": _engine(), "libs": found["libs"], "platform": _platform(),
-              "source": found["source"], "modules": found["modules"], "symbols": found.get("symbols") or {},
-              "inputs": found["inputs"], "bodies": found.get("bodies")}
-    record["key"] = key(record) if found.get("key") is not None else None
-    return record
-
-
-def migrated(data: bytes) -> tuple[bytes, dict[str, Any], str | None] | None:
-    """A cached document's bytes of the closure and the format before this engine's
-    (``EARLIER_SCHEMA``, ``EARLIER_FORMAT``) moved to this one's: its main label's closure the one
-    this toolchain makes of it (``restamped``) and its writer this engine's, edited where they are
-    (``document.relabel``), every other byte as it was -- the bytes a cold build here writes of the
-    model when nothing it is made of changed. ``(bytes, closure, the key it held)``; None for a
-    document of another closure or format, which is left as it is. ``ValueError`` (nothing moved)
-    for bytes that do not read as a document this engine wrote."""
-    from cadgen.engine import document
-
-    writer, found = _head(data[:_HEAD_BYTES], EARLIER_SCHEMA)
-    if found is None or document.written_format(writer) != EARLIER_FORMAT:
-        return None
-    held = json.loads(found)
-    record = restamped(held)
-    moved = document.relabel(data, {document.WRITER_GUID: document._writer(), document.CLOSURE_GUID: text(record)})
-    return moved, record, held.get("key")
 
 
 def read_record(doc: Any) -> tuple[str | None, str | None]:

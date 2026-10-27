@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import model
 import build123d as bd
 
 from lib.part_common import line_edges_at_z, safe_chamfer
@@ -31,7 +35,11 @@ def rectangular_calibration_block():
     part = block.part
     part = safe_chamfer(part, line_edges_at_z(part, HEIGHT), length=TOP_CHAMFER)
     part.label = "rectangular_calibration_block"
-    part.material = materials.steel_1018
+    part.material = FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Low-carbon mild steel, cold drawn bar', color='#c5c7c8ff', metalness=1.0,
+            roughness=0.4),
+    )
     return part
 
 

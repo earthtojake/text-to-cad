@@ -39,7 +39,8 @@ SRC = Path(__file__).resolve().parents[5] / "packages" / "cadgen" / "src"
 
 MODEL = """
 import build123d as bd
-from cadgen.engine import materials, step, xbf
+from cadgen.engine import step, xbf
+from bd_materials import metals
 
 
 @xbf("XBF/block.xbf")
@@ -53,7 +54,7 @@ def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
     plate.label, plate.color = "plate", bd.Color(0.8, 0.1, 0.1)
     peg = bd.Pos(8, 0, 4) * bd.Cylinder(1, 6)
-    peg.label, peg.material = "peg", materials.aluminium_6061
+    peg.label, peg.material = "peg", metals.aluminum()
     return bd.Compound(children=[plate, peg], label="pair")
 
 if __name__ == "__main__":
@@ -212,8 +213,8 @@ finally:
         self.assertEqual(set(by_name), {"plate", "peg"})
         # The plate's Color(0.8, 0.1, 0.1), sRGB, held linear.
         self.assertEqual([round(value, 2) for value in by_name["plate"]["color"][:3]], [0.6, 0.01, 0.01])
-        self.assertEqual((by_name["peg"]["material"]["name"], by_name["peg"]["material"]["density"]),
-                         ("Aluminum 6061-T6", 2700.0))
+        self.assertEqual((by_name["peg"]["material"]["material"]["name"], by_name["peg"]["material"]["material"]["density"]),
+                         ("Alu_G6061_T6", 2700.0))
         self.assertEqual(sorted(instance["path"] for instance in structure["instances"]), ["pair/peg", "pair/plate"])
         # Read in a reader process, which the structure names: never the daemon itself.
         self.assertNotIn(structure["read"]["process"], (0, self.daemon_pid()))

@@ -61,9 +61,9 @@ script: every model replays.
   they ran whole, measured 2026-10-23/24).
 - Materials: `capstan_index_overlay` declared `materials=` (the palette's aluminium
   bucket); each of its parts carries `lib/palette.py`'s `MATERIALS` entry for its bucket
-  now (`lib.assembly.compound`), a catalogue material in the old finish's look with
-  `color=None`, so a part keeps its palette colour. The other models declared no
-  materials and carry colours alone, as before.
+  now (`lib.assembly.compound`), a native `FinishedMaterial` with scalar PBR matching
+  the old finish. Assignments restore each part’s palette colour after setting its
+  native material. The other models carry colours alone, as before.
 - Dropped: the side files four models wrote from their bodies
   (`validation/*_frames.json`, for the validation programs; a model writes nothing), `capstan_index_overlay`'s `capstan_records()` (r13's overlay
   table, read from a validation output), `runtime_fixture`'s `bend` clip (a tube

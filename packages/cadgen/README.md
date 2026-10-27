@@ -89,7 +89,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    after it. Explicit viewer exports write only the requested
    artifact to managed temporary storage for delivery; no source or intermediate XBF
    is written (the engine's **Viewer exports**).
-3. **Standalone.** `cadgen.engine` imports nothing of cadgen outside itself: OCP, build123d (and
+3. **Standalone.** `cadgen.engine` imports nothing of cadgen outside itself: OCP, build123d, bd_materials, threejs_materials (and
    ezdxf, build123d's own DXF library), numpy, Pillow and the standard library only. cadgen
    reaches into it, never the other way: its telemetry is an observer the engine calls with
    plain facts (`engine.api.observers`).

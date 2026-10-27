@@ -22,14 +22,16 @@ from xml.etree import ElementTree
 
 import numpy as np
 
-from cadgen.engine import api, document, export, materials, mesh
+from cadgen.engine import api, document, export, mesh
+from bd_materials import metals
 from cadgen.engine import build as engine_build
 from cadgen.engine.export import ExportRefused, Source, translate
 
 BOARD = """
 import build123d as bd
 from cadgen.ap242 import mechanism_state
-from cadgen.engine import glb, materials, paint, step, stl, threemf, xbf
+from cadgen.engine import glb, paint, step, stl, threemf, xbf
+from bd_materials import metals
 
 
 @xbf("XBF/peg.xbf")
@@ -46,10 +48,10 @@ def peg():
 @threemf("board.3mf")
 def board():
     plate = bd.Pos(0, -20, 0) * bd.Box(30, 10, 2)
-    plate.color = bd.Color(0.2, 0.3, 0.9)
     plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[-1], "#ff0000")
-    plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[0], materials.steel)
-    plate.material = materials.aluminium
+    plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[0], metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN))
+    plate.material = metals.aluminum()
+    plate.color = bd.Color(0.2, 0.3, 0.9)
     plate.label = "plate"
     pegs = [peg().shape.moved(bd.Location((x, 0, 0))) for x in (-10, 0, 10)]
     for index, placed in enumerate(pegs):
@@ -72,7 +74,8 @@ def board():
 # seventh: a colour presentation per styled shape, which OCCT's writer keeps in a map.
 KIT = """
 import build123d as bd
-from cadgen.engine import materials, paint, xbf
+from cadgen.engine import paint, xbf
+from bd_materials import metals
 
 
 @xbf("XBF/kit.xbf")
@@ -81,9 +84,9 @@ def kit():
     parts = []
     for index, rgb in enumerate(looks):
         part = bd.Pos(index * 20, 0, 0) * bd.Box(10, 10, 4 + index)
-        part.color = bd.Color(*rgb)
         part = paint(part, part.faces().sort_by(bd.Axis.Z)[-1], bd.Color(rgb[2], rgb[0], rgb[1]))
-        part.material = (materials.aluminium, materials.steel)[index % 2]
+        part.material = (metals.aluminum(), metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN))[index % 2]
+        part.color = bd.Color(*rgb)
         part.label = f"part{index}"
         parts.append(part)
     peg = bd.Cylinder(2, 10)
@@ -254,15 +257,15 @@ class ExportTest(unittest.TestCase):
             self.assertEqual(_facts(step, other), _facts(self.loaded, prototype), name)
             self.assertTrue(prototype.face_names and prototype.edge_names, name)
         plate, read_plate = ours["plate"], theirs["plate"]
-        self.assertEqual((read_plate.material.name, read_plate.material.density),
-                         (plate.material.name, plate.material.density), "a material's name and density")
+        self.assertEqual((read_plate.material.name, read_plate.material.material.density),
+                         (plate.material.name, plate.material.material.density), "a material's name and density")
         # A painted colour is a face's colour in the STEP as in the xbf.
         red = [rgba for rgba in plate.face_colors.values() if rgba == (1.0, 0.0, 0.0, 1.0)]
         self.assertEqual(red, [rgba for rgba in read_plate.face_colors.values() if rgba == (1.0, 0.0, 0.0, 1.0)])
         # What OCCT's STEP writer drops: the PBR look (metallic, roughness), a face's material
         # (its colour stays), and the mechanism.
-        self.assertEqual(plate.material.metallic, 1.0)
-        self.assertEqual(read_plate.material.metallic, 0.0)
+        self.assertEqual(plate.material.pbr.values.metalness, 1.0)
+        self.assertEqual(read_plate.material.pbr.values.metalness, 0.0)
         self.assertEqual(len(plate.face_materials), 1)
         self.assertEqual(read_plate.face_materials, {})
         [ordinal] = plate.face_materials
@@ -281,8 +284,8 @@ class ExportTest(unittest.TestCase):
         looks = [gltf["materials"][primitive["material"]] for primitive in plate["primitives"]]
         self.assertEqual(len(looks), 3, "the part's own look, a painted colour and a painted material")
         by_name = {look.get("name"): look for look in looks}
-        self.assertEqual(by_name[materials.aluminium.name]["pbrMetallicRoughness"]["metallicFactor"], 1.0)
-        self.assertIn(materials.steel.name, by_name)
+        self.assertEqual(by_name[metals.aluminum().name]['pbrMetallicRoughness']['metallicFactor'], 1.0)
+        self.assertIn(metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).name, by_name)
         self.assertIn([1.0, 0.0, 0.0, 1.0], [look["pbrMetallicRoughness"]["baseColorFactor"] for look in looks])
         rack = next(node for node in placed if node["name"] == "rack/peg0")
         self.assertEqual(rack["matrix"][12:15], [-10.0, 0.0, 6.0])
@@ -304,7 +307,7 @@ class ExportTest(unittest.TestCase):
         bases = model.findall(f"{core}resources/{core}basematerials/{core}base")
         metallic = model.findall(f"{core}resources/{extension}pbmetallicdisplayproperties/{extension}pbmetallic")
         self.assertEqual(len(metallic), len(bases), "one display property per base material")
-        self.assertIn(materials.aluminium.name, [base.get("name") for base in bases])
+        self.assertIn(metals.aluminum().name, [base.get('name') for base in bases])
         plate = next(entry for entry in objects if entry.get("name") == "plate")
         painted = [t for t in plate.iter(f"{core}triangle") if t.get("p1") is not None]
         self.assertEqual(len(painted), 4, "the two painted faces' triangles name their own looks")

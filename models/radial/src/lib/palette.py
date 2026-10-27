@@ -1,4 +1,4 @@
-"""Material language for the radial, authored as the sRGB hex a shape takes.
+"""FinishedMaterial language for the radial, authored as the sRGB hex a shape takes.
 
 The brief's finishes, kept distinct:
   ENAMEL_BLACK     gloss black enamel — cylinder barrels, mount ring
@@ -10,12 +10,15 @@ The brief's finishes, kept distinct:
   HEAT_TINT(_BLUE) heat-tinted stainless — exhaust collector and stacks
   BRAID / COPPER   ignition leads; POLISHED_ALU harness ring, propeller, spinner
 Every leaf gets exactly one of these colours, and its system gives it the finish
-that colour names: an engine `Material` set on the part (`FINISHES`).
+that colour names: a native `FinishedMaterial` set on the part (`FINISHES`).
 """
 
 from __future__ import annotations
 
-from cadgen import Material, materials
+from bd_materials import FinishedMaterial, metals
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
 
 import build123d as bd
 
@@ -50,55 +53,129 @@ CERAMIC = "#e6e2d8"
 TITANIUM = FASTENER
 MACHINED = MACHINED_ALU
 
-# Each finish is an engine `Material` set on the part: the catalogue's entry for the
+# Each finish is a native `FinishedMaterial` set on the part: the catalogue's entry for the
 # metal (or a material of the project's own where the catalogue has none), in the
-# finish's look -- the original's metalness, roughness and clearcoat as `metallic`,
-# `roughness`, `coat` and `coat_roughness`, its name the description, no grain
-# (`anisotropy=0`). Every finish keeps `color=None`, so a part stays the colour its
-# builder authored. The original tuned these against its photographic Render rig: a
+# finish's look -- the original's metalness, roughness and clearcoat as `metalness`,
+# `roughness`, `clearcoat` and `clearcoat_roughness`, its name the description, no grain
+# (`anisotropy=0`). Assignments restore the authored colour after setting the native material,
+# so a part stays the colour its builder authored. The original tuned these against its photographic Render rig: a
 # dark room lit by two cards, where near-mirror metals (roughness < ~0.3) read black,
-# so "polished" is a satin base under a sharp coat.
-def _finish(base: Material, description: str, **look) -> Material:
-    return base.but(color=None, description=description, anisotropy=0.0, **look)
+# so "polished" is a satin base under a sharp clearcoat.
 
-
-_PAINT = dict(metallic=0.0, roughness=0.45, coat=0.7, coat_roughness=0.2)
-_HEAT_TINT = dict(metallic=1.0, roughness=0.4, coat=0.5, coat_roughness=0.15)
 
 FINISHES = {
-    "enamel_black": _finish(materials.steel_4140, "Black enamel", **_PAINT),
-    "section_red": Material("Section red", family="other", description="museum paint on every cut face",
-                            roughness=0.5, coat=0.5, coat_roughness=0.3),
-    "enamel_grey": _finish(materials.steel_4140, "Dark-grey enamel", **_PAINT),
-    "cast_alu": _finish(materials.aluminium_6061, "Cast aluminium", metallic=0.62, roughness=0.5),
-    "machined_alu": _finish(materials.aluminium_6061, "Machined aluminium", metallic=0.9, roughness=0.42,
-                            coat=0.6, coat_roughness=0.1),
-    "case_silver": _finish(materials.aluminium_6061, "Satin silver-grey enamel", metallic=0.55, roughness=0.4,
-                           coat=0.5, coat_roughness=0.22),
-    "steel_polished": _finish(materials.steel_1018, "Polished steel", metallic=1.0, roughness=0.42,
-                              coat=1.0, coat_roughness=0.04),
-    "steel_machined": _finish(materials.steel_4140, "Ground steel", metallic=1.0, roughness=0.36),
-    "steel_dark": _finish(materials.steel_1018, "Dark steel", metallic=0.8, roughness=0.5),
-    "blued_steel": _finish(materials.steel_spring_1095, "Blued spring steel", metallic=0.9, roughness=0.42,
-                           coat=0.5, coat_roughness=0.12),
-    "fastener": _finish(materials.steel_4140, "Cadmium-plated steel", metallic=0.9, roughness=0.4),
-    "safety_wire": _finish(materials.stainless_304, "Stainless safety wire", metallic=1.0, roughness=0.35),
-    "heat_tint": _finish(materials.stainless_304, "Heat-tinted stainless", **_HEAT_TINT),
-    "heat_tint_blue": _finish(materials.stainless_304, "Heat-tinted stainless (blue)", **_HEAT_TINT),
-    "heat_tint_straw": _finish(materials.stainless_304, "Heat-tinted stainless (straw)", **_HEAT_TINT),
-    "copper": _finish(materials.copper_c110, "Copper", metallic=1.0, roughness=0.35),
-    "braid": _finish(materials.copper_c110, "Tinned braid", metallic=0.9, roughness=0.55),
-    "polished_alu": _finish(materials.aluminium_6061, "Polished aluminium", metallic=1.0, roughness=0.3,
-                            coat=1.0, coat_roughness=0.04),
-    "bronze": Material("Bronze", 8800.0, family="metal", standard="UNS C93200 (bearing bronze)",
-                       description="Bronze", metallic=1.0, roughness=0.4),
-    "brass": _finish(materials.brass_c360, "Brass", metallic=1.0, roughness=0.38, coat=0.3, coat_roughness=0.15),
-    "magneto_black": _finish(materials.aluminium_6061, "Black crinkle", metallic=0.0, roughness=0.85),
-    "carb_alu": _finish(materials.aluminium_6061, "Cast aluminium (carburettor)", metallic=0.5, roughness=0.62),
-    "rubber": _finish(materials.nbr_70a, "Rubber", metallic=0.0, roughness=0.9),
-    "gasket": Material("Gasket", family="other", description="compressed fibre gasket", roughness=0.85),
-    "ceramic": Material("Alumina ceramic", 3900.0, family="other", standard="Al2O3",
-                        description="Ceramic (spark-plug insulator)", roughness=0.3),
+    "enamel_black": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Black enamel', metalness=0.0, roughness=0.45, clearcoat=0.7,
+            clearcoat_roughness=0.2),
+    ),
+    "section_red": FinishedMaterial(
+        RangeMaterial(name='Section red', density=None),
+        pbr=PbrProperties.create('museum paint on every cut face', metalness=0.0, roughness=0.5,
+            clearcoat=0.5, clearcoat_roughness=0.3),
+    ),
+    "enamel_grey": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Dark-grey enamel', metalness=0.0, roughness=0.45, clearcoat=0.7,
+            clearcoat_roughness=0.2),
+    ),
+    "cast_alu": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Cast aluminium', metalness=0.62, roughness=0.5),
+    ),
+    "machined_alu": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Machined aluminium', metalness=0.9, roughness=0.42, clearcoat=0.6,
+            clearcoat_roughness=0.1),
+    ),
+    "case_silver": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Satin silver-grey enamel', metalness=0.55, roughness=0.4, clearcoat=0.5,
+            clearcoat_roughness=0.22),
+    ),
+    "steel_polished": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Polished steel', metalness=1.0, roughness=0.42, clearcoat=1.0,
+            clearcoat_roughness=0.04),
+    ),
+    "steel_machined": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Ground steel', metalness=1.0, roughness=0.36),
+    ),
+    "steel_dark": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Dark steel', metalness=0.8, roughness=0.5),
+    ),
+    "blued_steel": FinishedMaterial(
+        RangeMaterial(name='Spring steel 1095', density=7850.0),
+        pbr=PbrProperties.create('Blued spring steel', metalness=0.9, roughness=0.42, clearcoat=0.5,
+            clearcoat_roughness=0.12),
+    ),
+    "fastener": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Cadmium-plated steel', metalness=0.9, roughness=0.4),
+    ),
+    "safety_wire": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Stainless safety wire', metalness=1.0, roughness=0.35),
+    ),
+    "heat_tint": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Heat-tinted stainless', metalness=1.0, roughness=0.4, clearcoat=0.5,
+            clearcoat_roughness=0.15),
+    ),
+    "heat_tint_blue": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Heat-tinted stainless (blue)', metalness=1.0, roughness=0.4, clearcoat=0.5,
+            clearcoat_roughness=0.15),
+    ),
+    "heat_tint_straw": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Heat-tinted stainless (straw)', metalness=1.0, roughness=0.4, clearcoat=0.5,
+            clearcoat_roughness=0.15),
+    ),
+    "copper": FinishedMaterial(
+        metals.copper().material,
+        pbr=PbrProperties.create('Copper', metalness=1.0, roughness=0.35),
+    ),
+    "braid": FinishedMaterial(
+        metals.copper().material,
+        pbr=PbrProperties.create('Tinned braid', metalness=0.9, roughness=0.55),
+    ),
+    "polished_alu": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Polished aluminium', metalness=1.0, roughness=0.3, clearcoat=1.0,
+            clearcoat_roughness=0.04),
+    ),
+    "bronze": FinishedMaterial(
+        RangeMaterial(name='Bronze', density=8800.0),
+        pbr=PbrProperties.create('Bronze', metalness=1.0, roughness=0.4),
+    ),
+    "brass": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Brass', metalness=1.0, roughness=0.38, clearcoat=0.3,
+            clearcoat_roughness=0.15),
+    ),
+    "magneto_black": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Black crinkle', metalness=0.0, roughness=0.85),
+    ),
+    "carb_alu": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Cast aluminium (carburettor)', metalness=0.5, roughness=0.62),
+    ),
+    "rubber": FinishedMaterial(
+        RangeMaterial(name='NBR 70A', density=1250.0),
+        pbr=PbrProperties.create('Rubber', metalness=0.0, roughness=0.9),
+    ),
+    "gasket": FinishedMaterial(
+        RangeMaterial(name='Gasket', density=None),
+        pbr=PbrProperties.create('compressed fibre gasket', metalness=0.0, roughness=0.85),
+    ),
+    "ceramic": FinishedMaterial(
+        RangeMaterial(name='Alumina ceramic', density=3900.0),
+        pbr=PbrProperties.create('Ceramic (spark-plug insulator)', metalness=0.0, roughness=0.3),
+    ),
 }
 
 
@@ -173,7 +250,9 @@ def material_compound(parts, label, finishes):
             f"unexpected {sorted(actual - expected)} - update the system's MATERIALS tuple")
     for finish, members in grouped.items():
         for part in members:
+            authored_color = part.color
             part.material = FINISHES[finish]
+            part.color = authored_color
     return bd.Compound(label=label, children=list(parts))
 
 

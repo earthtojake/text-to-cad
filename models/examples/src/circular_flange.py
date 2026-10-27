@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import model
 from math import tau
 
 import build123d as bd
@@ -50,7 +54,11 @@ def circular_flange():
     edges.extend(circular_edges(part, radius=OUTER_DIAMETER / 2.0, axis="z", coordinate=THICKNESS))
     part = safe_fillet(part, edges, radius=OUTER_FILLET)
     part.label = "circular_flange_bolt_pattern"
-    part.material = materials.steel_1018
+    part.material = FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Low-carbon mild steel, cold drawn bar', color='#c5c7c8ff', metalness=1.0,
+            roughness=0.4),
+    )
     return part
 
 

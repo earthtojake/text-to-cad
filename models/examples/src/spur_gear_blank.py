@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import glb, materials, stl, threemf
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import glb, stl, threemf
 # Prompt: Spur gear blank with central bore, raised hub, and simplified perimeter teeth.
 
 from lib.simple_model_library import make_spur_gear_blank
@@ -10,7 +14,12 @@ from lib.simple_model_library import make_spur_gear_blank
 @glb(out="../GLB/spur_gear_blank.glb")
 def spur_gear_blank():
     part = make_spur_gear_blank()
-    part.material = materials.brass_c360.but(color=None)
+    authored_color = part.color
+    part.material = FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Free-machining leaded brass', metalness=1.0, roughness=0.35),
+    )
+    part.color = authored_color
     return part
 
 

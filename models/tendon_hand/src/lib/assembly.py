@@ -203,5 +203,7 @@ def compound(bodies,label='tendon_hand_integration_study'):
     from lib.palette import MATERIALS, finish_for
     for body in bodies:
         bucket, _color, _look, _alpha = finish_for(body.name, body.kind)
+        color = body.shape.color
         body.shape.material = MATERIALS[bucket]
+        body.shape.color = color
     return bd.Compound(label=label, children=[body.shape for body in bodies])

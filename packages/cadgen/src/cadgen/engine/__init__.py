@@ -18,8 +18,7 @@ The verbs as functions are ``cadgen.engine.api`` (``cadgen.export``, ``cadgen.sn
 
 A function worth replaying on a later build -- an assembly's part, a derivation's stage --
 is marked ``@memo``: it writes no file, and a build whose edit does not reach it replays it
-instead of running it. A part's material is a value set on the shape: ``part.material = materials.aluminium``
-(``Material`` for any other). An assembly's mechanism is build123d's joints, placed with
+instead of running it. A part's material is a value set on the shape: ``part.material = bd_materials.metals.aluminum()``. An assembly's mechanism is build123d's joints, placed with
 ``connect_to``, as built where the joints place the parts. The functions that say more are
 ``cadgen.ap242``'s and ``cadgen.gltf``'s, defined here (``model``, ``mechanism``, ``animations``)
 and exported there: ``mechanism_state(assembly, name, **values)`` names a state of it, ``gear_pair``, ``rack_and_pinion_pair`` and ``screw_pair(assembly,
@@ -40,7 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["Material", "dxf", "glb", "materials", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
+__all__ = ["dxf", "glb", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
            "stl", "threemf", "xbf"]
 
 
@@ -65,14 +64,6 @@ _main_in_a_package()
 
 
 def __getattr__(name: str) -> Any:
-    if name == "materials":
-        import importlib
-
-        return importlib.import_module("cadgen.engine.materials")
-    if name == "Material":
-        from cadgen.engine.materials import Material
-
-        return Material
     if name == "read_mesh":
         from cadgen.engine.reader import read_mesh
 

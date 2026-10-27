@@ -13,6 +13,8 @@ for the rest (``groups``).
 
 from __future__ import annotations
 
+import json
+
 from typing import Any
 
 import numpy as np
@@ -76,8 +78,7 @@ def look_of(color: Any, material: Any) -> tuple:
         rgba = (*rgba, 1.0)
     held = None
     if material:
-        held = tuple((key, tuple(value) if isinstance(value, list) else value)
-                     for key, value in material.items() if key != "color")
+        held = json.dumps(material, sort_keys=True, separators=(",", ":"))
     return rgba, held
 
 
@@ -88,7 +89,7 @@ def groups(mesh: Any, prototype: dict[str, Any], color: Any = None) -> list[tupl
     base = color if color is not None else prototype.get("color")
     material = _material(prototype.get("material"))
     if material is not None and color is None:
-        base = base if base is not None else material.get("color")
+        base = base if base is not None else DEFAULT_COLOR
     face_colors = prototype.get("faceColors") or {}
     face_materials = prototype.get("faceMaterials") or {}
     own = look_of(base, material)
@@ -99,7 +100,7 @@ def groups(mesh: Any, prototype: dict[str, Any], color: Any = None) -> list[tupl
         text = str(int(ordinal))
         given = face_materials.get(text)
         if given:
-            look = look_of(face_colors.get(text) or given.get("color") or base, given)
+            look = look_of(face_colors.get(text) or base, given)
         elif text in face_colors:
             look = look_of(face_colors[text], None)
         else:

@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cadgen import model
 import build123d as bd
 
 
@@ -67,7 +71,11 @@ def electronics_enclosure_base():
 
     part = enclosure.part
     part.label = "electronics_enclosure_base"
-    part.material = materials("ABS")  # a moulded enclosure, its colour the catalogue's
+    part.material = FinishedMaterial(
+        plastics.abs_().material,
+        pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', color='#767679ff',
+            metalness=0.0, roughness=0.55),
+    )  # a moulded enclosure, its colour the catalogue's
     return part
 
 

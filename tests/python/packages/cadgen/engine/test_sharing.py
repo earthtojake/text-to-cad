@@ -208,12 +208,15 @@ MODEL = """
 from pathlib import Path
 
 import build123d as bd
-from cadgen.engine import Material, paint, read_step, xbf
+from cadgen.engine import paint, read_step, xbf
+from bd_materials import FinishedMaterial
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
 
 BOUGHT = Path(__file__).parent / "bought.step"
 PAIR = Path(__file__).parent / "pair.step"
-RED = Material("Red", 1000, color=(1, 0, 0))
-BLUE = Material("Blue", 1000, color=(0, 0, 1))
+RED = FinishedMaterial(RangeMaterial(name='Red', density=1000), pbr=PbrProperties.create('Red', color="#010000"))
+BLUE = FinishedMaterial(RangeMaterial(name='Blue', density=1000), pbr=PbrProperties.create('Blue', color="#000001"))
 
 
 def screw():

@@ -34,5 +34,6 @@ Any one of these says the project was written for 0.7:
 
 ## Open CASCADE 8 and build123d 0.13
 
-Models importing OCP directly may need renamed collections, downcasts and bounding-box
-reads. See [the Open CASCADE 8 migration guide](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-to-opencascade-8.md).
+cadgen 0.8.1 replaces cadgen materials with native `bd_materials` objects and rebuilds
+earlier XBF documents from source. Models importing OCP directly may also need renamed
+collections, downcasts and bounding-box reads. See [the Open CASCADE 8 migration guide](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-to-opencascade-8.md).

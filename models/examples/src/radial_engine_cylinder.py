@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import model
 from math import cos, radians, sin, tau
 
 import build123d as bd
@@ -122,7 +126,11 @@ def radial_engine_cylinder():
     part = cylinder.part
     part = safe_fillet(part, _edge_fillets(part), radius=EDGE_FILLET)
     part.label = "radial_engine_cylinder_cooling_fins"
-    part.material = materials.aluminium_6061
+    part.material = FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Aluminum 6061-T6', color='#f5f6f6ff', metalness=1.0, roughness=0.35,
+            anisotropy=0.3),
+    )
     return part
 
 

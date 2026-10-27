@@ -520,18 +520,18 @@ def models_in(namespace: dict[str, Any], script: Path) -> list[Model]:
 def paint(shape: Any, faces: Any, color: Any) -> Any:
     """Colour faces of a part, or give them a material: ``faces`` (a face, or several) of
     ``shape`` take ``color`` -- an sRGB hex string (``"#e68019"``, ``"#e68019cc"``), 0-255
-    integers (three, or four with alpha), a build123d ``Color``, or a ``Material`` -- in the
+    integers (three, or four with alpha), a build123d ``Color``, or a ``bd_materials.FinishedMaterial`` -- in the
     document, by their ordinal in the part. The colour is the one ``shape.color`` would give
     the same value (``colors``). A face holds one paint: a colour
     replaces its material, a material its colour. Returns ``shape``, whose paints the
     memo keys like its label.
 
     A part's material is set as its colour is, on the shape: ``part.material =
-    materials.steel``; on an assembly, it is every part's below it that has none. Both
+    bd_materials.metals.mild_steel()``; on an assembly, it is every part's below it that has none. Both
     are attributes of the object, and travel as build123d moves them: a copy, ``moved``
-    and ``located`` keep them, and a boolean's result takes those of its first operand
-    where its class holds the field (a ``Part`` does, a bare ``Solid`` has no
-    ``material``). Paint and materials are for finished parts: set them after the last
+    and ``located`` keep them. Material assignment uses build123d's native property;
+    set an explicit colour after assigning a material to override its PBR base colour.
+    Paint and materials are for finished parts: set them after the last
     operation, so an edit of one is no kernel call (the memo keys them with the shape,
     and a compound does not hold its children's materials in its key)."""
     import build123d as bd
@@ -541,9 +541,9 @@ def paint(shape: Any, faces: Any, color: Any) -> Any:
 
     from cadgen.engine.colors import linear
     from cadgen.engine.kernel.memo import FACE_COLORS, FACE_MATERIALS
-    from cadgen.engine.materials import Material
+    from bd_materials import FinishedMaterial
 
-    material = color if isinstance(color, Material) else None
+    material = color if isinstance(color, FinishedMaterial) else None
     rgba = None if material is not None else tuple(linear(color, "paint's color"))
     mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape.wrapped, TopAbs_FACE, mapped)

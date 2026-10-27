@@ -42,7 +42,8 @@ became `@model`, `build123d` is imported directly, and the two that also declare
 part whose STL, 3MF and GLB every run writes (`../STL/`, `../3MF/`, `../GLB/`, gitignored). Their shared builders are `lib/simple_model_library.py` (the
 `make_*` parts) and `lib/part_common.py`, plain modules; a colour is the sRGB hex itself,
 which a shape takes as it is. Each takes a catalogue material, in brackets above: a part that
-authors its own colour keeps it (`color=None`), one that does not takes the catalogue's.
+authors its own colour has it restored after native material assignment; one that
+does not takes the material’s explicit colour.
 The two print-in-place assemblies' `AssemblyHelper` frames are build123d joints: a
 `RevoluteJoint` on the bored link and a `RigidJoint` on the pinned one, on the same pin
 axis, paired by their label where the links stand as printed (open flat, 0 degrees).
@@ -50,8 +51,8 @@ axis, paired by their label where the links stand as printed (open flat, 0 degre
 Materials: the L-bracket is Steel 1018 and the enclosure ABS, each drawn in the
 catalogue's colour (neither authored one); the fixture takes one material on its
 assembly, which every part below it takes: bead-blasted Aluminum 6061-T6,
-anodised in each part's own colour (`color=None`). The imports read the STEP
-inputs as they are, without materials.
+anodised in each part's own colour (restored after native material assignment).
+The imports read the STEP inputs as they are, without materials.
 
 A run writes nothing, but the mounting plate's and the gear blank's declared files. The
 import script's `__main__` exports the enclosure and the fixture to `../STEP/` (gitignored,

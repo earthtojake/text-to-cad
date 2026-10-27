@@ -32,9 +32,9 @@ cadgen export "$ID" /tmp/annotations.glb            # demo, baked as a clip
 ## The port
 
 - `@step(out=...)` -> `@model`: a case writes nothing; export a file of it on request.
-- `unified_annotations`: the sidecar's `materials=` are `Material` values on the parts
-  (steel the catalogue's, in the old finish, `color=None`; the paint its own, with its
-  colour); the `swing` mate is a build123d revolute joint and the `open` pose a
+- `unified_annotations`: the sidecar's `materials=` are `FinishedMaterial` values on the parts
+  (native catalogue steel with the authored part colours, and the project's own blue
+  paint); the `swing` mate is a build123d revolute joint and the `open` pose a
   configuration; the clip, which moved the shaft by hand, is a motion of a new prismatic
   joint, `lift` (-8 to 8 mm). The old viewer multiplied the paint's opacity into the
   arm's (0.3); a part with a material wears the material's colour, so it shows 0.5.

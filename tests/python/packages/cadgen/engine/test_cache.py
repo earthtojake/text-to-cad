@@ -374,36 +374,6 @@ class CacheTest(unittest.TestCase):
         with urllib.request.urlopen(request, timeout=30) as answer:
             return json.loads(answer.read())["version"]
 
-    def test_a_start_moves_an_earlier_closure_in_place_and_its_model_runs_nothing(self) -> None:
-        from cadgen.engine import document, previous
-
-        ident = self.said()
-        self.assertIn("the body ran", self.run_script("cube").stderr)
-        self.cached(ident)
-        self.assertEqual(self.cli("stop").returncode, 0)
-        # What an engine before the toolchain was keyed cached of it: closure/1 on an xbf/7 writer, its
-        # key over the format, the libraries and the code alone -- and its record saying so.
-        data = self.file(ident).read_bytes()
-        closure = json.loads(previous._head(data, previous.SCHEMA)[1])
-        held = {name: value for name, value in closure.items() if name != "platform"}
-        held.update(schema=previous.EARLIER_SCHEMA, engine={**closure["engine"], "format": previous.EARLIER_FORMAT})
-        libs = {name: held["libs"].get(name) for name in previous.KEYED_LIBRARIES}
-        held["key"] = previous._digest([previous.EARLIER_SCHEMA, previous.EARLIER_FORMAT, libs, held["source"],
-                                        held["modules"], held["inputs"]])
-        writer = document.WRITER.format(format=previous.EARLIER_FORMAT, release=previous.version())
-        earlier = document.relabel(data, {document.WRITER_GUID: writer, document.CLOSURE_GUID: previous.text(held)})
-        self.file(ident).write_bytes(earlier)
-        registry = Registry(self.state, self.cache)
-        registry.update(ident, lambda found: {**found, "revision": held["key"],
-                                              "cache": {"revision": held["key"], "bytes": len(earlier)}})
-        # The next run starts the engine, which moves it before anything reaches it: nothing runs.
-        self.assert_taken()
-        record, moved = self.record(ident), previous.of(self.file(ident))
-        self.assertEqual((moved["schema"], record["revision"], record["cache"]),
-                         (previous.SCHEMA, moved["key"], {"revision": moved["key"], "bytes": self.file(ident).stat().st_size}))
-        self.assertEqual(self.file(ident).read_bytes(), data, "the bytes the engine cached of its own build")
-        self.assertEqual(self.ask({"op": "status"})["cache"]["moved"], 1)
-        self.assertIn(" · 1 moved to this engine's closure at its start", self.cli("status").stdout)
 
     def test_two_unchanged_runs_leave_one_generation_and_the_page_idle(self) -> None:
         # A document is what its last run made: nothing ran, nothing changed, so a page has nothing to fetch.

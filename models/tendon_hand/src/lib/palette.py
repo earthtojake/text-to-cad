@@ -60,7 +60,10 @@ the sub-assembly studies, but the assembled hand no longer uses it -- the
 palette below folds steel into aluminium.
 """
 
-from cadgen import materials
+from bd_materials import FinishedMaterial, metals, plastics
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
 
 # --- physical surfaces ------------------------------------------------------
 # Roughness/metalness/clearcoat of each surface: the look of `MATERIALS` below.
@@ -70,30 +73,57 @@ ANODIZED = {"roughness": .32, "metalness": .68, "clearcoat": .16}
 STEEL = {"roughness": .12, "metalness": .98, "clearcoat": .25}
 SILICONE = {"roughness": .67, "metalness": .01, "clearcoat": .04}
 CORD = {"roughness": .57, "metalness": .03}
-# The liner's STEP source color already carries alpha .28. Material opacity
+# The liner's STEP source color already carries alpha .28. FinishedMaterial opacity
 # stays at its default 1 so render composition preserves that authored value.
 LINER = {"roughness": .30, "metalness": .05}
 
 # The buckets as engine materials, set on each part (`lib.assembly.compound`): the
-# catalogue's entry for what the body is made of, in the look above (`metallic`,
-# `roughness`, `coat`), its name the description. Every one keeps `color=None`, so a
-# part stays the colour the palette gave it.
-def _material(base, description, look):
-    return base.but(color=None, description=description, anisotropy=0.0, metallic=look["metalness"],
-                    roughness=look["roughness"], coat=look.get("clearcoat", 0.0))
+# catalogue's entry for what the body is made of, in the look above (`metalness`,
+# `roughness`, `clearcoat`), its name the description. Assignments restore the
+# palette colour after setting each native material.
 
 
 MATERIALS = {
-    "aluminum_frame": _material(materials.aluminium_6061, "Machined aluminum", ALUMINUM),
-    "anodized_dark": _material(materials.aluminium_6061, "Dark anodized aluminum", ANODIZED),
-    "steel": _material(materials.stainless_304, "Polished steel", STEEL),
-    "silicone_pad": _material(materials.silicone_50a, "Silicone pad", SILICONE),
-    "silicone_grommet": _material(materials.silicone_50a, "Silicone grommet", SILICONE),
-    "bowden_liner": _material(materials.ptfe, "Translucent Bowden liner", LINER),
-    "cord_flexion": _material(materials.uhmw_pe, "Flexion cord", CORD),
-    "cord_abduction": _material(materials.uhmw_pe, "Abduction cord", CORD),
-    "cord_pip": _material(materials.uhmw_pe, "PIP cord", CORD),
-    "cord_tip": _material(materials.uhmw_pe, "Tip cord", CORD),
+    "aluminum_frame": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Machined aluminum', metalness=0.86, roughness=0.34, clearcoat=0.12),
+    ),
+    "anodized_dark": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Dark anodized aluminum', metalness=0.68, roughness=0.32, clearcoat=0.16),
+    ),
+    "steel": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Polished steel', metalness=0.98, roughness=0.12, clearcoat=0.25),
+    ),
+    "silicone_pad": FinishedMaterial(
+        RangeMaterial(name='Silicone 50A', density=1150.0),
+        pbr=PbrProperties.create('Silicone pad', metalness=0.01, roughness=0.67, clearcoat=0.04),
+    ),
+    "silicone_grommet": FinishedMaterial(
+        RangeMaterial(name='Silicone 50A', density=1150.0),
+        pbr=PbrProperties.create('Silicone grommet', metalness=0.01, roughness=0.67, clearcoat=0.04),
+    ),
+    "bowden_liner": FinishedMaterial(
+        plastics.ptfe().material,
+        pbr=PbrProperties.create('Translucent Bowden liner', metalness=0.05, roughness=0.3),
+    ),
+    "cord_flexion": FinishedMaterial(
+        RangeMaterial(name='UHMW-PE', density=930.0),
+        pbr=PbrProperties.create('Flexion cord', metalness=0.03, roughness=0.57),
+    ),
+    "cord_abduction": FinishedMaterial(
+        RangeMaterial(name='UHMW-PE', density=930.0),
+        pbr=PbrProperties.create('Abduction cord', metalness=0.03, roughness=0.57),
+    ),
+    "cord_pip": FinishedMaterial(
+        RangeMaterial(name='UHMW-PE', density=930.0),
+        pbr=PbrProperties.create('PIP cord', metalness=0.03, roughness=0.57),
+    ),
+    "cord_tip": FinishedMaterial(
+        RangeMaterial(name='UHMW-PE', density=930.0),
+        pbr=PbrProperties.create('Tip cord', metalness=0.03, roughness=0.57),
+    ),
 }
 
 ASSEMBLY_MATERIAL_BUCKETS = (

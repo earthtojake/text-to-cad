@@ -11,7 +11,6 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from cadgen.engine import Material
 from cadgen.engine import build as engine_build
 from cadgen.engine import document
 from cadgen.engine.colors import Linear, color, linear, linear_to_srgb, srgb_to_linear
@@ -44,8 +43,8 @@ class LinearTest(unittest.TestCase):
     def test_anything_else_is_refused_by_what_it_takes(self) -> None:
         for bad in ((0.5, 0.5, 0.5), (1, 2), (256, 0, 0), (True, 0, 0), "e68019", "#12345", "red", 0xE68019, None,
                     b"#e68019"):
-            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "Material color is a hex string"):
-                linear(bad, "Material color")
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "FinishedMaterial color is a hex string"):
+                linear(bad, "FinishedMaterial color")
 
     def test_a_build123d_color_is_srgb_read_linear(self) -> None:
         import build123d as bd
@@ -61,17 +60,17 @@ class LinearTest(unittest.TestCase):
 
 
 class MaterialColorTest(unittest.TestCase):
-    def test_a_material_takes_what_the_author_sees_and_holds_it_linear(self) -> None:
-        made = Material("Paint", color="#808080", emissive=(255, 128, 0), transmission_color="#ffffff")
-        self.assertAlmostEqual(made.color[0], 0.2158605, places=6)
-        self.assertEqual(made.emissive[:2], (1.0, round(srgb_to_linear(128 / 255), 6)))
-        self.assertIsInstance(made.color, Linear)
-        self.assertEqual(made.but(roughness=0.1).color, made.color, "a copy keeps the colour")
-        self.assertEqual(made.but(color="#ffffff").color, (1.0, 1.0, 1.0, 1.0))
-        with self.assertRaisesRegex(ValueError, "Material color is a hex string"):
-            Material("Paint", color=(0.5, 0.5, 0.5))
-        with self.assertRaisesRegex(ValueError, "Material emissive is a hex string"):
-            Material("Paint", emissive=(0.1, 0.2, 0.3))
+    def test_native_srgb_base_and_linear_emission_reach_the_document(self):
+        from bd_materials import metals
+        import build123d as bd
+
+        material = metals.aluminum()
+        material.pbr = material.pbr.override(color="#808080", emissive="#ff8000")
+        shape = bd.Box(2, 3, 4)
+        shape.material = material
+        part = document.collect(shape, "paint").parts[0]
+        self.assertAlmostEqual(part.color[0], 0.2158605, delta=1e-4)
+        self.assertAlmostEqual(part.material.pbr.values.emissive[1], srgb_to_linear(128 / 255), places=6)
 
 
 TWO_ROUTES = """

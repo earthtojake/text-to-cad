@@ -57,8 +57,8 @@ that could not replay before 2026-10-24 (`barrels`, `cam`, `propeller`), 48.8 s.
   in the original finish's look -- its metalness, roughness and clearcoat as
   `metallic`, `roughness`, `coat` and `coat_roughness`, its name the description, no
   grain -- or the project's own where the catalogue has none (section paint, bronze,
-  gasket, alumina). Every finish keeps `color=None`, so a part stays the colour its
-  builder gave it. The original grouped each system's parts by finish
+  gasket, alumina). Assignments restore each authored colour after setting the native
+  material. The original grouped each system's parts by finish
   (`<system>__<finish>` compounds) for its decorator's `materials=` to target; the parts
   sit directly under their system now.
 - **The heads' STEP check.** `heads.py` checks that its section cut and every head

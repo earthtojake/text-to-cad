@@ -18,7 +18,7 @@ SRC = ENGINE.parent.parent
 # Law 3: what the engine imports besides itself and the standard library. Pillow is the renderer's
 # rasteriser (a dependency of the cadgen wheel already). OCCT draws every snapshot, of every kind,
 # so no module drives a browser.
-LIBRARIES = {"OCP", "build123d", "numpy", "PIL"}
+LIBRARIES = {"OCP", "build123d", "bd_materials", "threejs_materials", "numpy", "PIL"}
 # By module, what one imports beyond those: ezdxf, build123d's own DXF library, which the DXF
 # export writes and checks a drawing with.
 BESIDES = {"export/dxf.py": {"ezdxf"}}

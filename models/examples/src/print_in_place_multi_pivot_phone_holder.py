@@ -30,7 +30,11 @@ Print footprint: 94 x 248 mm, 18 mm tall — fits a 250 mm bed; scale or shorten
 the arm links for a 220 mm bed.
 """
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cadgen import model
 
 import build123d as bd
 
@@ -251,7 +255,12 @@ def print_in_place_multi_pivot_phone_holder():
         bd.RevoluteJoint(label, bored, axis=axis)
         bd.RigidJoint(label, pinned, axis.location)
     holder = bd.Compound(children=links, label="print_in_place_multi_pivot_phone_holder")
-    holder.material = materials.pla.but(color=None)  # every link PLA, in its own colour
+    authored_color = holder.color
+    holder.material = FinishedMaterial(
+        plastics.pla().material,
+        pbr=PbrProperties.create('Polylactic acid, the common FDM filament', metalness=0.0, roughness=0.45),
+    )  # every link PLA, in its own colour
+    holder.color = authored_color
     return holder
 
 

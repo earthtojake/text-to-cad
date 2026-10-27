@@ -77,13 +77,10 @@ def bike():
     return bd.Compound(children=[wheel(300), wheel(300).moved(bd.Pos(1200, 0, 0))], label="bike")
 ```
 
-A part's material is set on the shape, as its colour is: `part.material =
-materials.aluminium_6061` (or `materials("6061")`: a catalogue of common engineering
-materials, **Materials**), or a `Material(...)` constant of the project's own for any other.
-`paint(part, faces, material)` gives faces one. On an assembly, a material is every part's
-below it that has none: a whole-model default. An explicit colour always wins: `part.color = …`
-is the part's colour whatever its material, set before or after it, and its material's base
-colour in the file; a material's look colours only a part with no colour of its own. Set materials on finished parts, after the
+A part's material is native: `part.material = bd_materials.metals.aluminum()`.
+`paint(part, faces, material)` gives faces one. Set an assembly's material before reading
+its children's inherited properties. Set an explicit `part.color` after `.material`, since
+build123d's material setter sets colour. Set materials on finished parts, after the
 last operation: an edit of one is then no kernel call. Two limits of OCCT's STEP writer show in a STEP export: it names the density
 unit gram³·cm² (the exponents wrong, the number right: the reader gives the density back as
 written), and it writes materials sharing a name as one entity, so a STEP gives every such
@@ -147,7 +144,8 @@ Every successful build registers its document by id and gives it a URL, `/<id>`;
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
 structures and buffers, never live kernel objects (law 20).
 The distribution injects its HTTP application through `daemon.HTTP_FACTORY`; this
-standalone engine imports no application module. Beside OCP, build123d and numpy it imports Pillow
+standalone engine imports no application module. Beside OCP, build123d, bd_materials,
+threejs_materials and numpy it imports Pillow
 (the renderer's rasteriser) and ezdxf (build123d's own DXF library, which the DXF export writes and
 checks a drawing with), and a test holds that list (law 3). The application serves the built
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
@@ -349,12 +347,11 @@ only, and a file's id is derived again from its path after a restart.
 | --- | --- |
 | `model.py` | the decorators (`out`, `name=`), `@model` or file decorators and never both; `Model` (the function, `.id`, `.build` the debug seam); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
 | `api.py` | the verbs as functions, through the daemon: `export`, `snapshot`, `inspect` (the root's `cadgen.export`, ...), and `serve`, `status`, `stop`, `delete`, `server`, which only the CLI calls (process control and deletion are the CLI's alone), and `build_script`, a script's models built by `Model.build()`; `Document`, the handle a model call returns (`.shape` transferred by id on first access: `result`); `hand_over`, a shape made a document in the caller and handed to the daemon; `observers`, told after each build, export and snapshot what it did, as plain facts (kinds, counts, times, the worker's part, an error's type and frames): the engine counts nothing, and cadgen's telemetry is an observer cadgen appends |
-| `materials.py` | `Material`, a physical material and its look (OpenPBR's glTF subset), and the catalogue of common ones: the module, called |
 | `colors.py` | a colour as the author gives it (sRGB hex, 0-255 integers, a build123d `Color`) held linear, and the way back (**Materials**) |
 | `mechanism.py` | kinematics: build123d's joints harvested into AP242's links and pairs, couplings (`gear_pair`, `rack_and_pinion_pair`, `screw_pair`), mechanism states (`mechanism_state`), the document's subtree, the structure's `kinematics`, poses (forward kinematics from the ground; `posed`, an assembly copied at a state), and configuration sequences (`configuration_sequence`, a function's samples, `Timeline`: a sequence's pair values over time) |
 | `build.py` | one build: load the script afresh (as Python imports it: a package's module by its dotted name), one memo run, document, element names, files: every model's that ran |
 | `delta.py` | the line under the run line: a built tree's facts (`facts`: its occurrences, its world bounds -- each part's box, kept by its geometry key, measured where it decides the model's -- its parts' geometry keys and looks, and its joints, configuration sequences and warnings), worked out in the worker, and the daemon's delta of them against the build before (`delta`), kept beside each record and in the registry's |
-| `previous.py` | the model's build closure on its xbf's main label (`manifest`), the release from the version beside the code and the platform, the closure made again before the body runs (`again`), and a `closure/1` document's bytes moved to this closure (`migrated`) |
+| `previous.py` | the model's build closure on its xbf's main label (`manifest`), the release from the version beside the code and the platform, the closure made again before the body runs (`again`) |
 | `document.py` | result to XCAF (prototypes, instances, names, colours, materials, element names; a mesh face refused, `mesh_faces`), a warm build's patch of the document it kept, atomic BinXCAF save, read-back of an xbf or a foreign STEP, and a saved document's main-label strings rewritten in its bytes (`relabel`) |
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
@@ -368,7 +365,7 @@ only, and a file's id is derived again from its path after a restart.
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: cadgen's bounded Windows retry, kept in the engine |
-| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`); at the engine's start, a `closure/1` document moved to this closure in place (`migrate`) |
+| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), each installation's engine record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); where the folder is, the distribution's (`FACTORY`) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cadgen.engine VERB`) |
@@ -916,7 +913,7 @@ clears it. Nothing reads or runs a script outside a run but the migration's one 
 fingerprint filled, and a record moved from its key given its function's line.
 
 **Identity migration.** At engine start, before the daemon is reachable, `identity.migrate` makes
-one pass over the records' JSON, independent of any build-closure migration. It fills a missing
+one pass over the records' JSON, independent of document format validation. It fills a missing
 `namespace`, `name` and a model's `fingerprint` (its script's bytes; null where the script is gone,
 until a run supplies one), and moves each record identified by the earlier
 `uuid5(NAMESPACE, "key::" + key)` formula, with its cache file, to its folder/name id (a shape
@@ -1909,80 +1906,61 @@ channel but a STEP one as LINEAR keys within a tenth of a millimetre and of a de
 
 ## Materials
 
-A `Material` (`materials.py`) is frozen and SI, and a field it does not know is `None`, never a
-guess. Its physical half: `name` (what the catalogue looks it up by), `family` (`metal`,
-`plastic`, `elastomer`, `composite`, `wood`, `glass` or `other`), `standard` (the designation:
-`UNS A96061`), `description`, `source` (where its numbers came from), `density` kg/m³,
-`young_modulus` Pa, `poisson_ratio`, `yield_strength` and `ultimate_strength` Pa,
-`thermal_expansion` 1/K, `thermal_conductivity` W/(m·K), `specific_heat` J/(kg·K), and
-`isotropic` (False for a laminate or a ply). Its look is a strict subset of OpenPBR, cut to what
-glTF carries: `color` (RGBA, alpha its opacity), `metallic`, `roughness`, `ior` (1.5),
-`anisotropy` and `anisotropy_rotation` (radians), `transmission`, `transmission_color` and
-`transmission_depth` (metres), `coat` and `coat_roughness`, `emissive` (RGB) and
-`emissive_strength` (1). Each look parameter is one glTF field; the module's docstring is the
-contract that maps OpenPBR, the `Material`, glTF and Blender's Principled BSDF onto one another.
-Every field is checked as it is made, by name (0-1 ranges, positive physical values). `but(**changes)`
-is a copy with changes; `mass(volume_m3)` is kilograms, or None without a density.
+Materials are build123d's native `bd_materials.FinishedMaterial` objects. Import the
+catalogue and finishes from `bd_materials`; cadgen defines no material class or catalogue
+and does not replace `Shape.material`.
 
-**Colours.** Every colour a model gives -- `shape.color`, `paint(shape, faces, color)`,
-`Material(color=, transmission_color=, emissive=)` -- is what the author sees, in sRGB: a hex
-string (`"#e68019"`, `"#e68019cc"` with alpha, `"#e81"`, `"#e81c"`), 0-255 integers (`(230, 128,
-25)`, or four with alpha), or a build123d `Color`. The document holds linear RGB, as OCCT's
-`Quantity_Color` and glTF's factors do, and the engine converts at the door (`colors.py`), each
-channel rounded to six decimals, the precision a colour is read back at. The one assumption, and
-its rule: **a build123d `Color`'s channels are sRGB**, as build123d defines them (its constructor
-and its iteration are `Quantity_TOC_sRGB`; `Color("#e68019")` is `(0.902, 0.502, 0.098)`), so
-the engine reads a shape's colour linear through the `Quantity_Color` it wraps. `shape.color =
-bd.Color("#e68019")`, `shape.color = "#e68019"` (build123d's setter makes the `Color`) and
-`paint(shape, shape.faces(), "#e68019")` store the same colour, within one 8-bit step.
-Floats are no colour of the author's: `Material(color=(0.5, 0.5, 0.5))` and
-`paint(..., (0.5, 0.5, 0.5))` are refused by what they take, and `bd.Color(0.5, 0.5, 0.5)` is
-sRGB mid grey, `#808080`. A colour read back is the colour written: `Material.color` holds it
-linear, and a shape a reader makes (`read_xbf`, `read_step`) is given the `Color` of it.
+```python
+from bd_materials import metals
+from cadgen import paint
 
-The catalogue is one object, the module itself: `materials("6061")` looks an entry up in any
-case by its name, its attribute or an alias (`"6061-T6"`, `"al 6061"`, `"steel"`, `"delrin"`),
-and a miss raises `LookupError` naming the three nearest; `materials.aluminium_6061` is an
-entry; `materials.names()` is every name by family and `materials.by(family="metal")` the
-entries a field selects. There is nothing to register: a project's own materials are
-`Material(...)` constants in its own module, and `materials.steel_1018.but(roughness=0.2)` a
-variant. Its 44 entries:
+housing.material = metals.aluminum(metals.Alu.G6061_T6)
+housing.material.pbr = housing.material.pbr.override(
+    roughness=0.35, anisotropy=0.3, clearcoat=0.2, clearcoat_roughness=0.1)
+housing.color = "#606b78"  # assign after material: build123d's setter sets colour
+paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
+```
 
-| Family | Entries |
-| --- | --- |
-| metals | Aluminum 6061-T6, 5052-H32, 6063-T5, 7075-T6; Steel 1018, A36, S235JR, 4140; Spring steel 1095; Stainless 304, 316, 17-4 PH; Brass C360, C260; Copper C110; Titanium Ti-6Al-4V; Zinc ZA-8; Neodymium magnet N42 (a density, nothing structural) |
-| printing plastics | PLA, PETG, ABS, ASA, Nylon PA12, Nylon PA6-CF, TPU 95A (an elastomer), Polycarbonate, SLA resin |
-| engineering plastics | Acetal (POM), Acrylic (PMMA), PTFE, PEEK, HDPE, UHMW-PE, Nylon PA6, Polypropylene |
-| sheet, composites, wood | FR4, Carbon fibre laminate and Birch plywood (both not isotropic), MDF, Hardboard |
-| elastomers, other | Silicone 50A, NBR 70A, EPDM foam, Glass (soda-lime) |
+`FinishedMaterial.material` is the native physical dataclass; `.pbr` is a native
+`threejs_materials.PbrProperties`. Catalogue factories return fresh finished materials.
+For a project's own material, use a native factory such as `metals.custom_metal`, or
+`FinishedMaterial(RangeMaterial(name="Coating", density=None), pbr=PbrProperties.create(
+"Coating", color="#202830", roughness=0.7))`. Unknown density remains unknown in
+inspection. Assign materials and paints after geometric operations. Native assignments,
+inheritance and copying follow build123d; a child whose inherited value has already been
+read can retain that cached value, so assign assembly materials before reading children.
 
-`aluminium`, `steel`, `stainless_steel`, `brass`, `copper`, `titanium`, `nylon`, `acrylic`,
-`glass`, `abs_plastic` and `acetal` are short names for the common choice. The seed values were
-taken once from public material cards (FreeCAD's) and typical datasheets, as a starting point;
-each entry's `source` names which. The looks are the engine's own: metals metallic with
-roughness by finish (polished 0.2, machined 0.35-0.45, cast 0.6), brushed aluminium and
-stainless anisotropic, plastics dielectric, glass and the clear plastics transmissive, rubber
-rough.
+**Physics and units.** Density is a single value in kg/m³. Mechanical properties use native
+`Range` values with bounds, rather than cadgen choosing a single typical number: modulus of elasticity is GPa, tensile and yield
+strengths are MPa. `bd_materials.core.PROPERTY_UNITS` defines the other units. A native
+physical material's `mass(volume_mm3)` and build123d's default `shape.mass()` return grams;
+`cadgen inspect` continues to report kilograms. `None` is unknown; the native
+`NOT_SUITABLE` range is distinct and survives XBF serialization.
 
-build123d 0.13's `Shape.material` property accepts native materials and sets their colour.
-The engine's [material integration](kernel/material.py), installed when build123d loads,
-keeps a cadgen `Material` as an authored value instead: explicit colour and document
-inheritance retain their existing precedence. Native assignments still use build123d's
-property, and `None` clears either kind.
+**Appearance.** Use `material.pbr.override(...)` to return an edited native look, then
+assign it to `material.pbr`. The existing controls use their native PBR names:
+`metalness`, `roughness`, `ior`, `anisotropy`, `anisotropy_rotation` (radians),
+`transmission`, `attenuation_color`, `attenuation_distance` (metres), `clearcoat`,
+`clearcoat_roughness`, `emissive`, `emissive_intensity`, and `opacity`. Base `color` floats
+are sRGB ratios; emission and attenuation floats are linear RGB. Hex strings are converted
+by the upstream library. Shape colours and plain face paints keep their sRGB hex,
+0–255 integer and build123d `Color` inputs; documents and glTF base factors use linear RGB.
 
-In the file a material is XCAF's own `XCAFDoc_Material` (name, description, density) and
-`XCAFDoc_VisMaterial` (PBR: colour and alpha, metallic, roughness, emissive, IOR), and every
-other field in one `TDataStd_NamedData` on the material's label, named as the schema names it
-(none for a material of a name and a density). Read back it is the material, its PBR factors as
-32-bit floats. A material change converts the prototypes it is on; a cold and a warm build write
-the same bytes. The structure serves every field of each part's and each painted face's material;
-a GLB writes the look as glTF's extensions (the volume's thickness the part's, the smallest extent
-of its box; anisotropy along a tangent the mesh carries for it). The viewer draws the look in
-Solid, Shaded and Preview, and a plain finish in X-ray and Parts. In Solid and Shaded a file's
-finishes reflect the studio's neutral environment on those surfaces alone, so a part with no
-material is drawn as ever; an engine document's reflect its look's environment, which lights every
-surface of it, and OCCT's stills draw them the same way (**The look**). A part's chip card and
-`cadgen inspect` weigh it: volume by density, summed over an assembly.
+XBF stores the native physical dataclass and the complete resolved PBR data, including
+embedded textures and texture transforms, on the XCAF material label. Native texture maps
+require UV mapping to render; the viewer, GLB export and OCCT snapshots refuse them
+explicitly. Use scalar PBR looks for those paths. Reading returns
+native `FinishedMaterial` objects with that resolved look; it does not recreate a finish's
+recipe. XCAF's standard attributes also carry the name, density and core PBR factors for
+other readers. STEP carries name, density and colour. The structure serves native physics
+under `material` and `PbrProperties.to_dict()` under `pbr`, with the native physical type
+named by `type`; no flattened cadgen material fields remain.
+
+A material edit changes document content without changing geometry keys. Warm document
+patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,
+anisotropy, transmission, attenuation and emission. OCCT stills use the documented
+approximations in **The look**. A part's chip card and `cadgen inspect` weigh it from its
+volume and native density, summed over an assembly.
 
 ## Imports
 
@@ -2650,17 +2628,17 @@ The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf
 A model's document is its own cache, as a FreeCAD document is: opened, it is what was last
 computed, and only what changed is computed again. It is kept in the engine's cache (**The
 cache**), and written as the model's xbf where one is declared, the same bytes. Its main label names what
-wrote it (`cadgen.engine xbf/8 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
+wrote it (`cadgen.engine xbf/9 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
 closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cadgen.engine
 closure/2`), pointers and digests only (law 1), and nothing of a version control's -- the engine calls
 no git. It names what the document was built from and what built it, the toolchain:
 
 ```
 schema    "cadgen.engine closure/2"
-engine    {"release": "cadgen 0.8.0", "format": "xbf/8", "digest": ...}   the format (keyed); the release and
+engine    {"release": "cadgen 0.8.1", "format": "xbf/9", "digest": ...}   the format (keyed); the release and
                                                                      the engine's code digest (information only)
-libs      {"build123d": "0.13.0", "OCP": "8.0.1.1"}                 what decides the geometry (keyed): OCP's
-                                                                     version leads with the OCCT it wraps
+libs      {"build123d": "0.13.0", "OCP": "8.0.1.1",                   geometry and materials libraries (keyed);
+           "bd_materials": "...", "threejs_materials": "..."}         OCP leads with the OCCT it wraps
 platform  {"python": "3.12.10", "system": "Darwin", "arch": "arm64"}  the system and architecture (keyed),
                                                                      Python (information only):
                                                                      platform.python_version(), .system(), .machine()
@@ -2689,14 +2667,15 @@ null (**Body retention**). `cadgen inspect DOC` prints the closure, `cadgen.insp
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
-(`previous.FORMAT`), the kernel and library versions (`libs`: build123d and OCP), the operating
+(`previous.FORMAT`), the kernel and library versions (`libs`: build123d, OCP,
+bd_materials and threejs_materials), the operating
 system and the architecture, along with the model's code and inputs. An arm64 kernel and an
 x86-64 one write other bytes of one model; a system, architecture or library change rebuilds it,
 saying what moved (`rebuilt: arm64 became x86_64`). The cadgen release (`engine.release`) and
 Python version (`platform.python`) are recorded in the closure but not keyed: a change to either
 alone does not rebuild. The engine's code digest is information only too; an engine edit that
-leaves the written document alone keeps every xbf current. `FORMAT` is bumped by hand (`xbf/7` to
-`xbf/8`) when what an engine writes changes -- the document's structure, the attributes on its labels, the
+leaves the written document alone keeps every xbf current. `FORMAT` is bumped by hand (`xbf/8` to
+`xbf/9`) when what an engine writes changes -- the document's structure, the attributes on its labels, the
 closure's fields, or what the key covers -- and then every xbf builds once, cleanly: a
 document of another format is "written by" another engine (`cache.reason`). The bumps so far:
 `xbf/2`, the key left the release, the engine digest and numpy, and the closure its commit;
@@ -2706,30 +2685,13 @@ functions join the closure (**Configuration sequences**); `xbf/6`, the closure c
 animations, and a document with any was not taken; `xbf/7`, the compiled animations are a build
 record on the main label, the closure counts none, and an animated document is taken like any
 (**Animations**); `xbf/8`, the closure names its toolchain (`closure/2`: system and architecture
-join the key; release and Python are recorded), the one bump that builds nothing: its documents
-are moved in place (below).
+join the key; release and Python are recorded); `xbf/9`, materials use native bd_materials
+physics and `PbrProperties`, and both material libraries join the key.
 
-**The move from `closure/1`.** The engine moves every cached document of the closure before
-(`closure/1`, written as `xbf/7`: no platform, the release not keyed) at its start, before it can be
-reached (`cache.Cache.migrate`), rather than build each model once. Its closure becomes the one this
-toolchain makes of it (`previous.restamped`): the release, the format and the platform this
-engine's, which `closure/1` did not key; its libraries, source, modules, symbols, inputs and bodies
-as it held them; the key made again over them, null where it was. That text and this engine's
-writer go into the cache file's main label where the old ones were, the label sizes that span
-them moved by what they grew, every other byte as it was (`document.relabel`, the BinXCAF bytes
-edited, never a document read and saved again); then its record's `revision` and its `cache`
-take the new key and size, so its facts and its build time stay with it. Those are the bytes a
-cold build on this toolchain writes of the model when nothing it is made of changed, to the byte,
-and every such model is taken with nothing run, its declared files written again from the moved
-document as its exports; one whose library moved since builds,
-saying so (`build123d 0.10.0 became 0.11.1`). Once: a moved document holds `closure/2`, and the
-next start moves none (a 64 KiB look at each cache file finds that). One whose bytes do not read
-as a document this engine wrote, or whose file is not the size its record says, is left as it
-was, and builds once. The start says what it moved in its log, one line, and `cadgen status`
-says it in its `cache` line (`5 moved to this engine's closure at its start`). An engine of the
-closure before that shares the registry meanwhile finds the moved documents written by another
-engine, and builds each once. `closure/1` is read for this move alone; with the move removed, a
-`closure/1` document left anywhere builds once, as one of another format does.
+Documents from an earlier format are refused by the ordinary writer/format validation.
+Rebuild models from source to produce current documents; a cache of an earlier format is
+not reused. There is no in-place format migration or material payload adapter. The JSON
+identity migration (**Identity migration**) is independent of document contents.
 
 Before a body runs or is replayed, the build makes the closure again -- the script loaded,
 its modules digested, each input hashed again -- and compares its key with the one the model's

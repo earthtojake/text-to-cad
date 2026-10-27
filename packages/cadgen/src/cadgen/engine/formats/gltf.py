@@ -198,16 +198,19 @@ def look_extensions(extensions: dict[str, Any]) -> dict[str, Any]:
     if "KHR_materials_transmission" in extensions:
         found["transmission"] = float(extensions["KHR_materials_transmission"].get("transmissionFactor", 0.0))
         volume = extensions.get("KHR_materials_volume") or {}
+        if volume.get("attenuationDistance") is not None:
+            found["attenuationDistance"] = float(volume["attenuationDistance"])
         if volume.get("attenuationColor"):
-            found["transmissionColor"] = [float(c) for c in volume["attenuationColor"]]
+            found["attenuationColor"] = [float(c) for c in volume["attenuationColor"]]
     if "KHR_materials_clearcoat" in extensions:
         coat = extensions["KHR_materials_clearcoat"]
-        found["coat"] = float(coat.get("clearcoatFactor", 0.0))
-        found["coatRoughness"] = float(coat.get("clearcoatRoughnessFactor", 0.0))
+        found["clearcoat"] = float(coat.get("clearcoatFactor", 0.0))
+        found["clearcoatRoughness"] = float(coat.get("clearcoatRoughnessFactor", 0.0))
     if "KHR_materials_anisotropy" in extensions:
         found["anisotropy"] = float(extensions["KHR_materials_anisotropy"].get("anisotropyStrength", 0.0))
+        found["anisotropyRotation"] = float(extensions["KHR_materials_anisotropy"].get("anisotropyRotation", 0.0))
     if "KHR_materials_emissive_strength" in extensions:
-        found["emissiveStrength"] = float(extensions["KHR_materials_emissive_strength"].get("emissiveStrength", 1.0))
+        found["emissiveIntensity"] = float(extensions["KHR_materials_emissive_strength"].get("emissiveStrength", 1.0))
     return found
 
 
@@ -223,7 +226,19 @@ def material_of(entry: dict[str, Any]) -> dict[str, Any]:
                              "roughness": float(pbr.get("roughnessFactor", 1.0)), "ior": 1.5,
                              "emissive": [float(value) for value in entry.get("emissiveFactor", (0.0, 0.0, 0.0))]}
     found.update(look_extensions(entry.get("extensions") or {}))
-    return found
+    from bd_materials import FinishedMaterial
+    from bd_materials.core import RangeMaterial
+    from threejs_materials import PbrProperties
+    from cadgen.engine.colors import linear_to_srgb
+    from cadgen.engine.document import material_json
+
+    name = found.pop("name")
+    rgba = found.pop("color")
+    found["color"] = [linear_to_srgb(c) for c in rgba[:3]]
+    found["opacity"] = rgba[3]
+    found["metalness"] = found.pop("metallic")
+    return material_json(FinishedMaterial(RangeMaterial(name=name, density=None),
+        pbr=PbrProperties.from_dict({"id": name, "name": name, "source": "glTF", "values": found})))
 
 
 def read_gltf(path: Path) -> Read:

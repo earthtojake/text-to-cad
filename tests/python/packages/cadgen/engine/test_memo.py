@@ -91,6 +91,29 @@ class HitTest(MemoCase):
         self.assertEqual(hot["hits"], 0)
         self.assertIsNot(box2, box)
 
+    def test_a_restored_result_owns_its_native_materials_and_face_paints(self) -> None:
+        import build123d as bd
+        from bd_materials import metals
+
+        from cadgen.engine import paint
+
+        shape = bd.Box(2, 3, 4)
+        shape.material = metals.aluminum()
+        shape.material.pbr = shape.material.pbr.override(roughness=0.25)
+        face = metals.copper()
+        face.pbr = face.pbr.override(roughness=0.35)
+        paint(shape, shape.faces()[0], face)
+        saved = memo._ShapeState(shape)
+
+        for _ in range(2):
+            shape.material.pbr = shape.material.pbr.override(roughness=0.9)
+            for material in shape.__dict__[memo.FACE_MATERIALS].values():
+                material.pbr.values.roughness = 0.8
+            self.assertIs(saved.restore(), shape)
+            self.assertEqual(shape.material.pbr.values.roughness, 0.25)
+            self.assertEqual([material.pbr.values.roughness for material in
+                              shape.__dict__[memo.FACE_MATERIALS].values()], [0.35])
+
 
 class BooleanTest(MemoCase):
     def test_a_boolean_leaves_its_inputs_and_writes_its_own_pcurves(self) -> None:

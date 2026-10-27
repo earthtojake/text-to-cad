@@ -1,19 +1,19 @@
 """Materials for the Moonwatch model entries.
 
 The original authored named PBR "finishes" (`materials=` on the decorator,
-assigned by leaf label). Here each finish is a `cadgen.Material` set on
+assigned by leaf label). Here each finish is a `bd_materials.FinishedMaterial` set on
 the part itself: the catalogue's entry for the metal, glass or rubber in
-question, in the finish's look (`.but(...)`), or a `Material` of the
-project's own where the catalogue has none (sapphire, ruby, print ink). A
-finish keeps the original's metallic, roughness and clearcoat (`coat`,
-`coat_roughness`) and its old name as the description, and takes the look
+question, in the finish's look (explicit scalar `PbrProperties`), or the project's
+own where the catalogue has none (sapphire, ruby, print ink). A
+finish keeps the original's metalness, roughness and clearcoat (`clearcoat`,
+`clearcoat_roughness`) and its old name as the description, and takes the look
 fields its name implies: brushed, satin and grained steel are anisotropic
 along their grain, a mirror polish is at most 0.1 rough, a polish has no
 grain, and the crystal, the sapphire back and the jewels transmit light at
 their index (sapphire and ruby, corundum, at 1.77), tinted by the part's own
-colour. Every finish keeps `color=None`, so a part stays the colour its
-builder authored (the STEP document remained the source of base colour then
-too).
+colour. Assignments restore the authored colour after setting the native material,
+so a part stays the colour its builder authored (the STEP document remained the
+source of base colour then too).
 
 Assignments use unique authored leaf labels, so factory edits cannot silently
 retarget a finish through occurrence order.
@@ -21,69 +21,127 @@ retarget a finish through occurrence order.
 
 from __future__ import annotations
 
-from cadgen import Material, materials
-
-
-def _finish(base: Material, description: str, **look) -> Material:
-    """A catalogue material in one finish: its name and physical values, the finish's
-    look, the part's own colour."""
-    return base.but(color=None, description=description, **look)
+from bd_materials import FinishedMaterial, glass, metals
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
 
 
 # Corundum, the stone of a jewel and of a sapphire crystal: 3980 kg/m^3, index 1.77.
-SAPPHIRE = Material("Sapphire", 3980.0, family="glass", standard="synthetic corundum, Al2O3",
-                    description="Glass Back", roughness=0.03, ior=1.77, transmission=1.0,
-                    coat=0.02, coat_roughness=0.05)
-RUBY = Material("Ruby", 3980.0, family="other", standard="synthetic corundum, Al2O3:Cr",
-                description="Ruby Jewel (synthetic corundum)", roughness=0.05, ior=1.77,
-                transmission=0.8, coat=1.0, coat_roughness=0.03)
-PRINT_INK = Material("Matte Print", family="other", description="printed ink, no density", roughness=0.85)
+SAPPHIRE = FinishedMaterial(
+    RangeMaterial(name='Sapphire', density=3980.0),
+    pbr=PbrProperties.create('Glass Back', metalness=0.0, roughness=0.03, ior=1.77, transmission=1.0,
+        clearcoat=0.02, clearcoat_roughness=0.05),
+)
+RUBY = FinishedMaterial(
+    RangeMaterial(name='Ruby', density=3980.0),
+    pbr=PbrProperties.create('Ruby Jewel (synthetic corundum)', metalness=0.0, roughness=0.05,
+        ior=1.77, transmission=0.8, clearcoat=1.0, clearcoat_roughness=0.03),
+)
+PRINT_INK = FinishedMaterial(
+    RangeMaterial(name='Matte Print', density=None),
+    pbr=PbrProperties.create('printed ink, no density', metalness=0.0, roughness=0.85),
+)
 # The dial's lacquer and lume: coatings, no density of their own.
-BLACK_LACQUER = Material("Black Lacquer", family="other", description="Black Lacquer", roughness=0.52,
-                         coat=0.35, coat_roughness=0.15)
-LUME = Material("Lume Plot", family="other", description="Lume Plot (luminous paint)", roughness=0.65,
-                coat=0.15, coat_roughness=0.3)
+BLACK_LACQUER = FinishedMaterial(
+    RangeMaterial(name='Black Lacquer', density=None),
+    pbr=PbrProperties.create('Black Lacquer', metalness=0.0, roughness=0.52, clearcoat=0.35,
+        clearcoat_roughness=0.15),
+)
+LUME = FinishedMaterial(
+    RangeMaterial(name='Lume Plot', density=None),
+    pbr=PbrProperties.create('Lume Plot (luminous paint)', metalness=0.0, roughness=0.65,
+        clearcoat=0.15, clearcoat_roughness=0.3),
+)
 
 FINISHES = {
     # old finish name: material (a catalogue entry in the finish, or the project's own)
-    "anglage_mirror": _finish(materials.brass_c360, "Anglage Mirror", metallic=0.9, roughness=0.1,
-                              coat=0.2, coat_roughness=0.08),
-    "bezel_anodized": _finish(materials.aluminium_6061, "Bezel Anodized", metallic=0.35, roughness=0.5,
-                              anisotropy=0.0, coat=0.2, coat_roughness=0.3),
-    "blued_screw": _finish(materials.steel_1018, "Blued Screw", metallic=0.9, roughness=0.14,
-                           coat=0.25, coat_roughness=0.08),
-    "brass_part": _finish(materials.brass_c360, "Brass Part", metallic=0.9, roughness=0.38),
-    "brushed_steel": _finish(materials.stainless_316, "Brushed Steel", metallic=0.9, roughness=0.5,
-                             anisotropy=0.5),
-    "case_mirror_polish": _finish(materials.stainless_316, "Case Mirror Polish", metallic=0.95, roughness=0.08,
-                                  anisotropy=0.0, coat=0.3, coat_roughness=0.05),
+    "anglage_mirror": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Anglage Mirror', metalness=0.9, roughness=0.1, clearcoat=0.2,
+            clearcoat_roughness=0.08),
+    ),
+    "bezel_anodized": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Bezel Anodized', metalness=0.35, roughness=0.5, clearcoat=0.2,
+            clearcoat_roughness=0.3),
+    ),
+    "blued_screw": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Blued Screw', metalness=0.9, roughness=0.14, clearcoat=0.25,
+            clearcoat_roughness=0.08),
+    ),
+    "brass_part": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Brass Part', metalness=0.9, roughness=0.38),
+    ),
+    "brushed_steel": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Brushed Steel', metalness=0.9, roughness=0.5, anisotropy=0.5),
+    ),
+    "case_mirror_polish": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Case Mirror Polish', metalness=0.95, roughness=0.08, clearcoat=0.3,
+            clearcoat_roughness=0.05),
+    ),
     # copper-plated brass bridges
-    "copper_plate": _finish(materials.brass_c360, "Copper Plate", metallic=0.9, roughness=0.34,
-                            coat=0.08, coat_roughness=0.3),
+    "copper_plate": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Copper Plate', metalness=0.9, roughness=0.34, clearcoat=0.08,
+            clearcoat_roughness=0.3),
+    ),
     # gilded brass wheels
-    "gilt_wheel": _finish(materials.brass_c360, "Gilt Wheel", metallic=0.95, roughness=0.24,
-                          coat=0.1, coat_roughness=0.15),
-    "glass": _finish(materials.glass, "Glass", roughness=0.05, coat=0.3, coat_roughness=0.05),
+    "gilt_wheel": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Gilt Wheel', metalness=0.95, roughness=0.24, clearcoat=0.1,
+            clearcoat_roughness=0.15),
+    ),
+    "glass": FinishedMaterial(
+        glass.soda_lime().material,
+        pbr=PbrProperties.create('Glass', metalness=0.0, roughness=0.05, ior=1.52, transmission=1.0,
+            clearcoat=0.3, clearcoat_roughness=0.05, attenuation_color=(0.822786, 0.930111, 0.871367),
+            attenuation_distance=0.05),
+    ),
     "glass_back": SAPPHIRE,
-    "grained_lever": _finish(materials.steel_1018, "Grained Lever", metallic=0.95, roughness=0.34,
-                             anisotropy=0.5, coat=0.08, coat_roughness=0.2),
+    "grained_lever": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Grained Lever', metalness=0.95, roughness=0.34, anisotropy=0.5,
+            clearcoat=0.08, clearcoat_roughness=0.2),
+    ),
     "matte_print": PRINT_INK,
-    "polished_steel": _finish(materials.stainless_304, "Polished Steel", metallic=0.92, roughness=0.12,
-                              anisotropy=0.0, coat=0.25, coat_roughness=0.08),
-    "rubber": _finish(materials.nbr_70a, "Rubber (nitrile gaskets)"),
+    "polished_steel": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Polished Steel', metalness=0.92, roughness=0.12, clearcoat=0.25,
+            clearcoat_roughness=0.08),
+    ),
+    "rubber": FinishedMaterial(
+        RangeMaterial(name='NBR 70A', density=1250.0),
+        pbr=PbrProperties.create('Rubber (nitrile gaskets)', metalness=0.0, roughness=0.9),
+    ),
     "ruby_jewel": RUBY,
-    "satin_steel": _finish(materials.stainless_304, "Satin Steel", metallic=0.95, roughness=0.3,
-                           anisotropy=0.4, coat=0.1, coat_roughness=0.2),
+    "satin_steel": FinishedMaterial(
+        metals.stainless().material,
+        pbr=PbrProperties.create('Satin Steel', metalness=0.95, roughness=0.3, anisotropy=0.4, clearcoat=0.1,
+            clearcoat_roughness=0.2),
+    ),
     # the dial, the hands and the bracelet's polished centre links
     "black_lacquer": BLACK_LACQUER,
-    "dial_polished_furniture": _finish(materials.stainless_316, "Dial Polished Furniture", metallic=0.95,
-                                       roughness=0.1, anisotropy=0.0, coat=0.2, coat_roughness=0.08),
+    "dial_polished_furniture": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Dial Polished Furniture', metalness=0.95, roughness=0.1, clearcoat=0.2,
+            clearcoat_roughness=0.08),
+    ),
     "lume_plot": LUME,
     # painted steel hands
-    "painted_hand": _finish(materials.steel_1018, "Painted Hand", metallic=0.25, roughness=0.28,
-                            coat=0.6, coat_roughness=0.1),
-    "polished_link": _finish(materials.stainless_316, "Polished Link", metallic=0.88, roughness=0.22,
-                             anisotropy=0.0, coat=0.15, coat_roughness=0.1),
+    "painted_hand": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Painted Hand', metalness=0.25, roughness=0.28, clearcoat=0.6,
+            clearcoat_roughness=0.1),
+    ),
+    "polished_link": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Polished Link', metalness=0.88, roughness=0.22, clearcoat=0.15,
+            clearcoat_roughness=0.1),
+    ),
 }
 
 MODEL_MATERIAL_ASSIGNMENTS = {
@@ -253,7 +311,9 @@ def apply_materials(parts, model: str):
     for leaf in (leaf for part in parts for leaf in _leaves(part)):
         material = wanted.get(leaf.label)
         if material is not None:
+            color = leaf.color
             leaf.material = material
+            leaf.color = color
             found.add(leaf.label)
     missing = sorted(set(wanted) - found)
     if missing:

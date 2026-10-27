@@ -154,7 +154,8 @@ is the script's folder; two explicit names in it must differ.
   the kernel loads on first use, in the worker. `from build123d import Box`, or a
   module-level `bd.Color(...)` or `bd.Align` default, loads it at that line instead.
 - **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"`, or 0-255
-  integers. Materials are values on the part: `part.material = materials.aluminium_6061`
+  integers. Import `metals` from `bd_materials`; assign a native material with
+  `part.material = metals.aluminum()`
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
 - **Inputs** are `read_step`, `read_xbf` and `read_mesh` in the body, and any file its
   Python opens, each tracked by its bytes. The clock, environment variables and

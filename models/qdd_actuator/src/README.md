@@ -14,8 +14,8 @@ saved under 0.1 s of an edit (see "When to use `@memo`" in `models/README.md`).
 
 Materials: `_label(shape, name, *details, color=, material=)` gives every part a
 material beside its colour, from the concept materials under the palette, each a
-catalogue entry in the finish its colour names, with `color=None` so the palette
-shows: bead-blasted, hard-anodised Aluminum 6061-T6 (housing, retainer, rear cover),
+native `bd_materials.FinishedMaterial` with explicit scalar PBR. `_label` restores
+the palette colour after material assignment. The finishes are: bead-blasted, hard-anodised Aluminum 6061-T6 (housing, retainer, rear cover),
 machined 7075-T6 (carrier, output flange), anodised 6063-T5 (cable tube); Steel
 4140 black oxide (screws), ground (gears) and as bearing steel (races, balls,
 rollers); Steel 1018 (laminations under varnish, rotor bell, connector collars);

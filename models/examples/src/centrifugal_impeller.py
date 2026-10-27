@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import model
 from math import asin, cos, hypot, radians, sin, tau
 
 import build123d as bd
@@ -215,7 +219,12 @@ def centrifugal_impeller():
 
     part.label = MODEL_LABEL
     part.color = bd.Color("#ced4da")
-    part.material = materials.aluminium_6061.but(color=None)
+    authored_color = part.color
+    part.material = FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Aluminum 6061-T6', metalness=1.0, roughness=0.35, anisotropy=0.3),
+    )
+    part.color = authored_color
     return part
 
 

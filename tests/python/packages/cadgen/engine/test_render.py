@@ -54,27 +54,42 @@ PLATFORM = context.platform()  # a row a platform draws apart has a golden of it
 BENCH = """
 import build123d as bd
 from cadgen.ap242 import mechanism_state
-from cadgen.engine import Material, materials, paint, xbf
+from cadgen.engine import paint, xbf
+from bd_materials import FinishedMaterial, metals, plastics, glass
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
 
-LACQUER = Material("Red lacquer", 1200, family="other", color="#cb2727", roughness=0.4, coat=1.0,
-                   coat_roughness=0.05)
+LACQUER = FinishedMaterial(RangeMaterial(name="Red lacquer", density=1200),
+    pbr=PbrProperties.create("lacquer", color="#cb2727", metalness=0, roughness=0.4,
+                             clearcoat=1, clearcoat_roughness=0.05))
+STEEL = FinishedMaterial(metals.mild_steel().material,
+    pbr=PbrProperties.create("steel", color="#c5c7c8", metalness=1, roughness=0.4))
+ALUMINUM = FinishedMaterial(metals.aluminum().material,
+    pbr=PbrProperties.create("aluminum", color="#f5f6f6", metalness=1, roughness=0.35, anisotropy=0.3))
+PLA = FinishedMaterial(plastics.pla().material,
+    pbr=PbrProperties.create("PLA", color="#ededeB", metalness=0, roughness=0.45))
+GLASS = FinishedMaterial(glass.soda_lime().material,
+    pbr=PbrProperties.create("glass", color="#ffffff", metalness=0, roughness=0.02, ior=1.52,
+        transmission=1, attenuation_color=(0.822786, 0.930111, 0.871367), attenuation_distance=0.05))
+STAINLESS = FinishedMaterial(metals.stainless().material,
+    pbr=PbrProperties.create("stainless", color="#d6d4d1", metalness=1, roughness=0.3, anisotropy=0.3))
 
 
 @xbf("XBF/bench.xbf")
 def bench():
     block = bd.Box(30, 30, 30)
-    block.label, block.material = "block", materials.steel_1018
+    block.label, block.material = "block", STEEL
     plate = bd.Pos(50, 0, -10) * bd.Box(40, 30, 4)
-    plate.label, plate.material = "plate", materials("6061")
+    plate.label, plate.material = "plate", ALUMINUM
     print_ = bd.Pos(100, 0, 0) * bd.Cylinder(12, 30)
-    print_.label, print_.material = "print", materials.pla
+    print_.label, print_.material = "print", PLA
     pane = bd.Box(40, 3, 30, align=(bd.Align.CENTER, bd.Align.MIN, bd.Align.MIN))
-    pane.label, pane.material = "pane", materials.glass
+    pane.label, pane.material = "pane", GLASS
     paint(print_, print_.faces().sort_by(bd.Axis.Z)[-1], LACQUER)
     left = bd.Pos(0, -50, 0) * bd.Box(10, 10, 10)
-    left.label, left.material = "left", materials.stainless_304
+    left.label, left.material = "left", STAINLESS
     right = left.moved(bd.Location((20, 0, 0)))
-    right.label, right.material = "right", materials.stainless_304.but(anisotropy=0.0, roughness=0.2)
+    right.label, right.material = "right", FinishedMaterial(STAINLESS.material, pbr=STAINLESS.pbr.override(roughness=0.2, anisotropy=0))
     bd.RevoluteJoint("hinge", plate, axis=bd.Axis((0, 15, 2), (1, 0, 0)), angular_range=(-90, 90))
     bd.RigidJoint("foot", pane, joint_location=bd.Location((0, 0, 0), (0, 90, 0)))
     plate.joints["hinge"].connect_to(pane.joints["foot"], angle=0)

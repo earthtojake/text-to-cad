@@ -24,7 +24,8 @@ SRC = Path(__file__).resolve().parents[5] / "packages" / "cadgen" / "src"
 HINGE = """
 import pathlib
 import build123d as bd
-from cadgen import model, materials
+from cadgen import model
+from bd_materials import metals
 from cadgen.ap242 import configuration_sequence, mechanism_state
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
@@ -35,7 +36,7 @@ def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"
-    base.material = materials.aluminium_6061
+    base.material = metals.aluminum()
     elbow = bd.Axis((40, 0, 20), (0, -1, 0))
     bd.RevoluteJoint("elbow", base, axis=elbow, angular_range=(-10, 120))
     bd.RigidJoint("elbow", arm, bd.Plane(origin=elbow.position, z_dir=elbow.direction).location)
@@ -94,14 +95,14 @@ class SummaryTest(unittest.TestCase):
         listed = self.run_("-m", "cadgen.engine", "inspect", ident, "--query", "structure")
         self.assertEqual(listed.returncode, 0, listed.stderr)
         lines = listed.stdout.splitlines()
-        self.assertEqual(lines[2:7], ["parts       2 in hinge", "materials", "  Aluminum 6061-T6: hinge/base",
+        self.assertEqual(lines[2:7], ["parts       2 in hinge", "materials", "  Alu_G6061_T6: hinge/base",
                                       "  no material: hinge/arm", "joints"])
         self.assertIn("closure", lines)
         data = self.run_("-m", "cadgen.engine", "inspect", ident, "--query", "structure", "--json")
         self.assertEqual(data.returncode, 0, data.stderr)
         structure = json.loads(data.stdout)["summary"]
         self.assertFalse({"bounds", "volume", "mass"} & set(structure), structure)
-        self.assertEqual(structure["materials"], [{"name": "Aluminum 6061-T6", "density": 2700.0, "parts": ["hinge/base"]}])
+        self.assertEqual(structure["materials"], [{"name": "Alu_G6061_T6", "density": 2700.0, "parts": ["hinge/base"]}])
         self.assertEqual(structure["states"], [{"name": "open", "values": {"elbow": 90.0}}])
         self.assertEqual(self.facts(), 0, "a structure measures nothing")
 
@@ -115,7 +116,7 @@ class SummaryTest(unittest.TestCase):
             "bounds      210 x 60 x 30 mm, from (-50, -30, 0)",
             "volume      144,000 mm^3",
             "materials   0.324 kg in all",
-            "  Aluminum 6061-T6: 0.324 kg, hinge/base",
+            "  Alu_G6061_T6: 0.324 kg, hinge/base",
             "  no material: hinge/arm",
             "joints",
             "  elbow  revolute  -10 to 120 deg, as built 0",
@@ -197,6 +198,29 @@ class CouplingsTest(unittest.TestCase):
 
 
 class SummaryTextTest(unittest.TestCase):
+    def test_a_named_native_material_without_density_is_listed_as_unweighed(self) -> None:
+        from bd_materials import FinishedMaterial
+        from bd_materials.core import RangeMaterial
+        from threejs_materials import PbrProperties
+
+        from cadgen.engine import document
+        from cadgen.engine.api import _summary
+
+        material = FinishedMaterial(RangeMaterial(name="Imported paint", density=None),
+                                    pbr=PbrProperties.create("Paint", color="#ff0000"))
+        structure = {"name": "part", "prototypes": [{"key": "k", "material": document.material_json(material)}],
+                     "instances": [{"prototype": 0, "path": "part"}], "tree": {"name": "part"}}
+        for measured in (False, True):
+            with self.subTest(measured=measured):
+                summary = _summary(structure, Path("part.xbf"), lambda *_: {"k": {"volume": 1000}},
+                                   "id", measured=measured)
+                self.assertEqual(summary["unweighed"], ["part"])
+                row = {"name": "Imported paint", "density": None, "parts": ["part"]}
+                if measured:
+                    row["mass"] = None
+                    self.assertIsNone(summary["mass"])
+                self.assertEqual(summary["materials"], [row])
+
     def test_names_a_file_carries_are_printed_without_their_control_characters(self) -> None:
         # A third-party STEP's product names reach the terminal: OCCT keeps an ESC in them.
         from cadgen.engine.cli import summary_text

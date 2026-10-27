@@ -15,6 +15,8 @@ no B-rep: no xbf, STEP or DXF is made from one (``export.translate``)."""
 
 from __future__ import annotations
 
+from cadgen.engine.document import material_color, material_from_json
+
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -98,9 +100,9 @@ def _glb(path: Path) -> tuple[list[tuple], list[tuple], dict[str, Any]]:
             # One look for every primitive: the part's own.
             own = looks[0] if looks else None
             parts.append((part.name, mesh_of(part.points, part.triangles, None, part.normals),
-                          None if own is None else tuple(own["color"]), {}, own, {}))
+                          None if own is None else material_color(material_from_json(own)), {}, own, {}))
             continue
-        face_colors = {at: tuple(look["color"]) for at, look in enumerate(looks, 1) if look is not None}
+        face_colors = {at: material_color(material_from_json(look)) for at, look in enumerate(looks, 1) if look is not None}
         face_materials = {at: look for at, look in enumerate(looks, 1) if look is not None}
         parts.append((part.name, mesh_of(part.points, part.triangles, part.faces, part.normals), None, face_colors,
                       None, face_materials))

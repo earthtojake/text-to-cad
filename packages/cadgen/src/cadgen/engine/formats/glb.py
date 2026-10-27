@@ -235,9 +235,12 @@ def _vis_material(label: Any, authored: list[dict[str, Any]]) -> tuple[tuple, di
     colour = tuple(round(float(c), 6) for c in colour)
     raw = material.RawName()
     name = raw.ToCString() if raw is not None else _name(label)
-    found: dict[str, Any] = {"name": name or "glTF material", "color": list(colour), "metallic": round(metallic, 6),
-                             "roughness": round(roughness, 6), "ior": round(ior, 6), "emissive": emissive}
-    found.update(look_extensions(_extensions(authored, name, colour, metallic, roughness)))
+    from cadgen.engine.formats.gltf import material_of
+
+    found = material_of({"name": name or "glTF material", "alphaMode": "BLEND" if colour[3] < 1 else "OPAQUE",
+                         "pbrMetallicRoughness": {"baseColorFactor": colour, "metallicFactor": round(metallic, 6),
+                                                 "roughnessFactor": round(roughness, 6)}, "emissiveFactor": emissive,
+                         "extensions": _extensions(authored, name, colour, metallic, roughness)})
     aspect = Graphic3d_AspectFillArea3d()
     material.FillAspect(aspect)
     texture = aspect.TextureSet() if aspect.ToMapTexture() else None

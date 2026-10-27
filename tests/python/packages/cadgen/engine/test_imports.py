@@ -24,14 +24,15 @@ from tests.python.support import engine_cache
 KIT = """
 import build123d as bd
 from cadgen.ap242 import mechanism_state
-from cadgen.engine import materials, paint, step, xbf
+from cadgen.engine import paint, step, xbf
+from bd_materials import metals
 
 
 @xbf("XBF/kit.xbf")
 @step("kit.step")
 def kit():
     base = bd.Box(10, 10, 5)
-    base.label, base.color, base.material = "base", bd.Color(0.2, 0.4, 0.6), materials.aluminium
+    base.label, base.material, base.color = "base", metals.aluminum(), bd.Color(0.2, 0.4, 0.6)
     peg = bd.Pos(20, 0, 0) * bd.Cylinder(3, 8)
     peg.label, peg.color = "peg", bd.Color(0.9, 0.1, 0.1)
     other = peg.moved(bd.Location((0, 20, 0)))
@@ -113,7 +114,7 @@ class ImportTest(unittest.TestCase):
         built = document.Loaded(self.folder / "XBF/kit.xbf").structure()
         self.assertEqual([(p["name"], p["color"], p["faceNames"]) for p in from_xbf["prototypes"]],
                          [(p["name"], p["color"], p["faceNames"]) for p in built["prototypes"]])
-        self.assertEqual(from_xbf["prototypes"][0]["material"]["name"], built["prototypes"][0]["material"]["name"])
+        self.assertEqual(from_xbf["prototypes"][0]["material"]["material"]["name"], built["prototypes"][0]["material"]["material"]["name"])
         self.assertEqual([i["path"].split("/")[-1] for i in from_xbf["instances"]], ["base", "peg", "other"])
 
     def test_read_xbf_copies_parts_and_paints_but_no_mechanism(self) -> None:

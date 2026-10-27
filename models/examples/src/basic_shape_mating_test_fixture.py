@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from cadgen import materials, model
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+
+from cadgen import model
 
 from math import sqrt
 
@@ -288,8 +292,12 @@ def basic_shape_mating_test_fixture():
         label="basic_shape_mating_test_fixture",
     )
     # One material for every part: bead-blasted aluminium anodised in each part's own colour.
-    fixture.material = materials.aluminium_6061.but(
-        color=None, roughness=0.6, anisotropy=0.0, description="Bead-blasted 6061-T6, colour-anodised")
+    authored_color = fixture.color
+    fixture.material = FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Bead-blasted 6061-T6, colour-anodised', metalness=1.0, roughness=0.6),
+    )
+    fixture.color = authored_color
     return fixture
 
 

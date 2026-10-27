@@ -35,11 +35,11 @@ __all__ = [
 
 def paint(shape, name, *details, color, material):
     """Assign native label + color metadata (``name:detail``) and the part's
-    material (a ``spec`` finish: its colour None, so ``color`` shows), and return
-    the shape."""
+    material (a native ``spec`` finish), then its authored palette colour.
+    Return the shape."""
     shape.label = ":".join("_".join(str(token).replace(":", "_").split()) for token in (name, *details))
-    shape.color = bd.Color(color)
     shape.material = material
+    shape.color = bd.Color(color)
     return shape
 
 

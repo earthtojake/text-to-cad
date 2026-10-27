@@ -15,7 +15,8 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen.engine import build as engine_build
-from cadgen.engine import document, materials
+from cadgen.engine import document
+from bd_materials import metals
 from cadgen.engine.colors import linear
 from cadgen.engine.model import Model, step, stl, xbf
 
@@ -152,7 +153,7 @@ class BuildTest(EngineCase):
         self.assertEqual(len(bracket.key), 32)
         # What wrote it is on the document's main label; where its code is, in its build closure
         # alone, relative to the document; no absolute path anywhere.
-        self.assertRegex(loaded.writer, r"^cadgen\.engine xbf/8 \(cadgen .+\)$")
+        self.assertRegex(loaded.writer, r"^cadgen\.engine xbf/9 \(cadgen .+\)$")
         raw = (self.folder / "out/frame.xbf").read_bytes()
         self.assertEqual(loaded.closure["source"]["path"], "../frame.py")
         self.assertNotIn(b"frame.py", raw.replace(json.dumps(loaded.closure, separators=(",", ":")).encode(), b""))
@@ -437,11 +438,12 @@ class ChildFilesTest(EngineCase):
 
 KIT = """
 import build123d as bd
-from cadgen.engine import materials, paint, step, xbf
+from cadgen.engine import paint, step, xbf
+from bd_materials import FinishedMaterial, metals
 
 LEFT = {left}
 RIGHT = {right}
-PIN = materials.{pin}
+PIN = {pin}
 TOP = bd.Color({top})
 PINS = {pins}
 
@@ -457,7 +459,7 @@ def left():
     pin.material = PIN
     peg = bd.Pos(3, 0, 4) * bd.Cylinder(1, 4)
     peg.label = "peg"
-    peg.material = materials.steel
+    peg.material = metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN)
     return bd.Compound(children=[plate, pin, peg][:PINS + 1], label="left")
 
 
@@ -468,7 +470,7 @@ def right():
     block.color = bd.Color(0.8, 0.1, 0.1)
     cap = bd.Pos(0, 0, 3) * bd.Box(2, 2, 2)
     cap.label = "cap"
-    cap.material = materials.aluminium
+    cap.material = metals.aluminum()
     bd.RevoluteJoint("hinge", block, axis=bd.Axis((0, 0, 2), (0, 1, 0)), angular_range=(-10, 90))
     bd.RigidJoint("seat", cap)
     block.joints["hinge"].connect_to(cap.joints["seat"], angle=20)
@@ -490,7 +492,7 @@ class PatchTest(EngineCase):
     """A warm build patches the document it last wrote: the prototypes it changed are made
     again in place, the rest keep their labels, and the file is the cold build's bytes."""
 
-    BASE = dict(left=10, right=6, pin="steel", top="0.1, 0.9, 0.1", pins=2)
+    BASE = dict(left=10, right=6, pin="metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN)", top="0.1, 0.9, 0.1", pins=2)
 
     def setUp(self) -> None:
         from cadgen.engine.kernel import memo
@@ -562,21 +564,21 @@ class PatchTest(EngineCase):
     def test_a_changed_material_or_paint_converts_its_prototype(self) -> None:
         self.kit()
         # Aluminium is the cap's too, and now comes first: the materials are numbered anew.
-        self.assertEqual(self.patched(pin="aluminium")["converted"]["converted"], 3)
+        self.assertEqual(self.patched(pin="metals.aluminum()")["converted"]["converted"], 3)
         pin = next(p for p in document.Loaded(self.xbf).prototypes if p.name == "pin")
-        self.assertEqual(pin.material.name, materials.aluminium.name)
-        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="aluminium"))
-        self.patched(pin="aluminium", top="0.9, 0.9, 0.1")
+        self.assertEqual(pin.material.name, metals.aluminum().name)
+        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="metals.aluminum()"))
+        self.patched(pin="metals.aluminum()", top="0.9, 0.9, 0.1")
         plate = next(p for p in document.Loaded(self.xbf).prototypes if p.name == "plate")
         import build123d as bd
 
         self.assertIn(tuple(linear(bd.Color(0.9, 0.9, 0.1))), plate.face_colors.values())
-        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="aluminium", top="0.9, 0.9, 0.1"))
+        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="metals.aluminum()", top="0.9, 0.9, 0.1"))
         # A field the file keeps beside XCAF's own (a coat) converts it too.
-        self.patched(pin="aluminium.but(coat=0.5)", top="0.9, 0.9, 0.1")
+        self.patched(pin="FinishedMaterial(metals.aluminum().material, pbr=metals.aluminum().pbr.override(clearcoat=0.5))", top="0.9, 0.9, 0.1")
         pin = next(p for p in document.Loaded(self.xbf).prototypes if p.name == "pin")
-        self.assertEqual(pin.material.coat, 0.5)
-        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="aluminium.but(coat=0.5)", top="0.9, 0.9, 0.1"))
+        self.assertEqual(pin.material.pbr.values.clearcoat, 0.5)
+        self.assertEqual(self.xbf.read_bytes(), self.cold(pin="FinishedMaterial(metals.aluminum().material, pbr=metals.aluminum().pbr.override(clearcoat=0.5))", top="0.9, 0.9, 0.1"))
 
     def test_the_served_document_is_the_written_one(self) -> None:
         import json

@@ -218,19 +218,22 @@ def finish(rgba: Any, material: dict[str, Any] | None) -> dict[str, Any]:
         return {"color": tuple(value ** LOOK.colour_power for value in colour), "alpha": alpha,
                 "metallic": LOOK.plain.metallic, "roughness": LOOK.plain.roughness, "ior": LOOK.plain.ior,
                 "emission": (0.0, 0.0, 0.0)}
+    if material["pbr"].get("textures"):
+        raise ValueError("OCCT snapshots of native material texture maps require UV mapping; use a scalar PBR look")
+    material = material["pbr"]["values"]
     roughness = float(material.get("roughness") if material.get("roughness") is not None else 0.5)
-    coat = float(material.get("coat") or 0.0)
+    coat = float(material.get("clearcoat") or 0.0)
     if coat > 0:
-        target = float(material.get("coatRoughness") or 0.0)
+        target = float(material.get("clearcoatRoughness") or 0.0)
         roughness += (target - roughness) * COAT_ROUGHNESS * coat
     transmission = float(material.get("transmission") or 0.0)
     if transmission > 0:
-        tint = material.get("transmissionColor") or (1.0, 1.0, 1.0)
+        tint = material.get("attenuationColor") or (1.0, 1.0, 1.0)
         colour = tuple(c * float(t) for c, t in zip(colour, tint))
         alpha *= 1 - TRANSMISSION_OPACITY * transmission
-    strength = float(material.get("emissiveStrength") if material.get("emissiveStrength") is not None else 1.0)
+    strength = float(material.get("emissiveIntensity") if material.get("emissiveIntensity") is not None else 1.0)
     emission = tuple(float(value) * strength for value in (material.get("emissive") or (0.0, 0.0, 0.0)))
-    return {"color": colour, "alpha": alpha, "metallic": float(material.get("metallic") or 0.0),
+    return {"color": colour, "alpha": alpha, "metallic": float(material.get("metalness") or 0.0),
             "roughness": roughness, "ior": float(material.get("ior") or 1.5), "emission": emission}
 
 

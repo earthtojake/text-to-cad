@@ -320,7 +320,7 @@ usually a sliver a boolean left.
 
 ## Mass properties
 
-A part given a material (`part.material = materials.aluminium_6061`,
+A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
 `cadgen inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
 

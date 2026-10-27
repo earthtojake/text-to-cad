@@ -19,7 +19,7 @@ HEAVY = ("OCP", "build123d")
 
 # The engine's names the root re-exports, and the operations on documents as functions; process
 # control (serve, status, stop, daemon) is the CLI's alone.
-ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "Material", "materials", "paint",
+ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
 VERBS = ("export", "snapshot", "inspect")
 ROOT = (*ENGINE, *VERBS, "__version__")
@@ -44,6 +44,8 @@ class RootExports(unittest.TestCase):
 
         self.assertEqual(sorted(ROOT), sorted(cadgen.__all__))
         self.assertEqual(sorted(cadgen.engine.__all__), sorted(ENGINE))
+        for name in ("Material", "materials"):
+            self.assertFalse(hasattr(cadgen.engine, name), f"materials come from bd_materials: {name}")
         for name in ENGINE:
             with self.subTest(name=name):
                 self.assertIs(getattr(cadgen, name), getattr(cadgen.engine, name))
@@ -101,7 +103,7 @@ class RootExports(unittest.TestCase):
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.
         # ``build`` among them: a model builds by a decorated function's call, never cadgen.build (law 12).
-        for name in ("build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
+        for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
                      "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "build123d"):
             with self.subTest(name=name), self.assertRaises(AttributeError) as caught:

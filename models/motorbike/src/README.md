@@ -71,8 +71,8 @@ from lib import chassis as B
 Every part is painted with `lib.paint(shape, name, *details, color=, material=)`:
 its label, its palette colour and its material, one of the `lib/spec.py`
 materials beside the palette. Each is a catalogue entry in the finish the part
-wears (`materials.steel_1018.but(...)`), with `color=None`, so the palette is
-the colour that shows and the material adds the finish:
+wears (`bd_materials.FinishedMaterial` with explicit scalar `PbrProperties`).
+The paint helper applies the native material before the authored palette colour:
 
 | Parts | Material | Finish |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-"""Material and color language for the W16, authored as the sRGB hex a shape takes.
+"""FinishedMaterial and color language for the W16, authored as the sRGB hex a shape takes.
 
 Four surface languages, kept distinct (see the brief):
   CAST      raw cast alloy — block, heads, sump, turbo centre housings
@@ -13,9 +13,12 @@ by its colour.
 
 from __future__ import annotations
 
-import build123d as bd
+from bd_materials import FinishedMaterial, metals, plastics
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
 
-from cadgen import Material, materials
+
+import build123d as bd
 
 
 CAST = "#7f8288"           # raw cast alloy, warm mid grey (reads matte next to MACHINED)
@@ -50,61 +53,128 @@ LENS_CLEAR = "#9fb3c859"
 # ---------------------------------------------------------------------------
 # Finishes: what a part of each colour is made of, in the look it wears. Each is
 # the catalogue's material (its density and physical numbers) in the original
-# finish's look (metallic, roughness, clear coat), with `color=None`, so the
-# colour above stays the one that shows. Inconel and the heat wrap are the
+# finish's look (metalness, roughness, clearcoat), with an explicit native PBR look.
+# The colour above is assigned after the material. Inconel and the heat wrap are the
 # project's own: the catalogue has neither.
 # ---------------------------------------------------------------------------
 
-INCONEL_625 = Material(
-    "Inconel 625", 8440.0, family="metal", standard="UNS N06625",
-    source="typical: Special Metals datasheet", description="Nickel superalloy exhaust tube",
-    metallic=0.88, roughness=0.36)
-HEAT_WRAP = Material(
-    "Heat wrap", None, family="other", description="Basalt-fibre heat wrap, gold foil faced",
-    roughness=0.95, metallic=0.1)
-
-
-def _finish(base, description, *, metallic, roughness, coat=0.0, coat_roughness=0.0, **look):
-    return base.but(color=None, description=description, metallic=metallic, roughness=roughness,
-                    anisotropy=0.0, coat=coat, coat_roughness=coat_roughness, **look)
+INCONEL_625 = FinishedMaterial(
+    RangeMaterial(name='Inconel 625', density=8440.0),
+    pbr=PbrProperties.create('Nickel superalloy exhaust tube', metalness=0.88, roughness=0.36),
+)
+HEAT_WRAP = FinishedMaterial(
+    RangeMaterial(name='Heat wrap', density=None),
+    pbr=PbrProperties.create('Basalt-fibre heat wrap, gold foil faced', metalness=0.1, roughness=0.95),
+)
 
 
 FINISHES = {
-    "aluminium_tube": _finish(materials.aluminium_6063, "Mandrel-bent aluminium tube, satin",
-                              metallic=0.85, roughness=0.42),
-    "belt": _finish(materials.nbr_70a, "Ribbed accessory belt", metallic=0.0, roughness=0.92),
-    "brass": _finish(materials.brass_c360, "Brass", metallic=0.9, roughness=0.34),
-    "carbon": _finish(materials.carbon_fibre_laminate, "Carbon composite, clear-coated",
-                      metallic=0.05, roughness=0.32, coat=1.0, coat_roughness=0.12),
-    "cast": _finish(materials.aluminium_6061, "Cast aluminium, as cast", metallic=0.3, roughness=0.82),
-    "cast_dark": _finish(materials.aluminium_6061, "Cast aluminium, as-cast texture",
-                         metallic=0.25, roughness=0.88),
-    "composite": _finish(materials.nylon_pa6_cf, "Dark composite", metallic=0.15, roughness=0.55),
-    "copper": _finish(materials.copper_c110, "Copper", metallic=0.9, roughness=0.34),
-    "gasket": _finish(materials.nbr_70a, "Gasket", metallic=0.0, roughness=0.9),
+    "aluminium_tube": FinishedMaterial(
+        RangeMaterial(name='Aluminum 6063-T5', density=2700.0),
+        pbr=PbrProperties.create('Mandrel-bent aluminium tube, satin', metalness=0.85, roughness=0.42),
+    ),
+    "belt": FinishedMaterial(
+        RangeMaterial(name='NBR 70A', density=1250.0),
+        pbr=PbrProperties.create('Ribbed accessory belt', metalness=0.0, roughness=0.92),
+    ),
+    "brass": FinishedMaterial(
+        metals.brass().material,
+        pbr=PbrProperties.create('Brass', metalness=0.9, roughness=0.34),
+    ),
+    "carbon": FinishedMaterial(
+        plastics.cfrp().material,
+        pbr=PbrProperties.create('Carbon composite, clear-coated', metalness=0.05, roughness=0.32,
+            clearcoat=1.0, clearcoat_roughness=0.12),
+    ),
+    "cast": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Cast aluminium, as cast', metalness=0.3, roughness=0.82),
+    ),
+    "cast_dark": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Cast aluminium, as-cast texture', metalness=0.25, roughness=0.88),
+    ),
+    "composite": FinishedMaterial(
+        RangeMaterial(name='Nylon PA6-CF', density=1170.0),
+        pbr=PbrProperties.create('Dark composite', metalness=0.15, roughness=0.55),
+    ),
+    "copper": FinishedMaterial(
+        metals.copper().material,
+        pbr=PbrProperties.create('Copper', metalness=0.9, roughness=0.34),
+    ),
+    "gasket": FinishedMaterial(
+        RangeMaterial(name='NBR 70A', density=1250.0),
+        pbr=PbrProperties.create('Gasket', metalness=0.0, roughness=0.9),
+    ),
     "gold_heat_wrap": HEAT_WRAP,
-    "heat_tint": _finish(materials.stainless_316, "Turbine housing, heat-tinted",
-                         metallic=0.8, roughness=0.4, coat=0.6, coat_roughness=0.3),
-    "heat_tint_blue": _finish(materials.stainless_316, "Turbine housing, blue heat band",
-                              metallic=0.8, roughness=0.36, coat=0.6, coat_roughness=0.25),
-    "heat_tint_bronze": _finish(materials.stainless_316, "Turbine inlet, bronze heat band",
-                                metallic=0.8, roughness=0.38, coat=0.6, coat_roughness=0.28),
-    "hose": _finish(materials.silicone_50a, "Hose", metallic=0.0, roughness=0.85),
+    "heat_tint": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Turbine housing, heat-tinted', metalness=0.8, roughness=0.4, clearcoat=0.6,
+            clearcoat_roughness=0.3),
+    ),
+    "heat_tint_blue": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Turbine housing, blue heat band', metalness=0.8, roughness=0.36,
+            clearcoat=0.6, clearcoat_roughness=0.25),
+    ),
+    "heat_tint_bronze": FinishedMaterial(
+        metals.stainless(metals.Stainless.G316L_ANNEALED).material,
+        pbr=PbrProperties.create('Turbine inlet, bronze heat band', metalness=0.8, roughness=0.38,
+            clearcoat=0.6, clearcoat_roughness=0.28),
+    ),
+    "hose": FinishedMaterial(
+        RangeMaterial(name='Silicone 50A', density=1150.0),
+        pbr=PbrProperties.create('Hose', metalness=0.0, roughness=0.85),
+    ),
     "inconel": INCONEL_625,
-    "intercooler_core": _finish(materials.aluminium_6063, "Brazed aluminium intercooler core",
-                                metallic=0.6, roughness=0.62),
-    "lens_clear": _finish(materials.polycarbonate, "Clear lens", metallic=0.0, roughness=0.1),
-    "machined": _finish(materials.aluminium_6061, "Machined aluminium", metallic=0.92, roughness=0.26),
-    "machined_steel": _finish(materials.steel_4140, "Ground steel", metallic=0.95, roughness=0.22),
-    "oil_filter": _finish(materials.steel_1018, "Painted filter canister", metallic=0.3, roughness=0.5),
-    "red_anodise": _finish(materials.aluminium_6061, "Red anodised aluminium", metallic=0.55, roughness=0.4),
-    "rubber": _finish(materials.nbr_70a, "Rubber", metallic=0.0, roughness=0.92),
-    "steel": _finish(materials.steel_1018, "Zinc-plated steel", metallic=0.9, roughness=0.3),
-    "steel_blue": _finish(materials.steel_spring_1095, "Heat-treated spring steel, blued",
-                          metallic=0.8, roughness=0.35),
-    "steel_dark": _finish(materials.steel_4140, "Black-oxide steel", metallic=0.7, roughness=0.55),
-    "titanium": _finish(materials.titanium_grade5, "Titanium", metallic=0.85, roughness=0.38),
-    "titanium_dark": _finish(materials.titanium_grade5, "Anodised titanium", metallic=0.7, roughness=0.48),
+    "intercooler_core": FinishedMaterial(
+        RangeMaterial(name='Aluminum 6063-T5', density=2700.0),
+        pbr=PbrProperties.create('Brazed aluminium intercooler core', metalness=0.6, roughness=0.62),
+    ),
+    "lens_clear": FinishedMaterial(
+        plastics.pc().material,
+        pbr=PbrProperties.create('Clear lens', metalness=0.0, roughness=0.1, ior=1.586, transmission=0.9),
+    ),
+    "machined": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Machined aluminium', metalness=0.92, roughness=0.26),
+    ),
+    "machined_steel": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Ground steel', metalness=0.95, roughness=0.22),
+    ),
+    "oil_filter": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Painted filter canister', metalness=0.3, roughness=0.5),
+    ),
+    "red_anodise": FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Red anodised aluminium', metalness=0.55, roughness=0.4),
+    ),
+    "rubber": FinishedMaterial(
+        RangeMaterial(name='NBR 70A', density=1250.0),
+        pbr=PbrProperties.create('Rubber', metalness=0.0, roughness=0.92),
+    ),
+    "steel": FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Zinc-plated steel', metalness=0.9, roughness=0.3),
+    ),
+    "steel_blue": FinishedMaterial(
+        RangeMaterial(name='Spring steel 1095', density=7850.0),
+        pbr=PbrProperties.create('Heat-treated spring steel, blued', metalness=0.8, roughness=0.35),
+    ),
+    "steel_dark": FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Black-oxide steel', metalness=0.7, roughness=0.55),
+    ),
+    "titanium": FinishedMaterial(
+        metals.titanium().material,
+        pbr=PbrProperties.create('Titanium', metalness=0.85, roughness=0.38),
+    ),
+    "titanium_dark": FinishedMaterial(
+        metals.titanium().material,
+        pbr=PbrProperties.create('Anodised titanium', metalness=0.7, roughness=0.48),
+    ),
 }
 
 FINISH_COLORS = {
@@ -157,7 +227,9 @@ def apply_finishes(assembly):
         finish = by_color.get(_color_key(part.color))
         if finish is None:
             raise ValueError(f"{part.label} has no W16 finish for color {part.color}")
+        color = part.color
         part.material = finish
+        part.color = color
     return assembly
 
 

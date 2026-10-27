@@ -17,7 +17,11 @@ Clearances target a tuned 0.4 mm-nozzle FDM printer:
 - 0.2 mm radial scallop between each knuckle and the opposite plate
 """
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cadgen import model
 
 import build123d as bd
 
@@ -148,7 +152,12 @@ def print_in_place_hinge():
     bd.RevoluteJoint("hinge_articulation", leaf_a, axis=axis)
     bd.RigidJoint("hinge_articulation", leaf_b, axis.location)
     hinge = bd.Compound(children=[leaf_a, leaf_b], label="print_in_place_hinge")
-    hinge.material = materials.pla.but(color=None)  # every leaf PLA, in its own colour
+    authored_color = hinge.color
+    hinge.material = FinishedMaterial(
+        plastics.pla().material,
+        pbr=PbrProperties.create('Polylactic acid, the common FDM filament', metalness=0.0, roughness=0.45),
+    )  # every leaf PLA, in its own colour
+    hinge.color = authored_color
     return hinge
 
 

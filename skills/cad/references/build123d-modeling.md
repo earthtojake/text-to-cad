@@ -52,42 +52,39 @@ See [positioning](positioning.md) for datums and joints, and
 
 ## Colour and materials
 
-A part's colour and material are set on the shape, after its last operation, so
-changing one costs no kernel call. A colour is what you see, in sRGB: a hex string
-(`"#2E3742"`, `"#38414D6B"` with alpha), 0-255 integers, or a build123d `Color`,
-whose channels build123d defines as sRGB (`bd.Color(0.5, 0.5, 0.5)` is `#808080`);
-the engine stores it linear. `shape.color`, `paint` and `Material(color=)` take the
-same values and store the same colour:
+Use build123d's native `bd_materials` objects. Set materials after geometric operations,
+then set any explicit colour: build123d's material setter also sets colour.
 
 ```python
-from cadgen import Material, materials, paint
+from bd_materials import metals
+from cadgen import paint
 
+body.material = metals.aluminum()
+body.material.pbr = body.material.pbr.override(roughness=0.35, anisotropy=0.3)
 body.color = "#2E3742"
-glass.color = "#38414D6B"                            # alpha (6B: 0.42) is opacity
-
-body.material = materials.aluminium_6061            # the catalogue, by attribute
-insert.material = materials("brass c360")           # or by name or alias, in any case
-seal.material = Material(name="Viton 75A", family="elastomer", density=1850.0,
-                         color="#3f3f3f", roughness=0.8)
-paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], materials.aluminium_6061.but(roughness=0.15))
+insert.material = metals.brass()
+polished = metals.aluminum()
+polished.pbr = polished.pbr.override(roughness=0.15)
+paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 ```
 
-- **The catalogue** is the `materials` module: `materials.aluminium_6061`, or
-  `materials("6061")` by name or alias (`"6061-T6"`, `"steel"`, `"delrin"`; a miss
-  names the three nearest). `materials.names()` lists its 44 entries by family (`metal`,
-  `plastic`, `elastomer`, `composite`, `wood`, `glass`): aluminium, steel, stainless,
-  brass, copper, titanium, the printing plastics (PLA, PETG, ABS, ASA, nylons, TPU,
-  resin), engineering plastics, FR4, carbon fibre, plywood, MDF, rubbers and glass.
-- **A project's own material** is a `Material(...)` constant in its own module, and
-  `materials.steel_1018.but(roughness=0.2)` a variant. A field it does not know is
-  `None`, never a guess; density is kg/m³.
-- **On an assembly**, a material is every part's below it that has none: a
-  whole-model default.
-- **`paint(part, faces, color_or_material)`** gives faces a colour or a material of
-  their own.
-- A material's density weighs the model (`cadgen inspect <id> OWNER`), its look is
-  drawn in the viewer's Solid and Shaded modes and in Preview, and a GLB carries it. A STEP
-  keeps a material's name and density only, and a face's colour.
+A project's material is a native `FinishedMaterial`, with physics in `.material` and
+appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
+factories. Density is a single value in kg/m³; mechanical properties are native ranges,
+with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cadgen inspect` reports kilograms.
+There is no cadgen material class, catalogue or adapter.
+
+`PbrProperties.override` returns an edited look. Its controls include `metalness`,
+`roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,
+`attenuation_color`, `attenuation_distance`, `clearcoat`, `clearcoat_roughness`,
+`emissive`, `emissive_intensity`, and `opacity`. Base colour floats are sRGB ratios;
+emission and attenuation floats are linear. Hex strings avoid that ambiguity.
+Shape colours and plain paints also accept 0–255 integers and build123d `Color`.
+
+XBF keeps native physics and the resolved PBR data; GLB and the viewer retain the
+appearance. STEP keeps name, density and colour. Native texture maps are preserved in
+XBF; the viewer, GLB export and snapshots refuse them until UV mapping is supported.
+Use scalar PBR looks for those paths. OCCT snapshots keep their documented appearance approximations.
 
 ## Placement and frame pitfalls
 

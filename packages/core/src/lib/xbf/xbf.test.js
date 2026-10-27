@@ -195,24 +195,23 @@ test("the scene: a group per instance over one geometry per prototype, colours, 
 });
 
 // Materials as the structure serves them (`cadgen.engine.document.material_json`).
-const MATERIAL = Object.freeze({ density: null, metallic: 0, roughness: 0.5, ior: 1.5, anisotropy: 0, anisotropyRotation: 0,
-  transmission: 0, transmissionColor: null, transmissionDepth: null, coat: 0, coatRoughness: 0, emissive: [0, 0, 0],
-  emissiveStrength: 1 });
-const BRUSHED = { ...MATERIAL, name: "Aluminum 6061-T6", density: 2700, color: [0.91, 0.92, 0.92, 1], metallic: 1, roughness: 0.35,
-  anisotropy: 0.3, anisotropyRotation: 0.5 };
-const LACQUER = { ...MATERIAL, name: "Red lacquer", color: [0.6, 0.02, 0.02, 1], roughness: 0.4, coat: 1, coatRoughness: 0.05,
-  emissive: [0.2, 0, 0], emissiveStrength: 2 };
-const GLASS = { ...MATERIAL, name: "Glass, soda-lime", density: 2520, color: [1, 1, 1, 1], roughness: 0.02, ior: 1.52, transmission: 1,
-  transmissionColor: [0.82, 0.93, 0.87], transmissionDepth: 0.05 };
+const BRUSHED = { type: "MetalMaterial", material: { name: "Aluminum 6061-T6", density: 2700 },
+  pbr: { values: { metalness: 1, roughness: 0.35, anisotropy: 0.3, anisotropyRotation: 0.5 } } };
+const LACQUER = { type: "RangeMaterial", material: { name: "Red lacquer", density: null },
+  pbr: { values: { roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.05, emissive: [0.2, 0, 0], emissiveIntensity: 2 } } };
+const LACQUER_COLOR = [0.6, 0.02, 0.02, 1];
+const GLASS = { type: "GlassMaterial", material: { name: "Glass, soda-lime", density: 2520 },
+  pbr: { values: { roughness: 0.02, ior: 1.52, transmission: 1, attenuationColor: [0.82, 0.93, 0.87], attenuationDistance: 0.05 } } };
+const GLASS_COLOR = [1, 1, 1, 1];
 
 test("a look's parameters: a colour alone without a material, the material's whole look with one", () => {
   assert.deepEqual(Object.keys(xbfLookParameters(THREE, [1, 0, 0, 0.5])).sort(), ["color", "depthWrite", "opacity", "transparent"],
     "a part with no material is drawn as every part was before materials");
-  const glass = xbfLookParameters(THREE, GLASS.color, GLASS, 3);
+  const glass = xbfLookParameters(THREE, GLASS_COLOR, GLASS, 3);
   assert.deepEqual([glass.transmission, glass.thickness, glass.ior, glass.attenuationDistance], [1, 3, 1.52, 50],
     "transmission through the part's thickness; the depth's metres as millimetres");
   assert.equal(glass.attenuationColor.getHex(), new THREE.Color().setRGB(0.82, 0.93, 0.87, THREE.LinearSRGBColorSpace).getHex());
-  const lacquer = xbfLookParameters(THREE, LACQUER.color, LACQUER);
+  const lacquer = xbfLookParameters(THREE, LACQUER_COLOR, LACQUER);
   assert.deepEqual([lacquer.clearcoat, lacquer.clearcoatRoughness, lacquer.emissiveIntensity, lacquer.metalness], [1, 0.05, 2, 0]);
   assert.equal("transmission" in lacquer, false);
 });
@@ -221,7 +220,7 @@ test("a document's materials: a physical material per look, kept in the shaded l
   const structure = structuredClone(STRUCTURE);
   structure.prototypes[0].material = BRUSHED;
   structure.prototypes[0].faceMaterials = { 2: LACQUER };
-  structure.prototypes[0].faceColors = { 2: LACQUER.color };
+  structure.prototypes[0].faceColors = { 2: LACQUER_COLOR };
   structure.prototypes[1].material = GLASS;
   const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
   const scene = createXbfScene(THREE, document);
@@ -257,7 +256,7 @@ test("a document's materials: a physical material per look, kept in the shaded l
   assert.equal(scene.rigFor(LOOK), scene.rig, "every other look: the look's own rig");
   const highlight = xbfLookXraySurface(document.look).materialSettings;
   const [body, painted] = plate.material;
-  for (const [surface, colour, name] of [[body, PLATE.color, "the part's"], [painted, LACQUER.color, "the paint's"]]) {
+  for (const [surface, colour, name] of [[body, PLATE.color, "the part's"], [painted, LACQUER_COLOR, "the paint's"]]) {
     assert.deepEqual([surface.metalness, surface.roughness, surface.specularIntensity, surface.clearcoat, surface.anisotropy,
       surface.envMapIntensity, surface.emissiveIntensity, surface.opacity],
     [0, highlight.roughness, highlight.specularIntensity, 0, 0, 0, 0, 0.22], name);

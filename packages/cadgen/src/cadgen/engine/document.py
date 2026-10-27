@@ -47,6 +47,8 @@ engine did not write reads the same way, with the XCAF reader.
 from __future__ import annotations
 
 import functools
+import json
+import math
 import hashlib
 import re
 import threading
@@ -178,13 +180,21 @@ def _rgba(color: Any) -> tuple | None:
 
 
 def _material(value: Any) -> Any:
-    """A shape's ``material`` field as the document takes it: a ``Material``, or None for
-    none (build123d's own default for a compound is the empty string)."""
-    from cadgen.engine.materials import Material
+    """The native build123d material, or no material."""
+    from bd_materials import FinishedMaterial
 
-    if value is None or isinstance(value, Material) or value == "":
-        return value or None
-    raise TypeError(f"a shape's material is a cadgen.engine.Material, not {value!r}")
+    if value is None or isinstance(value, FinishedMaterial):
+        return value
+    raise TypeError(f"a shape's material must be a bd_materials.FinishedMaterial, got {type(value).__name__}")
+
+
+def material_color(material: Any) -> tuple:
+    """The native PBR base colour as the document's linear RGBA."""
+    from cadgen.engine.colors import srgb_to_linear
+
+    values = material.pbr.values
+    return (*[round(srgb_to_linear(c), 6) for c in (values.color or (0.8, 0.8, 0.8))],
+            values.opacity if values.opacity is not None else 1.0)
 
 
 def _children(topods: Any) -> list[Any]:
@@ -265,7 +275,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
-        own_material = _material(state.get("material"))
+        own_material = _material(state.get("_material"))
         material = own_material or inherited_material
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
@@ -291,21 +301,19 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                 prototypes[signature] = found
                 order.append(found)
             return found, signature, color
-        # An explicit colour always wins; a material's look colours only a part with none of its own.
-        if own_color is None and material is not None and material.color is not None:
-            color = (own_material if own_material is not None and own_material.color is not None
-                     else material).color
-        if material is not None and color is None:
-            color = DEFAULT_COLOR
+        # build123d sets colour when material is assigned; a subsequent explicit
+        # colour wins. An inherited material supplies colour only where none is owned.
+        if color is None and material is not None:
+            color = material_color(material)
         face_materials = {int(ordinal): given for ordinal, given in (state.get(FACE_MATERIALS) or {}).items()}
         face_colors = {int(ordinal): tuple(rgba) for ordinal, rgba in (state.get(FACE_COLORS) or {}).items()
                        if int(ordinal) not in face_materials}
         for ordinal, given in face_materials.items():
-            face_color = given.color or color or DEFAULT_COLOR
+            face_color = material_color(given)
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
-        signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material,
-                     tuple(sorted(face_materials.items(), key=lambda item: item[0])))
+        signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
+                     tuple((o, material_key(m)) for o, m in sorted(face_materials.items())))
         found = prototypes.get(signature)
         if found is None:
             meshes = mesh_faces(topods)
@@ -363,8 +371,8 @@ def merge(tree: Tree) -> None:
     for part in tree.parts:
         names = part.names or {}
         signature = (part.key, *(tuple(names.get(kind) or ()) for kind in ("faces", "edges", "vertices")),
-                     part.color, tuple(sorted(part.face_colors.items())), part.material,
-                     tuple(sorted(part.face_materials.items(), key=lambda item: item[0])))
+                     part.color, tuple(sorted(part.face_colors.items())), material_key(part.material),
+                     tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())))
         found = first.setdefault(signature, part)
         if found is not part:
             replaced[id(part)] = found
@@ -515,65 +523,25 @@ def _name(label: Any, text: str) -> None:
     TDataStd_Name.Set_s(label, TCollection_ExtendedString(text, True))
 
 
-# A material's fields XCAF's own attributes have no place for, written on its
-# ``XCAFDoc_Material`` label as one ``TDataStd_NamedData`` named as the schema names them: text,
-# reals, ``isotropic`` an integer and ``transmission_color`` an array of reals; a field at its
-# default is not written, so a material of a name and a density has no such attribute.
-_EXTRA_TEXT = ("family", "standard", "source")
-_EXTRA_REALS = ("young_modulus", "poisson_ratio", "yield_strength", "ultimate_strength", "thermal_expansion",
-                "thermal_conductivity", "specific_heat", "anisotropy", "anisotropy_rotation", "transmission",
-                "transmission_depth", "coat", "coat_roughness", "emissive_strength")
-_EXTRA_DEFAULTS = {"anisotropy": 0.0, "anisotropy_rotation": 0.0, "transmission": 0.0, "coat": 0.0,
-                   "coat_roughness": 0.0, "emissive_strength": 1.0}
-
-
+# XCAF's physical and visual attributes expose the standard subset. The complete
+# native material is serialized on the physical label, including embedded PBR textures.
 def _write_extra(label: Any, material: Any) -> None:
     from OCP.TCollection import TCollection_ExtendedString
     from OCP.TDataStd import TDataStd_NamedData
 
-    from cadgen.engine.mechanism import _reals
-
-    text = lambda value: TCollection_ExtendedString(value, True)  # noqa: E731
-    texts = [(key, getattr(material, key)) for key in _EXTRA_TEXT if getattr(material, key) is not None]
-    reals = [(key, getattr(material, key)) for key in _EXTRA_REALS
-             if getattr(material, key) is not None and getattr(material, key) != _EXTRA_DEFAULTS.get(key)]
-    if not (texts or reals or not material.isotropic or material.transmission_color is not None):
-        return
-    data = TDataStd_NamedData.Set_s(label)
-    for key, value in texts:
-        data.SetString(text(key), text(value))
-    for key, value in reals:
-        data.SetReal(text(key), float(value))
-    if not material.isotropic:
-        data.SetInteger(text("isotropic"), 0)
-    if material.transmission_color is not None:
-        data.SetArrayOfReals(text("transmission_color"), _reals(material.transmission_color))
+    TDataStd_NamedData.Set_s(label).SetString(TCollection_ExtendedString("bd_materials"),
+                                            TCollection_ExtendedString(material_key(material), True))
 
 
-def _read_extra(label: Any) -> dict[str, Any]:
-    """The fields ``_write_extra`` wrote on a material's label."""
+def _read_extra(label: Any) -> Any:
     from OCP.TCollection import TCollection_ExtendedString
     from OCP.TDataStd import TDataStd_NamedData
 
     data = TDataStd_NamedData()
-    if not _find(label, data, TDataStd_NamedData.GetID_s()):
-        return {}
-    text = lambda value: TCollection_ExtendedString(value, True)  # noqa: E731
-    found: dict[str, Any] = {}
-    for key in _EXTRA_TEXT:
-        if data.HasString(text(key)):
-            found[key] = data.GetString(text(key)).ToExtString()
-    for key in _EXTRA_REALS:
-        if data.HasReal(text(key)):
-            found[key] = data.GetReal(text(key))
-    if data.HasInteger(text("isotropic")):
-        found["isotropic"] = bool(data.GetInteger(text("isotropic")))
-    if data.HasArrayOfReals(text("transmission_color")):
-        values = data.GetArrayOfReals(text("transmission_color"))
-        from cadgen.engine.colors import Linear
-
-        found["transmission_color"] = Linear(values.Value(at) for at in range(values.Lower(), values.Upper() + 1))
-    return found
+    key = TCollection_ExtendedString("bd_materials")
+    if _find(label, data, TDataStd_NamedData.GetID_s()) and data.HasString(key):
+        return material_from_json(json.loads(data.GetString(key).ToExtString()))
+    return None
 
 
 class _Materials:
@@ -592,18 +560,19 @@ class _Materials:
         self.visual_labels: dict[tuple, Any] = {}
 
     def set(self, label: Any, material: Any, rgba: tuple) -> None:
-        self.physical.SetMaterial(label, self.physical_label(material))
-        self.visual.SetShapeMaterial(label, self.visual_label((material, tuple(rgba))))
+        self.physical.SetMaterial(label, self.physical_label(material_key(material)))
+        self.visual.SetShapeMaterial(label, self.visual_label((material_key(material), tuple(rgba))))
 
-    def physical_label(self, material: Any) -> Any:
+    def physical_label(self, key: str) -> Any:
         """The label of ``material``'s ``XCAFDoc_Material``, made at its first use."""
         from OCP.TCollection import TCollection_HAsciiString
 
-        found = self.physical_labels.get(material)
+        found = self.physical_labels.get(key)
         if found is None:
-            found = self.physical_labels[material] = self.physical.AddMaterial(
-                TCollection_HAsciiString(material.name), TCollection_HAsciiString(material.description or ""),
-                (material.density or 0.0) / 1000.0, TCollection_HAsciiString("density"),
+            material = material_from_json(json.loads(key))
+            found = self.physical_labels[key] = self.physical.AddMaterial(
+                TCollection_HAsciiString(material.name), TCollection_HAsciiString(""),
+                (material.material.density or 0.0) / 1000.0, TCollection_HAsciiString("density"),
                 TCollection_HAsciiString("MASS_DENSITY_MEASURE"))
             _write_extra(found, material)
         return found
@@ -618,18 +587,20 @@ class _Materials:
             from OCP.TCollection import TCollection_AsciiString
             from OCP.XCAFDoc import XCAFDoc_VisMaterial, XCAFDoc_VisMaterialCommon
 
-            material, rgba = look
+            key, rgba = look
+            material = material_from_json(json.loads(key))
+            values = material.pbr.values
             # OCP 8 leaves PBR.EmissiveFactor unbound. OCCT's native conversion
             # copies common emission into that field; set the other PBR fields after.
             made = XCAFDoc_VisMaterial()
             common = XCAFDoc_VisMaterialCommon()
-            common.EmissiveColor = Quantity_Color(*(material.emissive or (0.0, 0.0, 0.0)), Quantity_TOC_RGB)
+            common.EmissiveColor = Quantity_Color(*(values.emissive or (0.0, 0.0, 0.0)), Quantity_TOC_RGB)
             made.SetCommonMaterial(common)
             pbr = made.ConvertToPbrMaterial()
             pbr.BaseColor = _quantity(rgba)
-            pbr.Metallic = material.metallic
-            pbr.Roughness = material.roughness
-            pbr.RefractionIndex = material.ior
+            pbr.Metallic = values.metalness if values.metalness is not None else 0.0
+            pbr.Roughness = values.roughness if values.roughness is not None else 0.5
+            pbr.RefractionIndex = values.ior if values.ior is not None else 1.5
             pbr.IsDefined = True
             made.SetPbrMaterial(pbr)
             made.UnsetCommonMaterial()
@@ -676,16 +647,17 @@ def _records(tree: Tree) -> list[_Record]:
             apart = tshape in labelled
             labelled.add(tshape)
             painted = tuple(sorted(prototype.face_colors.items()))
-            given = tuple(sorted(prototype.face_materials.items(), key=lambda item: item[0]))
+            given = tuple((o, material_key(m)) for o, m in sorted(prototype.face_materials.items()))
+            material = material_key(prototype.material)
             base = prototype.color or DEFAULT_COLOR
             found.append(_Record(
-                ("part", apart, prototype.name, prototype.color, prototype.material, painted, given, prototype.key),
+                ("part", apart, prototype.name, prototype.color, material, painted, given, prototype.key),
                 shape=prototype.shape, names=prototype.names,
                 colours=((prototype.color,) if prototype.color is not None else ())
                 + tuple(rgba for _, rgba in painted),
-                physical=((prototype.material,) if prototype.material is not None else ())
+                physical=((material,) if prototype.material is not None else ())
                 + tuple(material for _, material in given),
-                visual=(((prototype.material, tuple(base)),) if prototype.material is not None else ())
+                visual=(((material, tuple(base)),) if prototype.material is not None else ())
                 + tuple((material, tuple(prototype.face_colors.get(ordinal) or DEFAULT_COLOR))
                         for ordinal, material in given)))
         else:
@@ -1408,6 +1380,7 @@ class Loaded:
         self.locals: dict[tuple[int, ...], Any] = {}
         self.occurrences: dict[str, tuple[int, ...]] = {}
         self.step = self.path.suffix.lower() in (".step", ".stp")
+        check_format(self.doc)
         self._walk()
         self.mechanism = None
         if self.path.suffix.lower() == ".xbf":
@@ -1610,8 +1583,8 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
                             if text and ordinal <= vertices.Extent()}
         face_colors = {ordinal: read(rgba) for ordinal, rgba in part.face_colors.items()
                        if 1 <= ordinal <= faces.Extent()}
-        material = None if part.material is None else as_read(part.material, read(part.color or DEFAULT_COLOR))
-        face_materials = {ordinal: as_read(given, read(part.face_colors.get(ordinal) or DEFAULT_COLOR))
+        material = part.material
+        face_materials = {ordinal: given
                           for ordinal, given in part.face_materials.items() if 1 <= ordinal <= faces.Extent()}
         return {"index": index, "key": part.key, "name": part.name or f"part{index + 1}", "color": read(part.color),
                 "faceNames": {str(k): v for k, v in sorted(face_names.items())},
@@ -1666,6 +1639,15 @@ def _animations_listed(resolved: Any) -> list[dict[str, Any]]:
     """A document's animations (``animations.harvest``, by name) as its structure lists them: each
     its name and duration, in the build's order; the tracks stay the GLB's."""
     return [{"name": item.name, "duration": item.duration} for item in (resolved or {}).values()]
+
+
+def check_format(doc: Any) -> None:
+    """A cadgen-authored XBF must use this engine's format."""
+    from cadgen.engine.previous import FORMAT
+
+    found = written_format(_label_text(doc.Main(), WRITER_GUID))
+    if found is not None and found != FORMAT:
+        raise ValueError(f"unsupported document format {found}; expected {FORMAT}; rebuild the model from source")
 
 
 def _read(path: Path) -> Any:
@@ -1860,67 +1842,59 @@ def _f32(value: float) -> float:
     return round(struct.unpack("<f", struct.pack("<f", float(value)))[0], 6)
 
 
-def as_read(material: Any, rgba: tuple) -> Any:
-    """``material`` as a document read back gives it: drawn in ``rgba`` (the base colour
-    as read), its PBR factors (metallic, roughness, emissive, IOR) as 32-bit floats, its density
-    through the kernel's g/cm^3, no emissive where it is black, no description where it is
-    empty; every other field as it is (``_write_extra`` keeps doubles)."""
-    from cadgen.engine.colors import Linear
-
-    emissive = Linear(_f32(value) for value in (material.emissive or (0.0, 0.0, 0.0)))
-    return material.but(density=round(material.density / 1000.0 * 1000.0, 6) if material.density else None,
-                        color=Linear(rgba), metallic=_f32(material.metallic), roughness=_f32(material.roughness),
-                        ior=_f32(material.ior), emissive=emissive if any(emissive) else None,
-                        description=material.description or None)
-
-
-# A material's fields as the structure carries them, by the structure's (camelCase) names.
-_JSON_FIELDS = (("name", "name"), ("family", "family"), ("standard", "standard"), ("description", "description"),
-                ("source", "source"), ("density", "density"), ("young_modulus", "youngModulus"),
-                ("poisson_ratio", "poissonRatio"), ("yield_strength", "yieldStrength"),
-                ("ultimate_strength", "ultimateStrength"), ("thermal_expansion", "thermalExpansion"),
-                ("thermal_conductivity", "thermalConductivity"), ("specific_heat", "specificHeat"),
-                ("isotropic", "isotropic"), ("color", "color"), ("metallic", "metallic"), ("roughness", "roughness"),
-                ("ior", "ior"), ("anisotropy", "anisotropy"), ("anisotropy_rotation", "anisotropyRotation"),
-                ("transmission", "transmission"), ("transmission_color", "transmissionColor"),
-                ("transmission_depth", "transmissionDepth"), ("coat", "coat"), ("coat_roughness", "coatRoughness"),
-                ("emissive", "emissive"), ("emissive_strength", "emissiveStrength"))
-
-
 def material_json(material: Any) -> dict[str, Any] | None:
-    """A material as the structure carries it: every field, its colour the base colour it is
-    drawn in, ``emissive`` black where it has none, tuples as lists."""
+    """Serialize native physics and native PBR data; no cadgen material model."""
+    from dataclasses import fields
+    from bd_materials.core import Range
+
     if material is None:
         return None
-    found: dict[str, Any] = {}
-    for field, key in _JSON_FIELDS:
-        value = getattr(material, field)
-        if field == "color":
-            value = value or DEFAULT_COLOR
-        elif field == "emissive":
-            value = value or (0.0, 0.0, 0.0)
-        found[key] = list(value) if isinstance(value, tuple) else value
+    physics = {}
+    for field in fields(material.material):
+        value = getattr(material.material, field.name)
+        if isinstance(value, Range):
+            value = {"min": None if math.isnan(value.min) else value.min,
+                     "max": None if math.isnan(value.max) else value.max}
+        physics[field.name] = value
+    return {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+
+
+def material_key(material: Any) -> str | None:
+    """A content key: FinishedMaterial and PbrProperties are mutable native objects."""
+    return None if material is None else json.dumps(material_json(material), sort_keys=True, separators=(",", ":"),
+                                                   allow_nan=False)
+
+
+def pbr_from_json(value: dict[str, Any]) -> Any:
+    """Read PbrProperties.to_dict's wire representation (rotations there are radians)."""
+    from threejs_materials import PbrProperties
+
+    found = PbrProperties.from_dict(value)
+    found.texture_repeat = tuple(value["textureRepeat"]) if "textureRepeat" in value else None
+    found.texture_rotation = math.degrees(value["textureRotation"]) if "textureRotation" in value else None
+    found.normalize_uvs = value.get("normalizeUvs", True)
     return found
 
 
 def material_from_json(value: dict[str, Any] | None) -> Any:
-    """The ``Material`` of ``material_json``'s answer (a black ``emissive`` is none); None for None."""
-    if not value:
+    """Reconstruct only known bd_materials dataclasses, never a type named by executable code."""
+    if value is None:
         return None
-    from cadgen.engine.colors import Linear
-    from cadgen.engine.materials import Material
+    from bd_materials import FinishedMaterial, metals, plastics, glass, wood, paper, textile, resins
+    from bd_materials.core import Range, RangeMaterial, SolidMaterial, PolymerMaterial, ArealMaterial
 
-    fields = {field: value[key] for field, key in _JSON_FIELDS if value.get(key) is not None}
-    for field in ("color", "transmission_color", "emissive"):
-        if field in fields:
-            fields[field] = Linear(fields[field])
-    if not any(fields.get("emissive") or ()):
-        fields.pop("emissive", None)
-    return Material(**fields)
+    classes = (RangeMaterial, SolidMaterial, PolymerMaterial, ArealMaterial, metals.MetalMaterial,
+               plastics.PlasticMaterial, glass.GlassMaterial, wood.WoodMaterial, paper.PaperMaterial,
+               textile.TextileMaterial, resins.ResinMaterial)
+    cls = {kind.__name__: kind for kind in classes}[value["type"]]
+    fields = {key: Range(math.nan if item["min"] is None else item["min"],
+                         math.nan if item["max"] is None else item["max"]) if isinstance(item, dict) else item
+              for key, item in value["material"].items()}
+    return FinishedMaterial(cls(**fields), pbr=pbr_from_json(value["pbr"]))
 
 
 def _label_material(label: Any) -> Any:
-    """The material a label was given, as ``as_read`` describes it, or None: its
+    """The native material a label was given, or None: its
     ``XCAFDoc_Material`` (name, description, density, and the rest ``_write_extra`` wrote
     beside it) and its ``XCAFDoc_VisMaterial`` (PBR), either alone too -- a STEP the engine did
     not write has no PBR, and is drawn in the label's colour."""
@@ -1928,11 +1902,13 @@ def _label_material(label: Any) -> Any:
     from OCP.XCAFDoc import XCAFDoc, XCAFDoc_Material, XCAFDoc_VisMaterialTool
 
     from cadgen.engine.colors import Linear
-    from cadgen.engine.materials import Material
+    from bd_materials import FinishedMaterial
+    from bd_materials.core import RangeMaterial
+    from threejs_materials import PbrProperties
 
     name = description = ""
     density = None
-    extra: dict[str, Any] = {}
+    extra = None
     node = TDataStd_TreeNode()
     if _find(label, node, XCAFDoc.MaterialRefGUID_s()) and node.HasFather():
         physical = XCAFDoc_Material()
@@ -1959,9 +1935,15 @@ def _label_material(label: Any) -> Any:
         rgba, emissive, metallic, roughness = _label_color(label), (0.0, 0.0, 0.0), 0.0, 0.5
     else:
         return None
-    return Material(name or "material", density, color=None if rgba is None else Linear(rgba), metallic=metallic,
-                    roughness=roughness, ior=ior, emissive=Linear(emissive) if any(emissive) else None,
-                    description=description or None, **extra)
+    if extra is not None:
+        return extra
+    from cadgen.engine.colors import linear_to_srgb
+
+    return FinishedMaterial(RangeMaterial(name=name or "material", density=density),
+                            pbr=PbrProperties.create(name or "material",
+                                color=tuple(linear_to_srgb(c) for c in (rgba or DEFAULT_COLOR)[:3]),
+                                opacity=(rgba or DEFAULT_COLOR)[3], metalness=metallic,
+                                roughness=roughness, ior=ior, emissive=emissive))
 
 
 def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -> Prototype:

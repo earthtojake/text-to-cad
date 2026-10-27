@@ -31,9 +31,9 @@ the pure kinematics; `geo.py`, `castings.py`, `fasteners.py`), unchanged but for
   (`Shape._bool_op`, no clean, as before; the fuse keeps its simplified result
   through build123d's clean), so the memo keys them.
 - `palette.py`'s finishes, the original's `materials=` declaration, are
-  `Material` values: each the catalogue's entry for the alloy, steel, rubber or
+  `FinishedMaterial` values: each the catalogue's entry for the alloy, steel, rubber or
   composite in the finish's look (metallic, roughness, clear coat), with
-  `color=None`, so the palette stays the colour that shows; Inconel 625 and the
+  explicit scalar PBR. Assignments restore the authored palette colour; Inconel 625 and the
   heat wrap are the project's own. `apply_finishes` gives every part the finish
   of its colour, as the original's `material_compound` grouped them by colour
   (its `material_<finish>` groups, which existed for the old assignments, are

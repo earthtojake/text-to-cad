@@ -1,5 +1,9 @@
 from __future__ import annotations
-from cadgen import materials, model
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cadgen import model
 from math import cos, radians, sin
 
 import build123d as bd
@@ -151,7 +155,11 @@ def clevis_bracket_lightening_cutouts():
     part = bracket.part
     part = safe_fillet(part, _lug_base_edges(part), radius=LUG_FILLET)
     part.label = "aerospace_clevis_bracket_lightening_cutouts"
-    part.material = materials.aluminium_7075
+    part.material = FinishedMaterial(
+        metals.aluminum(metals.Alu.G7075_T6).material,
+        pbr=PbrProperties.create('High-strength zinc-alloyed aluminium for stressed parts', color='#f5f6f6ff',
+            metalness=1.0, roughness=0.35, anisotropy=0.3),
+    )
     return part
 
 

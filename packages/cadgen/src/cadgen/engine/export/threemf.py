@@ -12,6 +12,8 @@ places an object of its own drawn in that colour.
 
 from __future__ import annotations
 
+import json
+
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -89,11 +91,12 @@ def write(view: Any, path: Path) -> None:
         items.append(f'<item objectid="{ident}" transform="{transform}"/>')
     bases, metallic = [], []
     for at, (rgba, given) in enumerate(looks):
-        given = dict(given) if given is not None else None
-        name = given["name"] if given is not None else f"colour {at + 1}"
+        given = json.loads(given) if given is not None else None
+        name = given["material"]["name"] if given is not None else f"colour {at + 1}"
         if given is not None:
-            metallic.append(f'<m:pbmetallic name={quoteattr(name)} metallicness="{given["metallic"]:.6g}" '
-                            f'roughness="{given["roughness"]:.6g}"/>')
+            given = given["pbr"]["values"]
+            metallic.append(f'<m:pbmetallic name={quoteattr(name)} metallicness="{given.get("metalness", 0.0):.6g}" '
+                            f'roughness="{given.get("roughness", 0.5):.6g}"/>')
         else:
             metallic.append(f'<m:pbmetallic name={quoteattr(name)} metallicness="0" roughness="0.6"/>')
         bases.append(f'<base name={quoteattr(name)} displaycolor="{_hex(rgba)}"/>')
