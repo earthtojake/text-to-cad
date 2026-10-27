@@ -158,12 +158,42 @@ of the full install instructions, which the CAD app's update button links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 message, what it sends and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
-“Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
+“Design physical products with AI.” in blue, using a lighter brand shade on dark
 surfaces. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 
+
+## Social previews
+
+Regenerate with `node scripts/brand/export-social-preview.mjs` from the repo root
+(`--still` for PNG only); see [the authoring recipe](../../scripts/brand/README.md#social-preview).
+
+`public/social-preview-products.png` is the static share image, paired with
+`public/social-preview-products.mp4`: a 12-second, 1200×630 recording of the
+animated TEXTTOCAD SVG and the planetary GLB's existing `meshCycle` clip
+at half speed. The recording uses the real exported model at `public/hero/planetary.glb`.
+The composition uses a large animated wordmark, the byline “Design physical
+products with AI.”, the blue subtitle “100% open source and free.”, and an enlarged
+gear assembly. Both text blocks use the same font size. A smooth caret-led mask
+reveals the typeset lines at 60 fps, preserving kerning. The byline begins at
+2.35 seconds and finishes at 3.35; after a 0.2-second pause, the subtitle begins
+at 3.55 and finishes at 4.42. The caret fades between lines and disappears when
+finished. The gears fade and scale in over 0.65 seconds from the byline's start,
+during the SVG's build animation. `[[ texttocad.dev ]]` sits in the bottom-left
+corner at 25px, with the two text blocks raised to balance the space. It reveals
+from 4.62 to 5.22 seconds, 0.2 seconds after the subtitle finishes, with a matching
+caret. There are no format labels.
+It is made for link previews rather than captured from the homepage.
+
+`src/app/layout.tsx` declares the image fallback and the direct MP4 through
+Open Graph video metadata. Video playback depends on the receiving client;
+the X card remains a large-image card. Keep the MP4 below the repository's
+5 MiB file limit, use H.264/yuv420p with fast-start metadata, and preserve the
+image fallback. Rename preview assets when replacing them so social caches
+can fetch the new versions; update the structured-data image in `src/app/page.tsx`
+as well.
 
 ## api.texttocad.dev
 

@@ -5,7 +5,7 @@ export function HeroSection() {
   return (
     <section className="space-y-8">
       <div className="space-y-6 pt-4 sm:pt-6">
-        <h1 className="sr-only">text-to-cad: Give your agent CAD superpowers</h1>
+        <h1 className="sr-only">text-to-cad: Design physical products with AI.</h1>
         <LogoBuild
           id="hero-wordmark"
           name="logo-texttocad"
@@ -16,7 +16,7 @@ export function HeroSection() {
           className="h-auto w-full max-w-[800px]"
         />
         <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
-          Give your agent CAD superpowers.{" "}
+          Design physical products with AI.{" "}
           <span className="text-brand">100% open source and free.</span>
         </p>
       </div>

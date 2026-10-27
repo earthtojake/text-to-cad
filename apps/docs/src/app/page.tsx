@@ -283,7 +283,7 @@ const structuredData = {
       operatingSystem: "macOS, Windows, Linux",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/MIT",
-      image: absoluteUrl("/social-preview.png"),
+      image: absoluteUrl("/social-preview-products.png"),
       sameAs: [siteConfig.repository],
       author: { "@type": "Person", name: siteConfig.author.name, url: siteConfig.author.url },
     },

@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;background:#292929;color:#f4f4f4;font-family:Arial,sans-serif;width:1200px;height:630px;overflow:hidden}
+#wordmark{position:absolute;left:42px;top:22px;width:1116px;z-index:2}#wordmark svg{width:100%;height:auto}
+h1{position:absolute;left:48px;top:276px;font-size:46px;line-height:1.12;font-weight:600;letter-spacing:-1.5px;margin:0;z-index:2}
+#model{position:absolute;right:0;top:220px;width:780px;height:400px}canvas{width:100%;height:100%;display:block}
+#subtitle{position:absolute;left:48px;top:400px;margin:0;font-size:46px;line-height:1.12;font-weight:600;letter-spacing:-1.5px;color:#62b7ec;z-index:2;white-space:normal}
+.type-row{display:block;width:max-content;clip-path:inset(0 100% 0 0)}#caret{position:absolute;width:3px;height:43px;z-index:3;pointer-events:none;opacity:0}
+#site-url{position:absolute;left:48px;bottom:36px;margin:0;font-size:25px;font-weight:500;letter-spacing:.2px;color:#83c8ee;z-index:2}
+</style></head><body><div id="wordmark">{{WORDMARK}}
+</div><h1 id="byline"></h1><p id="subtitle"></p><p id="site-url"></p><div id="caret"></div><div id="model"><canvas></canvas></div><script type="module" src="/render.js"></script></body></html>

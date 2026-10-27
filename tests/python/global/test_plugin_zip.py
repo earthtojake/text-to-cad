@@ -84,7 +84,7 @@ class PluginZipTests(unittest.TestCase):
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses a subtitle over 30 characters (main's, until this check).
-            change = {"interface": {**manifest["interface"], "shortDescription": "Give your agent CAD superpowers."}}
+            change = {"interface": {**manifest["interface"], "shortDescription": "Design physical products with AI."}}
             self.assertTrue(any("plugin_short_description_too_long" in error for error in build({**manifest, **change})))
 
 

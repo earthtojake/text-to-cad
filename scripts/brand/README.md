@@ -1,5 +1,25 @@
 # Brand assets
 
+## Social preview
+
+`export-social-preview.mjs` records the animated wordmark and the docs' published
+planetary GLB into a static PNG and 12-second MP4. The composition and
+timing live in `social-preview/index.html` and `social-preview/scene.ts`.
+
+```sh
+node scripts/brand/export-social-preview.mjs          # PNG and MP4
+node scripts/brand/export-social-preview.mjs --still  # PNG only
+```
+
+Use the root workspace dependencies, compiled core exports, Playwright Chromium
+(`npx playwright install chromium` if missing), and ffmpeg on PATH. Frames are
+rendered at explicit times at 60 fps, using the existing SVG and baked GLB
+animation, then encoded as H.264/yuv420p with fast-start metadata. Temporary
+frames are cleaned up, and videos at or above 5 MiB are rejected. These are
+manual asset-authoring commands; ordinary docs builds do not record video.
+
+## Logos
+
 `generate-logos.mjs` draws the blue C, CAD and TEXTTOCAD SVGs, and the stacked
 TEXT TO CAD lockup, in `apps/docs/public/brand/` from its block alphabet, and writes the same front
 outlines to `models/branding/src/profiles.json`. No fonts, raster tracing or

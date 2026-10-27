@@ -1,7 +1,7 @@
 const DEFAULT_SITE_ORIGIN = "https://www.texttocad.dev";
 // The tagline the GitHub repository is found by, as the title's second half and the description's first
 // sentence; then what the project is and does, inside the ~160 characters a search result shows.
-const SITE_TAGLINE = "Give your agent CAD superpowers.";
+const SITE_TAGLINE = "Design physical products with AI.";
 const SITE_TITLE = `text-to-cad | ${SITE_TAGLINE.replace(/\.$/, "")}`;
 const SITE_DESCRIPTION = `${SITE_TAGLINE} Free, open-source CAD for AI agents like Codex and Claude Code: generate STEP, STL and 3MF models, check DFM, make drawings.`;
 

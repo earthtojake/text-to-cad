@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { siteConfig } from "@/lib/site";
+import { absoluteUrl, siteConfig } from "@/lib/site";
 import "./globals.css";
 
 // A new name for a new picture: the platforms that unfurl links cache a preview by its URL.
 const socialPreview = {
-  url: "/social-preview.png",
+  url: "/social-preview-products.png",
   width: 1200,
   height: 630,
-  alt: "text-to-cad: Give your agent CAD superpowers. 100% open source and free. A planetary gear assembly modeled with text-to-cad.",
+  alt: "text-to-cad: Design physical products with AI. Colorful planetary gears rendered from editable CAD geometry.",
 };
 
 const themeScript = `
@@ -68,6 +68,12 @@ export const metadata: Metadata = {
     url: "/",
     siteName: siteConfig.name,
     images: [socialPreview],
+    videos: [{
+      url: absoluteUrl("/social-preview-products.mp4"),
+      type: "video/mp4",
+      width: 1200,
+      height: 630,
+    }],
     type: "website",
     locale: "en_US",
   },
