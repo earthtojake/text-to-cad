@@ -341,9 +341,9 @@ build metadata. File metadata does not imply a live worker.
 ```
 src/cadgen/
   __init__.py            # the root, exactly: model, the decorators (xbf, step, glb, stl,
-                         #   threemf, dxf), memo, Material, materials, paint, read_step,
+                         #   threemf, dxf), memo, paint, read_step,
                          #   read_xbf, read_mesh, and the operations on documents (export,
-                         #   snapshot, inspect), every name loaded on first use; the font
+                         #   snapshot, inspect), and __version__, loaded on first use; the font
                          #   guard and the lazy kernel, first
   ap242.py               # the mechanism's AP242 names: mechanism_state,
                          #   configuration_sequence, gear_pair, rack_and_pinion_pair,
