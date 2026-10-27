@@ -1,0 +1,488 @@
+{
+  "step": "models/assemblies/STEP/anthropomorphic_hand/palm_hardware_review.step",
+  "sha256": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+  "body_count": 15,
+  "coordinate_contract": "Every native body is already placed in assembled neutral world coordinates. Apply only the wrist_flexion frame delta for motion.",
+  "bodies": [
+    {
+      "name": "palm_contact_1_silicone_pad",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "palm_pad",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_1_carrier",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "pad_mount",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_1_M1p6_top_socket_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_2_silicone_pad",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "palm_pad",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_2_carrier",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "pad_mount",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_2_M1p6_top_socket_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_3_silicone_pad",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "palm_pad",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_3_carrier",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "pad_mount",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_contact_3_M1p6_top_socket_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_radial_M3_low_head_socket_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_radial_0p4mm_seat_spacer",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_radial_M3_flanged_thread_insert",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    }
+  ]
+}

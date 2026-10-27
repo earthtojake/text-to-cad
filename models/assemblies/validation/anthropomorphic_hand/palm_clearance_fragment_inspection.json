@@ -1,0 +1,187 @@
+{
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/inspected_palm_clearance_fragment.step": "b2bd6ce58d0acc030a622b0b952b8a90b5ee30802836d3bf435f95d2377c28f0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_palm_clearance_fragment.py": "be5a3a28cd7028435a22ab0d31a293bbdf1026c391750185e1dd946801efadd7"
+  },
+  "scope": "Inspected detached palm shaving against every authored bearing, mount and comb-seat zone plus parent-frame guide mouths. Full revised assembly checks remain separate.",
+  "chip_mm3": 0.6966651228706695,
+  "retained_mm3": 4053.2597135496626,
+  "bounds_mm": [
+    [
+      -28.316480005091016,
+      28.14156254700552,
+      -15.84023225376585
+    ],
+    [
+      -28.03094644562081,
+      31.996050621494774,
+      -14.103065178013793
+    ]
+  ],
+  "nearest_guide_ends": [
+    {
+      "name": "thumb_cmc_abduction_negative_wrist_guide_outlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 6.859698477327211,
+      "point": [
+        -27.928932188134528,
+        38.828427124746185,
+        -13.5
+      ]
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_wrist_guide_outlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 10.005306167535206,
+      "point": [
+        -37.828427124746185,
+        28.928932188134528,
+        -11.0
+      ]
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_cmc_yaw_reaction_inlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.393115940180767,
+      "point": [
+        -19.3729401357773,
+        19.100147929641516,
+        -7.0
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_cmc_reaction_inlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.403892314638425,
+      "point": [
+        -28.459262274024436,
+        25.216621586905152,
+        0.0
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_cmc_reaction_inlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.609774862848553,
+      "point": [
+        -24.216621586905152,
+        29.459262274024436,
+        0.0
+      ]
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_cmc_reaction_inlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.632778709699254,
+      "point": [
+        -29.307790411448295,
+        24.368093449481293,
+        0.0
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide_outlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.634978046276348,
+      "point": [
+        -28.285614096357506,
+        24.231813833892943,
+        0.0
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_wrist_guide_outlet",
+      "frame": "wrist_flexion",
+      "bbox_gap_mm": 14.656069607989032,
+      "point": [
+        -24.042973409238222,
+        28.474454521012227,
+        0.0
+      ]
+    }
+  ],
+  "protected_zones": [
+    {
+      "zone": "bearing_-36_101_12.5",
+      "distance_mm": 70.47579845130299,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_-36_101_-16.5",
+      "distance_mm": 65.23053367254471,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_-12_105_12.5",
+      "distance_mm": 75.47984266774131,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_-12_105_-16.5",
+      "distance_mm": 70.60500961278754,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_12_100_12.5",
+      "distance_mm": 79.46856507765654,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_12_100_-16.5",
+      "distance_mm": 74.85636495468809,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_-35_36_14.0",
+      "distance_mm": 27.415034986450664,
+      "common_mm3": 0
+    },
+    {
+      "zone": "bearing_-35_36_-18.0",
+      "distance_mm": 3.924712180983103,
+      "common_mm3": 0
+    },
+    {
+      "zone": "wrist_mount_0",
+      "distance_mm": 11.849003006506958,
+      "common_mm3": 0
+    },
+    {
+      "zone": "wrist_mount_1",
+      "distance_mm": 50.938553241610535,
+      "common_mm3": 0
+    },
+    {
+      "zone": "pad_mount_0",
+      "distance_mm": 32.844401626936026,
+      "common_mm3": 0
+    },
+    {
+      "zone": "pad_mount_1",
+      "distance_mm": 52.169528520875865,
+      "common_mm3": 0
+    },
+    {
+      "zone": "pad_mount_2",
+      "distance_mm": 46.815869180145235,
+      "common_mm3": 0
+    },
+    {
+      "zone": "cup_seat_35.0",
+      "distance_mm": 48.089121031218625,
+      "common_mm3": 0
+    },
+    {
+      "zone": "cup_seat_75.0",
+      "distance_mm": 63.913831871451244,
+      "common_mm3": 0
+    },
+    {
+      "zone": "cmc_parent_comb_seating_rail",
+      "distance_mm": 2.8357513133408427,
+      "common_mm3": 0
+    }
+  ],
+  "protected_zones_clear": true,
+  "guide_mouths_clear": true
+}

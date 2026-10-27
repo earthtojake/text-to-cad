@@ -1,0 +1,16 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.028}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":14.245}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,8],"elapsed":14.265}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,8],"elapsed":19.947}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,8],"elapsed":19.958}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,8],"elapsed":19.997}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,8],"elapsed":20.013}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[5,8],"elapsed":20.028}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[6,8],"elapsed":20.03}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[7,8],"elapsed":20.073}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[8,8],"elapsed":20.083}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":21.083}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/wrist_guide_mounts_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":21.581}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/wrist_guide_mounts_review.step
+built models/assemblies/STEP/anthropomorphic_hand/wrist_guide_mounts_review.step

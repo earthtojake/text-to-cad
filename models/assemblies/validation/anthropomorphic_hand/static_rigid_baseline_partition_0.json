@@ -1,0 +1,1345 @@
+{
+  "rows": [
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 5300,
+      "congruent_proof_reuse": 3978,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "flat_open",
+      "pose": {}
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 4944,
+      "congruent_proof_reuse": 5899,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280903619474
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.06035921134625847
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.05999727062066241
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "wrist_flexion_-45",
+      "pose": {
+        "wrist_flexion": -45.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 4628,
+      "congruent_proof_reuse": 5834,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280921272484
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359615554281515
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.05999713763923296
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "wrist_flexion_25",
+      "pose": {
+        "wrist_flexion": 25.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 869,
+      "congruent_proof_reuse": 8624,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280921300872
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359276199656836
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.059997057207158144
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 0,
+      "congruent_proof_reuse": 9278,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "index_mcp_flexion_0",
+      "pose": {
+        "index_mcp_flexion": 0.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 534,
+      "congruent_proof_reuse": 8830,
+      "collisions": [
+        {
+          "a": "index_palm_bank_boss_clamp_front_cap",
+          "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.024288643519834487
+        },
+        {
+          "a": "index_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "index_palm_bank_boss_clamp_front_cap",
+          "intersection_mm3": 0.06822157714781953
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.6848655632864478
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 1.2601997654354877
+        },
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "index_mcp_flexion_75",
+      "pose": {
+        "index_mcp_flexion": 75.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 306,
+      "congruent_proof_reuse": 9021,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "index_pip_50",
+      "pose": {
+        "index_pip": 50.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 133,
+      "congruent_proof_reuse": 9155,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "index_dip_10",
+      "pose": {
+        "index_dip": 10.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 585,
+      "congruent_proof_reuse": 8727,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 424,
+      "congruent_proof_reuse": 8881,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 467,
+      "congruent_proof_reuse": 8881,
+      "collisions": [
+        {
+          "a": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+          "b": "palm_metacarpal_truss",
+          "intersection_mm3": 0.4009389447311773
+        },
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_front_cap",
+          "b": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.13458939321471042
+        },
+        {
+          "a": "middle_mcp_outlet_comb_liner_left_M0p6_screw",
+          "b": "middle_palm_bank_boss_clamp_front_cap",
+          "intersection_mm3": 0.1711527613769806
+        },
+        {
+          "a": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "palm_metacarpal_truss",
+          "intersection_mm3": 0.3485485250657122
+        },
+        {
+          "a": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "middle_palm_bank_boss_clamp_front_cap",
+          "intersection_mm3": 0.2571783130068773
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "middle_mcp_outlet_comb_liner_left_M0p6_screw",
+          "intersection_mm3": 0.23955199185401557
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.10922479542162769
+        },
+        {
+          "a": "middle_mcp_abduction_positive_bushing",
+          "b": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 1.1193498563958533
+        },
+        {
+          "a": "middle_mcp_abduction_positive_bushing",
+          "b": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.9337048564119113
+        },
+        {
+          "a": "middle_mcp_abduction_palmar_stub_keyed_shaft",
+          "b": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.17198134677633328
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.005788803837445761
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.10922484421715487
+        },
+        {
+          "a": "middle_mcp_outlet_comb_liner_right_M0p6_screw",
+          "b": "middle_palm_bank_boss_clamp_front_cap",
+          "intersection_mm3": 0.17115274843261258
+        },
+        {
+          "a": "middle_mcp_outlet_comb_liner_right_M0p6_screw",
+          "b": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+          "intersection_mm3": 0.2395526575594035
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 272,
+      "congruent_proof_reuse": 9054,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 134,
+      "congruent_proof_reuse": 9172,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 578,
+      "congruent_proof_reuse": 8720,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "ring_mcp_abduction_-5",
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 453,
+      "congruent_proof_reuse": 8878,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "ring_mcp_flexion_15",
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 463,
+      "congruent_proof_reuse": 8878,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "b": "palm_metacarpal_truss",
+          "intersection_mm3": 0.32768610374458396
+        },
+        {
+          "a": "ring_mcp_outlet_comb_liner_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.15074041128117543
+        },
+        {
+          "a": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "palm_metacarpal_truss",
+          "intersection_mm3": 0.32768610374452634
+        },
+        {
+          "a": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.15489354551508344
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.0973802025426541
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "ring_mcp_outlet_comb_liner_left_M0p6_screw",
+          "intersection_mm3": 0.2116943918308797
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.08563072754002964
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_front_cap",
+          "b": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.33426526174976506
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_front_cap",
+          "b": "ring_mcp_outlet_comb_liner_left_M0p6_screw",
+          "intersection_mm3": 0.07221831452309019
+        },
+        {
+          "a": "ring_mcp_abduction_positive_bushing",
+          "b": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.8004223592326334
+        },
+        {
+          "a": "ring_mcp_abduction_positive_bushing",
+          "b": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.8004223592324101
+        },
+        {
+          "a": "ring_mcp_abduction_palmar_stub_keyed_shaft",
+          "b": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.5057608162639913
+        },
+        {
+          "a": "ring_mcp_abduction_palmar_stub_keyed_shaft",
+          "b": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.5057608162639756
+        },
+        {
+          "a": "ring_palm_bank_structural_body_2",
+          "b": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.15489354539735845
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 0.09738021136564691
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.08563073728330187
+        },
+        {
+          "a": "ring_mcp_outlet_comb_liner_right_M0p6_screw",
+          "b": "ring_palm_bank_boss_clamp_front_cap",
+          "intersection_mm3": 0.07221831452308647
+        },
+        {
+          "a": "ring_mcp_outlet_comb_liner_right_M0p6_screw",
+          "b": "ring_palm_bank_structural_body_2",
+          "intersection_mm3": 0.1507404112796696
+        },
+        {
+          "a": "ring_mcp_outlet_comb_liner_right_M0p6_screw",
+          "b": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+          "intersection_mm3": 0.21169439181201558
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "ring_mcp_flexion_90",
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 258,
+      "congruent_proof_reuse": 9050,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "ring_pip_70",
+      "pose": {
+        "ring_pip": 70.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 133,
+      "congruent_proof_reuse": 9170,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "ring_dip_30",
+      "pose": {
+        "ring_dip": 30.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 605,
+      "congruent_proof_reuse": 8688,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 472,
+      "congruent_proof_reuse": 8827,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 488,
+      "congruent_proof_reuse": 8827,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_outlet_comb_structural_lower_jaw_1",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.40093894471336056
+        },
+        {
+          "a": "little_mcp_outlet_comb_scalloped_upper_jaw",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.3485485250764484
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "little_mcp_outlet_comb_structural_lower_jaw_1",
+          "intersection_mm3": 1.1193498563958917
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "little_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.9337048564126228
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        },
+        {
+          "a": "little_mcp_abduction_palmar_stub_keyed_shaft",
+          "b": "little_mcp_outlet_comb_scalloped_upper_jaw",
+          "intersection_mm3": 0.17198134677620527
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 309,
+      "congruent_proof_reuse": 9012,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 146,
+      "congruent_proof_reuse": 9151,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 730,
+      "congruent_proof_reuse": 8505,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 851,
+      "congruent_proof_reuse": 8575,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_cmc_flexion_-15",
+      "pose": {
+        "thumb_cmc_flexion": -15.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 896,
+      "congruent_proof_reuse": 8575,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 329,
+      "congruent_proof_reuse": 8977,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_mcp_flexion_10",
+      "pose": {
+        "thumb_mcp_flexion": 10.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 146,
+      "congruent_proof_reuse": 9140,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_ip_10",
+      "pose": {
+        "thumb_ip": 10.0
+      }
+    },
+    {
+      "body_count": 2933,
+      "processed": 2933,
+      "exact_booleans": 159,
+      "congruent_proof_reuse": 9140,
+      "collisions": [
+        {
+          "a": "wrist_flex_bushing_-1",
+          "b": "wrist_flexion_drive_mouth_-1_host_cap",
+          "intersection_mm3": 0.6264108674660792
+        },
+        {
+          "a": "wrist_flex_bushing_1",
+          "b": "wrist_flexion_drive_mouth_1_structural",
+          "intersection_mm3": 0.6264110484452319
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "ring_palm_bank_structural_body_1",
+          "intersection_mm3": 0.0011501280905736276
+        },
+        {
+          "a": "little_mcp_abduction_positive_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060359378147004414
+        },
+        {
+          "a": "little_mcp_abduction_negative_bushing",
+          "b": "fifth_metacarpal_cupping_truss",
+          "intersection_mm3": 0.060004682845315536
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "sample": "thumb_ip_85",
+      "pose": {
+        "thumb_ip": 85.0
+      }
+    }
+  ],
+  "complete": true,
+  "pass": false
+}

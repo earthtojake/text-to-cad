@@ -1,0 +1,635 @@
+{
+  "pass": true,
+  "guide_step_sha256": "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65",
+  "guide_count": 3,
+  "unchanged_native_bodies": [
+    {
+      "name": "wrist_abduction_drive_mouth_-1_structural",
+      "brep_sha256": "9849d07109128e5677bc625e0d89b97d182f545891399a90ce733103cc5f2b82"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_liner_cap",
+      "brep_sha256": "5e11f03d35aa9ed503a223aa7a867c472e33fb677c5731235a926f1268753b80"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_host_cap",
+      "brep_sha256": "1073b76388e722c52736e0d8c75afdb98ffeb9af1ec39f737047befecb6a1c1f"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_host_M0p6_screw",
+      "brep_sha256": "d50ef29daebafe87758c39dfd09c96e4b342256ac789a8740532bfd24729ac55"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_liner_+1_M0p4_screw",
+      "brep_sha256": "f1f205c65d8f7ecda090fa7ad2d814b4e537bbb575b0f879d5fc61ad905fe517"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_host_cap",
+      "brep_sha256": "65434b3a614e5644eb5767eee3d2583bc14e086cc1dceefe62076ab48f2038e5"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_host_M0p6_screw",
+      "brep_sha256": "8338b2f8864225cdc08ab2fb501976bb41e895b1067489dda4eed1a4a4d94071"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_structural",
+      "brep_sha256": "e7eed2db317d4cd9842a7dd67f888e4f96ae3ee29e18939061ad0deebf3856d8"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_liner_cap",
+      "brep_sha256": "2e023a939255f70ff17b2f200ed60e5c12a9f6d9f4d48b835c98db6f2c470422"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_host_cap",
+      "brep_sha256": "7ab22ce8cef1491bed5082e943e840e4177649ff4b9d7f71cd0e3364cf614e68"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_host_M0p6_screw",
+      "brep_sha256": "8db915ea7b5239faddcac57a1ec287580a61d4b39b7ab5b84033d4dcc2f0aeeb"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw",
+      "brep_sha256": "d11aa06c224c9ee548959b145738b0870a99c137540e03adc57cec531dde1b9b"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_structural",
+      "brep_sha256": "70c3a545e2f2d5cbaef0b691f8e958fcd7e1fd3847e355647c8a5ef8c9a4c872"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_liner_cap",
+      "brep_sha256": "bdeeaf3efb5614f8bd16ef2d912e7fb7fb38a192144f685f37981496673fb3a0"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_host_cap",
+      "brep_sha256": "8284d698dfadcf39fef70114d39e2bd76a74abd2e20e99f4b8ca92178b23be9b"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_host_M0p6_screw",
+      "brep_sha256": "42f2adfd9c4884ec31f4140f34802cf7b9777ed0352fb18d770a70d62818cafe"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw",
+      "brep_sha256": "8cd45a9a9ac3657f67796b67c24c74dbea8677c129ae812b81b7b40fbccdce9b"
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_1",
+      "brep_sha256": "899c86c732b9e6aaeb530e97bb7173db318d98afe763b83f266adf6005849b88"
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_2",
+      "brep_sha256": "27eee7684818e534d3e77b9152ad1c4f541cdf105001e7698184c9812f31ea0c"
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_cap",
+      "brep_sha256": "23047e383d34b78fb596734c1690a79f838efb358f98e86e9a082db1fdd484cc"
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw",
+      "brep_sha256": "b48d6acefb630d39f91db7353f6117c748d158a3ebe7df5f0527e9e236fd091b"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_cap",
+      "brep_sha256": "eb33a8a1b14d2a03b9e293084bb82c8b6e55b3aeb17e0210f9980160eee0b6c7"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_cap_1",
+      "brep_sha256": "a93497a882b57f002f82752311e801a438f77e53c475cad96888dfbe9f804c0d"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_cap_2",
+      "brep_sha256": "3ca652c0c2686120edf5da037745a30dc1adde5023238e1b9c370f6ad1aa6d99"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_M0p6_screw",
+      "brep_sha256": "6a1e5f7739a8950354b13d03955613dd8352cfd9cc34b19ae0dcbd0f1bb7c817"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_+1_M0p6_screw",
+      "brep_sha256": "9cae64f4d39fcfeb7427a4bd46efd831dfd36e7e4953ba39bc22d58816af539f"
+    }
+  ],
+  "hardware_count": 15,
+  "poses": 65,
+  "rows": [
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 9
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -20,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 3
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": -10,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 3
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 0,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 3
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 0
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 7
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 1
+    }
+  ]
+}

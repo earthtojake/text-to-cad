@@ -1,0 +1,26 @@
+[
+  {
+    "name": "index_mcp_abduction_positive_bushing",
+    "frame": "wrist_flexion",
+    "system": "index",
+    "kind": "bushing"
+  },
+  {
+    "name": "middle_mcp_abduction_positive_bushing",
+    "frame": "wrist_flexion",
+    "system": "middle",
+    "kind": "bushing"
+  },
+  {
+    "name": "ring_mcp_abduction_positive_bushing",
+    "frame": "wrist_flexion",
+    "system": "ring",
+    "kind": "bushing"
+  },
+  {
+    "name": "little_mcp_abduction_positive_bushing",
+    "frame": "palm_cup",
+    "system": "little",
+    "kind": "bushing"
+  }
+]

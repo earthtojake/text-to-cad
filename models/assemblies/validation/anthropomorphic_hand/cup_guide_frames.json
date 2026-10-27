@@ -1,0 +1,205 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/cup_guide_mounts_review.step",
+  "sha256": "815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d",
+  "body_count": 33,
+  "bodies": [
+    {
+      "name": "little_cup_child_bank_structural",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_01_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_02_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_03_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_04_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_05_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_06_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_07_upper_jaw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_rib_cap",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_child_bank_row_01_right_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_02_left_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_03_left_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_04_right_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_05_left_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_06_right_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_07_left_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_row_07_right_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_child_bank_rib_host_M0p6_screw",
+      "frame": "palm_cup",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_-1_structural_1",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_-1_structural_2",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_-1_structural_3",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_-1_palm_rib_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_01_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_02_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_03_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_04_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_05_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "little_cup_fixed_bank_-1_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_01_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_02_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_03_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_04_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_cup_fixed_bank_row_05_liner_-1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    }
+  ]
+}

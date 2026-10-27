@@ -1,0 +1,17 @@
+loading native
+native loaded 74
+thumb made
+all bounds ready
+resuming 5 certified poses
+wrist_abduction_0 {'sample': 'wrist_abduction_0', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 23, 'minimum_nearby_route_gap_mm': 5.166832401883324, 'route_collisions': [], 'pass': True}
+wrist_abduction_10 {'sample': 'wrist_abduction_10', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 32, 'minimum_nearby_route_gap_mm': 5.049394402275346, 'route_collisions': [], 'pass': True}
+wrist_abduction_20 {'sample': 'wrist_abduction_20', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 43, 'minimum_nearby_route_gap_mm': 5.0493944022753485, 'route_collisions': [], 'pass': True}
+Timeout (0:01:30)!
+Thread 0x00000001f09a1e80 (most recent call first):
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1277 in distance_to_with_closest_points
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1257 in distance_to
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingernails.py", line 113 in <module>
+wrist_flexion_-45 {'sample': 'wrist_flexion_-45', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 27, 'minimum_nearby_route_gap_mm': 5.1668324018833856, 'route_collisions': [], 'pass': True}
+wrist_flexion_-35 {'sample': 'wrist_flexion_-35', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 26, 'minimum_nearby_route_gap_mm': 5.1668324018833545, 'route_collisions': [], 'pass': True}
+wrist_flexion_-25 {'sample': 'wrist_flexion_-25', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 26, 'minimum_nearby_route_gap_mm': 5.166832401883363, 'route_collisions': [], 'pass': True}
+wrist_flexion_-15 {'sample': 'wrist_flexion_-15', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 25, 'minimum_nearby_route_gap_mm': 5.0493944022753325, 'route_collisions': [], 'pass': True}

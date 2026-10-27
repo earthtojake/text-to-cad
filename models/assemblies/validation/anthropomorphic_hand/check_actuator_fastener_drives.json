@@ -1,0 +1,255 @@
+{
+  "exact_representatives": [
+    "actuator_thumb_cmc_abduction_positive",
+    "actuator_thumb_cmc_abduction_negative"
+  ],
+  "proof": "All48 use the same16 hardware prototypes and identical complete drive prototypes under a shared rigid station transform; identical TShape and inverse-placement congruence are established in check_actuator_fastener_congruence.json. Both bank orientations receive explicit kernel intersections.",
+  "station_count": 48,
+  "prototype_mate_count": 15,
+  "exact_pairs": 24,
+  "collisions": [],
+  "capstan_retainer_contact": [
+    {
+      "station": "actuator_thumb_cmc_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": false
+    },
+    {
+      "station": "actuator_thumb_cmc_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": false
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_ip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_thumb_ip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_mcp_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_mcp_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_mcp_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_mcp_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_pip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_pip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_dip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_index_dip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_pip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_pip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_dip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_middle_dip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_pip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_pip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_dip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_ring_dip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_mcp_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_mcp_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_mcp_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_mcp_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_pip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_pip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_dip_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_little_dip_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_wrist_abduction_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_wrist_abduction_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_wrist_flexion_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_wrist_flexion_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_palm_cup_positive",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    },
+    {
+      "station": "actuator_palm_cup_negative",
+      "distance_mm": 0.0,
+      "rigid_congruence_transfer": true
+    }
+  ],
+  "ok": true,
+  "seconds": 49.83763408660889
+}

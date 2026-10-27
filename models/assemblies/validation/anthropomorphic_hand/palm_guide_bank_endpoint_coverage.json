@@ -1,0 +1,685 @@
+{
+  "endpoint_count": 42,
+  "frame": "wrist_flexion",
+  "fingers": {
+    "index": [
+      {
+        "name": "index_mcp_abduction_positive_wrist_guide_outlet",
+        "point": [
+          -29.19760439792409,
+          66.22964748420202,
+          -9.5
+        ],
+        "local_point": [
+          -5.5,
+          -35.0,
+          -9.5
+        ],
+        "routes": [
+          "index_mcp_abduction_positive"
+        ]
+      },
+      {
+        "name": "index_mcp_abduction_negative_wrist_guide_outlet",
+        "point": [
+          -18.860985569279098,
+          69.99186906078438,
+          -12.0
+        ],
+        "local_point": [
+          5.5,
+          -35.0,
+          -12.0
+        ],
+        "routes": [
+          "index_mcp_abduction_negative"
+        ]
+      },
+      {
+        "name": "index_mcp_flexion_positive_wrist_guide_outlet",
+        "point": [
+          -23.183571624894277,
+          68.41857640148632,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -35.0,
+          5.5
+        ],
+        "routes": [
+          "index_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "index_mcp_flexion_positive_yaw_reaction_inlet",
+        "point": [
+          -27.2878133448023,
+          79.6948878509172,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -23.0,
+          5.5
+        ],
+        "routes": [
+          "index_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "index_mcp_flexion_negative_wrist_guide_outlet",
+        "point": [
+          -24.875018342308913,
+          67.80294014350011,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -35.0,
+          -5.5
+        ],
+        "routes": [
+          "index_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "index_mcp_flexion_negative_yaw_reaction_inlet",
+        "point": [
+          -28.979260062216934,
+          79.079251592931,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -23.0,
+          -5.5
+        ],
+        "routes": [
+          "index_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "index_pip_positive_wrist_guide_outlet",
+        "point": [
+          -21.210217121243872,
+          69.13681870247021,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "index_pip_positive"
+        ]
+      },
+      {
+        "name": "index_pip_positive_mcp_reaction_inlet",
+        "point": [
+          -28.991175381902828,
+          90.51482582534962,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "index_pip_positive"
+        ]
+      },
+      {
+        "name": "index_pip_negative_wrist_guide_outlet",
+        "point": [
+          -26.848372845959318,
+          67.08469784251619,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "index_pip_negative"
+        ]
+      },
+      {
+        "name": "index_pip_negative_mcp_reaction_inlet",
+        "point": [
+          -34.62933110661828,
+          88.46270496539562,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "index_pip_negative"
+        ]
+      },
+      {
+        "name": "index_dip_positive_wrist_guide_outlet",
+        "point": [
+          -20.082585976300777,
+          69.547242874461,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "index_dip_positive"
+        ]
+      },
+      {
+        "name": "index_dip_positive_mcp_reaction_inlet",
+        "point": [
+          -27.863544236959736,
+          90.92524999734043,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "index_dip_positive"
+        ]
+      },
+      {
+        "name": "index_dip_negative_wrist_guide_outlet",
+        "point": [
+          -27.976003990902413,
+          66.6742736705254,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "index_dip_negative"
+        ]
+      },
+      {
+        "name": "index_dip_negative_mcp_reaction_inlet",
+        "point": [
+          -35.756962251561376,
+          88.0522807934048,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "index_dip_negative"
+        ]
+      }
+    ],
+    "middle": [
+      {
+        "name": "middle_mcp_abduction_positive_wrist_guide_outlet",
+        "point": [
+          -14.428619843336566,
+          69.65382898167678,
+          -9.5
+        ],
+        "local_point": [
+          -5.5,
+          -35.0,
+          -9.5
+        ],
+        "routes": [
+          "middle_mcp_abduction_positive"
+        ]
+      },
+      {
+        "name": "middle_mcp_abduction_negative_wrist_guide_outlet",
+        "point": [
+          -3.470478164327364,
+          70.61254215190101,
+          -12.0
+        ],
+        "local_point": [
+          5.5,
+          -35.0,
+          -12.0
+        ],
+        "routes": [
+          "middle_mcp_abduction_negative"
+        ]
+      },
+      {
+        "name": "middle_mcp_flexion_positive_wrist_guide_outlet",
+        "point": [
+          -8.052973775549393,
+          70.2116257352618,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -35.0,
+          5.5
+        ],
+        "routes": [
+          "middle_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "middle_mcp_flexion_positive_yaw_reaction_inlet",
+        "point": [
+          -9.098842688521291,
+          82.16596211236275,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -23.0,
+          5.5
+        ],
+        "routes": [
+          "middle_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "middle_mcp_flexion_negative_wrist_guide_outlet",
+        "point": [
+          -9.846124232114537,
+          70.05474539831602,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -35.0,
+          -5.5
+        ],
+        "routes": [
+          "middle_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "middle_mcp_flexion_negative_yaw_reaction_inlet",
+        "point": [
+          -10.891993145086431,
+          82.00908177541696,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -23.0,
+          -5.5
+        ],
+        "routes": [
+          "middle_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "middle_pip_positive_wrist_guide_outlet",
+        "point": [
+          -5.960964909556728,
+          70.39465279503187,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "middle_pip_positive"
+        ]
+      },
+      {
+        "name": "middle_pip_positive_mcp_reaction_inlet",
+        "point": [
+          -7.943758057065949,
+          93.0580821766191,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "middle_pip_positive"
+        ]
+      },
+      {
+        "name": "middle_pip_negative_wrist_guide_outlet",
+        "point": [
+          -11.938133098107201,
+          69.87171833854592,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "middle_pip_negative"
+        ]
+      },
+      {
+        "name": "middle_pip_negative_mcp_reaction_inlet",
+        "point": [
+          -13.920926245616423,
+          92.53514772013314,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "middle_pip_negative"
+        ]
+      },
+      {
+        "name": "middle_dip_positive_wrist_guide_outlet",
+        "point": [
+          -4.7655312718466325,
+          70.49923968632908,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "middle_dip_positive"
+        ]
+      },
+      {
+        "name": "middle_dip_positive_mcp_reaction_inlet",
+        "point": [
+          -6.748324419355854,
+          93.16266906791628,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "middle_dip_positive"
+        ]
+      },
+      {
+        "name": "middle_dip_negative_wrist_guide_outlet",
+        "point": [
+          -13.133566735817297,
+          69.76713144724874,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "middle_dip_negative"
+        ]
+      },
+      {
+        "name": "middle_dip_negative_mcp_reaction_inlet",
+        "point": [
+          -15.116359883326515,
+          92.43056082883595,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "middle_dip_negative"
+        ]
+      }
+    ],
+    "ring": [
+      {
+        "name": "ring_mcp_abduction_positive_wrist_guide_outlet",
+        "point": [
+          3.470478164327364,
+          65.61254215190101,
+          -9.5
+        ],
+        "local_point": [
+          -5.5,
+          -35.0,
+          -9.5
+        ],
+        "routes": [
+          "ring_mcp_abduction_positive"
+        ]
+      },
+      {
+        "name": "ring_mcp_abduction_negative_wrist_guide_outlet",
+        "point": [
+          14.428619843336566,
+          64.65382898167678,
+          -12.0
+        ],
+        "local_point": [
+          5.5,
+          -35.0,
+          -12.0
+        ],
+        "routes": [
+          "ring_mcp_abduction_negative"
+        ]
+      },
+      {
+        "name": "ring_mcp_flexion_positive_wrist_guide_outlet",
+        "point": [
+          9.846124232114537,
+          65.05474539831602,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -35.0,
+          5.5
+        ],
+        "routes": [
+          "ring_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "ring_mcp_flexion_positive_yaw_reaction_inlet",
+        "point": [
+          10.891993145086431,
+          77.00908177541694,
+          5.5
+        ],
+        "local_point": [
+          0.9,
+          -23.0,
+          5.5
+        ],
+        "routes": [
+          "ring_mcp_flexion_positive"
+        ]
+      },
+      {
+        "name": "ring_mcp_flexion_negative_wrist_guide_outlet",
+        "point": [
+          8.052973775549393,
+          65.2116257352618,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -35.0,
+          -5.5
+        ],
+        "routes": [
+          "ring_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "ring_mcp_flexion_negative_yaw_reaction_inlet",
+        "point": [
+          9.09884268852129,
+          77.16596211236273,
+          -5.5
+        ],
+        "local_point": [
+          -0.9,
+          -23.0,
+          -5.5
+        ],
+        "routes": [
+          "ring_mcp_flexion_negative"
+        ]
+      },
+      {
+        "name": "ring_pip_positive_wrist_guide_outlet",
+        "point": [
+          11.938133098107201,
+          64.87171833854592,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "ring_pip_positive"
+        ]
+      },
+      {
+        "name": "ring_pip_positive_mcp_reaction_inlet",
+        "point": [
+          13.920926245616423,
+          87.53514772013314,
+          0.0
+        ],
+        "local_point": [
+          3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "ring_pip_positive"
+        ]
+      },
+      {
+        "name": "ring_pip_negative_wrist_guide_outlet",
+        "point": [
+          5.960964909556728,
+          65.39465279503187,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "ring_pip_negative"
+        ]
+      },
+      {
+        "name": "ring_pip_negative_mcp_reaction_inlet",
+        "point": [
+          7.943758057065949,
+          88.0580821766191,
+          0.0
+        ],
+        "local_point": [
+          -3.0,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "ring_pip_negative"
+        ]
+      },
+      {
+        "name": "ring_dip_positive_wrist_guide_outlet",
+        "point": [
+          13.133566735817297,
+          64.76713144724874,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "ring_dip_positive"
+        ]
+      },
+      {
+        "name": "ring_dip_positive_mcp_reaction_inlet",
+        "point": [
+          15.116359883326515,
+          87.43056082883595,
+          0.0
+        ],
+        "local_point": [
+          4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "ring_dip_positive"
+        ]
+      },
+      {
+        "name": "ring_dip_negative_wrist_guide_outlet",
+        "point": [
+          4.7655312718466325,
+          65.49923968632908,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -35.0,
+          0.0
+        ],
+        "routes": [
+          "ring_dip_negative"
+        ]
+      },
+      {
+        "name": "ring_dip_negative_mcp_reaction_inlet",
+        "point": [
+          6.748324419355854,
+          88.16266906791628,
+          0.0
+        ],
+        "local_point": [
+          -4.2,
+          -12.25,
+          0.0
+        ],
+        "routes": [
+          "ring_dip_negative"
+        ]
+      }
+    ]
+  },
+  "pass": true
+}

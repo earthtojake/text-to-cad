@@ -1,0 +1,3 @@
+{'a': 'thumb_radial_shared_guide_bank_structural', 'b': 'thumb_cmc_fixed_flex_shared_structural_6', 'volume_mm3': 0.0910954842311411}
+{'a': 'thumb_wrist_splice_outlet_comb_liner_cap', 'b': 'thumb_cmc_fixed_flex_shared_structural_6', 'volume_mm3': 0.009458004589227013}
+{'pass': False, 'bodies': 58, 'exact_pairs': 174, 'interferences': [{'a': 'thumb_radial_shared_guide_bank_structural', 'b': 'thumb_cmc_fixed_flex_shared_structural_6', 'volume_mm3': 0.0910954842311411}, {'a': 'thumb_wrist_splice_outlet_comb_liner_cap', 'b': 'thumb_cmc_fixed_flex_shared_structural_6', 'volume_mm3': 0.009458004589227013}]}

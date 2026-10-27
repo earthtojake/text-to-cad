@@ -1,0 +1,84 @@
+{
+  "scope": "17 full-radius frame ribs versus thumb metacarpal surface swept through 5751 yaw/flex poses. Full rib sample coverage and conservative mesh, voxel, vertex quantization and angular reserves. This certificate does not include separate bearing bosses.",
+  "poses": 5751,
+  "mesh_chord_mm": 0.08,
+  "triangle_max_edge_mm": 0.3,
+  "vertex_quantization_mm": 0.08,
+  "voxel_spacing_mm": 0.3,
+  "angular_step_degrees": 1,
+  "rib_sample_step_mm": 0.03,
+  "reserve_formula_mm": ".61 + .017454 * min(distance_from_CMC_axis_origin + 2, 43.8) + .015",
+  "point_count": 3101496,
+  "rows": [
+    {
+      "branch": "radial_root",
+      "conservative_swept_metacarpal_gap_mm": 2.4902645090717237
+    },
+    {
+      "branch": "ulnar_root",
+      "conservative_swept_metacarpal_gap_mm": 44.28558566317269
+    },
+    {
+      "branch": "dorsal_radial_arch",
+      "conservative_swept_metacarpal_gap_mm": 2.675018533206299
+    },
+    {
+      "branch": "dorsal_ulnar_arch",
+      "conservative_swept_metacarpal_gap_mm": 26.51747978271822
+    },
+    {
+      "branch": "index_-16.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 1.4347774256309638
+    },
+    {
+      "branch": "index_12.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 0.8361404071834554
+    },
+    {
+      "branch": "middle_-16.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 26.51747978271822
+    },
+    {
+      "branch": "middle_12.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 22.587456217706812
+    },
+    {
+      "branch": "ring_-16.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 44.75398803580367
+    },
+    {
+      "branch": "ring_12.5_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 44.75398803580367
+    },
+    {
+      "branch": "thumb_-18_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 2.484393141218026
+    },
+    {
+      "branch": "thumb_14_bearing_branch",
+      "conservative_swept_metacarpal_gap_mm": 0.08262549784570695
+    },
+    {
+      "branch": "cup_35_branch",
+      "conservative_swept_metacarpal_gap_mm": 41.52278867846135
+    },
+    {
+      "branch": "cup_75_branch",
+      "conservative_swept_metacarpal_gap_mm": 44.853988035803674
+    },
+    {
+      "branch": "pad_0",
+      "conservative_swept_metacarpal_gap_mm": 1.1130832486205797
+    },
+    {
+      "branch": "pad_1",
+      "conservative_swept_metacarpal_gap_mm": 40.895880996449236
+    },
+    {
+      "branch": "pad_2",
+      "conservative_swept_metacarpal_gap_mm": 26.424038430939987
+    }
+  ],
+  "failures": [],
+  "final_geometry_note": "Final geometry additionally removes a radius0.55, height4 mm fixed CMC screw-head clearance cylinder. A subtraction preserves every previously proven separation. Final connected-solid/self-intersection validation is palm_accepted_strict.json."
+}

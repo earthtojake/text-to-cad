@@ -1,0 +1,59 @@
+{
+  "pass": false,
+  "scope": "Native reaction-arm continuity, interface bores and neutral pulley checks.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_negative_jaw_repair_review.step": "0fe5b9cca48ed3c3087e12f943c2ba8a977f76de78fb7053a8e60a2917e95ea2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/rigid_clearance_inputs.step": "8ba620fb8780d163945e4ef40623beb9778670e58953c79440ad5786bda808f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_thumb_jaw_repair.py": "768c71936caa303b10f8079c0a7f7a88710ae61352cede983e9f0bb75d3d74e6"
+  },
+  "body_volume_mm3": 5.021346831751343,
+  "pulley_contacts": [
+    {
+      "body": "thumb_cmc_abduction_negative_drive_pulley",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "body": "thumb_cmc_abduction_positive_drive_pulley",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "body": "thumb_cmc_flexion_negative_drive_pulley",
+      "intersection_mm3": 0.0013400375818441144,
+      "pass_": false
+    }
+  ],
+  "bores": [
+    {
+      "center_local_mm": [
+        -0.9,
+        -3.275,
+        -7.95
+      ],
+      "radius_mm": 0.22,
+      "obstruction_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "center_local_mm": [
+        0,
+        -3.5,
+        -15.2
+      ],
+      "radius_mm": 0.32,
+      "obstruction_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "center_local_mm": [
+        0,
+        3.5,
+        -15.2
+      ],
+      "radius_mm": 0.32,
+      "obstruction_mm3": 0.0,
+      "pass_": true
+    }
+  ]
+}

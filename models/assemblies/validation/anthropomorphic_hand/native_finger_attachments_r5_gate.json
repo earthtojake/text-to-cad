@@ -1,0 +1,248 @@
+{
+  "scope": "Native attachment graph for all 32 remade middle-phalanx support bodies.\n\nThe existing 0.025 mm seating/thread-fit contract applies. Every support must\nconnect to the actual new phalanx through proved native distances. Interference\nand strict-solid checks are independent gates.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/phalanx_continuous_representative_r5.step": "060f03559bd6e8808a7cc9ac944b3a6c0d32dfca9cd4a689dc81420539b2a1ce",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_finger_attachments.py": "5567e1dcf17f0b523cffdac0d12aa9c22b47697410a5776d972f0011569c820b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_full_route_bodies.py": "6a1c240eeaba6fb5496d1987f52a02e6fc3b90c081f96c57ab0d17cd7f00f6ef"
+  },
+  "anchor": "middle_proximal_frame",
+  "frame": "middle_mcp_flexion",
+  "body_count": 33,
+  "contact_tolerance_mm": 0.025,
+  "contact_edges": [
+    {
+      "a": "middle_mcp_outlet_comb_liner_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_scalloped_upper_jaw_1",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_liner_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.019999999242858304
+    },
+    {
+      "a": "middle_mcp_outlet_comb_liner_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_scalloped_upper_jaw_2",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_liner_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_2",
+      "distance_mm": 0.0199999992427563
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_rail_left_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_4",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_cap",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_4",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_rail_right_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_2",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_3",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_cap",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw_3",
+      "distance_mm": 8.28628102289784e-14
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_structural_lower_jaw_3",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_mcp_outlet_comb_structural_lower_jaw_4",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_liner_cap",
+      "b": "middle_pip_drive_guide_negative_right_M0p6_screw",
+      "distance_mm": 3.66205343881779e-15
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_rail_M0p6_screw",
+      "b": "middle_pip_drive_guide_negative_rail_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_rail_M0p6_screw",
+      "b": "middle_pip_drive_guide_negative_structural_jaw",
+      "distance_mm": 0.01999999999998052
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_rail_cap",
+      "b": "middle_pip_drive_guide_negative_structural_jaw",
+      "distance_mm": 0.020000000000000018
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_rail_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_right_M0p6_screw",
+      "b": "middle_pip_drive_guide_negative_structural_jaw",
+      "distance_mm": 0.019999963300716114
+    },
+    {
+      "a": "middle_pip_drive_guide_negative_structural_jaw",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_liner_cap",
+      "b": "middle_pip_drive_guide_positive_right_M0p6_screw",
+      "distance_mm": 8.881784197001252e-16
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_rail_M0p6_screw",
+      "b": "middle_pip_drive_guide_positive_rail_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_rail_M0p6_screw",
+      "b": "middle_pip_drive_guide_positive_structural_jaw",
+      "distance_mm": 0.019999999999973775
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_rail_cap",
+      "b": "middle_pip_drive_guide_positive_structural_jaw",
+      "distance_mm": 0.020000000000000018
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_rail_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_right_M0p6_screw",
+      "b": "middle_pip_drive_guide_positive_structural_jaw",
+      "distance_mm": 0.01999998131950509
+    },
+    {
+      "a": "middle_pip_drive_guide_positive_structural_jaw",
+      "b": "middle_proximal_frame",
+      "distance_mm": 8.881784197001252e-16
+    },
+    {
+      "a": "middle_pip_inlet_comb_liner_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_scalloped_upper_jaw",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_liner_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.019999999242591247
+    },
+    {
+      "a": "middle_pip_inlet_comb_liner_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_scalloped_upper_jaw",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_liner_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.019999999242776054
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_rail_left_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_3",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_cap",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_3",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_rail_right_cap",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_1",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_2",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_cap",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw_2",
+      "distance_mm": 2.4868995751603507e-14
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_cap",
+      "b": "middle_proximal_frame",
+      "distance_mm": 1.7763568394002505e-15
+    },
+    {
+      "a": "middle_pip_inlet_comb_structural_lower_jaw_2",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    },
+    {
+      "a": "middle_pip_inlet_comb_structural_lower_jaw_3",
+      "b": "middle_proximal_frame",
+      "distance_mm": 0.0
+    }
+  ],
+  "unattached": [],
+  "complete": true,
+  "pass": true
+}

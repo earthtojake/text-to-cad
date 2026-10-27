@@ -1,0 +1,56 @@
+{
+  "scope": "Complete bounding boxes of all15 hardware bodies against both5751-pose swept CMC surface clouds. Full global1.1/1.5mm conservative interpolation/surface reserves.",
+  "rows": [
+    {
+      "hardware_group": "palm_contact_1",
+      "swept_body": "palm_cmc_guide_envelope_points",
+      "conservative_gap_mm": 1.9740852297878813
+    },
+    {
+      "hardware_group": "palm_contact_2",
+      "swept_body": "palm_cmc_guide_envelope_points",
+      "conservative_gap_mm": 37.150882342764326
+    },
+    {
+      "hardware_group": "palm_contact_3",
+      "swept_body": "palm_cmc_guide_envelope_points",
+      "conservative_gap_mm": 23.970700030114834
+    },
+    {
+      "hardware_group": "palm_wrist_radial",
+      "swept_body": "palm_cmc_guide_envelope_points",
+      "conservative_gap_mm": 18.194040530692373
+    },
+    {
+      "hardware_group": "palm_wrist_ulnar",
+      "swept_body": "palm_cmc_guide_envelope_points",
+      "conservative_gap_mm": 54.75391660394103
+    },
+    {
+      "hardware_group": "palm_contact_1",
+      "swept_body": "palm_cmc_metacarpal_envelope_points",
+      "conservative_gap_mm": 3.5447993022517768
+    },
+    {
+      "hardware_group": "palm_contact_2",
+      "swept_body": "palm_cmc_metacarpal_envelope_points",
+      "conservative_gap_mm": 38.39348317708044
+    },
+    {
+      "hardware_group": "palm_contact_3",
+      "swept_body": "palm_cmc_metacarpal_envelope_points",
+      "conservative_gap_mm": 26.075713952679454
+    },
+    {
+      "hardware_group": "palm_wrist_radial",
+      "swept_body": "palm_cmc_metacarpal_envelope_points",
+      "conservative_gap_mm": 11.313274366843164
+    },
+    {
+      "hardware_group": "palm_wrist_ulnar",
+      "swept_body": "palm_cmc_metacarpal_envelope_points",
+      "conservative_gap_mm": 49.615946631163936
+    }
+  ],
+  "failures": []
+}

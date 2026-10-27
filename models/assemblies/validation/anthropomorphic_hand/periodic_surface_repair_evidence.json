@@ -1,0 +1,19 @@
+{
+  "scope": "Periodic NURBS surface extraction correction; native solid geometry remains unchanged.",
+  "input_sha256": {
+    "packages/cadgen/src/cadgen/_internal/surface_extract.py": "7b1e645f8001329a0f1600ec493c2380be36fbcf21707f4f4aca521467cc3da7",
+    "tests/python/packages/cadgen/test_surface_extract.py": "b1cbee82e617ef356c856700d3b9dc80f827d2e9c66930b2db8274d4f4a96330",
+    "models/assemblies/STEP/anthropomorphic_hand/radial_bank_surface_review.step": "978536ba8f11824058cb696b88874e8018c44b7307f0a5e7e79ec3dae41668c3",
+    "models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+    "tmp/anthropomorphic_hand/radial_bank_surface_corrected_iso.png": "f6a538784d0cc0b716b1a50d98cb84f031591e9692051f2de096e5bdba0d7f11",
+    "tmp/anthropomorphic_hand/radial_bank_native_occt_iso.png": "988ec9b3d0518f45e269f9804a4f27f01f1afe3907c70466c7b32761429e5ecb",
+    "models/assemblies/validation/anthropomorphic_hand/corrected_bank_surface_evaluation.json": "53df7ca26d51ec0833a7a9811c851ce1138b4d74ce58a6402a8eef40a9f7e196"
+  },
+  "surface_tests": 25,
+  "exact_native_sample_count": 1926,
+  "maximum_render_error_mm": 9.145064021270185e-07,
+  "corrected_snapshot_inspected": true,
+  "floating_sliver_removed": true,
+  "complete": true,
+  "pass": true
+}

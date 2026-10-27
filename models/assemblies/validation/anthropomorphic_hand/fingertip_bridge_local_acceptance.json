@@ -1,0 +1,16 @@
+{
+  "scope": "Five repaired fingertip bridges. Native strict validation, material equivalence,60mountpairs and5padbonds pass. Palmar and dorsal contextual PNGs visually inspected. This is local geometry QA, not blind aesthetic acceptance or whole-hand acceptance.",
+  "pass": true,
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_bridge_repair_strict.json": "32c25361ccc19161b44e44462df11f4e0497da5347952f4697d3cb6f6d343bdc",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_bridge_equivalence.json": "844431585acd9fca86f60c426594b8c1088c40a718790a5fb0029ee6efd76a2d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_bridge_fit_gate.json": "6defc6f3fe845815afa5cc14d8adf40682059861b3f0bea0bb5b4c591153d7ea",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/tip_bridge_repair_palmar.png": "97d2f6a2fe4ec5845b4c30544487b54fd8589d1eb588233efedf8000aaa4eef9",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/tip_bridge_repair_dorsal.png": "e39ab118137e9c6502a65053bd8f1687e877fd89e0b0c4e3f06907bf59e1918f"
+  },
+  "visual_observations": [
+    "Continuous cap rim and carrier surfaces; no visible missing patch.",
+    "Both attachment sides and fasteners are visible in the opposed views.",
+    "Diagnostic context uses neutral imported metal colors; final finish review remains separate."
+  ]
+}

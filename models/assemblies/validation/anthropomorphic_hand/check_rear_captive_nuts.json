@@ -1,0 +1,155 @@
+{
+  "body_count": 824,
+  "rear_body_count": 12,
+  "collisions": [],
+  "nut_seats": [
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "distance_mm": 5.684341886080802e-14,
+      "approach_volume_mm3": 0.0026459163594218485
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "distance_mm": 5.684341886080802e-14,
+      "approach_volume_mm3": 0.00264591635942185
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "distance_mm": 5.684341886080802e-14,
+      "approach_volume_mm3": 0.0026459163594218494
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "distance_mm": 5.684341886080802e-14,
+      "approach_volume_mm3": 0.002645916359421849
+    }
+  ],
+  "insertion_samples": [
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 0.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 2.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_1_M1p6_captive_nut",
+      "outboard_displacement_mm": 3.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 0.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 2.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_2_M1p6_captive_nut",
+      "outboard_displacement_mm": 3.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 0.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 2.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_3_M1p6_captive_nut",
+      "outboard_displacement_mm": 3.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 0.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 1.5,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 2.0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "nut": "rear_chassis_mount_4_M1p6_captive_nut",
+      "outboard_displacement_mm": 3.0,
+      "intersection_volume_mm3": 0.0
+    }
+  ],
+  "sources": {
+    "models/assemblies/src/anthropomorphic_hand/lib/actuator_fasteners.py": "0e0abbad45f6f037ffeb8be9b95a218f92dcb142745f9497dc696d045abcc68f",
+    "models/assemblies/src/anthropomorphic_hand/lib/forearm_frame.py": "fd8bb0fe0450c4d49623187d045ffcba49be569971febadbbab5706a4c4474ca",
+    "models/assemblies/STEP/anthropomorphic_hand/forearm_frame_review.step": "508571143a3a1ce179c63665ed16ef6297e880e7f0aad5434d904cf49fc348e9"
+  },
+  "ok": true
+}

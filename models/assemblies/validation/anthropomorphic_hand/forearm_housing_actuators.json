@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "housing_bodies": 42,
+  "actuator_bodies": 1008,
+  "pairs": 42336,
+  "failures": [],
+  "seconds": 15.945118749979883,
+  "context_step_sha256": "8ec8fa8b7cf5a182e3f3018c5418e6dce7a18c820eb1c86f8dc714e16b41bca3"
+}

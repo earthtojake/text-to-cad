@@ -1,0 +1,86 @@
+[
+  {
+    "pose": {
+      "wrist_flexion": 5.0
+    },
+    "pad_radius": 2.5,
+    "distance": 1.7763568394002505e-15
+  },
+  {
+    "pose": {
+      "wrist_flexion": 15.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_flexion": -25.0
+    },
+    "pad_radius": 2.5,
+    "distance": 1.7763568394002505e-15
+  },
+  {
+    "pose": {
+      "wrist_flexion": 25.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_flexion": 35.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_flexion": 45.0
+    },
+    "pad_radius": 2.5,
+    "distance": 7.105427357601002e-15
+  },
+  {
+    "pose": {
+      "wrist_flexion": 55.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_flexion": 60.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_abduction": 0.0
+    },
+    "pad_radius": 2.5,
+    "distance": 3.552713678800501e-15
+  },
+  {
+    "pose": {
+      "wrist_abduction": 10.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_abduction": -10.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  },
+  {
+    "pose": {
+      "wrist_abduction": 20.0
+    },
+    "pad_radius": 2.5,
+    "distance": 0.0
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "thumb_cmc_abduction_positive_bushing",
+    "frame": "wrist_flexion",
+    "system": "thumb",
+    "kind": "bushing"
+  },
+  {
+    "name": "thumb_cmc_abduction_palmar_stub_keyed_shaft",
+    "frame": "thumb_cmc_abduction",
+    "system": "thumb",
+    "kind": "shaft"
+  },
+  {
+    "name": "thumb_cmc_abduction_palmar_stub_retaining_ring",
+    "frame": "thumb_cmc_abduction",
+    "system": "thumb",
+    "kind": "retaining_ring"
+  }
+]

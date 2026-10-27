@@ -1,0 +1,47 @@
+{
+  "complete": true,
+  "sample_count": 225,
+  "unique_body_poses": 240,
+  "method": "direct native solid Boolean after conservative bounds; completed checkpoint results retained",
+  "rows": [
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+      "volume": 0,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+      "volume": 0,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0,
+      "gap": 0.0
+    }
+  ],
+  "pass": true,
+  "step_sha256": "0cbb95eaad8463d34ce50a9eae879d01cb4c02adb56ae2531b01c2278477f015",
+  "static_manifest_sha256": "9ef364376d40701e3e2530f70162da82782c09d84fe6e9830f1ef003a4d6d04a"
+}

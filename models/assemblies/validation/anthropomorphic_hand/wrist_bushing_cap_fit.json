@@ -1,0 +1,7 @@
+{
+  "pass": true,
+  "cap": "wrist_flexion_drive_mouth_-1_host_cap",
+  "bushing": "wrist_flex_bushing_-1",
+  "intersection_mm3": 0.0,
+  "cap_body_count": 1
+}

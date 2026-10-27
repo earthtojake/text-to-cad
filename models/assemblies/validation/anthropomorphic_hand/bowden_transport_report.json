@@ -1,0 +1,604 @@
+{
+  "status": "local routing gate only; full hand solid collisions remain required",
+  "working_length_mm": 28.5,
+  "minimum_radius_mm": 3.593785195980441,
+  "maximum_length_error_mm": 3.943512183468556e-13,
+  "sample_count": 64,
+  "rows": [
+    {
+      "angle_deg": -25.0,
+      "length_mm": 28.500000000000007,
+      "length_error_mm": 7.105427357601002e-15,
+      "minimum_radius_mm": 3.593785195980441,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 5.329070518200751e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -22.3,
+      "length_mm": 28.50000000000037,
+      "length_error_mm": 3.694822225952521e-13,
+      "minimum_radius_mm": 3.736336086934543,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -19.6,
+      "length_mm": 28.50000000000026,
+      "length_error_mm": 2.5934809855243657e-13,
+      "minimum_radius_mm": 3.71693070375249,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 6.4047456679787536e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -16.9,
+      "length_mm": 28.500000000000128,
+      "length_error_mm": 1.2789769243681803e-13,
+      "minimum_radius_mm": 3.711716658332552,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -15.0,
+      "length_mm": 28.499999999999606,
+      "length_error_mm": 3.943512183468556e-13,
+      "minimum_radius_mm": 3.823809025733662,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -14.2,
+      "length_mm": 28.49999999999993,
+      "length_error_mm": 7.105427357601002e-14,
+      "minimum_radius_mm": 3.905686591669169,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -11.5,
+      "length_mm": 28.499999999999762,
+      "length_error_mm": 2.3803181647963356e-13,
+      "minimum_radius_mm": 4.196640808527528,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -8.799999999999997,
+      "length_mm": 28.499999999999915,
+      "length_error_mm": 8.526512829121202e-14,
+      "minimum_radius_mm": 4.51269461772626,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -6.099999999999998,
+      "length_mm": 28.499999999999694,
+      "length_error_mm": 3.055333763768431e-13,
+      "minimum_radius_mm": 4.85780834322371,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -5.0,
+      "length_mm": 28.49999999999992,
+      "length_error_mm": 8.171241461241152e-14,
+      "minimum_radius_mm": 5.007834658236593,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -3.3999999999999986,
+      "length_mm": 28.499999999999794,
+      "length_error_mm": 2.0605739337042905e-13,
+      "minimum_radius_mm": 5.236902813611051,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": -0.6999999999999993,
+      "length_mm": 28.500000000000206,
+      "length_error_mm": 2.0605739337042905e-13,
+      "minimum_radius_mm": 5.656153139913762,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 2.0,
+      "length_mm": 28.499999999999908,
+      "length_error_mm": 9.237055564881302e-14,
+      "minimum_radius_mm": 5.953691847520569,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 4.700000000000003,
+      "length_mm": 28.499999999999766,
+      "length_error_mm": 2.3447910280083306e-13,
+      "minimum_radius_mm": 6.217458153145115,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 5.0,
+      "length_mm": 28.499999999999833,
+      "length_error_mm": 1.6697754290362354e-13,
+      "minimum_radius_mm": 6.248210220260389,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 7.400000000000006,
+      "length_mm": 28.499999999999694,
+      "length_error_mm": 3.055333763768431e-13,
+      "minimum_radius_mm": 6.5054997003125505,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 10.100000000000001,
+      "length_mm": 28.500000000000057,
+      "length_error_mm": 5.684341886080802e-14,
+      "minimum_radius_mm": 6.820915943355918,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 7.105427357601002e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 12.800000000000004,
+      "length_mm": 28.500000000000096,
+      "length_error_mm": 9.592326932761353e-14,
+      "minimum_radius_mm": 7.167129770787255,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 15.0,
+      "length_mm": 28.499999999999872,
+      "length_error_mm": 1.2789769243681803e-13,
+      "minimum_radius_mm": 7.474551916099438,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 15.5,
+      "length_mm": 28.499999999999908,
+      "length_error_mm": 9.237055564881302e-14,
+      "minimum_radius_mm": 7.547826527643739,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 18.200000000000003,
+      "length_mm": 28.49999999999972,
+      "length_error_mm": 2.8066438062523957e-13,
+      "minimum_radius_mm": 7.966806512432077,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 20.900000000000006,
+      "length_mm": 28.50000000000007,
+      "length_error_mm": 7.105427357601002e-14,
+      "minimum_radius_mm": 8.427684931527285,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 4.440892098500626e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 23.6,
+      "length_mm": 28.500000000000192,
+      "length_error_mm": 1.9184653865522705e-13,
+      "minimum_radius_mm": 8.933328866635936,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 2.6645352591003757e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 25.0,
+      "length_mm": 28.50000000000008,
+      "length_error_mm": 8.171241461241152e-14,
+      "minimum_radius_mm": 9.213617907719392,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 2.6645352591003757e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 26.300000000000004,
+      "length_mm": 28.49999999999976,
+      "length_error_mm": 2.4158453015843406e-13,
+      "minimum_radius_mm": 9.484852175914266,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 4.440892098500626e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 29.0,
+      "length_mm": 28.500000000000014,
+      "length_error_mm": 1.4210854715202004e-14,
+      "minimum_radius_mm": 10.079894880147508,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 31.700000000000003,
+      "length_mm": 28.500000000000178,
+      "length_error_mm": 1.7763568394002505e-13,
+      "minimum_radius_mm": 10.709820191129898,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 34.400000000000006,
+      "length_mm": 28.50000000000014,
+      "length_error_mm": 1.3855583347321954e-13,
+      "minimum_radius_mm": 11.355489243041166,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 35.0,
+      "length_mm": 28.50000000000005,
+      "length_error_mm": 4.973799150320701e-14,
+      "minimum_radius_mm": 11.49796075265955,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 37.1,
+      "length_mm": 28.499999999999908,
+      "length_error_mm": 9.237055564881302e-14,
+      "minimum_radius_mm": 11.981773018356519,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 39.80000000000001,
+      "length_mm": 28.500000000000025,
+      "length_error_mm": 2.4868995751603507e-14,
+      "minimum_radius_mm": 12.53267074831134,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 42.5,
+      "length_mm": 28.50000000000018,
+      "length_error_mm": 1.8118839761882555e-13,
+      "minimum_radius_mm": 12.932501133873654,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 45.0,
+      "length_mm": 28.499999999999837,
+      "length_error_mm": 1.6342482922482304e-13,
+      "minimum_radius_mm": 13.098734106257135,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.972054645195637e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 45.2,
+      "length_mm": 28.50000000000012,
+      "length_error_mm": 1.2079226507921703e-13,
+      "minimum_radius_mm": 13.10199431236152,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 47.900000000000006,
+      "length_mm": 28.49999999999991,
+      "length_error_mm": 8.881784197001252e-14,
+      "minimum_radius_mm": 12.992096819973296,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 50.60000000000001,
+      "length_mm": 28.499999999999915,
+      "length_error_mm": 8.526512829121202e-14,
+      "minimum_radius_mm": 12.616066810688904,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 53.30000000000001,
+      "length_mm": 28.500000000000103,
+      "length_error_mm": 1.0302869668521453e-13,
+      "minimum_radius_mm": 12.047546515944854,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 55.0,
+      "length_mm": 28.499999999999915,
+      "length_error_mm": 8.526512829121202e-14,
+      "minimum_radius_mm": 11.634684357719943,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 56.0,
+      "length_mm": 28.500000000000114,
+      "length_error_mm": 1.1368683772161603e-13,
+      "minimum_radius_mm": 11.383314716641511,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 58.7,
+      "length_mm": 28.49999999999996,
+      "length_error_mm": 3.907985046680551e-14,
+      "minimum_radius_mm": 10.705541613315642,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 61.400000000000006,
+      "length_mm": 28.50000000000007,
+      "length_error_mm": 7.105427357601002e-14,
+      "minimum_radius_mm": 10.066902503151834,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 64.10000000000001,
+      "length_mm": 28.499999999999957,
+      "length_error_mm": 4.263256414560601e-14,
+      "minimum_radius_mm": 9.49361710744392,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 65.0,
+      "length_mm": 28.500000000000032,
+      "length_error_mm": 3.197442310920451e-14,
+      "minimum_radius_mm": 9.318838282603465,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 66.80000000000001,
+      "length_mm": 28.5000000000001,
+      "length_error_mm": 9.947598300641403e-14,
+      "minimum_radius_mm": 8.993978744133118,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 7.32410687763558e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 69.5,
+      "length_mm": 28.500000000000036,
+      "length_error_mm": 3.552713678800501e-14,
+      "minimum_radius_mm": 8.565816565767474,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 72.2,
+      "length_mm": 28.499999999999886,
+      "length_error_mm": 1.1368683772161603e-13,
+      "minimum_radius_mm": 8.201567434309082,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 3.552713678800501e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 74.9,
+      "length_mm": 28.50000000000001,
+      "length_error_mm": 1.0658141036401503e-14,
+      "minimum_radius_mm": 7.891465337007225,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 75.0,
+      "length_mm": 28.499999999999872,
+      "length_error_mm": 1.2789769243681803e-13,
+      "minimum_radius_mm": 7.880887473432891,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 77.60000000000001,
+      "length_mm": 28.49999999999998,
+      "length_error_mm": 2.1316282072803006e-14,
+      "minimum_radius_mm": 7.6254811541789085,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 5.329070518200751e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 80.30000000000001,
+      "length_mm": 28.499999999999943,
+      "length_error_mm": 5.684341886080802e-14,
+      "minimum_radius_mm": 7.394413714287801,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 83.0,
+      "length_mm": 28.50000000000012,
+      "length_error_mm": 1.2079226507921703e-13,
+      "minimum_radius_mm": 7.190390220451127,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 5.329070518200751e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 85.0,
+      "length_mm": 28.500000000000135,
+      "length_error_mm": 1.3500311979441904e-13,
+      "minimum_radius_mm": 7.052858054489846,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 85.7,
+      "length_mm": 28.499999999999876,
+      "length_error_mm": 1.2434497875801753e-13,
+      "minimum_radius_mm": 7.006982277691681,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 88.4,
+      "length_mm": 28.50000000000018,
+      "length_error_mm": 1.8118839761882555e-13,
+      "minimum_radius_mm": 6.839107031485594,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 91.10000000000001,
+      "length_mm": 28.499999999999826,
+      "length_error_mm": 1.7408297026122455e-13,
+      "minimum_radius_mm": 6.682835256206843,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 5.329070518200751e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 93.80000000000001,
+      "length_mm": 28.500000000000092,
+      "length_error_mm": 9.237055564881302e-14,
+      "minimum_radius_mm": 6.535179775910935,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 95.0,
+      "length_mm": 28.499999999999886,
+      "length_error_mm": 1.1368683772161603e-13,
+      "minimum_radius_mm": 6.4717121522387,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 96.50000000000001,
+      "length_mm": 28.499999999999957,
+      "length_error_mm": 4.263256414560601e-14,
+      "minimum_radius_mm": 6.393900470784991,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 5.329070518200751e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 99.2,
+      "length_mm": 28.50000000000007,
+      "length_error_mm": 7.105427357601002e-14,
+      "minimum_radius_mm": 6.2573391798765705,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 101.9,
+      "length_mm": 28.500000000000163,
+      "length_error_mm": 1.6342482922482304e-13,
+      "minimum_radius_mm": 6.124285986639718,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 1.7763568394002505e-15,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 104.60000000000002,
+      "length_mm": 28.500000000000096,
+      "length_error_mm": 9.592326932761353e-14,
+      "minimum_radius_mm": 5.993873407847071,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 105.0,
+      "length_mm": 28.50000000000009,
+      "length_error_mm": 8.881784197001252e-14,
+      "minimum_radius_mm": 5.974737787391067,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 107.30000000000001,
+      "length_mm": 28.500000000000114,
+      "length_error_mm": 1.1368683772161603e-13,
+      "minimum_radius_mm": 5.865493613583257,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    },
+    {
+      "angle_deg": 110.0,
+      "length_mm": 28.500000000000178,
+      "length_error_mm": 1.7763568394002505e-13,
+      "minimum_radius_mm": 5.738733994919596,
+      "join_position_error_mm": 0.0,
+      "join_derivative_error": 0.0,
+      "clear_radius_and_length": true
+    }
+  ],
+  "centerline_envelope_at_samples": {
+    "minimum": [
+      0.0,
+      -12.25,
+      -15.81637634591082
+    ],
+    "maximum": [
+      0.0,
+      13.640385917142229,
+      13.56335546458139
+    ]
+  },
+  "liner_lane_pitch_mm": 1.2,
+  "liner_outer_radius_mm": 0.45,
+  "exact_interlane_clearance_mm": 0.29999999999999993,
+  "interlane_proof": "All paths are identical translations at constant X. Point distance is at least absolute X separation. Matching parameter points attain that bound.",
+  "curvature_method": "Stationary points of squared curvature rational polynomial plus endpoints; independent adaptive arclength quadrature.",
+  "reaction_assumption": "An ideally flexible inextensible zero-clearance liner carries equal and opposite compressive reaction; tendon plus liner work at crossed joint is T*dL=0. No positive clearance, liner bending stiffness or friction is silently assumed.",
+  "excluded": "Anchor fasteners and their mounts, finite-clearance construction, actual passive elastic equilibrium, and hand-body collisions."
+}

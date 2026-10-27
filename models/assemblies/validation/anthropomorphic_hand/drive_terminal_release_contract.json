@@ -1,0 +1,2075 @@
+{
+  "end_release": {
+    "thumb_cmc_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_ip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_ip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "palm_cup_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "palm_cup_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    }
+  },
+  "driven_release_vectors": {
+    "thumb_cmc_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_positive_drive_pulley_grub_screw": [
+      -0.5,
+      0.5,
+      0.7071067811865479
+    ],
+    "thumb_cmc_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_cmc_abduction_negative_drive_pulley_grub_screw": [
+      -0.5,
+      0.5,
+      -0.7071067811865479
+    ],
+    "thumb_cmc_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "thumb_cmc_flexion_positive_drive_terminal_cover_screw": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_positive_drive_terminal_cover": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_positive_drive_terminal_ferrule": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_positive_drive_terminal_bond_line": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_positive_drive_pulley_grub_screw": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "thumb_cmc_flexion_positive_drive_pulley": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_terminal_cover_screw": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_terminal_cover": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_terminal_ferrule": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_terminal_bond_line": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_pulley_grub_screw": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "thumb_cmc_flexion_negative_drive_pulley": [
+      -0.7071067811865461,
+      -0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_positive_drive_pulley_grub_screw": [
+      -0.5,
+      0.5,
+      0.7071067811865479
+    ],
+    "thumb_mcp_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "thumb_mcp_abduction_negative_drive_pulley_grub_screw": [
+      -0.5,
+      0.5,
+      -0.7071067811865479
+    ],
+    "thumb_mcp_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "thumb_mcp_flexion_positive_drive_terminal_cover_screw": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_positive_drive_terminal_cover": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_positive_drive_terminal_ferrule": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_positive_drive_terminal_bond_line": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_positive_drive_pulley_grub_screw": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "thumb_mcp_flexion_positive_drive_pulley": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_terminal_cover_screw": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_terminal_cover": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_terminal_ferrule": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_terminal_bond_line": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_pulley_grub_screw": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "thumb_mcp_flexion_negative_drive_pulley": [
+      -0.7071067811865461,
+      -0.7071067811865461,
+      0.0
+    ],
+    "thumb_ip_positive_drive_terminal_cover_screw": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_positive_drive_terminal_cover": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_positive_drive_terminal_ferrule": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_positive_drive_terminal_bond_line": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_positive_drive_pulley_grub_screw": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "thumb_ip_positive_drive_pulley": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_negative_drive_terminal_cover_screw": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_negative_drive_terminal_cover": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_negative_drive_terminal_ferrule": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_negative_drive_terminal_bond_line": [
+      0.7071067811865532,
+      0.7071067811865532,
+      0.0
+    ],
+    "thumb_ip_negative_drive_pulley_grub_screw": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "thumb_ip_negative_drive_pulley": [
+      -0.7071067811865532,
+      -0.7071067811865532,
+      0.0
+    ],
+    "index_mcp_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_positive_drive_pulley_grub_screw": [
+      -0.24184476264797183,
+      0.6644630243886809,
+      0.7071067811865479
+    ],
+    "index_mcp_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "index_mcp_abduction_negative_drive_pulley_grub_screw": [
+      -0.24184476264797183,
+      0.6644630243886809,
+      -0.7071067811865479
+    ],
+    "index_mcp_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "index_mcp_flexion_positive_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_positive_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_positive_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_positive_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_positive_drive_pulley_grub_screw": [
+      0.42261826174070194,
+      0.9063077870366527,
+      0.0
+    ],
+    "index_mcp_flexion_positive_drive_pulley": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_pulley_grub_screw": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "index_mcp_flexion_negative_drive_pulley": [
+      -0.9396926207859053,
+      -0.3420201433256693,
+      0.0
+    ],
+    "index_pip_positive_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_positive_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_positive_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_positive_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_positive_drive_pulley_grub_screw": [
+      0.42261826174070194,
+      0.9063077870366385,
+      0.0
+    ],
+    "index_pip_positive_drive_pulley": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_negative_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_negative_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_negative_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_negative_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_pip_negative_drive_pulley_grub_screw": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "index_pip_negative_drive_pulley": [
+      -0.9396926207859053,
+      -0.3420201433256693,
+      0.0
+    ],
+    "index_dip_positive_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_positive_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_positive_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_positive_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_positive_drive_pulley_grub_screw": [
+      0.42261826174070194,
+      0.9063077870366385,
+      0.0
+    ],
+    "index_dip_positive_drive_pulley": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_negative_drive_terminal_cover_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_negative_drive_terminal_cover": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_negative_drive_terminal_ferrule": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_negative_drive_terminal_bond_line": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "index_dip_negative_drive_pulley_grub_screw": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "index_dip_negative_drive_pulley": [
+      -0.9396926207859053,
+      -0.3420201433256693,
+      0.0
+    ],
+    "middle_mcp_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_positive_drive_pulley_grub_screw": [
+      -0.06162841671621955,
+      0.7044160264027539,
+      0.7071067811865479
+    ],
+    "middle_mcp_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "middle_mcp_abduction_negative_drive_pulley_grub_screw": [
+      -0.06162841671621955,
+      0.7044160264027539,
+      -0.7071067811865479
+    ],
+    "middle_mcp_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "middle_mcp_flexion_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_positive_drive_pulley_grub_screw": [
+      0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "middle_mcp_flexion_positive_drive_pulley": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_pulley_grub_screw": [
+      -0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "middle_mcp_flexion_negative_drive_pulley": [
+      -0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_positive_drive_pulley_grub_screw": [
+      0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "middle_pip_positive_drive_pulley": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_pip_negative_drive_pulley_grub_screw": [
+      -0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "middle_pip_negative_drive_pulley": [
+      -0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_positive_drive_pulley_grub_screw": [
+      0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "middle_dip_positive_drive_pulley": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "middle_dip_negative_drive_pulley_grub_screw": [
+      -0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "middle_dip_negative_drive_pulley": [
+      -0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_positive_drive_pulley_grub_screw": [
+      0.06162841671621955,
+      0.7044160264027539,
+      0.7071067811865479
+    ],
+    "ring_mcp_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ring_mcp_abduction_negative_drive_pulley_grub_screw": [
+      0.06162841671621955,
+      0.7044160264027539,
+      -0.7071067811865479
+    ],
+    "ring_mcp_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "ring_mcp_flexion_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_positive_drive_pulley_grub_screw": [
+      0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "ring_mcp_flexion_positive_drive_pulley": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_pulley_grub_screw": [
+      -0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "ring_mcp_flexion_negative_drive_pulley": [
+      -0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_positive_drive_pulley_grub_screw": [
+      0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "ring_pip_positive_drive_pulley": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_pip_negative_drive_pulley_grub_screw": [
+      -0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "ring_pip_negative_drive_pulley": [
+      -0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_positive_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_positive_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_positive_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_positive_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_positive_drive_pulley_grub_screw": [
+      0.7660444431189788,
+      0.6427876096865361,
+      0.0
+    ],
+    "ring_dip_positive_drive_pulley": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_negative_drive_terminal_cover_screw": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_negative_drive_terminal_cover": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_negative_drive_terminal_ferrule": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_negative_drive_terminal_bond_line": [
+      0.9961946980917453,
+      -0.08715574274765459,
+      0.0
+    ],
+    "ring_dip_negative_drive_pulley_grub_screw": [
+      -0.6427876096865397,
+      0.7660444431189717,
+      0.0
+    ],
+    "ring_dip_negative_drive_pulley": [
+      -0.9961946980917453,
+      0.08715574274765459,
+      0.0
+    ],
+    "little_mcp_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_positive_drive_pulley_grub_screw": [
+      0.298836238730118,
+      0.6408563820557873,
+      0.7071067811865479
+    ],
+    "little_mcp_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "little_mcp_abduction_negative_drive_pulley_grub_screw": [
+      0.298836238730118,
+      0.6408563820557873,
+      -0.7071067811865479
+    ],
+    "little_mcp_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "little_mcp_flexion_positive_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_positive_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_positive_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_positive_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_positive_drive_pulley_grub_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "little_mcp_flexion_positive_drive_pulley": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_pulley_grub_screw": [
+      -0.3420201433256693,
+      0.9396926207859053,
+      0.0
+    ],
+    "little_mcp_flexion_negative_drive_pulley": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "little_pip_positive_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_positive_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_positive_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_positive_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_positive_drive_pulley_grub_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "little_pip_positive_drive_pulley": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_negative_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_negative_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_negative_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_negative_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_pip_negative_drive_pulley_grub_screw": [
+      -0.3420201433256693,
+      0.9396926207859053,
+      0.0
+    ],
+    "little_pip_negative_drive_pulley": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "little_dip_positive_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_positive_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_positive_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_positive_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_positive_drive_pulley_grub_screw": [
+      0.9396926207859053,
+      0.3420201433256693,
+      0.0
+    ],
+    "little_dip_positive_drive_pulley": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_negative_drive_terminal_cover_screw": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_negative_drive_terminal_cover": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_negative_drive_terminal_ferrule": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_negative_drive_terminal_bond_line": [
+      0.9063077870366527,
+      -0.42261826174069483,
+      0.0
+    ],
+    "little_dip_negative_drive_pulley_grub_screw": [
+      -0.3420201433256693,
+      0.9396926207859053,
+      0.0
+    ],
+    "little_dip_negative_drive_pulley": [
+      -0.9063077870366527,
+      0.42261826174069483,
+      0.0
+    ],
+    "wrist_abduction_positive_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_positive_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_positive_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_positive_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_positive_drive_pulley_grub_screw": [
+      0.7071067811865475,
+      0.0,
+      0.7071067811865479
+    ],
+    "wrist_abduction_positive_drive_pulley": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_negative_drive_terminal_cover_screw": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_negative_drive_terminal_cover": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_negative_drive_terminal_ferrule": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_negative_drive_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wrist_abduction_negative_drive_pulley_grub_screw": [
+      0.7071067811865475,
+      0.0,
+      -0.7071067811865479
+    ],
+    "wrist_abduction_negative_drive_pulley": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "wrist_flexion_positive_drive_terminal_cover_screw": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_positive_drive_terminal_cover": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_positive_drive_terminal_ferrule": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_positive_drive_terminal_bond_line": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_positive_drive_pulley_grub_screw": [
+      0.7071067811865479,
+      0.7071067811865475,
+      0.0
+    ],
+    "wrist_flexion_positive_drive_pulley": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_terminal_cover_screw": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_terminal_cover": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_terminal_ferrule": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_terminal_bond_line": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_pulley_grub_screw": [
+      -0.7071067811865479,
+      0.7071067811865475,
+      0.0
+    ],
+    "wrist_flexion_negative_drive_pulley": [
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "palm_cup_positive_drive_terminal_cover_screw": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_positive_drive_terminal_cover": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_positive_drive_terminal_ferrule": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_positive_drive_terminal_bond_line": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_positive_drive_pulley_grub_screw": [
+      0.7071067811865461,
+      -0.7071067811865461,
+      0.0
+    ],
+    "palm_cup_positive_drive_pulley": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_negative_drive_terminal_cover_screw": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_negative_drive_terminal_cover": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_negative_drive_terminal_ferrule": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_negative_drive_terminal_bond_line": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "palm_cup_negative_drive_pulley_grub_screw": [
+      0.7071067811865461,
+      0.7071067811865461,
+      0.0
+    ],
+    "palm_cup_negative_drive_pulley": [
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  "capstan_bond_initial_release_vectors": {
+    "actuator_thumb_cmc_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_thumb_cmc_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_thumb_cmc_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_thumb_cmc_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_thumb_mcp_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_thumb_mcp_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_thumb_mcp_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_thumb_mcp_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_thumb_ip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_thumb_ip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_index_mcp_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_index_mcp_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_index_mcp_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_index_mcp_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_index_pip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_index_pip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_index_dip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_index_dip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_middle_mcp_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_middle_mcp_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_middle_mcp_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_middle_mcp_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_middle_pip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_middle_pip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_middle_dip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_middle_dip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_ring_mcp_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_ring_mcp_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_ring_mcp_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_ring_mcp_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_ring_pip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_ring_pip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_ring_dip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_ring_dip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_little_mcp_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_little_mcp_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_little_mcp_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_little_mcp_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_little_pip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_little_pip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_little_dip_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_little_dip_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_wrist_abduction_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_wrist_abduction_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_wrist_flexion_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_wrist_flexion_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "actuator_palm_cup_positive_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "actuator_palm_cup_negative_capstan_terminal_bond_line": [
+      0.0,
+      0.0,
+      -1.0
+    ]
+  },
+  "capstan_bond_standalone_release_certified": false,
+  "capstan_bond_explode_policy": "Retain resin with bonded ferrule/capstan group; do not use the candidate vector as an independent full withdrawal.",
+  "capstan_failed_candidate_report": "capstan_bond_release_check.json"
+}

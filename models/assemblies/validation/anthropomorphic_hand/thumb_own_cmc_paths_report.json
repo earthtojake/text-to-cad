@@ -1,0 +1,165 @@
+{
+  "rows": [
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -25.0,
+      "minimum_radius_mm": 3.64999350037431,
+      "mutual_gap_lower_bound_mm": 0.8700099955609327,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -15.0,
+      "minimum_radius_mm": 4.007917494679543,
+      "mutual_gap_lower_bound_mm": 0.8700099955609327,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -5.0,
+      "minimum_radius_mm": 4.4235331765868136,
+      "mutual_gap_lower_bound_mm": 0.870009995560933,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 5.0,
+      "minimum_radius_mm": 4.4235331765868136,
+      "mutual_gap_lower_bound_mm": 0.870009995560933,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 15.0,
+      "minimum_radius_mm": 4.007917494679543,
+      "mutual_gap_lower_bound_mm": 0.8700099955609327,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 25.0,
+      "minimum_radius_mm": 3.64999350037431,
+      "mutual_gap_lower_bound_mm": 0.8700099955609327,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 35.0,
+      "minimum_radius_mm": 3.648899965200525,
+      "mutual_gap_lower_bound_mm": 0.8700099955609321,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 45.0,
+      "minimum_radius_mm": 3.6479348531800713,
+      "mutual_gap_lower_bound_mm": 0.8700099955609321,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": -15.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.870003083933988,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": -5.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700026708871674,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 5.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700026708871674,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 15.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.870003083933988,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 25.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700000000195979,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 35.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700016409220032,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 45.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700057584510409,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 55.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700072846812593,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 65.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700000000100964,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 65.0,
+      "yaw_deg": 45.0,
+      "minimum_radius_mm": 3.6479348531800713,
+      "mutual_gap_lower_bound_mm": 0.8700000000100953,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": -15.0,
+      "yaw_deg": 45.0,
+      "minimum_radius_mm": 3.6479348531800713,
+      "mutual_gap_lower_bound_mm": 0.870003083933988,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "flex_deg": 65.0,
+      "yaw_deg": -25.0,
+      "minimum_radius_mm": 3.64999350037431,
+      "mutual_gap_lower_bound_mm": 0.8700000000100961,
+      "collisions": [],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

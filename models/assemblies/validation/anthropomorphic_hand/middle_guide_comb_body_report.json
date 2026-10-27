@@ -1,0 +1,239 @@
+{
+  "finger": "middle",
+  "scope": "body_only",
+  "rows": [
+    {
+      "pose": {},
+      "collisions": [],
+      "label": "neutral",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "collisions": [],
+      "label": "middle_pip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 15.0
+      },
+      "collisions": [],
+      "label": "middle_pip15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "collisions": [],
+      "label": "middle_pip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 45.0
+      },
+      "collisions": [],
+      "label": "middle_pip45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "collisions": [],
+      "label": "middle_pip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 75.0
+      },
+      "collisions": [],
+      "label": "middle_pip75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "collisions": [],
+      "label": "middle_pip90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 105.0
+      },
+      "collisions": [],
+      "label": "middle_pip105.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "collisions": [],
+      "label": "middle_pip110.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "collisions": [],
+      "label": "middle_dip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 15.0
+      },
+      "collisions": [],
+      "label": "middle_dip15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "collisions": [],
+      "label": "middle_dip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 45.0
+      },
+      "collisions": [],
+      "label": "middle_dip45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "collisions": [],
+      "label": "middle_dip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 75.0
+      },
+      "collisions": [],
+      "label": "middle_dip75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "collisions": [],
+      "label": "middle_dip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 0.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 30.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 60.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_flexion90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_abduction-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_abduction": 0.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_abduction0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "collisions": [],
+      "label": "middle_mcp_abduction15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "collisions": [],
+      "label": "fist",
+      "body_interferences": []
+    }
+  ],
+  "pass": true
+}

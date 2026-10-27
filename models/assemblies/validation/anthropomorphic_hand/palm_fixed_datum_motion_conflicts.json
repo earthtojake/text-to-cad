@@ -1,0 +1,10 @@
+[
+  {
+    "pose": {
+      "wrist_flexion": 55.0
+    },
+    "tendon": "index_mcp_flexion_negative",
+    "body": "wrist_-24_bolt",
+    "distance": 0.27265325975219895
+  }
+]

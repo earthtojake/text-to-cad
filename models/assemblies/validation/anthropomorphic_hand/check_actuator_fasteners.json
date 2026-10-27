@@ -1,0 +1,541 @@
+{
+  "body_count": 828,
+  "sources": {
+    "models/assemblies/src/anthropomorphic_hand/lib/actuator_fasteners.py": "d2b49d44d6f7a37f5dcf582512334ba891fca57e20cd66fe9a9fb88369f0dc2c",
+    "models/assemblies/src/anthropomorphic_hand/lib/motor.py": "4edb85aeb0eb7a1446f987ba01dcbc9e9913c86f49c1c602c932e18733af4a1e",
+    "models/assemblies/src/anthropomorphic_hand/lib/forearm_frame.py": "54ab34ca04bb15f43396897a90506673d34e4208f9aa0c8004bd88f1154fc30a",
+    "models/assemblies/src/anthropomorphic_hand/lib/tension_cartridge.py": "04436fd26666bdf4f3e1f90476d5c7f4f513d0f56d905e5bae83354ee9527ecd"
+  },
+  "own_collisions": [],
+  "mate_collisions": [
+    [
+      "rear_chassis_mount_1_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301564
+    ],
+    [
+      "rear_chassis_mount_1_M1p6_nut",
+      "frame_or_fork_0",
+      3.2208255650101663
+    ],
+    [
+      "rear_chassis_mount_2_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301561
+    ],
+    [
+      "rear_chassis_mount_2_M1p6_nut",
+      "frame_or_fork_0",
+      3.220825565010108
+    ],
+    [
+      "rear_chassis_mount_3_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301305
+    ],
+    [
+      "rear_chassis_mount_3_M1p6_nut",
+      "frame_or_fork_0",
+      3.2208255650101014
+    ],
+    [
+      "rear_chassis_mount_4_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301308
+    ],
+    [
+      "rear_chassis_mount_4_M1p6_nut",
+      "frame_or_fork_0",
+      3.220825565010113
+    ]
+  ],
+  "congruence": [
+    {
+      "station": "actuator_thumb_cmc_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_cmc_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_ip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_thumb_ip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_mcp_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_mcp_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_mcp_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_mcp_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_pip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_pip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_dip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_index_dip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_pip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_pip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_dip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_middle_dip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_pip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_pip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_dip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_ring_dip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_mcp_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_mcp_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_mcp_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_mcp_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_pip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_pip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_dip_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_little_dip_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_wrist_abduction_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_wrist_abduction_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_wrist_flexion_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_wrist_flexion_negative",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_palm_cup_positive",
+      "count": 16,
+      "mismatches": []
+    },
+    {
+      "station": "actuator_palm_cup_negative",
+      "count": 16,
+      "mismatches": []
+    }
+  ],
+  "own_exact_pairs": 476,
+  "actuator_mate_exact_pairs": 986,
+  "structure_exact_pairs": 108,
+  "structure_distances": [
+    {
+      "part": "wrist_frame_mount_1_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999999999999697
+    },
+    {
+      "part": "wrist_frame_mount_1_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_1_M3_captive_flanged_insert",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_2_M3_socket_screw",
+      "nearest_structural_body_mm": 0.1499999999999971
+    },
+    {
+      "part": "wrist_frame_mount_2_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_2_M3_captive_flanged_insert",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_3_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999999999999697
+    },
+    {
+      "part": "wrist_frame_mount_3_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_3_M3_captive_flanged_insert",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_4_M3_socket_screw",
+      "nearest_structural_body_mm": 0.1499999999999971
+    },
+    {
+      "part": "wrist_frame_mount_4_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "wrist_frame_mount_4_M3_captive_flanged_insert",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_1_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886590087
+    },
+    {
+      "part": "rear_external_mount_1_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_1_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_1_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_2_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886372073
+    },
+    {
+      "part": "rear_external_mount_2_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_2_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_2_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_3_M3_socket_screw",
+      "nearest_structural_body_mm": 0.149999948863784
+    },
+    {
+      "part": "rear_external_mount_3_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_3_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_3_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_4_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886671164
+    },
+    {
+      "part": "rear_external_mount_4_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_4_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_4_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_5_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886092352
+    },
+    {
+      "part": "rear_external_mount_5_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_5_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_5_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_6_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886363988
+    },
+    {
+      "part": "rear_external_mount_6_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_6_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_6_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_7_M3_socket_screw",
+      "nearest_structural_body_mm": 0.14999994886418708
+    },
+    {
+      "part": "rear_external_mount_7_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_7_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_7_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_external_mount_8_M3_socket_screw",
+      "nearest_structural_body_mm": 0.1499999488669029
+    },
+    {
+      "part": "rear_external_mount_8_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_8_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_external_mount_8_M3_nut",
+      "nearest_structural_body_mm": 0.19999999999998863
+    },
+    {
+      "part": "rear_chassis_mount_1_M1p6_socket_screw",
+      "nearest_structural_body_mm": 0.04999999999999548
+    },
+    {
+      "part": "rear_chassis_mount_1_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_1_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_1_M1p6_nut",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_2_M1p6_socket_screw",
+      "nearest_structural_body_mm": 0.04999999999999585
+    },
+    {
+      "part": "rear_chassis_mount_2_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_2_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_2_M1p6_nut",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_3_M1p6_socket_screw",
+      "nearest_structural_body_mm": 0.04999999999999548
+    },
+    {
+      "part": "rear_chassis_mount_3_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_3_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_3_M1p6_nut",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_4_M1p6_socket_screw",
+      "nearest_structural_body_mm": 0.04999999999999585
+    },
+    {
+      "part": "rear_chassis_mount_4_rear_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_4_front_washer",
+      "nearest_structural_body_mm": 0.0
+    },
+    {
+      "part": "rear_chassis_mount_4_M1p6_nut",
+      "nearest_structural_body_mm": 0.0
+    }
+  ],
+  "seconds": 531.1478090286255,
+  "ok": false
+}

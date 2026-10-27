@@ -1,0 +1,880 @@
+[
+  {
+    "flex": 0,
+    "yaw": 45,
+    "rows": [
+      {
+        "lane": -4.2,
+        "length_mm": 40.00000000000164,
+        "length_error_mm": 1.6413537196058314e-12,
+        "minimum_radius_mm": 3.64780400751474
+      },
+      {
+        "lane": 4.2,
+        "length_mm": 40.000000000364125,
+        "length_error_mm": 3.6412473036762094e-10,
+        "minimum_radius_mm": 3.6484886615001924
+      },
+      {
+        "lane": -5.4,
+        "length_mm": 36.00000000029966,
+        "length_error_mm": 2.9965718795210705e-10,
+        "minimum_radius_mm": 3.6478475479618564
+      },
+      {
+        "lane": 5.4,
+        "length_mm": 36.00000000002309,
+        "length_error_mm": 2.3092638912203256e-11,
+        "minimum_radius_mm": 3.649911534992411
+      },
+      {
+        "lane": -3,
+        "length_mm": 36.000000000066706,
+        "length_error_mm": 6.67057520331582e-11,
+        "minimum_radius_mm": 3.6478516516524806
+      },
+      {
+        "lane": 3,
+        "length_mm": 36.000000000040956,
+        "length_error_mm": 4.0955683289212175e-11,
+        "minimum_radius_mm": 3.6480967877805215
+      }
+    ],
+    "mutual_gaps": [
+      {
+        "a": "-4.2",
+        "b": "4.2",
+        "certified_gap_mm": 3.48545836567441
+      },
+      {
+        "a": "-4.2",
+        "b": "-5.4",
+        "certified_gap_mm": 0.06259538442755164
+      },
+      {
+        "a": "-4.2",
+        "b": "5.4",
+        "certified_gap_mm": 5.62575478227732
+      },
+      {
+        "a": "-4.2",
+        "b": "-3",
+        "certified_gap_mm": 0.06405812662017707
+      },
+      {
+        "a": "-4.2",
+        "b": "3",
+        "certified_gap_mm": 3.298811329093368
+      },
+      {
+        "a": "-4.2",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 9.87303268510828
+      },
+      {
+        "a": "-4.2",
+        "b": "own_flex_1",
+        "certified_gap_mm": 6.684868082384681
+      },
+      {
+        "a": "4.2",
+        "b": "-5.4",
+        "certified_gap_mm": 4.819729606550632
+      },
+      {
+        "a": "4.2",
+        "b": "5.4",
+        "certified_gap_mm": 0.08961413601787915
+      },
+      {
+        "a": "4.2",
+        "b": "-3",
+        "certified_gap_mm": 5.228219074705366
+      },
+      {
+        "a": "4.2",
+        "b": "3",
+        "certified_gap_mm": 0.05993323222568303
+      },
+      {
+        "a": "4.2",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 7.959334186911375
+      },
+      {
+        "a": "4.2",
+        "b": "own_flex_1",
+        "certified_gap_mm": 1.497307831380514
+      },
+      {
+        "a": "-5.4",
+        "b": "5.4",
+        "certified_gap_mm": 6.6583551805825545
+      },
+      {
+        "a": "-5.4",
+        "b": "-3",
+        "certified_gap_mm": 1.0467470406108732
+      },
+      {
+        "a": "-5.4",
+        "b": "3",
+        "certified_gap_mm": 4.335361065742823
+      },
+      {
+        "a": "-5.4",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 10.482876719728948
+      },
+      {
+        "a": "-5.4",
+        "b": "own_flex_1",
+        "certified_gap_mm": 7.70227194572211
+      },
+      {
+        "a": "5.4",
+        "b": "-3",
+        "certified_gap_mm": 6.320219426152661
+      },
+      {
+        "a": "5.4",
+        "b": "3",
+        "certified_gap_mm": 0.8897459490828336
+      },
+      {
+        "a": "5.4",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 7.849469704434455
+      },
+      {
+        "a": "5.4",
+        "b": "own_flex_1",
+        "certified_gap_mm": 0.12187072984777159
+      },
+      {
+        "a": "-3",
+        "b": "3",
+        "certified_gap_mm": 4.155231007383365
+      },
+      {
+        "a": "-3",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 4.613902746525613
+      },
+      {
+        "a": "-3",
+        "b": "own_flex_1",
+        "certified_gap_mm": 10.388490923860322
+      },
+      {
+        "a": "3",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 8.140703423835113
+      },
+      {
+        "a": "3",
+        "b": "own_flex_1",
+        "certified_gap_mm": 2.4262888330922343
+      },
+      {
+        "a": "own_flex_-1",
+        "b": "own_flex_1",
+        "certified_gap_mm": 13.19523999087511
+      }
+    ],
+    "clear": true,
+    "hardware": [
+      {
+        "lane": -4.2,
+        "body": "carrier",
+        "centerline_distance_mm": 1.2621584506483305,
+        "gap_mm": 0.8121584506483306
+      },
+      {
+        "lane": -4.2,
+        "body": "metacarpal",
+        "centerline_distance_mm": 1.543842222056852,
+        "gap_mm": 1.093842222056852
+      },
+      {
+        "lane": -4.2,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 6.265271476665336,
+        "gap_mm": 5.815271476665336
+      },
+      {
+        "lane": -4.2,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 8.49618231927695,
+        "gap_mm": 8.046182319276951
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 0.6311880465574141,
+        "gap_mm": 0.1811880465574141
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 1.992572232731192,
+        "gap_mm": 1.5425722327311922
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 4.058068039336792,
+        "gap_mm": 3.608068039336792
+      },
+      {
+        "lane": 4.2,
+        "body": "carrier",
+        "centerline_distance_mm": 0.652280375216655,
+        "gap_mm": 0.20228037521665504
+      },
+      {
+        "lane": 4.2,
+        "body": "metacarpal",
+        "centerline_distance_mm": 6.477783376008873,
+        "gap_mm": 6.027783376008873
+      },
+      {
+        "lane": 4.2,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.51369557779954,
+        "gap_mm": 11.06369557779954
+      },
+      {
+        "lane": 4.2,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.836555933027276,
+        "gap_mm": 13.386555933027276
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 1.325999857984321,
+        "gap_mm": 0.8759998579843211
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 2.4264065860276416,
+        "gap_mm": 1.9764065860276416
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 7.790690370085867,
+        "gap_mm": 7.340690370085867
+      },
+      {
+        "lane": -5.4,
+        "body": "carrier",
+        "centerline_distance_mm": 0.6396643693854238,
+        "gap_mm": 0.1896643693854238
+      },
+      {
+        "lane": -5.4,
+        "body": "metacarpal",
+        "centerline_distance_mm": 0.7876711176879738,
+        "gap_mm": 0.3376711176879738
+      },
+      {
+        "lane": -5.4,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.333349835932028,
+        "gap_mm": 10.883349835932028
+      },
+      {
+        "lane": -5.4,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.708891435997504,
+        "gap_mm": 13.258891435997505
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 3.858578771143995,
+        "gap_mm": 3.4085787711439948
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 5.6372449083483644,
+        "gap_mm": 5.187244908348364
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 3.337671117687974,
+        "gap_mm": 2.8876711176879737
+      },
+      {
+        "lane": 5.4,
+        "body": "carrier",
+        "centerline_distance_mm": 0.8177416163921652,
+        "gap_mm": 0.36774161639216524
+      },
+      {
+        "lane": 5.4,
+        "body": "metacarpal",
+        "centerline_distance_mm": 3.4316412508733722,
+        "gap_mm": 2.981641250873372
+      },
+      {
+        "lane": 5.4,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.440093392920993,
+        "gap_mm": 10.990093392920993
+      },
+      {
+        "lane": 5.4,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.796211434089663,
+        "gap_mm": 13.346211434089664
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 1.9528343988776153,
+        "gap_mm": 1.5028343988776154
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 1.6853424818478508,
+        "gap_mm": 1.235342481847851
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.549714171545896,
+        "gap_mm": 6.099714171545896
+      },
+      {
+        "lane": -3,
+        "body": "carrier",
+        "centerline_distance_mm": 1.8635634067874374,
+        "gap_mm": 1.4135634067874374
+      },
+      {
+        "lane": -3,
+        "body": "metacarpal",
+        "centerline_distance_mm": 2.28182318945964,
+        "gap_mm": 1.8318231894596402
+      },
+      {
+        "lane": -3,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 0.5276387474173008,
+        "gap_mm": 0.07763874741730076
+      },
+      {
+        "lane": -3,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 2.0678888506422832,
+        "gap_mm": 1.6178888506422833
+      },
+      {
+        "lane": -3,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 1.7307322691230624,
+        "gap_mm": 1.2807322691230625
+      },
+      {
+        "lane": -3,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 3.453200676063051,
+        "gap_mm": 3.003200676063051
+      },
+      {
+        "lane": -3,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 4.828914444722704,
+        "gap_mm": 4.378914444722704
+      },
+      {
+        "lane": 3,
+        "body": "carrier",
+        "centerline_distance_mm": 0.5848525876045293,
+        "gap_mm": 0.13485258760452928
+      },
+      {
+        "lane": 3,
+        "body": "metacarpal",
+        "centerline_distance_mm": 5.227000669615696,
+        "gap_mm": 4.7770006696156955
+      },
+      {
+        "lane": 3,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.01779475075817,
+        "gap_mm": 10.567794750758171
+      },
+      {
+        "lane": 3,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.438255924979195,
+        "gap_mm": 12.988255924979196
+      },
+      {
+        "lane": 3,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 0.771227535123839,
+        "gap_mm": 0.321227535123839
+      },
+      {
+        "lane": 3,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 0.7842406299007884,
+        "gap_mm": 0.33424062990078834
+      },
+      {
+        "lane": 3,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.515476802963129,
+        "gap_mm": 6.065476802963129
+      }
+    ]
+  },
+  {
+    "flex": 0,
+    "yaw": 0,
+    "rows": [
+      {
+        "lane": -4.2,
+        "length_mm": 40.000000000000405,
+        "length_error_mm": 4.050093593832571e-13,
+        "minimum_radius_mm": 3.649999999999859
+      },
+      {
+        "lane": 4.2,
+        "length_mm": 40.000000000036344,
+        "length_error_mm": 3.6344260934129125e-11,
+        "minimum_radius_mm": 3.65000000006411
+      },
+      {
+        "lane": -5.4,
+        "length_mm": 36.00000000000517,
+        "length_error_mm": 5.172751116333529e-12,
+        "minimum_radius_mm": 3.6499999999451367
+      },
+      {
+        "lane": 5.4,
+        "length_mm": 36.0000000000078,
+        "length_error_mm": 7.8017592386459e-12,
+        "minimum_radius_mm": 3.6499999999451744
+      },
+      {
+        "lane": -3,
+        "length_mm": 36.000000000275534,
+        "length_error_mm": 2.7553426207305165e-10,
+        "minimum_radius_mm": 3.647413854249353
+      },
+      {
+        "lane": 3,
+        "length_mm": 36.000000000183434,
+        "length_error_mm": 1.8343371266382746e-10,
+        "minimum_radius_mm": 3.6500000001204436
+      }
+    ],
+    "mutual_gaps": [
+      {
+        "a": "-4.2",
+        "b": "4.2",
+        "certified_gap_mm": 3.7361170987397583
+      },
+      {
+        "a": "-4.2",
+        "b": "-5.4",
+        "certified_gap_mm": 0.06658327604447312
+      },
+      {
+        "a": "-4.2",
+        "b": "5.4",
+        "certified_gap_mm": 6.624898330720436
+      },
+      {
+        "a": "-4.2",
+        "b": "-3",
+        "certified_gap_mm": 0.06410944084347814
+      },
+      {
+        "a": "-4.2",
+        "b": "3",
+        "certified_gap_mm": 4.308006382657545
+      },
+      {
+        "a": "-4.2",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 8.326395049367465
+      },
+      {
+        "a": "-4.2",
+        "b": "own_flex_1",
+        "certified_gap_mm": 1.7239375205294292
+      },
+      {
+        "a": "4.2",
+        "b": "-5.4",
+        "certified_gap_mm": 6.185525216959891
+      },
+      {
+        "a": "4.2",
+        "b": "5.4",
+        "certified_gap_mm": 0.06882935839930726
+      },
+      {
+        "a": "4.2",
+        "b": "-3",
+        "certified_gap_mm": 5.091178627092795
+      },
+      {
+        "a": "4.2",
+        "b": "3",
+        "certified_gap_mm": 0.06647946609381894
+      },
+      {
+        "a": "4.2",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 10.231744397965898
+      },
+      {
+        "a": "4.2",
+        "b": "own_flex_1",
+        "certified_gap_mm": 3.751664161320664
+      },
+      {
+        "a": "-5.4",
+        "b": "5.4",
+        "certified_gap_mm": 8.507090589729934
+      },
+      {
+        "a": "-5.4",
+        "b": "-3",
+        "certified_gap_mm": 1.0625371715092569
+      },
+      {
+        "a": "-5.4",
+        "b": "3",
+        "certified_gap_mm": 6.2924111946055525
+      },
+      {
+        "a": "-5.4",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 8.65830799949727
+      },
+      {
+        "a": "-5.4",
+        "b": "own_flex_1",
+        "certified_gap_mm": 3.8983775587758065
+      },
+      {
+        "a": "5.4",
+        "b": "-3",
+        "certified_gap_mm": 6.146950746230328
+      },
+      {
+        "a": "5.4",
+        "b": "3",
+        "certified_gap_mm": 1.062099526760357
+      },
+      {
+        "a": "5.4",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 10.877575359242817
+      },
+      {
+        "a": "5.4",
+        "b": "own_flex_1",
+        "certified_gap_mm": 4.603359377415522
+      },
+      {
+        "a": "-3",
+        "b": "3",
+        "certified_gap_mm": 4.055835373772204
+      },
+      {
+        "a": "-3",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 0.05996246484859957
+      },
+      {
+        "a": "-3",
+        "b": "own_flex_1",
+        "certified_gap_mm": 8.445660470825363
+      },
+      {
+        "a": "3",
+        "b": "own_flex_-1",
+        "certified_gap_mm": 9.620891047742283
+      },
+      {
+        "a": "3",
+        "b": "own_flex_1",
+        "certified_gap_mm": 2.390441624753897
+      },
+      {
+        "a": "own_flex_-1",
+        "b": "own_flex_1",
+        "certified_gap_mm": 13.19523999087511
+      }
+    ],
+    "clear": true,
+    "hardware": [
+      {
+        "lane": -4.2,
+        "body": "carrier",
+        "centerline_distance_mm": 0.7936252984175266,
+        "gap_mm": 0.3436252984175266
+      },
+      {
+        "lane": -4.2,
+        "body": "metacarpal",
+        "centerline_distance_mm": 4.411041121642237,
+        "gap_mm": 3.9610411216422365
+      },
+      {
+        "lane": -4.2,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 6.279627778816314,
+        "gap_mm": 5.829627778816314
+      },
+      {
+        "lane": -4.2,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 8.507452638043866,
+        "gap_mm": 8.057452638043866
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 0.560182271492169,
+        "gap_mm": 0.11018227149216903
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 1.689548887309407,
+        "gap_mm": 1.2395488873094072
+      },
+      {
+        "lane": -4.2,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.553183190336404,
+        "gap_mm": 6.103183190336404
+      },
+      {
+        "lane": 4.2,
+        "body": "carrier",
+        "centerline_distance_mm": 0.6579935060119598,
+        "gap_mm": 0.20799350601195982
+      },
+      {
+        "lane": 4.2,
+        "body": "metacarpal",
+        "centerline_distance_mm": 5.248852056542545,
+        "gap_mm": 4.798852056542545
+      },
+      {
+        "lane": 4.2,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.514843451808556,
+        "gap_mm": 11.064843451808557
+      },
+      {
+        "lane": 4.2,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.831898767276957,
+        "gap_mm": 13.381898767276958
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 3.833089964894065,
+        "gap_mm": 3.3830899648940647
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 3.5313408998098845,
+        "gap_mm": 3.0813408998098843
+      },
+      {
+        "lane": 4.2,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 7.477678914574648,
+        "gap_mm": 7.027678914574648
+      },
+      {
+        "lane": -5.4,
+        "body": "carrier",
+        "centerline_distance_mm": 2.3516993258217083,
+        "gap_mm": 1.9016993258217083
+      },
+      {
+        "lane": -5.4,
+        "body": "metacarpal",
+        "centerline_distance_mm": 1.7642750903549278,
+        "gap_mm": 1.3142750903549278
+      },
+      {
+        "lane": -5.4,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.277357513107855,
+        "gap_mm": 10.827357513107856
+      },
+      {
+        "lane": -5.4,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.66372642357317,
+        "gap_mm": 13.21372642357317
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 1.7028936842188223,
+        "gap_mm": 1.2528936842188223
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 3.3999595853698805,
+        "gap_mm": 2.9499595853698803
+      },
+      {
+        "lane": -5.4,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.585999041073508,
+        "gap_mm": 6.135999041073508
+      },
+      {
+        "lane": 5.4,
+        "body": "carrier",
+        "centerline_distance_mm": 1.267495006347743,
+        "gap_mm": 0.8174950063477431
+      },
+      {
+        "lane": 5.4,
+        "body": "metacarpal",
+        "centerline_distance_mm": 1.7903472482342606,
+        "gap_mm": 1.3403472482342607
+      },
+      {
+        "lane": 5.4,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.32531539077555,
+        "gap_mm": 10.875315390775551
+      },
+      {
+        "lane": 5.4,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.700462163424197,
+        "gap_mm": 13.250462163424197
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 5.647775211277168,
+        "gap_mm": 5.197775211277168
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 3.849283286842007,
+        "gap_mm": 3.3992832868420066
+      },
+      {
+        "lane": 5.4,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.585999040817035,
+        "gap_mm": 6.135999040817035
+      },
+      {
+        "lane": -3,
+        "body": "carrier",
+        "centerline_distance_mm": 4.63991542166088,
+        "gap_mm": 4.18991542166088
+      },
+      {
+        "lane": -3,
+        "body": "metacarpal",
+        "centerline_distance_mm": 4.12065584099419,
+        "gap_mm": 3.67065584099419
+      },
+      {
+        "lane": -3,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 0.9497222059351148,
+        "gap_mm": 0.4997222059351148
+      },
+      {
+        "lane": -3,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 3.4497222059351147,
+        "gap_mm": 2.9997222059351145
+      },
+      {
+        "lane": -3,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 0.7699329394024644,
+        "gap_mm": 0.3199329394024644
+      },
+      {
+        "lane": -3,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 0.9710559149738802,
+        "gap_mm": 0.5210559149738803
+      },
+      {
+        "lane": -3,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.606000209733445,
+        "gap_mm": 6.1560002097334445
+      },
+      {
+        "lane": 3,
+        "body": "carrier",
+        "centerline_distance_mm": 0.9429135476649698,
+        "gap_mm": 0.4929135476649698
+      },
+      {
+        "lane": 3,
+        "body": "metacarpal",
+        "centerline_distance_mm": 4.123851167998707,
+        "gap_mm": 3.6738511679987065
+      },
+      {
+        "lane": 3,
+        "body": "yaw_pulley_-11.0",
+        "centerline_distance_mm": 11.041966412399582,
+        "gap_mm": 10.591966412399582
+      },
+      {
+        "lane": 3,
+        "body": "yaw_pulley_-13.5",
+        "centerline_distance_mm": 13.457838593619003,
+        "gap_mm": 13.007838593619004
+      },
+      {
+        "lane": 3,
+        "body": "flex_pulley_-0.9",
+        "centerline_distance_mm": 3.272721194695121,
+        "gap_mm": 2.822721194695121
+      },
+      {
+        "lane": 3,
+        "body": "flex_pulley_0.9",
+        "centerline_distance_mm": 1.4802209826757668,
+        "gap_mm": 1.030220982675767
+      },
+      {
+        "lane": 3,
+        "body": "flex_shaft",
+        "centerline_distance_mm": 6.589483847774661,
+        "gap_mm": 6.1394838477746605
+      }
+    ]
+  }
+]

@@ -1,0 +1,181 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/wrist_guide_mounts_review.step",
+  "sha256": "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65",
+  "body_count": 29,
+  "bodies": [
+    {
+      "name": "wrist_abduction_drive_mouth_-1_structural",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_liner_cap",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_host_cap",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_host_M0p6_screw",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_-1_liner_+1_M0p4_screw",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_structural",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_liner_cap",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_host_cap",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_host_M0p6_screw",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_abduction_drive_mouth_1_liner_-1_M0p4_screw",
+      "frame": "forearm",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_structural",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_liner_cap",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_host_cap",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_host_M0p6_screw",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_structural",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_liner_cap",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_host_cap",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_host_M0p6_screw",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw",
+      "frame": "wrist_abduction",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_1",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_2",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_cap_1",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_cap_2",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "fastener"
+    }
+  ]
+}

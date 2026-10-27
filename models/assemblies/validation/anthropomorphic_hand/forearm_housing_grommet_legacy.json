@@ -1,0 +1,44 @@
+{
+  "ok": false,
+  "partial": true,
+  "occurrences": 42,
+  "mutual_pairs": 861,
+  "host_pairs": 4620,
+  "route_segments": 0,
+  "exact_curve_distances": 0,
+  "minimum_route_clearance": 1000000000.0,
+  "wrist_hardware_poses": 0,
+  "failures": [
+    {
+      "a": "left_forearm_open_side_frame",
+      "b": "left_forearm_cable_exit_1_silicone_grommet",
+      "overlap": 0.05937608019014523
+    },
+    {
+      "a": "left_forearm_open_side_frame",
+      "b": "left_forearm_cable_exit_2_silicone_grommet",
+      "overlap": 0.059375993656953514
+    },
+    {
+      "a": "right_forearm_open_side_frame",
+      "b": "right_forearm_cable_exit_1_silicone_grommet",
+      "overlap": 0.059376077618993266
+    },
+    {
+      "a": "right_forearm_open_side_frame",
+      "b": "right_forearm_cable_exit_2_silicone_grommet",
+      "overlap": 0.059376077627220886
+    },
+    {
+      "a": "left_forearm_rail_clamp_2_removable_cap",
+      "host": "forearm_monolithic_24_seat_open_reaction_chassis",
+      "overlap": 12.224866776461644
+    },
+    {
+      "a": "right_forearm_rail_clamp_2_removable_cap",
+      "host": "forearm_monolithic_24_seat_open_reaction_chassis",
+      "overlap": 12.224866776461608
+    }
+  ],
+  "elapsed_seconds": 157.23564754100516
+}

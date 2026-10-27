@@ -1,0 +1,1933 @@
+{
+  "scope": "Verify authored gear axes and rope terminations under actual payout motion.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_actuator_kinematics.py": "eed2973c397d6281b4a974eceb84ea5f2d5f8c770207b1c1f1ad482e726e4c13",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/actuator_kinematics.py": "f972bedfb11fe8e56a3f0519a0e55eee0a468252e6b565d9ec8cdf5986c1c83c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/forearm_routing.py": "ff8e20b3463c9b85340545d54db3a1131907342799e1ccdb141edfe1b86a2819",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/capstan_path.py": "f6462bb55f711b974696fdd8548ce0c4a32ee35a48495faa0b8aa0ad6dd49b4a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af"
+  },
+  "rows": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 4.832213032818602e-14,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.907985046680551e-14,
+      "planet_axis_orbit_rolling_max_error": 6.521915363565902e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 9.106319693313691e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 6.07087979554246e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 5.955433342649105e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.351623381340333e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 3.03543989777123e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.929642751054232e-14,
+      "planet_axis_orbit_rolling_max_error": 5.783398860650275e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.1776437161565096e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.351623381340333e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.929642751054232e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 2.864289338439558e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.7763568394002505e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.0097183471152322e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.5888218580782548e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.880780558453649e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.944109290391274e-15,
+      "planet_axis_orbit_rolling_max_error": 2.5618982671915014e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 1.464821375527116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 1.7763568394002505e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 6.135506694409735e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 1.1457157353758233e-13,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.07087979554246e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.399531182602658e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 5.050135945278633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.01080938469374e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.204547701064548e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_pip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.30540822551633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.30540822551633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 2.9777166713245526e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "index_dip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 2.8916994303251375e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 5.929547246265982e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.01080938469374e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 1.4210854715202004e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 4.2863236558381085e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 1.464821375527116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.432144669219779e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 2.8916994303251375e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.4238583238573986e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.160723346098895e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 8.881784197001252e-16,
+      "planet_axis_orbit_rolling_max_error": 1.551136925266137e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 8.881784197001252e-16,
+      "planet_axis_orbit_rolling_max_error": 7.588599744428075e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.588599744428075e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 1.1374233532693354e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.07087979554246e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 6.135506694409735e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 1.1457157353758233e-13,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.01080938469374e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.204547701064548e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.399531182602658e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 5.050135945278633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 2.9777166713245526e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.30540822551633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 3.30540822551633e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.847716647714797e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 6.01080938469374e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 2.8916994303251375e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 5.929547246265982e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.432144669219779e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 2.8916994303251375e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.5888218580782548e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.4238583238573986e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 1.4210854715202004e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 6.217248937900877e-15,
+      "planet_axis_orbit_rolling_max_error": 4.2863236558381085e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 1.464821375527116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 1.1374233532693354e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.32410687763558e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.160723346098895e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 8.881784197001252e-16,
+      "planet_axis_orbit_rolling_max_error": 1.551136925266137e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 8.881784197001252e-16,
+      "planet_axis_orbit_rolling_max_error": 7.588599744428075e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.588599744428075e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.907985046680551e-14,
+      "planet_axis_orbit_rolling_max_error": 6.521915363565902e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 9.106319693313691e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 4.832213032818602e-14,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.351623381340333e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 6.07087979554246e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 5.955433342649105e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_pip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.929642751054232e-14,
+      "planet_axis_orbit_rolling_max_error": 5.783398860650275e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.1776437161565096e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 3.351623381340333e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.929642751054232e-14,
+      "planet_axis_orbit_rolling_max_error": 5.695433295429594e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 3.552713678800501e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.03543989777123e-14,
+      "planet_axis_orbit_rolling_max_error": 3.03543989777123e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "little_dip_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.728578676879116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.0658141036401503e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 2.842170943040401e-14,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 2.864289338439558e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.7763568394002505e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 5.684341886080802e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.842170943040401e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.0097183471152322e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.864289338439558e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 1.5888218580782548e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 1.464821375527116e-14,
+      "planet_axis_orbit_rolling_max_error": 4.2780337774645346e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 1.4210854715202004e-14,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 2.929642751054232e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 1.7763568394002505e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "rotation_rad": -15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 5.880780558453649e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "rotation_rad": -1.2,
+      "spool_endpoint_error_mm": 7.944109290391274e-15,
+      "planet_axis_orbit_rolling_max_error": 2.5618982671915014e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "rotation_rad": 0.0,
+      "spool_endpoint_error_mm": 0.0,
+      "planet_axis_orbit_rolling_max_error": 0.0,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "rotation_rad": 1.2,
+      "spool_endpoint_error_mm": 3.552713678800501e-15,
+      "planet_axis_orbit_rolling_max_error": 1.464821375527116e-14,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "rotation_rad": 15.707963267948966,
+      "spool_endpoint_error_mm": 7.105427357601002e-15,
+      "planet_axis_orbit_rolling_max_error": 7.105427357601002e-15,
+      "input_key_error_mm": 0.0,
+      "pass_": true
+    }
+  ],
+  "pass_": true
+}

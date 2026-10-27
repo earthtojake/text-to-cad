@@ -1,0 +1,478 @@
+{
+  "pose_count": 41,
+  "rows": [
+    {
+      "pose": "flat_open",
+      "angles": {},
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_mcp_abduction_-15",
+      "angles": {
+        "middle_mcp_abduction": -15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 3.204296758965566e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.09000233041553163
+    },
+    {
+      "pose": "middle_mcp_abduction_-5",
+      "angles": {
+        "middle_mcp_abduction": -5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 1.1962500143901049e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.25186032391867574
+    },
+    {
+      "pose": "middle_mcp_abduction_5",
+      "angles": {
+        "middle_mcp_abduction": 5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 1.4054300946555646e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.25186074315042795
+    },
+    {
+      "pose": "middle_mcp_abduction_15",
+      "angles": {
+        "middle_mcp_abduction": 15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 3.204296758965566e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.0900067046059817
+    },
+    {
+      "pose": "middle_mcp_flexion_-15",
+      "angles": {
+        "middle_mcp_flexion": -15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.659300627039741e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.08990906783092079
+    },
+    {
+      "pose": "middle_mcp_flexion_-5",
+      "angles": {
+        "middle_mcp_flexion": -5.0
+      },
+      "minimum_radius_mm": 3.4999999999999982,
+      "maximum_join_gap_mm": 1.3322676295501878e-15,
+      "maximum_tangent_error": 3.6650236557393156e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699901276875386
+    },
+    {
+      "pose": "middle_mcp_flexion_5",
+      "angles": {
+        "middle_mcp_flexion": 5.0
+      },
+      "minimum_radius_mm": 3.4999999999999982,
+      "maximum_join_gap_mm": 1.3322676295501878e-15,
+      "maximum_tangent_error": 3.6650236557393156e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.27000626188330334
+    },
+    {
+      "pose": "middle_mcp_flexion_15",
+      "angles": {
+        "middle_mcp_flexion": 15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.659300627039741e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2700018490282242
+    },
+    {
+      "pose": "middle_mcp_flexion_25",
+      "angles": {
+        "middle_mcp_flexion": 25.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 1.4238583238573986e-14,
+      "maximum_tangent_error": 6.955527313080394e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.27000228718358443
+    },
+    {
+      "pose": "middle_mcp_flexion_35",
+      "angles": {
+        "middle_mcp_flexion": 35.0
+      },
+      "minimum_radius_mm": 3.4999999999999987,
+      "maximum_join_gap_mm": 1.5888218580782548e-14,
+      "maximum_tangent_error": 6.86724770124419e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.27000482905212986
+    },
+    {
+      "pose": "middle_mcp_flexion_45",
+      "angles": {
+        "middle_mcp_flexion": 45.0
+      },
+      "minimum_radius_mm": 3.4999999999999933,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.632437998758358e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.27000252954627013
+    },
+    {
+      "pose": "middle_mcp_flexion_55",
+      "angles": {
+        "middle_mcp_flexion": 55.0
+      },
+      "minimum_radius_mm": 3.4999999999999907,
+      "maximum_join_gap_mm": 8.881784197001252e-15,
+      "maximum_tangent_error": 2.9893669801409084e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.26999999999999946
+    },
+    {
+      "pose": "middle_mcp_flexion_65",
+      "angles": {
+        "middle_mcp_flexion": 65.0
+      },
+      "minimum_radius_mm": 3.5000000000000013,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 1.0530159589964839e-14,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2700021918283936
+    },
+    {
+      "pose": "middle_mcp_flexion_75",
+      "angles": {
+        "middle_mcp_flexion": 75.0
+      },
+      "minimum_radius_mm": 3.500000000000006,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 5.521057726179437e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2700024776396567
+    },
+    {
+      "pose": "middle_mcp_flexion_85",
+      "angles": {
+        "middle_mcp_flexion": 85.0
+      },
+      "minimum_radius_mm": 3.4999999999999942,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.82220677164838e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.27000502879019506
+    },
+    {
+      "pose": "middle_mcp_flexion_90",
+      "angles": {
+        "middle_mcp_flexion": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.3102244613661886e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.269993963259782
+    },
+    {
+      "pose": "middle_pip_0",
+      "angles": {
+        "middle_pip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_10",
+      "angles": {
+        "middle_pip": 10.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 2.8508313657667433e-14,
+      "maximum_tangent_error": 2.1210781103223385e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_20",
+      "angles": {
+        "middle_pip": 20.0
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.7028447152542777e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_30",
+      "angles": {
+        "middle_pip": 30.0
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 8.881784197001252e-16,
+      "maximum_tangent_error": 1.0532500405730103e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_40",
+      "angles": {
+        "middle_pip": 40.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 3.00540469234687e-14,
+      "maximum_tangent_error": 9.694605782913358e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_50",
+      "angles": {
+        "middle_pip": 50.0
+      },
+      "minimum_radius_mm": 3.5000000000000044,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 4.407459562045625e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2700025295462677
+    },
+    {
+      "pose": "middle_pip_60",
+      "angles": {
+        "middle_pip": 60.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 1.9899025015462835e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_70",
+      "angles": {
+        "middle_pip": 70.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 3.260957681782951e-14,
+      "maximum_tangent_error": 6.938893903907228e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2700025295462677
+    },
+    {
+      "pose": "middle_pip_80",
+      "angles": {
+        "middle_pip": 80.0
+      },
+      "minimum_radius_mm": 3.499999999999991,
+      "maximum_join_gap_mm": 2.4868995751603507e-14,
+      "maximum_tangent_error": 2.9940020596445738e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_90",
+      "angles": {
+        "middle_pip": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_100",
+      "angles": {
+        "middle_pip": 100.0
+      },
+      "minimum_radius_mm": 3.499999999999991,
+      "maximum_join_gap_mm": 2.4868995751603507e-14,
+      "maximum_tangent_error": 9.391438513943436e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_pip_110",
+      "angles": {
+        "middle_pip": 110.0
+      },
+      "minimum_radius_mm": 3.5000000000000027,
+      "maximum_join_gap_mm": 1.2434497875801753e-14,
+      "maximum_tangent_error": 4.8469850251071806e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_0",
+      "angles": {
+        "middle_dip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_10",
+      "angles": {
+        "middle_dip": 10.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_20",
+      "angles": {
+        "middle_dip": 20.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_30",
+      "angles": {
+        "middle_dip": 30.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_40",
+      "angles": {
+        "middle_dip": 40.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_50",
+      "angles": {
+        "middle_dip": 50.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_60",
+      "angles": {
+        "middle_dip": 60.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_70",
+      "angles": {
+        "middle_dip": 70.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "middle_dip_80",
+      "angles": {
+        "middle_dip": 80.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.2699999999999968
+    },
+    {
+      "pose": "full_fist",
+      "angles": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "minimum_radius_mm": 3.4999999999999973,
+      "maximum_join_gap_mm": 2.929642751054232e-14,
+      "maximum_tangent_error": 3.742373919797964e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.269993963259782
+    },
+    {
+      "pose": "precision_pinch",
+      "angles": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 40,
+        "middle_pip": 60,
+        "middle_dip": 30
+      },
+      "minimum_radius_mm": 3.4999999999999907,
+      "maximum_join_gap_mm": 1.4888583356622763e-14,
+      "maximum_tangent_error": 9.330002786622952e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.26999990709438204
+    },
+    {
+      "pose": "spread_flex",
+      "angles": {
+        "middle_mcp_abduction": 15,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "minimum_radius_mm": 3.499999999999994,
+      "maximum_join_gap_mm": 2.95110562224397e-14,
+      "maximum_tangent_error": 4.6596312966847435e-15,
+      "minimum_all_paths_0_45mm_envelope_gap_lower_bound_mm": 0.13001478058398985
+    }
+  ],
+  "failures": [],
+  "length_jacobian_columns": [
+    {
+      "joint": "middle_mcp_abduction",
+      "d_length_d_radian": [
+        -5.499999999864802,
+        5.499999999864802,
+        8.142219984546602e-09,
+        -4.4782209915006316e-08,
+        3.256887993818641e-08,
+        -7.327997986091943e-08,
+        -1.6284439969093204e-08,
+        -3.256887993818641e-08
+      ]
+    },
+    {
+      "joint": "middle_mcp_flexion",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        -5.499999999864802,
+        5.499999999864802,
+        8.142219984546602e-09,
+        -4.071109992273301e-08,
+        1.6284439969093204e-08,
+        0.0
+      ]
+    },
+    {
+      "joint": "middle_pip",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -4.500000005070796,
+        4.499999996928576,
+        6.513775987637282e-08,
+        -1.6284439969093204e-08
+      ]
+    },
+    {
+      "joint": "middle_dip",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -3.4999999939923505,
+        3.5000000102767905
+      ]
+    }
+  ],
+  "limitations": "All paths conservatively use0.45 radius in pairclearance; negativecandidate needs actualgroup radii/solids. Excludes hand solids."
+}

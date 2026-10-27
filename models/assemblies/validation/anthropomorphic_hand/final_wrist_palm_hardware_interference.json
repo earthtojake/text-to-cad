@@ -1,0 +1,13 @@
+{
+  "body_count": 44,
+  "processed": 44,
+  "exact_booleans": 41,
+  "congruent_proof_reuse": 1,
+  "collisions": [],
+  "complete": true,
+  "pass": true,
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/palm_hardware_review.step": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/wrist_guide_mounts_review.step": "074592457b000ef471b1d96088d4de782587ba8218c10cab39269b7d5d9aee3a"
+  }
+}

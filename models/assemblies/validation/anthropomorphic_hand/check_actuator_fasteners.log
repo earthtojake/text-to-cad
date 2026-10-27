@@ -1,0 +1,209 @@
+Generated 828 hardware bodies
+Own pairs 476 collisions 0
+Station actuator_thumb_cmc_abduction_positive checked
+Station actuator_thumb_cmc_abduction_negative checked
+Station actuator_thumb_cmc_flexion_positive checked
+Station actuator_thumb_cmc_flexion_negative checked
+Station actuator_thumb_mcp_abduction_positive checked
+Station actuator_thumb_mcp_abduction_negative checked
+Station actuator_thumb_mcp_flexion_positive checked
+Station actuator_thumb_mcp_flexion_negative checked
+Station actuator_thumb_ip_positive checked
+Station actuator_thumb_ip_negative checked
+Station actuator_index_mcp_abduction_positive checked
+Station actuator_index_mcp_abduction_negative checked
+Station actuator_index_mcp_flexion_positive checked
+Station actuator_index_mcp_flexion_negative checked
+Station actuator_index_pip_positive checked
+Station actuator_index_pip_negative checked
+Station actuator_index_dip_positive checked
+Station actuator_index_dip_negative checked
+Station actuator_middle_mcp_abduction_positive checked
+Station actuator_middle_mcp_abduction_negative checked
+Station actuator_middle_mcp_flexion_positive checked
+Station actuator_middle_mcp_flexion_negative checked
+Station actuator_middle_pip_positive checked
+Station actuator_middle_pip_negative checked
+Station actuator_middle_dip_positive checked
+Station actuator_middle_dip_negative checked
+Station actuator_ring_mcp_abduction_positive checked
+Station actuator_ring_mcp_abduction_negative checked
+Station actuator_ring_mcp_flexion_positive checked
+Station actuator_ring_mcp_flexion_negative checked
+Station actuator_ring_pip_positive checked
+Station actuator_ring_pip_negative checked
+Station actuator_ring_dip_positive checked
+Station actuator_ring_dip_negative checked
+Station actuator_little_mcp_abduction_positive checked
+Station actuator_little_mcp_abduction_negative checked
+Station actuator_little_mcp_flexion_positive checked
+Station actuator_little_mcp_flexion_negative checked
+Station actuator_little_pip_positive checked
+Station actuator_little_pip_negative checked
+Station actuator_little_dip_positive checked
+Station actuator_little_dip_negative checked
+Station actuator_wrist_abduction_positive checked
+Station actuator_wrist_abduction_negative checked
+Station actuator_wrist_flexion_positive checked
+Station actuator_wrist_flexion_negative checked
+Station actuator_palm_cup_positive checked
+Station actuator_palm_cup_negative checked
+Structure actuator_thumb_cmc_abduction_positive
+Structure actuator_thumb_cmc_abduction_negative
+Structure actuator_thumb_cmc_flexion_positive
+Structure actuator_thumb_cmc_flexion_negative
+Structure actuator_thumb_mcp_abduction_positive
+Structure actuator_thumb_mcp_abduction_negative
+Structure actuator_thumb_mcp_flexion_positive
+Structure actuator_thumb_mcp_flexion_negative
+Structure actuator_thumb_ip_positive
+Structure actuator_thumb_ip_negative
+Structure actuator_index_mcp_abduction_positive
+Structure actuator_index_mcp_abduction_negative
+Structure actuator_index_mcp_flexion_positive
+Structure actuator_index_mcp_flexion_negative
+Structure actuator_index_pip_positive
+Structure actuator_index_pip_negative
+Structure actuator_index_dip_positive
+Structure actuator_index_dip_negative
+Structure actuator_middle_mcp_abduction_positive
+Structure actuator_middle_mcp_abduction_negative
+Structure actuator_middle_mcp_flexion_positive
+Structure actuator_middle_mcp_flexion_negative
+Structure actuator_middle_pip_positive
+Structure actuator_middle_pip_negative
+Structure actuator_middle_dip_positive
+Structure actuator_middle_dip_negative
+Structure actuator_ring_mcp_abduction_positive
+Structure actuator_ring_mcp_abduction_negative
+Structure actuator_ring_mcp_flexion_positive
+Structure actuator_ring_mcp_flexion_negative
+Structure actuator_ring_pip_positive
+Structure actuator_ring_pip_negative
+Structure actuator_ring_dip_positive
+Structure actuator_ring_dip_negative
+Structure actuator_little_mcp_abduction_positive
+Structure actuator_little_mcp_abduction_negative
+Structure actuator_little_mcp_flexion_positive
+Structure actuator_little_mcp_flexion_negative
+Structure actuator_little_pip_positive
+Structure actuator_little_pip_negative
+Structure actuator_little_dip_positive
+Structure actuator_little_dip_negative
+Structure actuator_wrist_abduction_positive
+Structure actuator_wrist_abduction_negative
+Structure actuator_wrist_flexion_positive
+Structure actuator_wrist_flexion_negative
+Structure actuator_palm_cup_positive
+Structure actuator_palm_cup_negative
+Structure wrist_frame_mount_1_M3_socket_screw
+Structure wrist_frame_mount_1_rear_washer
+Structure wrist_frame_mount_1_M3_captive_flanged_insert
+Structure wrist_frame_mount_2_M3_socket_screw
+Structure wrist_frame_mount_2_rear_washer
+Structure wrist_frame_mount_2_M3_captive_flanged_insert
+Structure wrist_frame_mount_3_M3_socket_screw
+Structure wrist_frame_mount_3_rear_washer
+Structure wrist_frame_mount_3_M3_captive_flanged_insert
+Structure wrist_frame_mount_4_M3_socket_screw
+Structure wrist_frame_mount_4_rear_washer
+Structure wrist_frame_mount_4_M3_captive_flanged_insert
+Structure rear_external_mount_1_M3_socket_screw
+Structure rear_external_mount_1_rear_washer
+Structure rear_external_mount_1_front_washer
+Structure rear_external_mount_1_M3_nut
+Structure rear_external_mount_2_M3_socket_screw
+Structure rear_external_mount_2_rear_washer
+Structure rear_external_mount_2_front_washer
+Structure rear_external_mount_2_M3_nut
+Structure rear_external_mount_3_M3_socket_screw
+Structure rear_external_mount_3_rear_washer
+Structure rear_external_mount_3_front_washer
+Structure rear_external_mount_3_M3_nut
+Structure rear_external_mount_4_M3_socket_screw
+Structure rear_external_mount_4_rear_washer
+Structure rear_external_mount_4_front_washer
+Structure rear_external_mount_4_M3_nut
+Structure rear_external_mount_5_M3_socket_screw
+Structure rear_external_mount_5_rear_washer
+Structure rear_external_mount_5_front_washer
+Structure rear_external_mount_5_M3_nut
+Structure rear_external_mount_6_M3_socket_screw
+Structure rear_external_mount_6_rear_washer
+Structure rear_external_mount_6_front_washer
+Structure rear_external_mount_6_M3_nut
+Structure rear_external_mount_7_M3_socket_screw
+Structure rear_external_mount_7_rear_washer
+Structure rear_external_mount_7_front_washer
+Structure rear_external_mount_7_M3_nut
+Structure rear_external_mount_8_M3_socket_screw
+Structure rear_external_mount_8_rear_washer
+Structure rear_external_mount_8_front_washer
+Structure rear_external_mount_8_M3_nut
+Structure rear_chassis_mount_1_M1p6_socket_screw
+Structure rear_chassis_mount_1_rear_washer
+Structure rear_chassis_mount_1_front_washer
+Structure rear_chassis_mount_1_M1p6_nut
+Structure rear_chassis_mount_2_M1p6_socket_screw
+Structure rear_chassis_mount_2_rear_washer
+Structure rear_chassis_mount_2_front_washer
+Structure rear_chassis_mount_2_M1p6_nut
+Structure rear_chassis_mount_3_M1p6_socket_screw
+Structure rear_chassis_mount_3_rear_washer
+Structure rear_chassis_mount_3_front_washer
+Structure rear_chassis_mount_3_M1p6_nut
+Structure rear_chassis_mount_4_M1p6_socket_screw
+Structure rear_chassis_mount_4_rear_washer
+Structure rear_chassis_mount_4_front_washer
+Structure rear_chassis_mount_4_M1p6_nut
+{
+  "body_count": 828,
+  "own_collisions": [],
+  "mate_collisions": [
+    [
+      "rear_chassis_mount_1_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301564
+    ],
+    [
+      "rear_chassis_mount_1_M1p6_nut",
+      "frame_or_fork_0",
+      3.2208255650101663
+    ],
+    [
+      "rear_chassis_mount_2_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301561
+    ],
+    [
+      "rear_chassis_mount_2_M1p6_nut",
+      "frame_or_fork_0",
+      3.220825565010108
+    ],
+    [
+      "rear_chassis_mount_3_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301305
+    ],
+    [
+      "rear_chassis_mount_3_M1p6_nut",
+      "frame_or_fork_0",
+      3.2208255650101014
+    ],
+    [
+      "rear_chassis_mount_4_front_washer",
+      "frame_or_fork_0",
+      0.5564392807301308
+    ],
+    [
+      "rear_chassis_mount_4_M1p6_nut",
+      "frame_or_fork_0",
+      3.220825565010113
+    ]
+  ],
+  "own_exact_pairs": 476,
+  "actuator_mate_exact_pairs": 986,
+  "structure_exact_pairs": 108,
+  "seconds": 531.1478090286255,
+  "ok": false
+}

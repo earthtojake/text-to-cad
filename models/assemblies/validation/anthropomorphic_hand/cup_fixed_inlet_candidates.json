@@ -1,0 +1,162 @@
+[
+  {
+    "tendon": "little_mcp_abduction_positive",
+    "point": [
+      16.22366801037394,
+      35.0,
+      -9.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      16.22366801037394,
+      59.603627893291105,
+      -9.5
+    ],
+    "working_length": 28.603627893291105
+  },
+  {
+    "tendon": "little_mcp_abduction_negative",
+    "point": [
+      26.193053667777093,
+      35.0,
+      -12.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      26.193053667777093,
+      54.954827014143405,
+      -12.0
+    ],
+    "working_length": 23.954827014143405
+  },
+  {
+    "tendon": "little_mcp_flexion_positive",
+    "point": [
+      12.0,
+      31.0,
+      5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      22.0240378474085,
+      56.89887101815063,
+      5.5
+    ],
+    "working_length": 31.77107946733581
+  },
+  {
+    "tendon": "little_mcp_flexion_negative",
+    "point": [
+      12.0,
+      31.0,
+      -5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      20.392683830742534,
+      57.65958388928388,
+      -5.5
+    ],
+    "working_length": 31.949428527835266
+  },
+  {
+    "tendon": "little_pip_positive",
+    "point": [
+      37.54184965478638,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      33.54184965478638,
+      76.62987482357894,
+      0.0
+    ],
+    "working_length": 37.86692310573237
+  },
+  {
+    "tendon": "little_pip_negative",
+    "point": [
+      32.10400293256648,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      28.10400293256648,
+      79.16558439402314,
+      0.0
+    ],
+    "working_length": 40.38611678320744
+  },
+  {
+    "tendon": "little_dip_positive",
+    "point": [
+      38.62941899923036,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      34.62941899923036,
+      76.12273290949011,
+      0.0
+    ],
+    "working_length": 37.363384651342244
+  },
+  {
+    "tendon": "little_dip_negative",
+    "point": [
+      31.016433588122503,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "frame": "wrist_flexion",
+    "moving_outlet": [
+      27.016433588122503,
+      79.67272630811198,
+      0.0
+    ],
+    "working_length": 40.890227091598234
+  }
+]

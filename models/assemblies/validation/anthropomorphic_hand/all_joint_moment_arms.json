@@ -1,0 +1,7110 @@
+{
+  "scope": "Hand-side virtual work; measured wrist transport length is separately compensated at every actuator.",
+  "joints": [
+    {
+      "joint": "wrist_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": 11.000000000136716,
+          "expected_mm": 11.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -11.000000000136716,
+          "expected_mm": -11.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "wrist_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": 1.0177774980683253e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": 11.000000000136716,
+          "expected_mm": 11.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -11.000000000136716,
+          "expected_mm": -11.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "palm_cup",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": 7.000000000198031,
+          "expected_mm": 7.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -6.999999999790919,
+          "expected_mm": -7.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "index_mcp_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": 5.499999999864802,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -5.500000000068358,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -6.106664988409952e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": 1.6284439969093205e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -1.2213329976819904e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "index_mcp_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": 5.500000000068358,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -5.500000000068358,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "index_pip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": 4.4999999993712425,
+          "expected_mm": 4.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -4.500000000185464,
+          "expected_mm": -4.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -1.6284439969093205e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "index_dip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": 3.4999999996919042,
+          "expected_mm": 3.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -3.4999999996919042,
+          "expected_mm": -3.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "middle_mcp_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": 5.500000000068358,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -5.500000000068358,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -1.6284439969093205e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "middle_mcp_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": 5.500000000068358,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -5.500000000068358,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "middle_pip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": 4.500000000185464,
+          "expected_mm": 4.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -4.4999999993712425,
+          "expected_mm": -4.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "middle_dip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": 3.499999998877682,
+          "expected_mm": 3.5,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -3.5000000005061263,
+          "expected_mm": -3.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "ring_mcp_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": 5.500000000068358,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -5.500000000068358,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": 2.0355549961366505e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -2.0355549961366505e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "ring_mcp_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": 5.499999999864802,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -5.499999999864802,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "ring_pip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": 4.500000000185464,
+          "expected_mm": 4.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -4.4999999993712425,
+          "expected_mm": -4.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "ring_dip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": 3.4999999996919042,
+          "expected_mm": 3.5,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -3.4999999996919042,
+          "expected_mm": -3.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "little_mcp_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": 5.500000000271913,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -5.500000000271913,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -1.6284439969093205e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "little_mcp_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": 5.499999999864802,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -5.499999999864802,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "little_pip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": 4.500000000185464,
+          "expected_mm": 4.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -4.500000000185464,
+          "expected_mm": -4.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": 1.6284439969093205e-09,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "little_dip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": 3.4999999996919042,
+          "expected_mm": 3.5,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -3.5000000005061263,
+          "expected_mm": -3.5,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "thumb_cmc_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": 7.000000000096253,
+          "expected_mm": 7.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -7.000000000096253,
+          "expected_mm": -7.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": 2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -2.0355549961366507e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "thumb_cmc_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": 6.9999999999944755,
+          "expected_mm": 7.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -6.9999999999944755,
+          "expected_mm": -7.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "thumb_mcp_abduction",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": 5.499999999864802,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -5.499999999864802,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": 8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": 4.0711099922733014e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "thumb_mcp_flexion",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": 5.499999999864802,
+          "expected_mm": 5.5,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -5.499999999864802,
+          "expected_mm": -5.5,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": -8.142219984546603e-10,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    },
+    {
+      "joint": "thumb_ip",
+      "tendons": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "moment_arm_mm": 3.4999999996919042,
+          "expected_mm": 3.5,
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "moment_arm_mm": -3.4999999996919042,
+          "expected_mm": -3.5,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "moment_arm_mm": -0.0,
+          "expected_mm": 0.0,
+          "pass": true
+        }
+      ],
+      "positive_drive": true,
+      "negative_drive": true,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

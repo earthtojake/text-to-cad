@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "build": {
+    "ok": true,
+    "kind": "assembly",
+    "outcome": "built",
+    "document": "models/assemblies/STEP/anthropomorphic_hand/forearm_housing_context.step",
+    "tree": "acbf6b424028d6a70ffe8100d8379e0eb64574a2f2b70b8c8f4c66ad2d6f65b7"
+  },
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/forearm_housing_context.step",
+  "step_sha256": "8ec8fa8b7cf5a182e3f3018c5418e6dce7a18c820eb1c86f8dc714e16b41bca3",
+  "render_input_sha256": "8ec8fa8b7cf5a182e3f3018c5418e6dce7a18c820eb1c86f8dc714e16b41bca3",
+  "render_input_sha256_after": "8ec8fa8b7cf5a182e3f3018c5418e6dce7a18c820eb1c86f8dc714e16b41bca3",
+  "image_sha256": "54a3f648b1a4c20a227044c624c96d8b0f4a6817d5bc5f90cc88f35957230e0b",
+  "render_job_sha256": "5700f1591a486a06f595ac037aabed82560a22478daa258382dbc36cd2a662da",
+  "housing_step_sha256": "2fbce0facb5d5f45c513414f000727a197b44c8a9b2070016546bab0a56f5636",
+  "factory_sha256": "38731aa83d9121d9f618a5df1a17801ab6e4fb30a7b2e35365eb94a8b7753ef8"
+}

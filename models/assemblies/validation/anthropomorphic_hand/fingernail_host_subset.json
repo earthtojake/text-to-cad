@@ -1,0 +1,123 @@
+{
+  "pass": true,
+  "host_source_sha256": "a768036f16980c4e4233b7a6480de9c636825004a5f4042bf9c9dae911d11cba",
+  "baseline_source_sha256": "4dfc5a0f722b483e248d52264bc6f2391a0610ef3c0aa79a36dcb625a2bd59da",
+  "new_material_test": "OCCT exact BRepAlgoAPI_Cut(new, old), GlueShift, no fuzzy tolerance",
+  "rows": [
+    {
+      "subset": {
+        "finger": "index",
+        "added_material_mm3": 0.0,
+        "removed_material_mm3": 4.938129376303607,
+        "pad_region_volume_difference_mm3": 3.746265520021552e-10,
+        "pass": true
+      },
+      "mount": {
+        "finger": "index",
+        "contacts_mm": {
+          "nail_saddle_gap": 0.0,
+          "saddle_host_gap": 0.0,
+          "radial_screw_saddle_gap": 0.0,
+          "radial_screw_insert_gap": 4.440892098500626e-16,
+          "radial_insert_host_gap": 0.0,
+          "ulnar_screw_saddle_gap": 0.0,
+          "ulnar_screw_insert_gap": 0.0,
+          "ulnar_insert_host_gap": 0.0
+        },
+        "pass": true
+      }
+    },
+    {
+      "subset": {
+        "finger": "middle",
+        "added_material_mm3": 0.0,
+        "removed_material_mm3": 4.938129376303607,
+        "pad_region_volume_difference_mm3": 3.746265520021552e-10,
+        "pass": true
+      },
+      "mount": {
+        "finger": "middle",
+        "contacts_mm": {
+          "nail_saddle_gap": 0.0,
+          "saddle_host_gap": 0.0,
+          "radial_screw_saddle_gap": 0.0,
+          "radial_screw_insert_gap": 4.440892098500626e-16,
+          "radial_insert_host_gap": 0.0,
+          "ulnar_screw_saddle_gap": 0.0,
+          "ulnar_screw_insert_gap": 4.440892098500626e-16,
+          "ulnar_insert_host_gap": 0.0
+        },
+        "pass": true
+      }
+    },
+    {
+      "subset": {
+        "finger": "ring",
+        "added_material_mm3": 0.0,
+        "removed_material_mm3": 4.938116210788166,
+        "pad_region_volume_difference_mm3": 6.684643949483871e-10,
+        "pass": true
+      },
+      "mount": {
+        "finger": "ring",
+        "contacts_mm": {
+          "nail_saddle_gap": 0.0,
+          "saddle_host_gap": 0.0,
+          "radial_screw_saddle_gap": 0.0,
+          "radial_screw_insert_gap": 4.440892098500626e-16,
+          "radial_insert_host_gap": 0.0,
+          "ulnar_screw_saddle_gap": 0.0,
+          "ulnar_screw_insert_gap": 4.440892098500626e-16,
+          "ulnar_insert_host_gap": 0.0
+        },
+        "pass": true
+      }
+    },
+    {
+      "subset": {
+        "finger": "little",
+        "added_material_mm3": 0.0,
+        "removed_material_mm3": 4.9608440837162675,
+        "pad_region_volume_difference_mm3": 7.293010639841668e-11,
+        "pass": true
+      },
+      "mount": {
+        "finger": "little",
+        "contacts_mm": {
+          "nail_saddle_gap": 0.0,
+          "saddle_host_gap": 0.0,
+          "radial_screw_saddle_gap": 4.440892098500626e-16,
+          "radial_screw_insert_gap": 0.0,
+          "radial_insert_host_gap": 0.0,
+          "ulnar_screw_saddle_gap": 0.0,
+          "ulnar_screw_insert_gap": 0.0,
+          "ulnar_insert_host_gap": 0.0
+        },
+        "pass": true
+      }
+    },
+    {
+      "subset": {
+        "finger": "thumb",
+        "added_material_mm3": 0.0,
+        "removed_material_mm3": 3.5288507989370146,
+        "pad_region_volume_difference_mm3": 2.397229081907426e-10,
+        "pass": true
+      },
+      "mount": {
+        "finger": "thumb",
+        "contacts_mm": {
+          "nail_saddle_gap": 4.440892098500626e-16,
+          "saddle_host_gap": 0.0,
+          "radial_screw_saddle_gap": 0.0,
+          "radial_screw_insert_gap": 4.440892098500626e-16,
+          "radial_insert_host_gap": 0.0,
+          "ulnar_screw_saddle_gap": 0.0,
+          "ulnar_screw_insert_gap": 4.440892098500626e-16,
+          "ulnar_insert_host_gap": 0.0
+        },
+        "pass": true
+      }
+    }
+  ]
+}

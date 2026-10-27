@@ -1,0 +1,12 @@
+{
+  "reason": "Other audits finished; resume the same immutable payout audit with four workers.",
+  "stopped_task_owned_pids": [
+    58303,
+    12106,
+    12107
+  ],
+  "checkpoint_sha256": {
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_0.json.gz": "ce0b97540df8ebacf3ec101f9fb8be20b1d846b90708457c1f3c8e4ed442c8dc",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_1.json.gz": "9da24c8798b7e9d4b012b53e4d526966cfa9774fbdc517a5d2b9b3f665ee8892"
+  }
+}

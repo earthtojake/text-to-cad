@@ -1,0 +1,888 @@
+{
+  "scope": [
+    "phalanx_1",
+    "phalanx_2",
+    "phalanx_3",
+    "mcp_abduction_1_pulley",
+    "mcp_abduction_-1_pulley",
+    "mcp_flexion_1_pulley",
+    "mcp_flexion_-1_pulley",
+    "mcp_flexion_shaft_envelope",
+    "pip_1_pulley",
+    "pip_-1_pulley",
+    "pip_shaft_envelope",
+    "dip_1_pulley",
+    "dip_-1_pulley",
+    "dip_shaft_envelope",
+    "mcp_carrier"
+  ],
+  "source_sha256": {
+    "finger_routing.py": "0befd07b030429bd05f3e2f3db276e5025ec06c384da5f42dc5b324b7db887c4",
+    "bowden_mcp.py": "537ff065a7b4d0b375c6ead6436de1fc953fb4c5cfde45d00227278dce20af61",
+    "yaw_transport.py": "72f9838c8fc28b7d3dd062dd7e766b524503953876344d767d47b2c42e866ce0",
+    "pip_transport.py": "7bd2dea49dcded900f6480698cf7936e9ee3969bcc6cc1a1eb94502fad225301",
+    "phalanx.py": "4dfc5a0f722b483e248d52264bc6f2391a0610ef3c0aa79a36dcb625a2bd59da",
+    "pulley.py": "513d794bedc452a0c28097fae91ddc423e71ac58f9b9000043569f0d31a9dea4",
+    "universal_carrier.py": "9763c4630dd6250c2908f4e3837f1a3c1dcda77539e02842d1671ab831ac72e9",
+    "layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af"
+  },
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {},
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_-25",
+      "pose": {
+        "little_mcp_abduction": -25.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 3.732067169519928e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.0899767311480888,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": -25.0
+        },
+        "exact_distances_tested": 123,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_-15",
+      "pose": {
+        "little_mcp_abduction": -15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.1736855608674774e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08979183827551451,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": -15.0
+        },
+        "exact_distances_tested": 118,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 2.079678070305694e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2518581903983358,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": -5.0
+        },
+        "exact_distances_tested": 95,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_5",
+      "pose": {
+        "little_mcp_abduction": 5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 2.079678070305694e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.25185262429418775,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 5.0
+        },
+        "exact_distances_tested": 95,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_15",
+      "pose": {
+        "little_mcp_abduction": 15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 5.978733960281817e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08996946751619395,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 15.0
+        },
+        "exact_distances_tested": 118,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_abduction_25",
+      "pose": {
+        "little_mcp_abduction": 25.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.928762266452001e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08998130215007216,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 25.0
+        },
+        "exact_distances_tested": 123,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_-15",
+      "pose": {
+        "little_mcp_flexion": -15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 4.1736855608674774e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08989051477711674,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": -15.0
+        },
+        "exact_distances_tested": 96,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_-5",
+      "pose": {
+        "little_mcp_flexion": -5.0
+      },
+      "minimum_radius_mm": 3.499999999999999,
+      "maximum_join_gap_mm": 4.440892098500626e-16,
+      "maximum_tangent_error": 4.283563044844853e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699865047849569,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": -5.0
+        },
+        "exact_distances_tested": 91,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      },
+      "minimum_radius_mm": 3.499999999999999,
+      "maximum_join_gap_mm": 4.440892098500626e-16,
+      "maximum_tangent_error": 4.283563044844853e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999937140755137,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 5.0
+        },
+        "exact_distances_tested": 89,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_15",
+      "pose": {
+        "little_mcp_flexion": 15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 4.1736855608674774e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700117651302648,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 15.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_25",
+      "pose": {
+        "little_mcp_flexion": 25.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 8.881784197001252e-16,
+      "maximum_tangent_error": 3.0832434554370492e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999985090895107,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 25.0
+        },
+        "exact_distances_tested": 83,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_35",
+      "pose": {
+        "little_mcp_flexion": 35.0
+      },
+      "minimum_radius_mm": 3.4999999999999987,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.1087232104830897e-14,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999999999999946,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 35.0
+        },
+        "exact_distances_tested": 83,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_45",
+      "pose": {
+        "little_mcp_flexion": 45.0
+      },
+      "minimum_radius_mm": 3.4999999999999933,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 8.086357243644102e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999999999999946,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 45.0
+        },
+        "exact_distances_tested": 82,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_55",
+      "pose": {
+        "little_mcp_flexion": 55.0
+      },
+      "minimum_radius_mm": 3.5000000000000027,
+      "maximum_join_gap_mm": 8.881784197001252e-15,
+      "maximum_tangent_error": 4.157040317942297e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999999999999946,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 55.0
+        },
+        "exact_distances_tested": 87,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_65",
+      "pose": {
+        "little_mcp_flexion": 65.0
+      },
+      "minimum_radius_mm": 3.5000000000000013,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 5.365950338995594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.27000219182839336,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 65.0
+        },
+        "exact_distances_tested": 83,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_75",
+      "pose": {
+        "little_mcp_flexion": 75.0
+      },
+      "minimum_radius_mm": 3.500000000000006,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 8.213587208762784e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700098945601471,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 75.0
+        },
+        "exact_distances_tested": 85,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      },
+      "minimum_radius_mm": 3.4999999999999942,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 3.504244472837621e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699980393191518,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 85.0
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_mcp_flexion_90",
+      "pose": {
+        "little_mcp_flexion": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.479565346662071e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999935183969,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_flexion": 90.0
+        },
+        "exact_distances_tested": 87,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_0",
+      "pose": {
+        "little_pip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 0.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_10",
+      "pose": {
+        "little_pip": 10.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 2.4424906541753444e-15,
+      "maximum_tangent_error": 1.336885555457667e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 10.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_20",
+      "pose": {
+        "little_pip": 20.0
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 8.881784197001252e-16,
+      "maximum_tangent_error": 3.196594111384947e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.27000436239214676,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 20.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_30",
+      "pose": {
+        "little_pip": 30.0
+      },
+      "minimum_radius_mm": 3.5000000000000004,
+      "maximum_join_gap_mm": 2.909377512977897e-14,
+      "maximum_tangent_error": 3.973993651728112e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 30.0
+        },
+        "exact_distances_tested": 85,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_40",
+      "pose": {
+        "little_pip": 40.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 2.6645352591003757e-15,
+      "maximum_tangent_error": 8.98389288479247e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700020594251761,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 40.0
+        },
+        "exact_distances_tested": 84,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_50",
+      "pose": {
+        "little_pip": 50.0
+      },
+      "minimum_radius_mm": 3.5000000000000044,
+      "maximum_join_gap_mm": 7.993605777301127e-15,
+      "maximum_tangent_error": 3.781283367737843e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.270000862972236,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 50.0
+        },
+        "exact_distances_tested": 84,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 3.4844027277880974e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 60.0
+        },
+        "exact_distances_tested": 85,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_70",
+      "pose": {
+        "little_pip": 70.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 5.266250202865051e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 70.0
+        },
+        "exact_distances_tested": 87,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_80",
+      "pose": {
+        "little_pip": 80.0
+      },
+      "minimum_radius_mm": 3.499999999999991,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 8.22506875171883e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 80.0
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_90",
+      "pose": {
+        "little_pip": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 90.0
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_100",
+      "pose": {
+        "little_pip": 100.0
+      },
+      "minimum_radius_mm": 3.5000000000000053,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 100.0
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_pip_110",
+      "pose": {
+        "little_pip": 110.0
+      },
+      "minimum_radius_mm": 3.5000000000000027,
+      "maximum_join_gap_mm": 2.864289338439558e-14,
+      "maximum_tangent_error": 3.391635943292865e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700022645346748,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_pip": 110.0
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_0",
+      "pose": {
+        "little_dip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 0.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_10",
+      "pose": {
+        "little_dip": 10.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 10.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 20.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_30",
+      "pose": {
+        "little_dip": 30.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 30.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_40",
+      "pose": {
+        "little_dip": 40.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 40.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_50",
+      "pose": {
+        "little_dip": 50.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 50.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_60",
+      "pose": {
+        "little_dip": 60.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 60.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_70",
+      "pose": {
+        "little_dip": 70.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 70.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "little_dip_80",
+      "pose": {
+        "little_dip": 80.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.1443916996305594e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.269999999999989,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_dip": 80.0
+        },
+        "exact_distances_tested": 88,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "full_fist",
+      "pose": {
+        "little_mcp_abduction": 0,
+        "little_mcp_flexion": 90,
+        "little_pip": 110,
+        "little_dip": 80
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 2.842170943040401e-14,
+      "maximum_tangent_error": 3.196594111384947e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700008236333876,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 0,
+          "little_mcp_flexion": 90,
+          "little_pip": 110,
+          "little_dip": 80
+        },
+        "exact_distances_tested": 85,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "precision_pinch",
+      "pose": {
+        "little_mcp_abduction": 0,
+        "little_mcp_flexion": 40,
+        "little_pip": 60,
+        "little_dip": 30
+      },
+      "minimum_radius_mm": 3.500000000000005,
+      "maximum_join_gap_mm": 1.4458497151625688e-14,
+      "maximum_tangent_error": 4.665001393311476e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999991283243585,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 0,
+          "little_mcp_flexion": 40,
+          "little_pip": 60,
+          "little_dip": 30
+        },
+        "exact_distances_tested": 86,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "spread_flex",
+      "pose": {
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 110,
+        "little_dip": 80
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 3.4809342861069267e-14,
+      "maximum_tangent_error": 2.6307835046141617e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08992293197159096,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 25.0,
+          "little_mcp_flexion": 90,
+          "little_pip": 110,
+          "little_dip": 80
+        },
+        "exact_distances_tested": 117,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "adducted_full_fist",
+      "pose": {
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 110,
+        "little_dip": 80
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 3.4809342861069267e-14,
+      "maximum_tangent_error": 2.6307835046141617e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08992293197159096,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "little_mcp_abduction": 25.0,
+          "little_mcp_flexion": 90,
+          "little_pip": 110,
+          "little_dip": 80
+        },
+        "exact_distances_tested": 117,
+        "collisions": []
+      },
+      "pass": true
+    }
+  ],
+  "pass": true
+}

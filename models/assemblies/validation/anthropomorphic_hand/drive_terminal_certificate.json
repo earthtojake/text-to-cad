@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "occurrences": 336,
+  "driven_occurrences": 288,
+  "capstan_bond_occurrences": 48,
+  "strict_every_placement": true,
+  "neutral_driven_seatings": 48,
+  "neutral_capstan_bond_seatings": 48,
+  "neutral_mutual_pairs": 56280,
+  "five_family_capture_directions": 30,
+  "five_family_removal_steps": 200,
+  "target_joint_poses": 434,
+  "hardware_poses": 434,
+  "failures": [],
+  "rope_retraction_mm": 0.85,
+  "capstan_bond_standalone_release_certified": false,
+  "capstan_explode_policy": "Keep bonded resin, steel ferrule and capstan grouped.",
+  "proof_files": [
+    "drive_terminal_strict.json",
+    "drive_terminal_check.json",
+    "drive_terminal_motion_check.json",
+    "drive_terminal_end_release.json"
+  ],
+  "scope": "Exact local terminal seating, neutral mutual pairs, five-family removals and target-joint motion against real shaft/bushing hardware; whole-hand frame/guide collisions remain the integrator gate."
+}

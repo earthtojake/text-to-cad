@@ -1,0 +1,15 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.272}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":120.32}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,7],"elapsed":120.529}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,7],"elapsed":134.463}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,7],"elapsed":135.733}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,7],"elapsed":136.305}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,7],"elapsed":138.299}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[5,7],"elapsed":138.404}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[6,7],"elapsed":138.894}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[7,7],"elapsed":139.065}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":141.838}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_base_mounts_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":145.693}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/thumb_base_mounts_review.step
+built models/assemblies/STEP/anthropomorphic_hand/thumb_base_mounts_review.step

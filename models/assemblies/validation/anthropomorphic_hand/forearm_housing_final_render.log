@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/render_forearm_housing_final.py", line 20, in <module>
+    assert r.returncode==0,r.stderr
+           ^^^^^^^^^^^^^^^
+AssertionError

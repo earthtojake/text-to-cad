@@ -1,0 +1,101 @@
+{
+  "pass": true,
+  "proofs": [
+    {
+      "part": "wrist_abduction_positive_drive_pulley",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_positive_drive_terminal_cover",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_positive_drive_terminal_cover_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_positive_drive_terminal_bond_line",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_positive_drive_terminal_ferrule",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_positive_drive_pulley_grub_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_pulley",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_terminal_cover",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_terminal_cover_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_terminal_bond_line",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_terminal_ferrule",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_abduction_negative_drive_pulley_grub_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_pulley",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_terminal_cover",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_terminal_cover_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_terminal_bond_line",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_terminal_ferrule",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_positive_drive_pulley_grub_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_pulley",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_terminal_cover",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_terminal_cover_screw",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_terminal_bond_line",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_terminal_ferrule",
+      "outside_envelope_mm3": 0
+    },
+    {
+      "part": "wrist_flexion_negative_drive_pulley_grub_screw",
+      "outside_envelope_mm3": 0
+    }
+  ]
+}

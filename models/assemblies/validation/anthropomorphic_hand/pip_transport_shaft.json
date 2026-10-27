@@ -1,0 +1,674 @@
+{
+  "method": "exact polynomial curvature and infinite axis distance extrema; equal-X planes give exact8.4mm lane separation",
+  "working_length": 30,
+  "shaft_radius": 1,
+  "liner_outer_radius": 0.45,
+  "rows": [
+    {
+      "angle": 0,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.425360708201108,
+      "shaft_clearance": 5.651693602555217
+    },
+    {
+      "angle": 1,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.4288428076778255,
+      "shaft_clearance": 5.605688090645382
+    },
+    {
+      "angle": 2,
+      "length": 30.0,
+      "minimum_radius": 5.431543428280034,
+      "shaft_clearance": 5.559310557297877
+    },
+    {
+      "angle": 3,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.433453591085226,
+      "shaft_clearance": 5.512523181063369
+    },
+    {
+      "angle": 4,
+      "length": 30.0,
+      "minimum_radius": 5.434565163895738,
+      "shaft_clearance": 5.465277010440309
+    },
+    {
+      "angle": 5,
+      "length": 29.999999999999996,
+      "minimum_radius": 5.434870888560965,
+      "shaft_clearance": 5.410920136124181
+    },
+    {
+      "angle": 6,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.434364405642363,
+      "shaft_clearance": 5.325222267585804
+    },
+    {
+      "angle": 7,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.433040276260362,
+      "shaft_clearance": 5.24036337792955
+    },
+    {
+      "angle": 8,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.430894000979173,
+      "shaft_clearance": 5.156345037207585
+    },
+    {
+      "angle": 9,
+      "length": 30.0,
+      "minimum_radius": 5.427922035604558,
+      "shaft_clearance": 5.073168348329353
+    },
+    {
+      "angle": 10,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.42412180378932,
+      "shaft_clearance": 4.99083395353833
+    },
+    {
+      "angle": 11,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.419491706362121,
+      "shaft_clearance": 4.909342041591346
+    },
+    {
+      "angle": 12,
+      "length": 29.99999999999999,
+      "minimum_radius": 5.414031127318179,
+      "shaft_clearance": 4.828692355611721
+    },
+    {
+      "angle": 13,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.407740436431955,
+      "shaft_clearance": 4.748884201585144
+    },
+    {
+      "angle": 14,
+      "length": 29.999999999999993,
+      "minimum_radius": 5.400620988476064,
+      "shaft_clearance": 4.6699164574645415
+    },
+    {
+      "angle": 15,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.3926751190529485,
+      "shaft_clearance": 4.591787582848522
+    },
+    {
+      "angle": 16,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.383906137069485,
+      "shaft_clearance": 4.514495629195861
+    },
+    {
+      "angle": 17,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.374318313907177,
+      "shaft_clearance": 4.438038250536896
+    },
+    {
+      "angle": 18,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.363916869362503,
+      "shaft_clearance": 4.362412714642323
+    },
+    {
+      "angle": 19,
+      "length": 29.999999999999982,
+      "minimum_radius": 5.352707954453473,
+      "shaft_clearance": 4.287615914607174
+    },
+    {
+      "angle": 20,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.340698631208549,
+      "shaft_clearance": 4.213644380808973
+    },
+    {
+      "angle": 21,
+      "length": 29.999999999999986,
+      "minimum_radius": 5.327896849571844,
+      "shaft_clearance": 4.140494293196897
+    },
+    {
+      "angle": 22,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.314311421578005,
+      "shaft_clearance": 4.0681614938702575
+    },
+    {
+      "angle": 23,
+      "length": 29.999999999999982,
+      "minimum_radius": 5.299951992963344,
+      "shaft_clearance": 3.9966414999028776
+    },
+    {
+      "angle": 24,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.284829012395339,
+      "shaft_clearance": 3.9259295163717356
+    },
+    {
+      "angle": 25,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.2689536985141165,
+      "shaft_clearance": 3.8560204495480477
+    },
+    {
+      "angle": 26,
+      "length": 29.99999999999997,
+      "minimum_radius": 5.252338004989717,
+      "shaft_clearance": 3.786908920209801
+    },
+    {
+      "angle": 27,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.234994583806306,
+      "shaft_clearance": 3.7185892770358846
+    },
+    {
+      "angle": 28,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.216936746991919,
+      "shaft_clearance": 3.6510556100428273
+    },
+    {
+      "angle": 29,
+      "length": 29.99999999999997,
+      "minimum_radius": 5.19817842701471,
+      "shaft_clearance": 3.5843017640268044
+    },
+    {
+      "angle": 30,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.17873413606978,
+      "shaft_clearance": 3.5183213519747474
+    },
+    {
+      "angle": 31,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.158618924480096,
+      "shaft_clearance": 3.4531077684100406
+    },
+    {
+      "angle": 32,
+      "length": 29.99999999999998,
+      "minimum_radius": 5.137848338433728,
+      "shaft_clearance": 3.3886542026399242
+    },
+    {
+      "angle": 33,
+      "length": 30.0,
+      "minimum_radius": 5.116438377275327,
+      "shaft_clearance": 3.32495365187415
+    },
+    {
+      "angle": 34,
+      "length": 30.0,
+      "minimum_radius": 5.094405450565198,
+      "shaft_clearance": 3.261998934184927
+    },
+    {
+      "angle": 35,
+      "length": 30.0,
+      "minimum_radius": 5.071766335112205,
+      "shaft_clearance": 3.1997827012817375
+    },
+    {
+      "angle": 36,
+      "length": 30.0,
+      "minimum_radius": 5.0485381321785985,
+      "shaft_clearance": 3.138297451075558
+    },
+    {
+      "angle": 37,
+      "length": 30.0,
+      "minimum_radius": 5.024738225045788,
+      "shaft_clearance": 3.0775355400087374
+    },
+    {
+      "angle": 38,
+      "length": 30.0,
+      "minimum_radius": 5.000384237119321,
+      "shaft_clearance": 3.017489195130497
+    },
+    {
+      "angle": 39,
+      "length": 30.0,
+      "minimum_radius": 4.975493990740173,
+      "shaft_clearance": 2.958150525897821
+    },
+    {
+      "angle": 40,
+      "length": 30.0,
+      "minimum_radius": 4.950085466857327,
+      "shaft_clearance": 2.899511535684832
+    },
+    {
+      "angle": 41,
+      "length": 30.0,
+      "minimum_radius": 4.924176765704168,
+      "shaft_clearance": 2.8415641329858055
+    },
+    {
+      "angle": 42,
+      "length": 30.0,
+      "minimum_radius": 4.897786068607868,
+      "shaft_clearance": 2.78430014229777
+    },
+    {
+      "angle": 43,
+      "length": 30.0,
+      "minimum_radius": 4.870931601047757,
+      "shaft_clearance": 2.7277113146720025
+    },
+    {
+      "angle": 44,
+      "length": 30.0,
+      "minimum_radius": 4.843631597065394,
+      "shaft_clearance": 2.6717893379241353
+    },
+    {
+      "angle": 45,
+      "length": 30.0,
+      "minimum_radius": 4.815904265115227,
+      "shaft_clearance": 2.6165258464953576
+    },
+    {
+      "angle": 46,
+      "length": 30.000000000000007,
+      "minimum_radius": 4.78776775543202,
+      "shaft_clearance": 2.5619124309582917
+    },
+    {
+      "angle": 47,
+      "length": 30.0,
+      "minimum_radius": 4.759240128977566,
+      "shaft_clearance": 2.507940647162945
+    },
+    {
+      "angle": 48,
+      "length": 30.0,
+      "minimum_radius": 4.730339328017163,
+      "shaft_clearance": 2.4546020250196143
+    },
+    {
+      "angle": 49,
+      "length": 30.0,
+      "minimum_radius": 4.701083148363644,
+      "shaft_clearance": 2.401888076916954
+    },
+    {
+      "angle": 50,
+      "length": 30.0,
+      "minimum_radius": 4.671489213315432,
+      "shaft_clearance": 2.349790305774917
+    },
+    {
+      "angle": 51,
+      "length": 30.0,
+      "minimum_radius": 4.641574949303874,
+      "shaft_clearance": 2.2983002127332943
+    },
+    {
+      "angle": 52,
+      "length": 30.0,
+      "minimum_radius": 4.611357563254668,
+      "shaft_clearance": 2.2474093044778485
+    },
+    {
+      "angle": 53,
+      "length": 30.0,
+      "minimum_radius": 4.580854021658622,
+      "shaft_clearance": 2.1971091002074425
+    },
+    {
+      "angle": 54,
+      "length": 30.0,
+      "minimum_radius": 4.550081031338019,
+      "shaft_clearance": 2.1473911382459443
+    },
+    {
+      "angle": 55,
+      "length": 29.999999999999996,
+      "minimum_radius": 4.519055021886396,
+      "shaft_clearance": 2.098246982303186
+    },
+    {
+      "angle": 56,
+      "length": 29.999999999999996,
+      "minimum_radius": 4.48779212975238,
+      "shaft_clearance": 2.049668227392429
+    },
+    {
+      "angle": 57,
+      "length": 30.0,
+      "minimum_radius": 4.4563081839313945,
+      "shaft_clearance": 2.001646505409024
+    },
+    {
+      "angle": 58,
+      "length": 30.0,
+      "minimum_radius": 4.424618693223136,
+      "shaft_clearance": 1.9541734903779415
+    },
+    {
+      "angle": 59,
+      "length": 30.0,
+      "minimum_radius": 4.39273883500741,
+      "shaft_clearance": 1.9072409033786297
+    },
+    {
+      "angle": 60,
+      "length": 29.999999999999993,
+      "minimum_radius": 4.360683445486674,
+      "shaft_clearance": 1.8608405171536837
+    },
+    {
+      "angle": 61,
+      "length": 30.0,
+      "minimum_radius": 4.328467011339736,
+      "shaft_clearance": 1.8149641604117452
+    },
+    {
+      "angle": 62,
+      "length": 29.999999999999996,
+      "minimum_radius": 4.296103662727637,
+      "shaft_clearance": 1.7696037218317306
+    },
+    {
+      "angle": 63,
+      "length": 29.999999999999996,
+      "minimum_radius": 4.2636071675911555,
+      "shaft_clearance": 1.7247511537789617
+    },
+    {
+      "angle": 64,
+      "length": 30.0,
+      "minimum_radius": 4.230990927176314,
+      "shaft_clearance": 1.6803984757418384
+    },
+    {
+      "angle": 65,
+      "length": 29.999999999999993,
+      "minimum_radius": 4.19826797272383,
+      "shaft_clearance": 1.6365377774987675
+    },
+    {
+      "angle": 66,
+      "length": 30.0,
+      "minimum_radius": 4.165450963257523,
+      "shaft_clearance": 1.593161222025205
+    },
+    {
+      "angle": 67,
+      "length": 30.0,
+      "minimum_radius": 4.132552184405614,
+      "shaft_clearance": 1.5502610481502879
+    },
+    {
+      "angle": 68,
+      "length": 30.0,
+      "minimum_radius": 4.099583548190314,
+      "shaft_clearance": 1.5078295729731888
+    },
+    {
+      "angle": 69,
+      "length": 30.0,
+      "minimum_radius": 4.066556593720066,
+      "shaft_clearance": 1.4658591940484713
+    },
+    {
+      "angle": 70,
+      "length": 30.000000000000007,
+      "minimum_radius": 4.03348248872089,
+      "shaft_clearance": 1.4243423913510183
+    },
+    {
+      "angle": 71,
+      "length": 30.000000000000007,
+      "minimum_radius": 4.000372031843663,
+      "shaft_clearance": 1.3832717290286343
+    },
+    {
+      "angle": 72,
+      "length": 29.999999999999996,
+      "minimum_radius": 3.967235655685934,
+      "shaft_clearance": 1.3426398569540334
+    },
+    {
+      "angle": 73,
+      "length": 30.000000000000007,
+      "minimum_radius": 3.934083430468386,
+      "shaft_clearance": 1.3024395120835168
+    },
+    {
+      "angle": 74,
+      "length": 30.0,
+      "minimum_radius": 3.9009250683080188,
+      "shaft_clearance": 1.262663519632796
+    },
+    {
+      "angle": 75,
+      "length": 30.000000000000004,
+      "minimum_radius": 3.867769928032137,
+      "shaft_clearance": 1.223304794078705
+    },
+    {
+      "angle": 76,
+      "length": 30.0,
+      "minimum_radius": 3.834627020479084,
+      "shaft_clearance": 1.184356339995331
+    },
+    {
+      "angle": 77,
+      "length": 30.0,
+      "minimum_radius": 3.801505014234658,
+      "shaft_clearance": 1.1458112527339057
+    },
+    {
+      "angle": 78,
+      "length": 30.0,
+      "minimum_radius": 3.768412241754348,
+      "shaft_clearance": 1.1076627189543242
+    },
+    {
+      "angle": 79,
+      "length": 30.0,
+      "minimum_radius": 3.7353567058253283,
+      "shaft_clearance": 1.069904017016068
+    },
+    {
+      "angle": 80,
+      "length": 30.0,
+      "minimum_radius": 3.7023460863232076,
+      "shaft_clearance": 1.0325285172378555
+    },
+    {
+      "angle": 81,
+      "length": 30.0,
+      "minimum_radius": 3.6693877472219194,
+      "shaft_clearance": 0.9955296820322743
+    },
+    {
+      "angle": 82,
+      "length": 30.0,
+      "minimum_radius": 3.6364887438174085,
+      "shaft_clearance": 0.9589010659232005
+    },
+    {
+      "angle": 83,
+      "length": 30.0,
+      "minimum_radius": 3.6036558301274533,
+      "shaft_clearance": 0.9226363154538311
+    },
+    {
+      "angle": 84,
+      "length": 30.00000000000744,
+      "minimum_radius": 3.599943409202702,
+      "shaft_clearance": 0.896056497039347
+    },
+    {
+      "angle": 85,
+      "length": 30.0,
+      "minimum_radius": 3.599387487602476,
+      "shaft_clearance": 0.8716588468584654
+    },
+    {
+      "angle": 86,
+      "length": 30.0,
+      "minimum_radius": 3.598159960993075,
+      "shaft_clearance": 0.8483077436501281
+    },
+    {
+      "angle": 87,
+      "length": 30.0000000000001,
+      "minimum_radius": 3.596195478057804,
+      "shaft_clearance": 0.8257792969355051
+    },
+    {
+      "angle": 88,
+      "length": 30.00000000000021,
+      "minimum_radius": 3.596205955718113,
+      "shaft_clearance": 0.7876144975937114
+    },
+    {
+      "angle": 89,
+      "length": 29.999999999996888,
+      "minimum_radius": 3.5976240265851382,
+      "shaft_clearance": 0.7597577217467062
+    },
+    {
+      "angle": 90,
+      "length": 30.000000000000963,
+      "minimum_radius": 3.5991892158630714,
+      "shaft_clearance": 0.738100860951022
+    },
+    {
+      "angle": 91,
+      "length": 29.999999999996643,
+      "minimum_radius": 3.5999562923376165,
+      "shaft_clearance": 0.7179973066205239
+    },
+    {
+      "angle": 92,
+      "length": 30.000000000001805,
+      "minimum_radius": 3.5997151221966845,
+      "shaft_clearance": 0.6994945800251944
+    },
+    {
+      "angle": 93,
+      "length": 29.999999999999996,
+      "minimum_radius": 3.5982354190538484,
+      "shaft_clearance": 0.6826250861829803
+    },
+    {
+      "angle": 94,
+      "length": 30.0,
+      "minimum_radius": 3.596318244050377,
+      "shaft_clearance": 0.6607317486385644
+    },
+    {
+      "angle": 95,
+      "length": 30.0,
+      "minimum_radius": 3.596325624889557,
+      "shaft_clearance": 0.6234518609824489
+    },
+    {
+      "angle": 96,
+      "length": 30.000000000000007,
+      "minimum_radius": 3.5963326381504475,
+      "shaft_clearance": 0.5860949841221952
+    },
+    {
+      "angle": 97,
+      "length": 30.000000000000007,
+      "minimum_radius": 3.5963392745074927,
+      "shaft_clearance": 0.5486464720384827
+    },
+    {
+      "angle": 98,
+      "length": 30.0,
+      "minimum_radius": 3.5963455246349043,
+      "shaft_clearance": 0.5110913274294784
+    },
+    {
+      "angle": 99,
+      "length": 30.000000000000234,
+      "minimum_radius": 3.598392573596209,
+      "shaft_clearance": 0.49001699463317316
+    },
+    {
+      "angle": 100,
+      "length": 29.999999999999787,
+      "minimum_radius": 3.5999999166965293,
+      "shaft_clearance": 0.48504910723902017
+    },
+    {
+      "angle": 101,
+      "length": 29.99999999999997,
+      "minimum_radius": 3.5980422122650313,
+      "shaft_clearance": 0.4842911687355689
+    },
+    {
+      "angle": 102,
+      "length": 29.99999999999996,
+      "minimum_radius": 3.596418626144509,
+      "shaft_clearance": 0.4601890894988674
+    },
+    {
+      "angle": 103,
+      "length": 29.99999999999993,
+      "minimum_radius": 3.5964217705598975,
+      "shaft_clearance": 0.4232182941284146
+    },
+    {
+      "angle": 104,
+      "length": 29.999999999999986,
+      "minimum_radius": 3.5964244587954464,
+      "shaft_clearance": 0.3860847676181143
+    },
+    {
+      "angle": 105,
+      "length": 29.999999999999936,
+      "minimum_radius": 3.596426681262281,
+      "shaft_clearance": 0.34877215197746736
+    },
+    {
+      "angle": 106,
+      "length": 29.99999999999997,
+      "minimum_radius": 3.5964284283172243,
+      "shaft_clearance": 0.31126361661028823
+    },
+    {
+      "angle": 107,
+      "length": 30.000000000000135,
+      "minimum_radius": 3.596429690256596,
+      "shaft_clearance": 0.27354182786953163
+    },
+    {
+      "angle": 108,
+      "length": 29.99999999999989,
+      "minimum_radius": 3.596430457309684,
+      "shaft_clearance": 0.23558891623002998
+    },
+    {
+      "angle": 109,
+      "length": 29.999999999999936,
+      "minimum_radius": 3.5964307196331413,
+      "shaft_clearance": 0.19738644082740953
+    },
+    {
+      "angle": 110,
+      "length": 30.000000000000288,
+      "minimum_radius": 3.5964304673053684,
+      "shaft_clearance": 0.15891535108609478
+    }
+  ]
+}

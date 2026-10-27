@@ -1,0 +1,394 @@
+{
+  "rows": [
+    {
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "body_count": 3039,
+      "exact_distances_tested": 401,
+      "tendon_table": [
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "exact_distances_tested": 90,
+          "clear": true,
+          "collisions": []
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "exact_distances_tested": 70,
+          "clear": true,
+          "collisions": []
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "exact_distances_tested": 60,
+          "clear": true,
+          "collisions": []
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "exact_distances_tested": 58,
+          "clear": true,
+          "collisions": []
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "exact_distances_tested": 82,
+          "clear": true,
+          "collisions": []
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "exact_distances_tested": 41,
+          "clear": true,
+          "collisions": []
+        }
+      ],
+      "collisions": [],
+      "stored_rope_solid_proofs": [
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "actuator_thumb_mcp_abduction_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "actuator_thumb_mcp_abduction_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "actuator_thumb_mcp_abduction_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "thumb_mcp_abduction_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "thumb_mcp_abduction_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "thumb_mcp_abduction_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "thumb_mcp_abduction_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "body": "thumb_mcp_abduction_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "actuator_index_mcp_flexion_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "actuator_index_mcp_flexion_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "actuator_index_mcp_flexion_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "index_mcp_flexion_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "index_mcp_flexion_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "index_mcp_flexion_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "index_mcp_flexion_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "body": "index_mcp_flexion_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "actuator_middle_mcp_flexion_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "actuator_middle_mcp_flexion_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "actuator_middle_mcp_flexion_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "middle_mcp_flexion_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "middle_mcp_flexion_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "middle_mcp_flexion_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "middle_mcp_flexion_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "body": "middle_mcp_flexion_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "actuator_ring_mcp_flexion_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "actuator_ring_mcp_flexion_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "actuator_ring_mcp_flexion_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "ring_mcp_flexion_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "ring_mcp_flexion_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "ring_mcp_flexion_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "ring_mcp_flexion_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "body": "ring_mcp_flexion_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "actuator_little_mcp_flexion_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "actuator_little_mcp_flexion_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "actuator_little_mcp_flexion_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "little_mcp_flexion_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "little_mcp_flexion_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "little_mcp_flexion_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "little_mcp_flexion_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "little_mcp_flexion_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "actuator_wrist_flexion_negative_capstan",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "actuator_wrist_flexion_negative_capstan_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "actuator_wrist_flexion_negative_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "wrist_flexion_negative_drive_pulley",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "wrist_flexion_negative_drive_terminal_bond_line",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "wrist_flexion_negative_drive_terminal_cover",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "wrist_flexion_negative_drive_terminal_cover_screw",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "body": "wrist_flexion_negative_drive_terminal_ferrule",
+          "intersection_mm3": 0.0,
+          "method": "exact swept terminal arc Boolean, preserving flat endpoint"
+        }
+      ],
+      "pass": true,
+      "sample": "wrist_flexion_60",
+      "actuator_angles_rad": {
+        "thumb_cmc_abduction_positive": -3.284403302128442,
+        "thumb_cmc_abduction_negative": 3.3776781217582843,
+        "thumb_cmc_flexion_positive": -1.2001411290857553,
+        "thumb_cmc_flexion_negative": 1.9479133580193326,
+        "thumb_mcp_abduction_positive": -3.2188995101282427,
+        "thumb_mcp_abduction_negative": 1.7285548658755645,
+        "thumb_mcp_flexion_positive": -3.349968031145474,
+        "thumb_mcp_flexion_negative": 1.6004828943349367,
+        "thumb_ip_positive": -3.198443493041213,
+        "thumb_ip_negative": 1.6736088568105958,
+        "index_mcp_abduction_positive": -5.160674291885459,
+        "index_mcp_abduction_negative": 3.42582775592655,
+        "index_mcp_flexion_positive": -5.975815838577903,
+        "index_mcp_flexion_negative": 3.550440684906536,
+        "index_pip_positive": -5.73970117662619,
+        "index_pip_negative": 3.1045377787475155,
+        "index_dip_positive": -5.581770506700656,
+        "index_dip_negative": 3.1279012306391345,
+        "middle_mcp_abduction_positive": -5.2768743712475406,
+        "middle_mcp_abduction_negative": 3.6189595295109394,
+        "middle_mcp_flexion_positive": -5.397162011096938,
+        "middle_mcp_flexion_negative": 3.214416587689132,
+        "middle_pip_positive": -5.173703644560949,
+        "middle_pip_negative": 2.8473465187196885,
+        "middle_dip_positive": -5.9007635249463934,
+        "middle_dip_negative": 3.236532511424999,
+        "ring_mcp_abduction_positive": -5.4765050732627945,
+        "ring_mcp_abduction_negative": 3.6998380008001255,
+        "ring_mcp_flexion_positive": -5.666186955680041,
+        "ring_mcp_flexion_negative": 3.3151019170399905,
+        "ring_pip_positive": -5.414284619405648,
+        "ring_pip_negative": 2.925491079315679,
+        "ring_dip_positive": -5.189915748162165,
+        "ring_dip_negative": 2.73525182405378,
+        "little_mcp_abduction_positive": -3.6160759810065066,
+        "little_mcp_abduction_negative": 2.9711504777546525,
+        "little_mcp_flexion_positive": -3.6715611385543774,
+        "little_mcp_flexion_negative": 2.53312013429037,
+        "little_pip_positive": -4.540271637387609,
+        "little_pip_negative": 2.441462699203695,
+        "little_dip_positive": -4.535639952060826,
+        "little_dip_negative": 2.4244643101926444,
+        "wrist_abduction_positive": 0.0,
+        "wrist_abduction_negative": 0.0,
+        "wrist_flexion_positive": -1.6522645966464906,
+        "wrist_flexion_negative": -2.202588885823965,
+        "palm_cup_positive": -2.955835674663215,
+        "palm_cup_negative": 2.93762389155974
+      }
+    }
+  ],
+  "complete": true,
+  "pass_": true
+}

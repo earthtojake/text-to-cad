@@ -1,0 +1,15 @@
+{
+  "rows": [
+    {
+      "sign": -1,
+      "intersection_mm3": 0,
+      "distance": 0.0
+    },
+    {
+      "sign": 1,
+      "intersection_mm3": 0,
+      "distance": 0.0
+    }
+  ],
+  "pass": true
+}

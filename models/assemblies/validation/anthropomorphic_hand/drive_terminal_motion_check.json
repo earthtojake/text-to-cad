@@ -1,0 +1,4839 @@
+{
+  "partial": false,
+  "ok": true,
+  "source": "frozen drive_terminal_placements.step",
+  "motion_seating": [
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 70.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 70.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 65.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 65.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 45.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 45.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": -20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": -20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 85.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 85.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": -20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": -20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 20.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": -15.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 90.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 80.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 60,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 70,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 80,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 90,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 100,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 110.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 25.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -45.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 60.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -45.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 0.0,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 10,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 20,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 30,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 40,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 50,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 60.0,
+      "maximum_overlap": 0.0
+    }
+  ],
+  "hardware_motion": [
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "q": 70.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "q": 70.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "q": 65.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "q": 65.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 30,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 40,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "q": 45.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 30,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 40,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "q": 45.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": -20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "q": 20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": -20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "q": 20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "q": 85.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "q": 85.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 90,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 100,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_positive",
+      "q": 110.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_negative",
+      "q": 80.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_dip_positive",
+      "q": 80.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 90,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 100,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "index_pip_negative",
+      "q": 110.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "q": 15.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_positive",
+      "q": 80.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_dip_negative",
+      "q": 80.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 90,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 100,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_negative",
+      "q": 110.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 90,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 100,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "middle_pip_positive",
+      "q": 110.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_positive",
+      "q": 80.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_dip_negative",
+      "q": 80.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 90,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 100,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_positive",
+      "q": 110.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "q": 90.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 30,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 40,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 50,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 60,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 70,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 80,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 90,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 100,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "ring_pip_negative",
+      "q": 110.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "q": 25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "q": 25.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": -20.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "q": 20.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": -20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "q": 20.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": -15.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "q": 90.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": -15.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "q": 90.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_negative",
+      "q": 80.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_dip_positive",
+      "q": 80.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 90,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 100,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_positive",
+      "q": 110.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 60,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 70,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 80,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 90,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 100,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "little_pip_negative",
+      "q": 110.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_positive",
+      "q": 25.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 10,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 20,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "palm_cup_negative",
+      "q": 25.0,
+      "nearby_hardware_count": 1,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -45.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": -10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 0.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 10,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 20,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 30,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 40,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 50,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "q": 60.0,
+      "nearby_hardware_count": 2,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -45.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -40,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -30,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": -10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 0.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 10,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 20,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 30,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 40,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 50,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "q": 60.0,
+      "nearby_hardware_count": 3,
+      "maximum_overlap": 0.0
+    }
+  ],
+  "failures": [],
+  "completed_routes": [
+    "thumb_mcp_abduction_positive",
+    "thumb_mcp_abduction_negative",
+    "thumb_mcp_flexion_positive",
+    "thumb_mcp_flexion_negative",
+    "thumb_cmc_flexion_positive",
+    "thumb_cmc_flexion_negative",
+    "thumb_cmc_abduction_negative",
+    "thumb_cmc_abduction_positive",
+    "index_mcp_abduction_positive",
+    "index_mcp_abduction_negative",
+    "thumb_ip_positive",
+    "thumb_ip_negative",
+    "index_mcp_flexion_positive",
+    "index_mcp_flexion_negative",
+    "index_pip_positive",
+    "index_dip_negative",
+    "index_dip_positive",
+    "middle_mcp_abduction_negative",
+    "middle_mcp_abduction_positive",
+    "index_pip_negative",
+    "middle_mcp_flexion_positive",
+    "middle_mcp_flexion_negative",
+    "ring_mcp_abduction_negative",
+    "ring_mcp_abduction_positive",
+    "middle_dip_positive",
+    "middle_dip_negative",
+    "middle_pip_negative",
+    "middle_pip_positive",
+    "ring_dip_positive",
+    "ring_dip_negative",
+    "ring_mcp_flexion_positive",
+    "ring_pip_positive",
+    "ring_mcp_flexion_negative",
+    "ring_pip_negative",
+    "little_mcp_abduction_positive",
+    "little_mcp_abduction_negative",
+    "wrist_abduction_negative",
+    "wrist_abduction_positive",
+    "little_mcp_flexion_negative",
+    "little_mcp_flexion_positive",
+    "little_dip_negative",
+    "little_dip_positive",
+    "little_pip_positive",
+    "little_pip_negative",
+    "palm_cup_positive",
+    "palm_cup_negative",
+    "wrist_flexion_negative",
+    "wrist_flexion_positive"
+  ],
+  "elapsed_seconds": 2480.6089822496288,
+  "resume_inputs_sha256": {
+    "drive_terminal_placements.step": "d78418617c5ee40aa3897a43a96b987702aa6183f8c917c3f6dde97ca64f9246",
+    "joint_hardware_review.step": "3154b67ffabba89c33e0800c18fcba0e8248ec72ad0714dd89c285b176230678"
+  }
+}

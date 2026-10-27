@@ -1,0 +1,40 @@
+{
+  "body_count": 2933,
+  "processed": 1301,
+  "exact_booleans": 2277,
+  "congruent_proof_reuse": 1644,
+  "collisions": [
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_conformal_bridge",
+      "intersection_mm3": 34.88752354807585
+    },
+    {
+      "a": "thumb_fingertip_radial_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409109134774535
+    },
+    {
+      "a": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.001840908679793749
+    },
+    {
+      "a": "wrist_flex_bushing_-1",
+      "b": "wrist_flexion_drive_mouth_-1_host_cap",
+      "intersection_mm3": 0.626411001229826
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093815146
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.009968179397175477
+    }
+  ],
+  "complete": false,
+  "pass": false
+}

@@ -1,0 +1,40 @@
+{
+  "body_count": 2933,
+  "processed": 801,
+  "exact_booleans": 2054,
+  "congruent_proof_reuse": 587,
+  "collisions": [
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_conformal_bridge",
+      "intersection_mm3": 34.88750516236889
+    },
+    {
+      "a": "thumb_fingertip_radial_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409109115513818
+    },
+    {
+      "a": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409091565612218
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093814137
+    },
+    {
+      "a": "index_fingertip_radial_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968179437662789
+    },
+    {
+      "a": "index_fingertip_ulnar_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968167601617733
+    }
+  ],
+  "complete": false,
+  "pass": false
+}

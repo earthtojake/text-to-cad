@@ -1,0 +1,6034 @@
+[
+  {
+    "name": "thumb_cmc_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -34.5,
+      -222.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -34.5,
+      -12.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -37.828427124746185,
+      28.928932188134528,
+      -11.0
+    ],
+    "tangent": [
+      -0.7071067811865472,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -34.5,
+      -222.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -34.5,
+      -12.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -27.928932188134528,
+      38.828427124746185,
+      -13.5
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -31.5,
+      -181.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -31.5,
+      -12.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -17.393041148454966,
+      19.665833354590756,
+      7.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_positive_cmc_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -18.100147929641516,
+      20.3729401357773,
+      7.0
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_positive_cmc_yaw_reaction_outlet",
+    "frame": "thumb_cmc_abduction",
+    "point": [
+      -32.24228355337246,
+      34.51507575950825,
+      7.0
+    ],
+    "tangent": [
+      -0.7071067811865469,
+      0.7071067811865481,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -31.5,
+      -181.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -31.5,
+      -12.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -18.665833354590756,
+      18.393041148454966,
+      -7.0
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_negative_cmc_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -19.3729401357773,
+      19.100147929641516,
+      -7.0
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_cmc_flexion_negative_cmc_yaw_reaction_outlet",
+    "frame": "thumb_cmc_abduction",
+    "point": [
+      -33.51507575950825,
+      33.24228355337246,
+      -7.0
+    ],
+    "tangent": [
+      -0.7071067811865481,
+      0.7071067811865469,
+      0.0
+    ],
+    "routes": [
+      "thumb_cmc_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -28.5,
+      -140.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -28.5,
+      -12.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -24.042973409238222,
+      28.474454521012227,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693036,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -24.216621586905152,
+      29.459262274024436,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693058,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -41.54073772597556,
+      46.78337841309485,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive",
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_mcp_abduction_positive_metacarpal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_positive_metacarpal_guide_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -62.22361107568207,
+      55.44543648263006,
+      -9.5
+    ],
+    "tangent": [
+      -0.7071067811865465,
+      0.7071067811865486,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_positive_metacarpal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -28.5,
+      -140.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -28.5,
+      -12.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -28.285614096357506,
+      24.231813833892943,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693028,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -28.459262274024436,
+      25.216621586905152,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693072,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -45.78337841309485,
+      42.54073772597556,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative",
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_mcp_abduction_negative_metacarpal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_abduction_negative_metacarpal_guide_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -54.44543648263006,
+      63.22361107568207,
+      -12.0
+    ],
+    "tangent": [
+      -0.7071067811865485,
+      0.7071067811865467,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_abduction_negative_metacarpal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -25.5,
+      -99.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -25.5,
+      -12.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -23.194445271814367,
+      29.322982658436082,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693047,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -23.368093449481293,
+      30.307790411448295,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693083,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -45.677312395916864,
+      47.950104602052654,
+      5.5
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive",
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_positive_mcp_yaw_reaction_outlet",
+    "frame": "thumb_mcp_abduction",
+    "point": [
+      -57.69812767608817,
+      59.97091988222396,
+      5.5
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -25.5,
+      -99.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -25.5,
+      -12.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -29.13414223378136,
+      23.383285696469088,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693047,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -29.307790411448295,
+      24.368093449481293,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693014,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -46.950104602052654,
+      46.677312395916864,
+      -5.5
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative",
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_mcp_flexion_negative_mcp_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_mcp_flexion_negative_mcp_yaw_reaction_outlet",
+    "frame": "thumb_mcp_abduction",
+    "point": [
+      -58.97091988222396,
+      58.69812767608817,
+      -5.5
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "thumb_mcp_flexion_negative_mcp_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -22.5,
+      -58.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -22.5,
+      -12.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -22.345917134390508,
+      30.171510795859945,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693033,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -22.519565312057438,
+      31.15631854887215,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693008,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -39.84368145112785,
+      48.48043468794256,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive",
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_ip_positive_metacarpal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_metacarpal_guide_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -48.823937572196996,
+      55.763634534164,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive",
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_metacarpal_guide",
+        "outlet"
+      ],
+      [
+        "thumb_ip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_mcp_reaction_outlet",
+    "frame": "thumb_mcp_flexion",
+    "point": [
+      -66.14805371126741,
+      73.08775067323441,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive",
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_ip_positive_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_positive_proximal_guide_outlet",
+    "frame": "thumb_mcp_flexion",
+    "point": [
+      -76.79001076812496,
+      79.06280297426075,
+      3.5
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_positive"
+    ],
+    "ends": [
+      [
+        "thumb_ip_positive_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -22.5,
+      -58.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -22.5,
+      -12.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -29.982670371205216,
+      22.53475755904523,
+      0.0
+    ],
+    "tangent": [
+      -0.1736481776669303,
+      0.984807753012208,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_cmc_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -30.15631854887215,
+      23.519565312057438,
+      0.0
+    ],
+    "tangent": [
+      -0.17364817766693016,
+      0.9848077530122081,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_cmc_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_cmc_reaction_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -47.48043468794256,
+      40.84368145112785,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative",
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_cmc_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_ip_negative_metacarpal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_metacarpal_guide_outlet",
+    "frame": "thumb_cmc_flexion",
+    "point": [
+      -54.763634534164,
+      49.823937572196996,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative",
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_metacarpal_guide",
+        "outlet"
+      ],
+      [
+        "thumb_ip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_mcp_reaction_outlet",
+    "frame": "thumb_mcp_flexion",
+    "point": [
+      -72.08775067323441,
+      67.14805371126741,
+      0.0
+    ],
+    "tangent": [
+      -0.7071067811865476,
+      0.7071067811865476,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative",
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "thumb_ip_negative_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "thumb_ip_negative_proximal_guide_outlet",
+    "frame": "thumb_mcp_flexion",
+    "point": [
+      -78.06280297426075,
+      77.79001076812496,
+      -3.5
+    ],
+    "tangent": [
+      -0.7071067811865475,
+      0.7071067811865475,
+      0.0
+    ],
+    "routes": [
+      "thumb_ip_negative"
+    ],
+    "ends": [
+      [
+        "thumb_ip_negative_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -19.5,
+      -17.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -19.5,
+      -12.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -29.19760439792409,
+      66.22964748420202,
+      -9.5
+    ],
+    "tangent": [
+      -0.34202014332566855,
+      0.9396926207859085,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -19.5,
+      -17.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -19.5,
+      -12.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -18.860985569279098,
+      69.99186906078438,
+      -12.0
+    ],
+    "tangent": [
+      -0.3420201433256686,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -16.5,
+      -222.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -16.5,
+      -12.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -23.183571624894277,
+      68.41857640148632,
+      5.5
+    ],
+    "tangent": [
+      -0.34202014332566877,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_positive_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -27.2878133448023,
+      79.6948878509172,
+      5.5
+    ],
+    "tangent": [
+      -0.3420201433256688,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_positive_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_positive_yaw_reaction_outlet",
+    "frame": "index_mcp_abduction",
+    "point": [
+      -34.128216211315674,
+      98.48874026663536,
+      5.5
+    ],
+    "tangent": [
+      -0.3420201433256694,
+      0.9396926207859081,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_positive_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -16.5,
+      -222.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -16.5,
+      -12.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -24.875018342308913,
+      67.80294014350011,
+      -5.5
+    ],
+    "tangent": [
+      -0.3420201433256686,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_negative_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -28.979260062216934,
+      79.079251592931,
+      -5.5
+    ],
+    "tangent": [
+      -0.3420201433256688,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_negative_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_mcp_flexion_negative_yaw_reaction_outlet",
+    "frame": "index_mcp_abduction",
+    "point": [
+      -35.81966292873031,
+      97.87310400864916,
+      -5.5
+    ],
+    "tangent": [
+      -0.3420201433256694,
+      0.9396926207859081,
+      0.0
+    ],
+    "routes": [
+      "index_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "index_mcp_flexion_negative_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -13.5,
+      -181.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -13.5,
+      -12.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -21.210217121243872,
+      69.13681870247021,
+      0.0
+    ],
+    "tangent": [
+      -0.3420201433256687,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -28.991175381902828,
+      90.51482582534962,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566805,
+      0.9396926207859085,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_mcp_reaction_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -37.370668893381705,
+      113.53729503460437,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566705,
+      0.939692620785909,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive",
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "index_pip_positive_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_positive_proximal_guide_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -48.49306223099376,
+      137.9558303396435,
+      4.5
+    ],
+    "tangent": [
+      -0.34202014332566855,
+      0.9396926207859084,
+      0.0
+    ],
+    "routes": [
+      "index_pip_positive"
+    ],
+    "ends": [
+      [
+        "index_pip_positive_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -13.5,
+      -181.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -13.5,
+      -12.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -26.848372845959318,
+      67.08469784251619,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566877,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -34.62933110661828,
+      88.46270496539562,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566855,
+      0.9396926207859084,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_mcp_reaction_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -43.00882461809716,
+      111.48517417465037,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566905,
+      0.9396926207859082,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative",
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "index_pip_negative_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_pip_negative_proximal_guide_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -50.18450894840839,
+      137.3401940816573,
+      -4.5
+    ],
+    "tangent": [
+      -0.34202014332566855,
+      0.9396926207859084,
+      0.0
+    ],
+    "routes": [
+      "index_pip_negative"
+    ],
+    "ends": [
+      [
+        "index_pip_negative_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -10.5,
+      -140.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -10.5,
+      -12.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -20.082585976300777,
+      69.547242874461,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566866,
+      0.9396926207859084,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -27.863544236959736,
+      90.92524999734043,
+      0.0
+    ],
+    "tangent": [
+      -0.3420201433256678,
+      0.9396926207859088,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_mcp_reaction_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -36.24303774843862,
+      113.94771920659518,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566905,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_pip_reaction_inlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -42.22839025663782,
+      130.39234007034858,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566805,
+      0.9396926207859085,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_pip_reaction_outlet",
+    "frame": "index_pip",
+    "point": [
+      -50.60788376811671,
+      153.41480927960333,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566893,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive",
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_pip_reaction",
+        "outlet"
+      ],
+      [
+        "index_dip_positive_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_positive_middle_guide_outlet",
+    "frame": "index_pip",
+    "point": [
+      -57.385585957461146,
+      162.38783848007714,
+      3.5
+    ],
+    "tangent": [
+      -0.34202014332566893,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_positive"
+    ],
+    "ends": [
+      [
+        "index_dip_positive_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -10.5,
+      -140.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -10.5,
+      -12.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -27.976003990902413,
+      66.6742736705254,
+      0.0
+    ],
+    "tangent": [
+      -0.3420201433256687,
+      0.9396926207859084,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -35.756962251561376,
+      88.0522807934048,
+      0.0
+    ],
+    "tangent": [
+      -0.3420201433256672,
+      0.939692620785909,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_mcp_reaction_outlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -44.13645576304025,
+      111.07475000265956,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566905,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_pip_reaction_inlet",
+    "frame": "index_mcp_flexion",
+    "point": [
+      -50.12180827123946,
+      127.51937086641296,
+      0.0
+    ],
+    "tangent": [
+      -0.3420201433256674,
+      0.9396926207859089,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_pip_reaction_outlet",
+    "frame": "index_pip",
+    "point": [
+      -58.50130178271834,
+      150.54184007566772,
+      0.0
+    ],
+    "tangent": [
+      -0.34202014332566893,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative",
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_pip_reaction",
+        "outlet"
+      ],
+      [
+        "index_dip_negative_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "index_dip_negative_middle_guide_outlet",
+    "frame": "index_pip",
+    "point": [
+      -59.07703267487578,
+      161.77220222209093,
+      -3.5
+    ],
+    "tangent": [
+      -0.34202014332566893,
+      0.9396926207859083,
+      0.0
+    ],
+    "routes": [
+      "index_dip_negative"
+    ],
+    "ends": [
+      [
+        "index_dip_negative_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -7.5,
+      -99.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -7.5,
+      -12.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -14.428619843336566,
+      69.65382898167678,
+      -9.5
+    ],
+    "tangent": [
+      -0.08715574274765822,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -7.5,
+      -99.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -7.5,
+      -12.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -3.470478164327364,
+      70.61254215190101,
+      -12.0
+    ],
+    "tangent": [
+      -0.08715574274765815,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -4.5,
+      -58.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -4.5,
+      -12.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -8.052973775549393,
+      70.2116257352618,
+      5.5
+    ],
+    "tangent": [
+      -0.08715574274765812,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_positive_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -9.098842688521291,
+      82.16596211236275,
+      5.5
+    ],
+    "tangent": [
+      -0.08715574274765782,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_positive_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_positive_yaw_reaction_outlet",
+    "frame": "middle_mcp_abduction",
+    "point": [
+      -10.841957543474454,
+      102.08985607419766,
+      5.5
+    ],
+    "tangent": [
+      -0.08715574274765814,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_positive_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -4.5,
+      -58.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -4.5,
+      -12.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -9.846124232114537,
+      70.05474539831602,
+      -5.5
+    ],
+    "tangent": [
+      -0.08715574274765815,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_negative_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -10.891993145086431,
+      82.00908177541696,
+      -5.5
+    ],
+    "tangent": [
+      -0.08715574274765846,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_negative_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_mcp_flexion_negative_yaw_reaction_outlet",
+    "frame": "middle_mcp_abduction",
+    "point": [
+      -12.635108000039596,
+      101.93297573725187,
+      -5.5
+    ],
+    "tangent": [
+      -0.08715574274765814,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "middle_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "middle_mcp_flexion_negative_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -1.5,
+      -17.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -1.5,
+      -12.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -5.960964909556728,
+      70.39465279503187,
+      0.0
+    ],
+    "tangent": [
+      -0.0871557427476582,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -7.943758057065949,
+      93.0580821766191,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765814,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_mcp_reaction_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -10.079073754383574,
+      117.46485227986686,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765804,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive",
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "middle_pip_positive_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_positive_proximal_guide_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -14.76396596711907,
+      146.9186174883262,
+      4.5
+    ],
+    "tangent": [
+      -0.0871557427476581,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_positive"
+    ],
+    "ends": [
+      [
+        "middle_pip_positive_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -1.5,
+      -17.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      -1.5,
+      -12.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -11.938133098107201,
+      69.87171833854592,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765814,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -13.920926245616423,
+      92.53514772013314,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765794,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_mcp_reaction_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -16.056241942934047,
+      116.9419178233809,
+      0.0
+    ],
+    "tangent": [
+      -0.087155742747658,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative",
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "middle_pip_negative_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_pip_negative_proximal_guide_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -16.557116423684214,
+      146.76173715138043,
+      -4.5
+    ],
+    "tangent": [
+      -0.08715574274765828,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_pip_negative"
+    ],
+    "ends": [
+      [
+        "middle_pip_negative_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      1.5,
+      -222.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      1.5,
+      -12.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -4.7655312718466325,
+      70.49923968632908,
+      0.0
+    ],
+    "tangent": [
+      -0.0871557427476582,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -6.748324419355854,
+      93.16266906791628,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765821,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_mcp_reaction_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -8.88364011667348,
+      117.56943917116405,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765839,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_pip_reaction_inlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -10.670332843000473,
+      137.99143048204482,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765829,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_pip_reaction_outlet",
+    "frame": "middle_pip",
+    "point": [
+      -12.805648540318096,
+      162.39820058529259,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765793,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive",
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_pip_reaction",
+        "outlet"
+      ],
+      [
+        "middle_dip_positive_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_positive_middle_guide_outlet",
+    "frame": "middle_pip",
+    "point": [
+      -17.204326764053498,
+      174.81206903489507,
+      3.5
+    ],
+    "tangent": [
+      -0.08715574274765789,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_positive"
+    ],
+    "ends": [
+      [
+        "middle_dip_positive_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      1.5,
+      -222.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      1.5,
+      -12.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -13.133566735817297,
+      69.76713144724874,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765821,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      -15.116359883326515,
+      92.43056082883595,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765821,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_mcp_reaction_outlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -17.25167558064414,
+      116.83733093208372,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765768,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_pip_reaction_inlet",
+    "frame": "middle_mcp_flexion",
+    "point": [
+      -19.038368306971133,
+      137.25932224296452,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765829,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_pip_reaction_outlet",
+    "frame": "middle_pip",
+    "point": [
+      -21.17368400428876,
+      161.66609234621228,
+      0.0
+    ],
+    "tangent": [
+      -0.08715574274765844,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative",
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_pip_reaction",
+        "outlet"
+      ],
+      [
+        "middle_dip_negative_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "middle_dip_negative_middle_guide_outlet",
+    "frame": "middle_pip",
+    "point": [
+      -18.99747722061864,
+      174.6551886979493,
+      -3.5
+    ],
+    "tangent": [
+      -0.08715574274765789,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "middle_dip_negative"
+    ],
+    "ends": [
+      [
+        "middle_dip_negative_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      4.5,
+      -181.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      4.5,
+      -12.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      3.470478164327364,
+      65.61254215190101,
+      -9.5
+    ],
+    "tangent": [
+      0.08715574274765815,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      4.5,
+      -181.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      4.5,
+      -12.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      14.428619843336566,
+      64.65382898167678,
+      -12.0
+    ],
+    "tangent": [
+      0.08715574274765811,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      7.5,
+      -140.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      7.5,
+      -12.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      9.846124232114537,
+      65.05474539831602,
+      5.5
+    ],
+    "tangent": [
+      0.0871557427476582,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_positive_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      10.891993145086431,
+      77.00908177541694,
+      5.5
+    ],
+    "tangent": [
+      0.08715574274765846,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_positive_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_positive_yaw_reaction_outlet",
+    "frame": "ring_mcp_abduction",
+    "point": [
+      12.635108000039596,
+      96.93297573725187,
+      5.5
+    ],
+    "tangent": [
+      0.08715574274765814,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_positive_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      7.5,
+      -140.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      7.5,
+      -12.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      8.052973775549393,
+      65.2116257352618,
+      -5.5
+    ],
+    "tangent": [
+      0.0871557427476582,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_negative_yaw_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      9.09884268852129,
+      77.16596211236273,
+      -5.5
+    ],
+    "tangent": [
+      0.08715574274765814,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_negative_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_mcp_flexion_negative_yaw_reaction_outlet",
+    "frame": "ring_mcp_abduction",
+    "point": [
+      10.841957543474454,
+      97.08985607419766,
+      -5.5
+    ],
+    "tangent": [
+      0.08715574274765846,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "ring_mcp_flexion_negative_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      10.5,
+      -99.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      10.5,
+      -12.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      11.938133098107201,
+      64.87171833854592,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765817,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      13.920926245616423,
+      87.53514772013314,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765821,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_mcp_reaction_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      16.056241942934047,
+      111.9419178233809,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765814,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive",
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "ring_pip_positive_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_positive_proximal_guide_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      16.20849345269358,
+      137.77695835901343,
+      4.5
+    ],
+    "tangent": [
+      0.08715574274765844,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_positive"
+    ],
+    "ends": [
+      [
+        "ring_pip_positive_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      10.5,
+      -99.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      10.5,
+      -12.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      5.960964909556728,
+      65.39465279503187,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765817,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      7.943758057065949,
+      88.0580821766191,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765794,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_mcp_reaction_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      10.079073754383574,
+      112.46485227986686,
+      0.0
+    ],
+    "tangent": [
+      0.087155742747658,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative",
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "ring_pip_negative_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_pip_negative_proximal_guide_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      14.415342996128437,
+      137.9338386959592,
+      -4.5
+    ],
+    "tangent": [
+      0.08715574274765824,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_pip_negative"
+    ],
+    "ends": [
+      [
+        "ring_pip_negative_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      13.5,
+      -58.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      13.5,
+      -12.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      13.133566735817297,
+      64.76713144724874,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765814,
+      0.9961946980917457,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      15.116359883326515,
+      87.43056082883595,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765826,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_mcp_reaction_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      17.25167558064414,
+      111.83733093208372,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765787,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_pip_reaction_inlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      18.6897453359805,
+      128.27454345059752,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765793,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_pip_reaction_outlet",
+    "frame": "ring_pip",
+    "point": [
+      20.825061033298127,
+      152.68131355384529,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765879,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive",
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_pip_reaction",
+        "outlet"
+      ],
+      [
+        "ring_dip_positive_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_positive_middle_guide_outlet",
+    "frame": "ring_pip",
+    "point": [
+      18.474542764132693,
+      163.67802050939883,
+      3.5
+    ],
+    "tangent": [
+      0.08715574274765779,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_positive"
+    ],
+    "ends": [
+      [
+        "ring_dip_positive_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      13.5,
+      -58.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      13.5,
+      -12.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      4.7655312718466325,
+      65.49923968632908,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765817,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_mcp_reaction_inlet",
+    "frame": "wrist_flexion",
+    "point": [
+      6.748324419355854,
+      88.16266906791628,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765826,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_mcp_reaction_outlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      8.88364011667348,
+      112.56943917116405,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765787,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_pip_reaction_inlet",
+    "frame": "ring_mcp_flexion",
+    "point": [
+      10.32170987200984,
+      129.00665168967782,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765793,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_pip_reaction_outlet",
+    "frame": "ring_pip",
+    "point": [
+      12.457025569327463,
+      153.4134217929256,
+      0.0
+    ],
+    "tangent": [
+      0.08715574274765829,
+      0.9961946980917454,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative",
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_pip_reaction",
+        "outlet"
+      ],
+      [
+        "ring_dip_negative_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "ring_dip_negative_middle_guide_outlet",
+    "frame": "ring_pip",
+    "point": [
+      16.68139230756755,
+      163.8349008463446,
+      -3.5
+    ],
+    "tangent": [
+      0.08715574274765779,
+      0.9961946980917455,
+      0.0
+    ],
+    "routes": [
+      "ring_dip_negative"
+    ],
+    "ends": [
+      [
+        "ring_dip_negative_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      16.5,
+      -17.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      16.5,
+      -12.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      16.22366801037394,
+      35.0,
+      -9.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_positive",
+      "little_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_positive_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_mcp_abduction_positive_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_positive_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      16.22366801037394,
+      59.603627893291105,
+      -9.5
+    ],
+    "tangent": [
+      0.42261826174069916,
+      0.9063077870366502,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_positive_cup_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      16.5,
+      -17.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      16.5,
+      -12.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      26.193053667777093,
+      35.0,
+      -12.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_negative",
+      "little_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_negative_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_mcp_abduction_negative_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_abduction_negative_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      26.193053667777093,
+      54.954827014143405,
+      -12.0
+    ],
+    "tangent": [
+      0.4226182617406988,
+      0.9063077870366503,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_abduction_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_abduction_negative_cup_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      19.5,
+      -222.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      19.5,
+      -12.0,
+      43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      12.0,
+      31.0,
+      5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive",
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_mcp_flexion_positive_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      22.0240378474085,
+      56.89887101815063,
+      5.5
+    ],
+    "tangent": [
+      0.4226182617406999,
+      0.9063077870366498,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_cup_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_yaw_reaction_inlet",
+    "frame": "palm_cup",
+    "point": [
+      27.095456988296895,
+      67.77456446259042,
+      5.5
+    ],
+    "tangent": [
+      0.42261826174069883,
+      0.9063077870366503,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_positive_yaw_reaction_outlet",
+    "frame": "little_mcp_abduction",
+    "point": [
+      35.547822223110884,
+      85.90072020332342,
+      5.5
+    ],
+    "tangent": [
+      0.4226182617407004,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_positive"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_positive_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      19.5,
+      -222.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      19.5,
+      -12.0,
+      -43.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      12.0,
+      31.0,
+      -5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative",
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_mcp_flexion_negative_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      20.392683830742534,
+      57.65958388928388,
+      -5.5
+    ],
+    "tangent": [
+      0.42261826174069905,
+      0.9063077870366502,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_cup_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_yaw_reaction_inlet",
+    "frame": "palm_cup",
+    "point": [
+      25.46410297163093,
+      68.53527733372368,
+      -5.5
+    ],
+    "tangent": [
+      0.42261826174069883,
+      0.9063077870366503,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_yaw_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_mcp_flexion_negative_yaw_reaction_outlet",
+    "frame": "little_mcp_abduction",
+    "point": [
+      33.91646820644492,
+      86.66143307445668,
+      -5.5
+    ],
+    "tangent": [
+      0.4226182617407004,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_mcp_flexion_negative"
+    ],
+    "ends": [
+      [
+        "little_mcp_flexion_negative_yaw_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      22.5,
+      -181.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      22.5,
+      -12.0,
+      41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      37.54184965478638,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive",
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_pip_positive_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      33.54184965478638,
+      76.62987482357894,
+      0.0
+    ],
+    "tangent": [
+      0.4226182617406998,
+      0.9063077870366498,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive",
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_cup_reaction",
+        "outlet"
+      ],
+      [
+        "little_pip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_mcp_reaction_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      43.89599706743352,
+      98.83441560597686,
+      0.0
+    ],
+    "tangent": [
+      0.4226182617407005,
+      0.9063077870366494,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive",
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "little_pip_positive_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_positive_proximal_guide_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      49.49422486055396,
+      115.80887717553287,
+      4.5
+    ],
+    "tangent": [
+      0.4226182617406999,
+      0.9063077870366497,
+      0.0
+    ],
+    "routes": [
+      "little_pip_positive"
+    ],
+    "ends": [
+      [
+        "little_pip_positive_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      22.5,
+      -181.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      22.5,
+      -12.0,
+      -41.8
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      32.10400293256648,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative",
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_pip_negative_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      28.10400293256648,
+      79.16558439402314,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174069905,
+      0.90630778703665,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative",
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_cup_reaction",
+        "outlet"
+      ],
+      [
+        "little_pip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_mcp_reaction_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      38.45815034521362,
+      101.37012517642106,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174070055,
+      0.9063077870366495,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative",
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_mcp_reaction",
+        "outlet"
+      ],
+      [
+        "little_pip_negative_proximal_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_pip_negative_proximal_guide_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      47.862870843888,
+      116.56959004666614,
+      -4.5
+    ],
+    "tangent": [
+      0.4226182617406999,
+      0.9063077870366497,
+      0.0
+    ],
+    "routes": [
+      "little_pip_negative"
+    ],
+    "ends": [
+      [
+        "little_pip_negative_proximal_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      25.5,
+      -140.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      25.5,
+      -12.0,
+      40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      38.62941899923036,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive",
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_dip_positive_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      34.62941899923036,
+      76.12273290949011,
+      0.0
+    ],
+    "tangent": [
+      0.4226182617406995,
+      0.9063077870366499,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive",
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_cup_reaction",
+        "outlet"
+      ],
+      [
+        "little_dip_positive_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_mcp_reaction_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      44.9835664118775,
+      98.32727369188802,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174070005,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_pip_reaction_inlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      48.57582163667344,
+      106.03088988169955,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174070033,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_pip_reaction_outlet",
+    "frame": "little_pip",
+    "point": [
+      57.979077960404005,
+      126.196238143265,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174069955,
+      0.9063077870366499,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive",
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_pip_reaction",
+        "outlet"
+      ],
+      [
+        "little_dip_positive_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_positive_middle_guide_outlet",
+    "frame": "little_pip",
+    "point": [
+      58.369208357108654,
+      134.84134070330254,
+      3.5
+    ],
+    "tangent": [
+      0.422618261740699,
+      0.9063077870366502,
+      0.0
+    ],
+    "routes": [
+      "little_dip_positive"
+    ],
+    "ends": [
+      [
+        "little_dip_positive_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      25.5,
+      -140.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      25.5,
+      -12.0,
+      -40.6
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      31.016433588122503,
+      43.0,
+      0.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative",
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_wrist_guide",
+        "outlet"
+      ],
+      [
+        "little_dip_negative_cup_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_cup_reaction_outlet",
+    "frame": "palm_cup",
+    "point": [
+      27.016433588122503,
+      79.67272630811198,
+      0.0
+    ],
+    "tangent": [
+      0.4226182617406992,
+      0.9063077870366502,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative",
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_cup_reaction",
+        "outlet"
+      ],
+      [
+        "little_dip_negative_mcp_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_mcp_reaction_outlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      37.37058100076964,
+      101.8772670905099,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174070005,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_mcp_reaction",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_pip_reaction_inlet",
+    "frame": "little_mcp_flexion",
+    "point": [
+      40.96283622556558,
+      109.58088328032143,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174070033,
+      0.9063077870366496,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_pip_reaction",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_pip_reaction_outlet",
+    "frame": "little_pip",
+    "point": [
+      50.36609254929615,
+      129.74623154188689,
+      0.0
+    ],
+    "tangent": [
+      0.42261826174069955,
+      0.9063077870366499,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative",
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_pip_reaction",
+        "outlet"
+      ],
+      [
+        "little_dip_negative_middle_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "little_dip_negative_middle_guide_outlet",
+    "frame": "little_pip",
+    "point": [
+      56.73785434044269,
+      135.60205357443579,
+      -3.5
+    ],
+    "tangent": [
+      0.422618261740699,
+      0.9063077870366502,
+      0.0
+    ],
+    "routes": [
+      "little_dip_negative"
+    ],
+    "ends": [
+      [
+        "little_dip_negative_middle_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      28.5,
+      -99.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_positive"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      28.5,
+      -12.0,
+      39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_positive"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_positive_wrist_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      -11.0,
+      -15.0,
+      5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_positive"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      28.5,
+      -99.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_negative"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      28.5,
+      -12.0,
+      -39.4
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_negative"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_abduction_negative_wrist_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      11.0,
+      -15.0,
+      -5.5
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_abduction_negative"
+    ],
+    "ends": [
+      [
+        "wrist_abduction_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      31.5,
+      -58.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_positive"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      31.5,
+      -12.0,
+      38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_positive"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_positive_wrist_guide_outlet",
+    "frame": "wrist_abduction",
+    "point": [
+      14.0,
+      -6.0,
+      11.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_positive"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      31.5,
+      -58.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_negative"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      31.5,
+      -12.0,
+      -38.2
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_negative"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "wrist_flexion_negative_wrist_guide_outlet",
+    "frame": "wrist_abduction",
+    "point": [
+      -14.0,
+      -6.0,
+      -11.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "wrist_flexion_negative"
+    ],
+    "ends": [
+      [
+        "wrist_flexion_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_positive_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      34.5,
+      -17.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_positive"
+    ],
+    "ends": [
+      [
+        "palm_cup_positive_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_positive_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      34.5,
+      -12.0,
+      37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_positive"
+    ],
+    "ends": [
+      [
+        "palm_cup_positive_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_positive_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      2.0,
+      45.0,
+      7.0
+    ],
+    "tangent": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_positive"
+    ],
+    "ends": [
+      [
+        "palm_cup_positive_wrist_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_negative_exit_guide_outlet",
+    "frame": "forearm",
+    "point": [
+      34.5,
+      -17.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_negative"
+    ],
+    "ends": [
+      [
+        "palm_cup_negative_exit_guide",
+        "outlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_negative_wrist_guide_inlet",
+    "frame": "forearm",
+    "point": [
+      34.5,
+      -12.0,
+      -37.0
+    ],
+    "tangent": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_negative"
+    ],
+    "ends": [
+      [
+        "palm_cup_negative_wrist_guide",
+        "inlet"
+      ]
+    ]
+  },
+  {
+    "name": "palm_cup_negative_wrist_guide_outlet",
+    "frame": "wrist_flexion",
+    "point": [
+      2.0,
+      47.0,
+      -7.0
+    ],
+    "tangent": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "routes": [
+      "palm_cup_negative"
+    ],
+    "ends": [
+      [
+        "palm_cup_negative_wrist_guide",
+        "outlet"
+      ]
+    ]
+  }
+]

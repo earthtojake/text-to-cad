@@ -1,0 +1,198 @@
+{
+  "pass": true,
+  "terminal_orbits": [
+    {
+      "body": "index_fingertip_silicone_pad",
+      "clearance_mm": 3.8093403893975264,
+      "pass": true
+    },
+    {
+      "body": "index_fingertip_conformal_bridge",
+      "clearance_mm": 4.483869144474899,
+      "pass": true
+    },
+    {
+      "body": "index_fingertip_radial_M0p8_socket_screw",
+      "clearance_mm": 8.924611886763476,
+      "pass": true
+    },
+    {
+      "body": "index_fingertip_ulnar_M0p8_socket_screw",
+      "clearance_mm": 8.924611886763476,
+      "pass": true
+    },
+    {
+      "body": "index_fingertip_radial_M0p8_captive_insert",
+      "clearance_mm": 8.863400634506412,
+      "pass": true
+    },
+    {
+      "body": "index_fingertip_ulnar_M0p8_captive_insert",
+      "clearance_mm": 8.86340063450641,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_silicone_pad",
+      "clearance_mm": 3.8093403893975264,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_conformal_bridge",
+      "clearance_mm": 4.483869144474899,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_radial_M0p8_socket_screw",
+      "clearance_mm": 8.924611886763476,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_ulnar_M0p8_socket_screw",
+      "clearance_mm": 8.924611886763476,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_radial_M0p8_captive_insert",
+      "clearance_mm": 8.863400634506412,
+      "pass": true
+    },
+    {
+      "body": "middle_fingertip_ulnar_M0p8_captive_insert",
+      "clearance_mm": 8.86340063450641,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_silicone_pad",
+      "clearance_mm": 3.811194414965019,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_conformal_bridge",
+      "clearance_mm": 4.485595096600072,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_radial_M0p8_socket_screw",
+      "clearance_mm": 8.821702537155113,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_ulnar_M0p8_socket_screw",
+      "clearance_mm": 8.821702537155115,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_radial_M0p8_captive_insert",
+      "clearance_mm": 8.756178956235638,
+      "pass": true
+    },
+    {
+      "body": "ring_fingertip_ulnar_M0p8_captive_insert",
+      "clearance_mm": 8.756178956235637,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_silicone_pad",
+      "clearance_mm": 3.566925407953839,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_conformal_bridge",
+      "clearance_mm": 4.139533420968437,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_radial_M0p8_socket_screw",
+      "clearance_mm": 8.104742039789684,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_ulnar_M0p8_socket_screw",
+      "clearance_mm": 8.104742039789684,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_radial_M0p8_captive_insert",
+      "clearance_mm": 8.016496035641149,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_ulnar_M0p8_captive_insert",
+      "clearance_mm": 8.016496035641149,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_silicone_pad",
+      "clearance_mm": 5.705683504843292,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_conformal_bridge",
+      "clearance_mm": 6.675082511880762,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_radial_M0p8_socket_screw",
+      "clearance_mm": 11.62761913917698,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "clearance_mm": 11.62761913917698,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_radial_M0p8_captive_insert",
+      "clearance_mm": 11.630265400567671,
+      "pass": true
+    },
+    {
+      "body": "thumb_fingertip_ulnar_M0p8_captive_insert",
+      "clearance_mm": 11.630265400567671,
+      "pass": true
+    }
+  ],
+  "cup_route_rows": [
+    {
+      "label": "palm_cup_0",
+      "pose": {
+        "palm_cup": 0.0
+      },
+      "exact_wire_distances": 0,
+      "minimum_nearby_clearance_mm": null,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "label": "palm_cup_10",
+      "pose": {
+        "palm_cup": 10.0
+      },
+      "exact_wire_distances": 0,
+      "minimum_nearby_clearance_mm": null,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "label": "palm_cup_20",
+      "pose": {
+        "palm_cup": 20.0
+      },
+      "exact_wire_distances": 1,
+      "minimum_nearby_clearance_mm": 3.566925407953828,
+      "collisions": [],
+      "pass": true
+    },
+    {
+      "label": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      },
+      "exact_wire_distances": 1,
+      "minimum_nearby_clearance_mm": 3.5669254079538306,
+      "collisions": [],
+      "pass": true
+    }
+  ],
+  "scope": "Every complete native terminal drive circle at R3.5 and X\u00b10.9 against all six local pad bodies, minus tendon radius0.3: this contains every150-degree terminal arc at every DIP/IP angle. All42 hand routes against all30 assembled pad bodies at cup0/10/20/25deg. Common wrist rigid motion preserves all relative hand-route/pad clearances."
+}

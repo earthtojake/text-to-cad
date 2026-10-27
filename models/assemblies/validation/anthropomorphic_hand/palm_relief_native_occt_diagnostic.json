@@ -1,0 +1,8 @@
+{
+  "source": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step",
+  "source_sha256": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+  "stl": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STL/anthropomorphic_hand/palm_relief_native_occt_diagnostic.stl",
+  "stl_sha256": "20646c28e80c58d5b7e7e5284b5b3e732cc32ac919bd7362653974069f451e53",
+  "chord_tolerance_mm": 0.003,
+  "angle_tolerance": 0.18
+}

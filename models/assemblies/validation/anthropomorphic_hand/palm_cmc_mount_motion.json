@@ -1,0 +1,133 @@
+{
+  "scope": "all18 moving CMC mount bodies,9yaw/flex corners; conservative branch/eye-envelope screen and exact native Boolean for near pairs",
+  "rows": [
+    {
+      "name": "thumb_cmc_child_four_liner_comb_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_scalloped_cap",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_scalloped_cap",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": -15
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_scalloped_cap",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_scalloped_cap",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_scalloped_cap",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    }
+  ],
+  "failures": [],
+  "final_geometry_note": "Final geometry additionally removes a radius0.55, height4 mm fixed CMC screw-head clearance cylinder. A subtraction preserves every previously proven separation. Final connected-solid/self-intersection validation is palm_accepted_strict.json."
+}

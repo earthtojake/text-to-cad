@@ -1,0 +1,399 @@
+{
+  "scope": "Resolve the two newly discovered index/thumb contacts in the fist candidate.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/fist_contact_inputs.step": "74820b311845d8894a619d14392e6c85fe8d248ebe581c158f7bce0e7bfffe5b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fist_contact_inputs.json": "fc7a6601253ef8df6436147c5641f490c32c4c07ebeb18ec264854762cc8e153",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_fist_candidate.json": "d9e760fab54643101b3279dd43d22e150970b011b1888baf3a79e52ec5e54d83",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fist_thumb_variants.py": "8160e0e3827d3537dac304776b365792ddb24923c43ddd35585d9d9e07efc6f3"
+  },
+  "rows": [
+    {
+      "thumb_mcp_flexion": 60.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -25.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -25.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 60.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.3688745549595441,
+          "pass_": false
+        }
+      ],
+      "known_pairs_pass": false
+    },
+    {
+      "thumb_mcp_flexion": 65.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -25.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -25.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 65.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.23866082234619374,
+          "pass_": false
+        }
+      ],
+      "known_pairs_pass": false
+    },
+    {
+      "thumb_mcp_flexion": 55.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -25.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -25.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.6902427751020612,
+          "pass_": false
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.5405482321636388,
+          "pass_": false
+        }
+      ],
+      "known_pairs_pass": false
+    },
+    {
+      "thumb_mcp_flexion": 60.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -15.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 60.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    },
+    {
+      "thumb_mcp_flexion": 65.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -15.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 65.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    },
+    {
+      "thumb_mcp_flexion": 55.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -15.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    },
+    {
+      "thumb_mcp_flexion": 70.0,
+      "thumb_mcp_abduction": -15.0,
+      "thumb_cmc_abduction": -20.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -15.0,
+        "thumb_mcp_flexion": 70.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    },
+    {
+      "thumb_mcp_flexion": 70.0,
+      "thumb_mcp_abduction": 5.0,
+      "thumb_cmc_abduction": -20.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": 5.0,
+        "thumb_mcp_flexion": 70.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    },
+    {
+      "thumb_mcp_flexion": 70.0,
+      "thumb_mcp_abduction": 15.0,
+      "thumb_cmc_abduction": -20.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": 15.0,
+        "thumb_mcp_flexion": 70.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    }
+  ]
+}

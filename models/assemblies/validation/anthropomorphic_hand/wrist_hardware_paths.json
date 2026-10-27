@@ -1,0 +1,19 @@
+{
+  "scope": "Complete wire radius-envelope check against13 wrist frames/bushings/pulleys/shaft envelopes; palm and final shaft hardware pending",
+  "samples": [
+    {
+      "pose": {},
+      "exact_distances": 186,
+      "minimum_checked_clearance_mm": -0.4500009999999975,
+      "collisions": [
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "body": "wrist_palm_cradle",
+          "centerline_distance_mm": -9.99999997487852e-07,
+          "required_mm": 0.45
+        }
+      ],
+      "clear": false
+    }
+  ]
+}

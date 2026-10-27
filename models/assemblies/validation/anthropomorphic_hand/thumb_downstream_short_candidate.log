@@ -1,0 +1,52 @@
+checking flat
+{"label": "flat", "pose": {}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking mcp_abduction_-15
+{"label": "mcp_abduction_-15", "pose": {"thumb_mcp_abduction": -15.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 8.881784197001252e-16, "maximum_tangent_error": 5.661048867003676e-16, "mutual_gap_lower_bound_mm": 0.3300132887873878, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 98, "pass": true}
+checking mcp_abduction_-5
+{"label": "mcp_abduction_-5", "pose": {"thumb_mcp_abduction": -5.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 7.105427357601002e-15, "maximum_tangent_error": 1.6653345369377348e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 84, "pass": true}
+checking mcp_abduction_5
+{"label": "mcp_abduction_5", "pose": {"thumb_mcp_abduction": 5.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 7.105427357601002e-15, "maximum_tangent_error": 1.6653345369377348e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 84, "pass": true}
+checking mcp_abduction_15
+{"label": "mcp_abduction_15", "pose": {"thumb_mcp_abduction": 15.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 8.881784197001252e-16, "maximum_tangent_error": 5.661048867003676e-16, "mutual_gap_lower_bound_mm": 0.3256129928888757, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 98, "pass": true}
+checking mcp_flexion_0
+{"label": "mcp_flexion_0", "pose": {"thumb_mcp_flexion": 0.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking mcp_flexion_10
+{"label": "mcp_flexion_10", "pose": {"thumb_mcp_flexion": 10.0}, "minimum_radius_mm": 3.4999999999999996, "maximum_join_gap_mm": 4.440892098500626e-16, "maximum_tangent_error": 1.1050065994108394e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 82, "pass": true}
+checking mcp_flexion_20
+{"label": "mcp_flexion_20", "pose": {"thumb_mcp_flexion": 20.0}, "minimum_radius_mm": 3.500000000000001, "maximum_join_gap_mm": 8.881784197001252e-16, "maximum_tangent_error": 1.808164448713604e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 79, "pass": true}
+checking mcp_flexion_30
+{"label": "mcp_flexion_30", "pose": {"thumb_mcp_flexion": 30.0}, "minimum_radius_mm": 3.500000000000001, "maximum_join_gap_mm": 8.881784197001252e-16, "maximum_tangent_error": 8.005932084973722e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 78, "pass": true}
+checking mcp_flexion_40
+{"label": "mcp_flexion_40", "pose": {"thumb_mcp_flexion": 40.0}, "minimum_radius_mm": 3.5000000000000013, "maximum_join_gap_mm": 2.6645352591003757e-15, "maximum_tangent_error": 2.2037297810228127e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 77, "pass": true}
+checking mcp_flexion_50
+{"label": "mcp_flexion_50", "pose": {"thumb_mcp_flexion": 50.0}, "minimum_radius_mm": 3.499999999999999, "maximum_join_gap_mm": 7.105427357601002e-15, "maximum_tangent_error": 2.673771110915334e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 77, "pass": true}
+checking mcp_flexion_60
+{"label": "mcp_flexion_60", "pose": {"thumb_mcp_flexion": 60.0}, "minimum_radius_mm": 3.499999999999998, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 1.7422013638940487e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking mcp_flexion_70
+{"label": "mcp_flexion_70", "pose": {"thumb_mcp_flexion": 70.0}, "minimum_radius_mm": 3.500000000000004, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 1.897149936107019e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 81, "pass": true}
+checking ip_0
+{"label": "ip_0", "pose": {"thumb_ip": 0.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_10
+{"label": "ip_10", "pose": {"thumb_ip": 10.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_20
+{"label": "ip_20", "pose": {"thumb_ip": 20.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_30
+{"label": "ip_30", "pose": {"thumb_ip": 30.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_40
+{"label": "ip_40", "pose": {"thumb_ip": 40.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_50
+{"label": "ip_50", "pose": {"thumb_ip": 50.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_60
+{"label": "ip_60", "pose": {"thumb_ip": 60.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_70
+{"label": "ip_70", "pose": {"thumb_ip": 70.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_80
+{"label": "ip_80", "pose": {"thumb_ip": 80.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 80, "pass": true}
+checking ip_85
+{"label": "ip_85", "pose": {"thumb_ip": 85.0}, "minimum_radius_mm": 3.5, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 6.206335383118183e-16, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 79, "pass": true}
+checking compound_-15.0
+{"label": "compound_-15.0", "pose": {"thumb_mcp_abduction": -15.0, "thumb_mcp_flexion": 70.0, "thumb_ip": 85.0}, "minimum_radius_mm": 3.4999999999999982, "maximum_join_gap_mm": 1.7763568394002505e-15, "maximum_tangent_error": 1.4432899320127035e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 97, "pass": true}
+checking compound_0.0
+{"label": "compound_0.0", "pose": {"thumb_mcp_abduction": 0.0, "thumb_mcp_flexion": 70.0, "thumb_ip": 85.0}, "minimum_radius_mm": 3.500000000000004, "maximum_join_gap_mm": 0.0, "maximum_tangent_error": 1.897149936107019e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 82, "pass": true}
+checking compound_15.0
+{"label": "compound_15.0", "pose": {"thumb_mcp_abduction": 15.0, "thumb_mcp_flexion": 70.0, "thumb_ip": 85.0}, "minimum_radius_mm": 3.5000000000000044, "maximum_join_gap_mm": 1.7763568394002505e-15, "maximum_tangent_error": 1.4432899320127035e-15, "mutual_gap_lower_bound_mm": 0.4124626630968996, "mutual_conflicts": [], "collisions": [], "exact_distance_tests": 94, "pass": true}

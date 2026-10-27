@@ -1,0 +1,1348 @@
+{
+  "strict": [],
+  "seating": [
+    {
+      "name": "thumb_cmc_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_cmc_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_mcp_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_mcp_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_mcp_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_mcp_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_ip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "thumb_ip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_mcp_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_mcp_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_mcp_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_mcp_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_pip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_pip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_dip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "index_dip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_mcp_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_mcp_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_mcp_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_mcp_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_pip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_pip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_dip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "middle_dip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_mcp_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_mcp_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_mcp_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_mcp_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_pip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_pip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_dip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "ring_dip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_mcp_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_mcp_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_mcp_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_mcp_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_pip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_pip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_dip_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "little_dip_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "wrist_abduction_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "wrist_abduction_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "wrist_flexion_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "wrist_flexion_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "palm_cup_positive",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    },
+    {
+      "name": "palm_cup_negative",
+      "rope_pulley": 0,
+      "rope_ferrule": 0,
+      "ferrule_pulley": 0,
+      "screw_pulley": 0,
+      "rope_cover_screw": 0
+    }
+  ],
+  "capture": [
+    {
+      "radius": 3.5,
+      "axis": 0,
+      "sign": -1,
+      "capture_overlap": 0.14529045960166326
+    },
+    {
+      "radius": 3.5,
+      "axis": 0,
+      "sign": 1,
+      "capture_overlap": 0.11538961892361396
+    },
+    {
+      "radius": 3.5,
+      "axis": 1,
+      "sign": -1,
+      "capture_overlap": 0.17293607830767407
+    },
+    {
+      "radius": 3.5,
+      "axis": 1,
+      "sign": 1,
+      "capture_overlap": 0.1086997768320924
+    },
+    {
+      "radius": 3.5,
+      "axis": 2,
+      "sign": -1,
+      "capture_overlap": 0.132465081615655
+    },
+    {
+      "radius": 3.5,
+      "axis": 2,
+      "sign": 1,
+      "capture_overlap": 0.12947740281594844
+    },
+    {
+      "radius": 4.5,
+      "axis": 0,
+      "sign": -1,
+      "capture_overlap": 0.1453657742426031
+    },
+    {
+      "radius": 4.5,
+      "axis": 0,
+      "sign": 1,
+      "capture_overlap": 0.11145918585937599
+    },
+    {
+      "radius": 4.5,
+      "axis": 1,
+      "sign": -1,
+      "capture_overlap": 0.17134553231548855
+    },
+    {
+      "radius": 4.5,
+      "axis": 1,
+      "sign": 1,
+      "capture_overlap": 0.1110083236995297
+    },
+    {
+      "radius": 4.5,
+      "axis": 2,
+      "sign": -1,
+      "capture_overlap": 0.13244484629383668
+    },
+    {
+      "radius": 4.5,
+      "axis": 2,
+      "sign": 1,
+      "capture_overlap": 0.1294981920647554
+    },
+    {
+      "radius": 5.5,
+      "axis": 0,
+      "sign": -1,
+      "capture_overlap": 0.14530512247788097
+    },
+    {
+      "radius": 5.5,
+      "axis": 0,
+      "sign": 1,
+      "capture_overlap": 0.109019373695673
+    },
+    {
+      "radius": 5.5,
+      "axis": 1,
+      "sign": -1,
+      "capture_overlap": 0.17022737386805392
+    },
+    {
+      "radius": 5.5,
+      "axis": 1,
+      "sign": 1,
+      "capture_overlap": 0.11243202670804972
+    },
+    {
+      "radius": 5.5,
+      "axis": 2,
+      "sign": -1,
+      "capture_overlap": 0.1324319759351522
+    },
+    {
+      "radius": 5.5,
+      "axis": 2,
+      "sign": 1,
+      "capture_overlap": 0.12950934889508975
+    }
+  ],
+  "hardware_motion": [],
+  "withdrawal": [
+    {
+      "radius": 3.5,
+      "z": 0.05,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.1,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.15000000000000002,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.2,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.25,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.30000000000000004,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.35000000000000003,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.4,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.45,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.5,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.55,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.6000000000000001,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.65,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.7000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.8500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.9,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 0.9500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.05,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.1,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.1500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.2000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.25,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.3,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.35,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.4000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.4500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.5,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.55,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.6,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.6500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.7000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.85,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.9000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 1.9500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 3.5,
+      "z": 2.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.05,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.1,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.15000000000000002,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.2,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.25,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.30000000000000004,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.35000000000000003,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.4,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.45,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.5,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.55,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.6000000000000001,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.65,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.7000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.8500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.9,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 0.9500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.05,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.1,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.1500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.2000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.25,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.3,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.35,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.4000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.4500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.5,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.55,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.6,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.6500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.7000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.85,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.9000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 1.9500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 4.5,
+      "z": 2.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.05,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.1,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.15000000000000002,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.2,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.25,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.30000000000000004,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.35000000000000003,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.4,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.45,
+      "screw": 0,
+      "cover_after_screw_removed": 0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.5,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.55,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.6000000000000001,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.65,
+      "screw": 0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.7000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.8500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.9,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 0.9500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.05,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.1,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.1500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.2000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.25,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.3,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.35,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.4000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.4500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.5,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.55,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.6,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.6500000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.7000000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.75,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.8,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.85,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.9000000000000001,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 1.9500000000000002,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    },
+    {
+      "radius": 5.5,
+      "z": 2.0,
+      "screw": 0.0,
+      "cover_after_screw_removed": 0.0,
+      "ferrule_after_cover_removed": 0.0
+    }
+  ],
+  "motion_seating": [],
+  "pair_checks": 0,
+  "failures": [],
+  "partial": true,
+  "strict_check_mode": "native --every-placement separately",
+  "elapsed_seconds": 353.8966488339938
+}

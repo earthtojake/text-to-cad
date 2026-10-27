@@ -1,0 +1,406 @@
+{
+  "sample_count": 225,
+  "method": "0.1 mm conservative curve sampling; expanded axial band and 0.050001 mm radial reserve",
+  "rows": {
+    "(0.0, 1.0)": {
+      "minimum_safe_outer_radius": 5.607449902686867,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_abduction_negative",
+      "group": "thumb_mcp_abduction_negative_cmc_reaction",
+      "point": [
+        -6.08925727333407,
+        0.47106516309186475,
+        -0.47596476725631576
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        0.0,
+        1.0
+      ]
+    },
+    "(1.0, 2.0)": {
+      "minimum_safe_outer_radius": 5.719773304940018,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_abduction_positive",
+      "group": "thumb_mcp_abduction_positive_cmc_reaction",
+      "point": [
+        -1.6683608020257665,
+        5.991841506469946,
+        2.4574661581394937
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        1.0,
+        2.0
+      ]
+    },
+    "(2.0, 3.0)": {
+      "minimum_safe_outer_radius": 5.4915347235608944,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_abduction_positive",
+      "group": "thumb_mcp_abduction_positive_cmc_reaction",
+      "point": [
+        -1.4899804030898594,
+        5.803314460298921,
+        3.4270395758535726
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        2.0,
+        3.0
+      ]
+    },
+    "(3.0, 4.0)": {
+      "minimum_safe_outer_radius": 5.210098972672425,
+      "sample": "thumb_cmc_flexion_25",
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_drive_wrap",
+      "point": [
+        -4.516132673127252,
+        3.2433404669914623,
+        4.346871092393714
+      ],
+      "tube_radius": 0.3,
+      "axial_band": [
+        3.0,
+        4.0
+      ]
+    },
+    "(4.0, 5.0)": {
+      "minimum_safe_outer_radius": 4.253631727267763,
+      "sample": "thumb_cmc_flexion_25",
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_drive_wrap",
+      "point": [
+        -3.828842992803949,
+        2.556050786668159,
+        5.349445364935432
+      ],
+      "tube_radius": 0.3,
+      "axial_band": [
+        4.0,
+        5.0
+      ]
+    },
+    "(5.0, 6.0)": {
+      "minimum_safe_outer_radius": 2.7399831612588565,
+      "sample": "thumb_cmc_flexion_45",
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_drive_wrap",
+      "point": [
+        -2.7266116561664973,
+        1.4538194500307071,
+        6.345234265428613
+      ],
+      "tube_radius": 0.3,
+      "axial_band": [
+        5.0,
+        6.0
+      ]
+    },
+    "(6.0, 7.0)": {
+      "minimum_safe_outer_radius": 0.5499989999999932,
+      "sample": "wrist_abduction_-10",
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_drive_approach",
+      "point": [
+        0.636396103067888,
+        0.636396103067888,
+        7.0
+      ],
+      "tube_radius": 0.3,
+      "axial_band": [
+        6.0,
+        7.0
+      ]
+    },
+    "(7.0, 8.0)": {
+      "minimum_safe_outer_radius": 0.5499989999999932,
+      "sample": "wrist_abduction_-10",
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_drive_approach",
+      "point": [
+        0.636396103067888,
+        0.636396103067888,
+        7.0
+      ],
+      "tube_radius": 0.3,
+      "axial_band": [
+        7.0,
+        8.0
+      ]
+    },
+    "(8.0, 9.0)": {
+      "minimum_safe_outer_radius": 1.918023432372771,
+      "sample": "thumb_cmc_abduction_-25",
+      "tendon": "thumb_mcp_flexion_negative",
+      "group": "thumb_mcp_flexion_negative_cmc_reaction",
+      "point": [
+        -1.972581650695922,
+        -1.3984862483733664,
+        8.372667927122007
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        8.0,
+        9.0
+      ]
+    },
+    "(9.0, 10.0)": {
+      "minimum_safe_outer_radius": 1.9625410003963624,
+      "sample": "thumb_cmc_abduction_-15",
+      "tendon": "thumb_mcp_flexion_negative",
+      "group": "thumb_mcp_flexion_negative_cmc_reaction",
+      "point": [
+        -1.8710204799531027,
+        -1.6010607319249885,
+        8.59227285138879
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        9.0,
+        10.0
+      ]
+    },
+    "(10.0, 11.0)": {
+      "minimum_safe_outer_radius": 2.1217375524180717,
+      "sample": "thumb_cmc_flexion_15",
+      "tendon": "thumb_mcp_flexion_negative",
+      "group": "thumb_mcp_flexion_negative_cmc_reaction",
+      "point": [
+        -1.7155598893450872,
+        -1.9825153979995918,
+        9.741614286412746
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        10.0,
+        11.0
+      ]
+    },
+    "(11.0, 12.0)": {
+      "minimum_safe_outer_radius": 1.6762969917427502,
+      "sample": "full_fist_candidate",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.013369959230885797,
+        2.1762569225745594,
+        12.499277356046989
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.0,
+        12.0
+      ]
+    },
+    "(12.0, 13.0)": {
+      "minimum_safe_outer_radius": 0.39403483067381884,
+      "sample": "thumb_cmc_flexion_55",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.6235924124673957,
+        0.6406501148378254,
+        13.261707186920281
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        12.0,
+        13.0
+      ]
+    },
+    "(13.0, 14.0)": {
+      "minimum_safe_outer_radius": 0.37894734530783625,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.6234411600725451,
+        0.6195734933377821,
+        14.223032002801355
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        13.0,
+        14.0
+      ]
+    },
+    "(14.0, 15.0)": {
+      "minimum_safe_outer_radius": 0.37894734530783625,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.6234411600725451,
+        0.6195734933377821,
+        14.223032002801355
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        14.0,
+        15.0
+      ]
+    },
+    "(15.0, 16.0)": {
+      "minimum_safe_outer_radius": 0.43785875827565235,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.4040944139450957,
+        0.8463383666189515,
+        14.546924101716979
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        15.0,
+        16.0
+      ]
+    },
+    "(16.0, 17.0)": {
+      "minimum_safe_outer_radius": 0.886925409154572,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        -0.11618534496141564,
+        1.3820513123710683,
+        15.522002444516632
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        16.0,
+        17.0
+      ]
+    },
+    "(17.0, 18.0)": {
+      "minimum_safe_outer_radius": 1.379012045044029,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        -0.5301531990723376,
+        1.802672352081487,
+        16.56008236617285
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        17.0,
+        18.0
+      ]
+    },
+    "(18.0, 19.0)": {
+      "minimum_safe_outer_radius": 1.7520052243192021,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        -0.8233182584378795,
+        2.0961104645736697,
+        17.562111163728655
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        18.0,
+        19.0
+      ]
+    },
+    "(19.0, 20.0)": {
+      "minimum_safe_outer_radius": 1.6312865169166944,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        -0.7296907316108019,
+        2.002482937746592,
+        20.49241431834794
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        19.0,
+        20.0
+      ]
+    },
+    "(20.0, 21.0)": {
+      "minimum_safe_outer_radius": 1.243917066955566,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        -0.41983545872479056,
+        1.6926276648605807,
+        21.45533244338121
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        20.0,
+        21.0
+      ]
+    },
+    "(21.0, 22.0)": {
+      "minimum_safe_outer_radius": 0.8436054362230769,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        -0.06903931405406638,
+        1.3418315201898565,
+        22.460846406688884
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        21.0,
+        22.0
+      ]
+    },
+    "(22.0, 23.0)": {
+      "minimum_safe_outer_radius": 0.5957093062450187,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        0.19447921313747685,
+        1.0783129929983133,
+        23.452419196646357
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        22.0,
+        23.0
+      ]
+    },
+    "(23.0, 24.0)": {
+      "minimum_safe_outer_radius": 0.5149285197741544,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        0.3046718726377051,
+        0.9681203334980779,
+        24.470895081669397
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        23.0,
+        24.0
+      ]
+    },
+    "(24.0, 25.0)": {
+      "minimum_safe_outer_radius": 0.5144175747168935,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_mcp_yaw_reaction",
+      "point": [
+        0.30545423148720374,
+        0.9673379746485793,
+        24.53832496287811
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        24.0,
+        25.0
+      ]
+    }
+  }
+}

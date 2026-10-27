@@ -1,0 +1,105 @@
+{
+  "body_count": 2933,
+  "processed": 926,
+  "exact_booleans": 2374,
+  "congruent_proof_reuse": 803,
+  "collisions": [
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_conformal_bridge",
+      "intersection_mm3": 34.88752351188158
+    },
+    {
+      "a": "thumb_fingertip_radial_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409109733775848
+    },
+    {
+      "a": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "b": "index_palm_bank_structural_body",
+      "intersection_mm3": 0.034911235526865
+    },
+    {
+      "a": "index_palm_bank_boss_clamp_front_cap",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.03411352289010282
+    },
+    {
+      "a": "index_mcp_outlet_comb_liner_left_M0p6_screw",
+      "b": "index_palm_bank_boss_clamp_front_cap",
+      "intersection_mm3": 0.000432351130243992
+    },
+    {
+      "a": "index_palm_bank_boss_clamp_left_M0p8_screw",
+      "b": "index_mcp_outlet_comb_liner_left_M0p6_screw",
+      "intersection_mm3": 0.13972402483089066
+    },
+    {
+      "a": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "b": "index_palm_bank_structural_body",
+      "intersection_mm3": 0.034113522889369724
+    },
+    {
+      "a": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "b": "index_palm_bank_boss_clamp_front_cap",
+      "intersection_mm3": 0.03411352289008682
+    },
+    {
+      "a": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "b": "index_palm_bank_boss_clamp_left_M0p8_screw",
+      "intersection_mm3": 0.02350107689441948
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093815803
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.009968179396179295
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.32768610374458584
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "intersection_mm3": 0.3276861037445561
+    },
+    {
+      "a": "index_mcp_abduction_positive_bushing",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.8004223592327306
+    },
+    {
+      "a": "index_mcp_abduction_positive_bushing",
+      "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "intersection_mm3": 0.8004223592327867
+    },
+    {
+      "a": "index_mcp_abduction_palmar_stub_keyed_shaft",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.5057608162639303
+    },
+    {
+      "a": "index_mcp_abduction_palmar_stub_keyed_shaft",
+      "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "intersection_mm3": 0.5057608162639224
+    },
+    {
+      "a": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409090650811837
+    },
+    {
+      "a": "index_fingertip_ulnar_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968167568934563
+    }
+  ],
+  "complete": false,
+  "pass": false
+}

@@ -1,0 +1,638 @@
+{
+  "pass": true,
+  "scope": "Explicit machined clearances; joint and tendon datums remain unchanged.\n\nOnly the named support is cut. Shafts, bearings, pulley profiles and guide\nendpoints keep their authored geometry. Failed/disconnected cuts are rejected.\nThis candidate still requires attachment, full-assembly and tendon checks.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/rigid_clearance_inputs.json": "f659c39103c257a96e40f777c51d06b8921f1c350c077c1180d3f36f6d840b64",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/rigid_clearance_inputs.step": "8ba620fb8780d163945e4ef40623beb9778670e58953c79440ad5786bda808f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packet_manifest.json": "9ef364376d40701e3e2530f70162da82782c09d84fe6e9830f1ef003a4d6d04a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/static_clearance_relief.py": "18bf31a1156523dd3477dce4d631c606912a2edf494bfe6034f523c87f82d4d2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_negative_jaw_repair_review.step": "0fe5b9cca48ed3c3087e12f943c2ba8a977f76de78fb7053a8e60a2917e95ea2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/thumb_cmc_jaw_repair_local_check.json": "f4fd0e6f878dceac8c7e4e1242da66a3792f9e74da91930857a5799e8405c4f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_arm_repair_review.step": "47041ce9d0cdf77fc0c19c758c1c1e3c6f6893ab03e2977c4c3135ec464ed822",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/radial_bank_arm_repair_local_check.json": "9f6b940c48405b9c8c4b1159bb11f5922b3bc2e62fdf2ad76c20c4a9b417cb9b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/palm_clearance_fragment_inspection.json": "1c8268a0696427694fbd03691e50891ac0e4ae8bc910e1ed650fa25566952ecf",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/palm_clearance_fragment_inspection_2.json": "f2461f466158069b67c776fc58efd6ddf016703213c84833b57757b29154823d"
+  },
+  "preconstruction_replacements": {
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_negative_jaw_repair_review.step",
+    "thumb_radial_shared_guide_bank_structural": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_arm_repair_review.step"
+  },
+  "pairs": [
+    {
+      "target": "fifth_metacarpal_cupping_truss",
+      "obstacle": "little_cup_fixed_bank_-1_structural_1",
+      "before_mm3": 1345.630913796144,
+      "after_mm3": 1335.446078025965,
+      "removed_fraction": 0.007568818214384252,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.6236892024680936,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "palm_cup_10",
+          "removed_contact_mm3": 0.19856008593676627,
+          "pose": {
+            "palm_cup": 10.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "little_cup_child_bank_structural",
+      "obstacle": "palm_cup_keyed_shaft",
+      "before_mm3": 38.5985489865937,
+      "after_mm3": 38.49661498879805,
+      "removed_fraction": 0.0026408764182055677,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0871337109594151,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "little_cup_child_bank_structural",
+      "before_mm3": 4093.461551962387,
+      "after_mm3": 4093.4385641925983,
+      "removed_fraction": 5.615728765755572e-06,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0044409000592931305,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "palm_cup_10",
+          "removed_contact_mm3": 0.00444090009032997,
+          "pose": {
+            "palm_cup": 10.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "palm_cup_20",
+          "removed_contact_mm3": 0.004440900102662327,
+          "pose": {
+            "palm_cup": 20.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "palm_cup_25",
+          "removed_contact_mm3": 0.0042741008823939065,
+          "pose": {
+            "palm_cup": 25.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "thumb_cmc_abduction_palmar_stub_keyed_shaft",
+      "before_mm3": 4093.4385641925983,
+      "after_mm3": 4093.230321561264,
+      "removed_fraction": 5.087229918526013e-05,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.009531728058580114,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "thumb_cmc_abduction_positive_bushing",
+      "before_mm3": 4093.230321561264,
+      "after_mm3": 4093.161553188215,
+      "removed_fraction": 1.6800513933240324e-05,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0429559117588274,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "thumb_cmc_flexion_positive_drive_pulley",
+      "before_mm3": 4093.161553188215,
+      "after_mm3": 4092.7808498531285,
+      "removed_fraction": 9.30096039795387e-05,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "thumb_cmc_abduction_25",
+          "removed_contact_mm3": 0.0019050292667285853,
+          "pose": {
+            "thumb_cmc_abduction": 25.0
+          },
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_35",
+          "removed_contact_mm3": 0.10103219155995118,
+          "pose": {
+            "thumb_cmc_abduction": 35.0
+          },
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_45",
+          "removed_contact_mm3": 0.1759410663043017,
+          "pose": {
+            "thumb_cmc_abduction": 45.0
+          },
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "before_mm3": 4092.7808498531285,
+      "after_mm3": 4052.4371817671836,
+      "removed_fraction": 0.009857275423723874,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.6192342557473715,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "precision_pinch_candidate",
+          "removed_contact_mm3": 0.9515614907411889,
+          "pose": {
+            "index_mcp_abduction": -17.40900758070954,
+            "index_mcp_flexion": 74.68469201675903,
+            "index_pip": 57.94830222639836,
+            "index_dip": 21.90864380435607,
+            "thumb_mcp_abduction": -11.484462068625563,
+            "thumb_mcp_flexion": 7.697863149475799,
+            "thumb_ip": 31.564732218590134,
+            "thumb_cmc_abduction": -21.046825109125002,
+            "thumb_cmc_flexion": 37.474289981694746
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_-25",
+          "removed_contact_mm3": 0.06279689861005484,
+          "pose": {
+            "thumb_cmc_abduction": -25.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_-15",
+          "removed_contact_mm3": 0.2177577672839569,
+          "pose": {
+            "thumb_cmc_abduction": -15.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [
+            {
+              "volume_mm3": 0.6966651297339963,
+              "bounds_mm": [
+                [
+                  -28.316480005091744,
+                  28.141562547005808,
+                  -15.840232253769983
+                ],
+                [
+                  -28.030946445620806,
+                  31.99605062149518,
+                  -14.103065178017811
+                ]
+              ],
+              "inspection": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/palm_clearance_fragment_inspection.json",
+              "inspection_sha256": "1c8268a0696427694fbd03691e50891ac0e4ae8bc910e1ed650fa25566952ecf"
+            }
+          ],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_-5",
+          "removed_contact_mm3": 0.0001953133153905051,
+          "pose": {
+            "thumb_cmc_abduction": -5.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": [
+            {
+              "residual_contact_mm3": 0.00019531331307441125,
+              "bounds_mm": [
+                -31.33613977297562,
+                32.99678136580483,
+                -16.17647322096882,
+                -31.317426036397872,
+                33.386691702325926,
+                -16.076673597168817
+              ],
+              "clearance_mm": 0.025,
+              "construction": "planar_residual_cleanup"
+            }
+          ]
+        },
+        {
+          "sample": "thumb_cmc_abduction_5",
+          "removed_contact_mm3": 0.0507503280896472,
+          "pose": {
+            "thumb_cmc_abduction": 5.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_15",
+          "removed_contact_mm3": 0.31146835606922385,
+          "pose": {
+            "thumb_cmc_abduction": 15.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [
+            {
+              "volume_mm3": 1.5808531896353741,
+              "bounds_mm": [
+                [
+                  -31.069135190977384,
+                  32.312164504832765,
+                  -15.714033115037035
+                ],
+                [
+                  -28.429679746233752,
+                  34.59955671697157,
+                  -14.3999999
+                ]
+              ],
+              "inspection": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/palm_clearance_fragment_inspection_2.json",
+              "inspection_sha256": "f2461f466158069b67c776fc58efd6ddf016703213c84833b57757b29154823d"
+            }
+          ],
+          "verified_residual_pockets": []
+        },
+        {
+          "sample": "thumb_cmc_abduction_25",
+          "removed_contact_mm3": 0.010916768033908416,
+          "pose": {
+            "thumb_cmc_abduction": 25.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "palm_metacarpal_truss",
+      "obstacle": "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw",
+      "before_mm3": 4052.4371817671836,
+      "after_mm3": 4052.415051279015,
+      "removed_fraction": 5.461031763294531e-06,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "thumb_cmc_abduction_45",
+          "removed_contact_mm3": 0.008521834720711451,
+          "pose": {
+            "thumb_cmc_abduction": 45.0
+          },
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "ring_palm_bank_structural_body",
+      "obstacle": "ring_mcp_negative_yaw_outlet_structural_jaw_1",
+      "before_mm3": 112.34491153596348,
+      "after_mm3": 112.16870714987786,
+      "removed_fraction": 0.0015684233818565902,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "ring_mcp_abduction_15",
+          "removed_contact_mm3": 0.01921348354491901,
+          "pose": {
+            "ring_mcp_abduction": 15.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_yaw_drive_1_host_cap",
+      "obstacle": "thumb_cmc_abduction_negative_bushing",
+      "before_mm3": 6.194258396821909,
+      "after_mm3": 5.995304660899221,
+      "removed_fraction": 0.032119056580649875,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.1703626486348838,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_radial_shared_guide_bank_structural",
+      "obstacle": "thumb_cmc_abduction_negative_bushing",
+      "before_mm3": 14.235721230050324,
+      "after_mm3": 13.941372141955158,
+      "removed_fraction": 0.02067679489774083,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.24653154780441502,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [
+            {
+              "volume_mm3": 0.005723886727896485,
+              "bounds_mm": [
+                [
+                  -36.553210919283,
+                  33.55436613542076,
+                  -18.975000100000003
+                ],
+                [
+                  -35.64790073311,
+                  34.03496524704815,
+                  -18.0099999
+                ]
+              ],
+              "guide_endpoint_gap_lower_bound_mm": 8.494758040661536
+            }
+          ],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "obstacle": "thumb_cmc_abduction_negative_drive_pulley",
+      "before_mm3": 5.021346831751343,
+      "after_mm3": 5.021346831751343,
+      "removed_fraction": 0.0,
+      "clearance_mm": 0.025,
+      "changes": []
+    },
+    {
+      "target": "thumb_cmc_yaw_drive_-1_liner_cap",
+      "obstacle": "thumb_cmc_abduction_negative_drive_pulley",
+      "before_mm3": 0.16642450681250182,
+      "after_mm3": 0.16241731952203178,
+      "removed_fraction": 0.02407810824991438,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013399907583740247,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_yaw_drive_-1_structural_2",
+      "obstacle": "thumb_cmc_abduction_negative_drive_pulley",
+      "before_mm3": 0.18389004011068605,
+      "after_mm3": 0.17988296438410123,
+      "removed_fraction": 0.021790607714114927,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013400448951837647,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_radial_shared_guide_bank_structural",
+      "obstacle": "thumb_cmc_abduction_negative_drive_pulley",
+      "before_mm3": 13.941372141955158,
+      "after_mm3": 13.941372141955158,
+      "removed_fraction": 0.0,
+      "clearance_mm": 0.025,
+      "changes": []
+    },
+    {
+      "target": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "obstacle": "thumb_cmc_abduction_positive_drive_pulley",
+      "before_mm3": 5.021346831751343,
+      "after_mm3": 5.021346831751343,
+      "removed_fraction": 0.0,
+      "clearance_mm": 0.025,
+      "changes": []
+    },
+    {
+      "target": "thumb_cmc_yaw_drive_1_liner_cap",
+      "obstacle": "thumb_cmc_abduction_positive_drive_pulley",
+      "before_mm3": 0.18389004001256878,
+      "after_mm3": 0.17988293057852672,
+      "removed_fraction": 0.021790791027987037,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013399912232681735,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_radial_shared_guide_bank_structural",
+      "obstacle": "thumb_cmc_abduction_positive_drive_pulley",
+      "before_mm3": 13.941372141955158,
+      "after_mm3": 13.937321264435898,
+      "removed_fraction": 0.00029056519530595886,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013400423170440241,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_negative_yaw_outlet_outer_jaw",
+      "obstacle": "thumb_cmc_flexion_negative_drive_pulley",
+      "before_mm3": 0.1838900400125687,
+      "after_mm3": 0.17941860679811344,
+      "removed_fraction": 0.024315798801009765,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013399907585987373,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "obstacle": "thumb_cmc_flexion_negative_drive_pulley",
+      "before_mm3": 5.021346831751343,
+      "after_mm3": 5.016876335448559,
+      "removed_fraction": 0.000890298251161623,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013400375818441144,
+          "pose": {},
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_positive_yaw_outlet_outer_jaw",
+      "obstacle": "thumb_cmc_flexion_positive_drive_pulley",
+      "before_mm3": 0.1838900400125687,
+      "after_mm3": 0.18169015917732237,
+      "removed_fraction": 0.011963023310539125,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.0013399912232651948,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_cmc_positive_yaw_outlet_structural_jaw_1",
+      "obstacle": "thumb_cmc_flexion_positive_drive_pulley",
+      "before_mm3": 1.098226765464207,
+      "after_mm3": 1.0960288247374501,
+      "removed_fraction": 0.002001354179187118,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "flat_open",
+          "removed_contact_mm3": 0.001340034698396739,
+          "pose": {},
+          "construction": "offset_counterpart",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    },
+    {
+      "target": "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw",
+      "obstacle": "thumb_metacarpal_frame",
+      "before_mm3": 2.5669875301950835,
+      "after_mm3": 2.5059887052766454,
+      "removed_fraction": 0.023762805312031406,
+      "clearance_mm": 0.025,
+      "changes": [
+        {
+          "sample": "thumb_mcp_flexion_70",
+          "removed_contact_mm3": 0.01163572872362504,
+          "pose": {
+            "thumb_mcp_flexion": 70.0
+          },
+          "construction": "rounded_local_contact_pocket",
+          "discarded_machining_swarf": [],
+          "verified_residual_pockets": []
+        }
+      ]
+    }
+  ],
+  "body_frames": {
+    "fifth_metacarpal_cupping_truss": "palm_cup",
+    "little_cup_child_bank_structural": "palm_cup",
+    "palm_metacarpal_truss": "wrist_flexion",
+    "ring_palm_bank_structural_body": "wrist_flexion",
+    "thumb_cmc_negative_yaw_outlet_outer_jaw": "thumb_cmc_abduction",
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1": "thumb_cmc_abduction",
+    "thumb_cmc_positive_yaw_outlet_outer_jaw": "thumb_cmc_abduction",
+    "thumb_cmc_positive_yaw_outlet_structural_jaw_1": "thumb_cmc_abduction",
+    "thumb_cmc_yaw_drive_-1_liner_cap": "wrist_flexion",
+    "thumb_cmc_yaw_drive_-1_structural_2": "wrist_flexion",
+    "thumb_cmc_yaw_drive_1_host_cap": "wrist_flexion",
+    "thumb_cmc_yaw_drive_1_liner_cap": "wrist_flexion",
+    "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw": "thumb_mcp_flexion",
+    "thumb_radial_shared_guide_bank_structural": "wrist_flexion"
+  }
+}

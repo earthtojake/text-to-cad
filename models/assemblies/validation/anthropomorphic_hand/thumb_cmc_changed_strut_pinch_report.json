@@ -1,0 +1,30 @@
+{
+  "scope": "changed child four-liner structural jaw only; other bodies verified separately; palm host pending",
+  "body_count": 1,
+  "rows": [
+    {
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "route_distance_checks": 13,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "hardware": "frame_0"
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

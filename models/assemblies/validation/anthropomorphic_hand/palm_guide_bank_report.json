@@ -1,0 +1,8 @@
+{
+  "scope": "all48 full neutral routes; actual palm frame; mutual mount solids",
+  "collisions": [],
+  "host_interferences": [],
+  "mutual_interferences": [],
+  "tested": 104,
+  "pass": true
+}

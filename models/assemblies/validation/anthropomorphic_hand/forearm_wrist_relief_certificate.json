@@ -1,0 +1,9 @@
+{
+  "frame_sha256": "944bbd7420a8bccfca240a6b0c0e3bf9edcd3cd25290a39ef6534fe1c7f141f1",
+  "prior_assembly_sha256": "c5b1567c5998a0e06dbc88fce8ca36ef192dc9c9082fafd54bf7261fffa37e91",
+  "intersection_mm3": 0.0,
+  "new_material_outside_previous_frame_mm3": 0.0,
+  "removed_material_mm3": 39.22921694864267,
+  "native_frame_to_fork_distance_mm": 0.05999928581863636,
+  "pass": true
+}

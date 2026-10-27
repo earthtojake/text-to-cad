@@ -1,0 +1,376 @@
+{
+  "finger": "ring",
+  "scope": "routes_and_bodies",
+  "rows": [
+    {
+      "pose": {},
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "neutral",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_pip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 10.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 20.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 30.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 40.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip40.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 50.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip50.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 60.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_pip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 70.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_pip70.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 80.0
+      },
+      "exact_distances_tested": 28,
+      "collisions": [],
+      "label": "ring_pip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 90.0
+      },
+      "exact_distances_tested": 28,
+      "collisions": [],
+      "label": "ring_pip90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 100.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_pip100.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_pip": 110.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_pip110.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 10.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 20.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 30.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 40.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip40.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 50.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip50.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 60.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 70.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_dip70.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_dip": 80.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_dip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": -15.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": -5.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion-5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 5.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_mcp_flexion5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_mcp_flexion15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 25.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_mcp_flexion25.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 35.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_mcp_flexion35.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 45.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_mcp_flexion45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 55.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_mcp_flexion55.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 65.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "ring_mcp_flexion65.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 75.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 85.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion85.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_flexion90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_abduction": -15.0
+      },
+      "exact_distances_tested": 29,
+      "collisions": [],
+      "label": "ring_mcp_abduction-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "ring_mcp_abduction-5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_abduction": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_abduction0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_abduction": 5.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "ring_mcp_abduction5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "exact_distances_tested": 31,
+      "collisions": [],
+      "label": "ring_mcp_abduction15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "ring_mcp_flexion": 90,
+        "ring_pip": 110,
+        "ring_dip": 80
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "fist",
+      "body_interferences": []
+    }
+  ],
+  "pass": true
+}

@@ -1,0 +1,204 @@
+{
+  "pass": true,
+  "body_count": 30,
+  "native_review_body_count": 74,
+  "native_sha256": "04d3807aa2a39d9b649d1089d4b1dad79f76e7d283a8b9fdfa53be6a6405c10c",
+  "source_sha256": {
+    "fingernail.py": "7384672700541cd7d68d11e8ffc38d121a8b2a857ec0d6e33b23b87b8b40bf8e",
+    "phalanx.py": "a768036f16980c4e4233b7a6480de9c636825004a5f4042bf9c9dae911d11cba",
+    "fingertip_pad.py": "0cdf5ca7445d7d036e8933658279be1cb6a588f0978b9b7e254749924f6dde18",
+    "layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af"
+  },
+  "factory": "lib.fingernail.fingernail_bodies",
+  "already_assembled_and_fanned": true,
+  "bodies": [
+    {
+      "name": "index_dorsal_fingernail",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "fingernail"
+    },
+    {
+      "name": "index_fingernail_conformal_saddle",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "nail_mount"
+    },
+    {
+      "name": "index_fingernail_radial_M0p8_socket_screw",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_fingernail_ulnar_M0p8_socket_screw",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_fingernail_radial_M0p8_captive_insert",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_fingernail_ulnar_M0p8_captive_insert",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_dorsal_fingernail",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "fingernail"
+    },
+    {
+      "name": "middle_fingernail_conformal_saddle",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "nail_mount"
+    },
+    {
+      "name": "middle_fingernail_radial_M0p8_socket_screw",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_fingernail_radial_M0p8_captive_insert",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_dorsal_fingernail",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "fingernail"
+    },
+    {
+      "name": "ring_fingernail_conformal_saddle",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "nail_mount"
+    },
+    {
+      "name": "ring_fingernail_radial_M0p8_socket_screw",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_fingernail_radial_M0p8_captive_insert",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_dorsal_fingernail",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "fingernail"
+    },
+    {
+      "name": "little_fingernail_conformal_saddle",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "nail_mount"
+    },
+    {
+      "name": "little_fingernail_radial_M0p8_socket_screw",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_fingernail_ulnar_M0p8_socket_screw",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_fingernail_radial_M0p8_captive_insert",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "little_fingernail_ulnar_M0p8_captive_insert",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_dorsal_fingernail",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "fingernail"
+    },
+    {
+      "name": "thumb_fingernail_conformal_saddle",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "nail_mount"
+    },
+    {
+      "name": "thumb_fingernail_radial_M0p8_socket_screw",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_fingernail_radial_M0p8_captive_insert",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "fastener"
+    }
+  ],
+  "sample_count": 225,
+  "routes_per_sample": 48,
+  "exact_native_body_pairs": 290,
+  "exact_route_distances": 1336,
+  "broad_phase": "Conservative source-primitive boxes padded0.001mm for nails and CAD control bounds for hosts; .5mm curve samples with .250001mm continuous reserve before exact OCCT checks. Earlier saved rows used looser CAD bounds and retained all exact checks.",
+  "strict_every_placement_pass": true,
+  "viewer": "http://127.0.0.1:3251/?file=assemblies/STEP/anthropomorphic_hand/fingernail_review.step",
+  "mount_assumption": "Conformal structural nail-to-saddle bond modeled at zero thickness; nominal threaded fits omit helical threads."
+}

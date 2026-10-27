@@ -1,0 +1,444 @@
+{
+  "scope": "Metacarpal versus current MCP carrier and proximal phalanx only; tendon and remaining-body checks belong to full assembly gate.",
+  "max_common_mm3": 0.0,
+  "rows": [
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": -15,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": -10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "cmc_carrier",
+      "yaw": null,
+      "flex": 65,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": -15,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -15,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": -10,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -10,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": -5,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": -5,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": 0,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 0,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": 5,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 5,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": 10,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 10,
+      "flex": 70,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "mcp_carrier",
+      "yaw": 15,
+      "flex": null,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 0,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 10,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 20,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 30,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 40,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 50,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 60,
+      "common_mm3": 0.0
+    },
+    {
+      "part": "thumb_proximal",
+      "yaw": 15,
+      "flex": 70,
+      "common_mm3": 0.0
+    }
+  ]
+}

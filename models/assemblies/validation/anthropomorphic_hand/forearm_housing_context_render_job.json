@@ -1,0 +1,60 @@
+{
+  "jobs": [
+    {
+      "input": "models/assemblies/STEP/anthropomorphic_hand/forearm_housing_context.step",
+      "mode": "view",
+      "outputs": [
+        {
+          "path": "models/assemblies/validation/anthropomorphic_hand/forearm_housing_context.png",
+          "camera": {
+            "direction": [
+              0.8,
+              -0.4,
+              1.0
+            ],
+            "zoom": 1.1
+          }
+        }
+      ],
+      "render": {
+        "sizeProfile": "presentation-large",
+        "padding": 0.15,
+        "tessellation": {
+          "chordTolerance": 0.003,
+          "angleTolerance": 0.18
+        }
+      },
+      "display": {
+        "mode": "solid",
+        "edges": {
+          "enabled": false
+        }
+      },
+      "theme": "models/assemblies/src/anthropomorphic_hand/presentation-theme.json"
+    }
+  ],
+  "display": {
+    "edges": {
+      "enabled": true,
+      "classes": {
+        "feature": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "tangent": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "seam": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "degenerate": {
+          "opacity": 0,
+          "thickness": 0
+        }
+      },
+      "silhouette": false
+    }
+  }
+}

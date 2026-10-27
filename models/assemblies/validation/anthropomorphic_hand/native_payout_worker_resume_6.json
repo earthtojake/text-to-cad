@@ -1,0 +1,21 @@
+{
+  "reason": "Strict validation completed; resume the exact actuator audit with six workers on the newly free CPU cores.",
+  "stopped_task_pids": [
+    63516,
+    3494,
+    3521,
+    3522,
+    3523
+  ],
+  "previous_workers": 4,
+  "next_workers": 6,
+  "checkpoint_sha256": {
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_4.json.gz": "90ac5f9250a231f0175fe7b23e4bcd6c848acf987fcd9403d4bc71fdfe60a097",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_5.json.gz": "85a8befcf07abd6edacf3ad0c127034cdabf96a8a2dbd71aba794a940f5991a1",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_3.json.gz": "9e7834c80c45c433c82935c77587eaef6befe2d76889978859577ff5a2a80251",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_2.json.gz": "15b5960cfe5242339a79742e09acbe60800a59d39d93e9784458a4602f3d135d",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_0.json.gz": "479fef04604938138e0832ba2ed59b2f4d206d88f3e9f6599bb0750142babd07",
+    "models/assemblies/validation/anthropomorphic_hand/native_payout_rigid_grouped_checkpoint_1.json.gz": "c61bbc89e099a23dd311354bd6c11e492d2ebc0d5015d1de0c81df7580abfd0e"
+  },
+  "utc": "2026-09-06T20:56:18.378220+00:00"
+}

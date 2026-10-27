@@ -1,0 +1,67 @@
+{
+  "scope": "twelve CMC endpoint mounts versus all48tendons at25CMCposes, thumb hardware and palm-frame solids",
+  "body_count": 6,
+  "rows": [
+    {
+      "pose": {},
+      "route_distance_checks": 50,
+      "route_conflicts": [
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "tendon": "index_mcp_abduction_positive",
+          "group": "index_mcp_abduction_positive_wrist_guide",
+          "centerline_distance": -1.999999998223643e-06,
+          "radius": 0.45
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "tendon": "thumb_mcp_abduction_negative",
+          "group": "thumb_mcp_abduction_negative_cmc_reaction",
+          "centerline_distance": 0.4174019009294781,
+          "radius": 0.45
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_scalloped_cap",
+          "tendon": "thumb_mcp_abduction_negative",
+          "group": "thumb_mcp_abduction_negative_cmc_reaction",
+          "centerline_distance": 0.4177117767618468,
+          "radius": 0.45
+        }
+      ],
+      "solid_conflicts": [
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "hardware": "palm_radial_palmar_clamp_1",
+          "overlap_volume_mm3": 3.0238399210423843
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "hardware": "palm_radial_palmar_clamp_2",
+          "overlap_volume_mm3": 3.109029897628582
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_host_M0p6_screw",
+          "hardware": "palm_radial_palmar_clamp_2",
+          "overlap_volume_mm3": 0.14985396957623337
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "other_mount": "thumb_cmc_parent_inlet_comb_scalloped_cap",
+          "overlap_volume_mm3": 0.004438778613580666
+        }
+      ],
+      "host_contacts": [
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "hardware": "palm_metacarpal_truss"
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_palm_rib_cap",
+          "hardware": "palm_metacarpal_truss"
+        }
+      ],
+      "pass": false
+    }
+  ],
+  "pass": false
+}

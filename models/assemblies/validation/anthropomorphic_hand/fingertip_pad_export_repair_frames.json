@@ -1,0 +1,182 @@
+[
+  {
+    "name": "index_fingertip_silicone_pad",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fingertip_pad"
+  },
+  {
+    "name": "index_fingertip_conformal_bridge",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "index_fingertip_radial_M0p8_socket_screw",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingertip_ulnar_M0p8_socket_screw",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingertip_radial_M0p8_captive_insert",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingertip_ulnar_M0p8_captive_insert",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingertip_silicone_pad",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fingertip_pad"
+  },
+  {
+    "name": "middle_fingertip_conformal_bridge",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "middle_fingertip_radial_M0p8_socket_screw",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingertip_ulnar_M0p8_socket_screw",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingertip_radial_M0p8_captive_insert",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingertip_ulnar_M0p8_captive_insert",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingertip_silicone_pad",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fingertip_pad"
+  },
+  {
+    "name": "ring_fingertip_conformal_bridge",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "ring_fingertip_radial_M0p8_socket_screw",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingertip_ulnar_M0p8_socket_screw",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingertip_radial_M0p8_captive_insert",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingertip_ulnar_M0p8_captive_insert",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingertip_silicone_pad",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fingertip_pad"
+  },
+  {
+    "name": "little_fingertip_conformal_bridge",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "little_fingertip_radial_M0p8_socket_screw",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingertip_ulnar_M0p8_socket_screw",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingertip_radial_M0p8_captive_insert",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingertip_ulnar_M0p8_captive_insert",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingertip_silicone_pad",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fingertip_pad"
+  },
+  {
+    "name": "thumb_fingertip_conformal_bridge",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "thumb_fingertip_radial_M0p8_socket_screw",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingertip_ulnar_M0p8_socket_screw",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingertip_radial_M0p8_captive_insert",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingertip_ulnar_M0p8_captive_insert",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  }
+]

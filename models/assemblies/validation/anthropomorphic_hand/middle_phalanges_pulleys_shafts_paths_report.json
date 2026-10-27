@@ -1,0 +1,11 @@
+{
+  "scope": "phalanges_pulleys_shafts",
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "exact_distances_tested": 74,
+      "collisions": []
+    }
+  ]
+}

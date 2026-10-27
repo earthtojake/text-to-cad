@@ -1,0 +1,9 @@
+{
+  "body_count": 7,
+  "processed": 7,
+  "exact_booleans": 2,
+  "congruent_proof_reuse": 0,
+  "collisions": [],
+  "complete": true,
+  "pass": true
+}

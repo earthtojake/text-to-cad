@@ -1,0 +1,495 @@
+Checking middle neutral
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+neutral collisions 4 body_interferences 0
+Checking middle middle_pip0.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip0.0 collisions 4 body_interferences 0
+Checking middle middle_pip10.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip10.0 collisions 4 body_interferences 0
+Checking middle middle_pip20.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip20.0 collisions 4 body_interferences 0
+Checking middle middle_pip30.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip30.0 collisions 4 body_interferences 0
+Checking middle middle_pip40.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip40.0 collisions 4 body_interferences 0
+Checking middle middle_pip50.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip50.0 collisions 4 body_interferences 0
+Checking middle middle_pip60.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip60.0 collisions 4 body_interferences 0
+Checking middle middle_pip70.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip70.0 collisions 4 body_interferences 0
+Checking middle middle_pip80.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip80.0 collisions 4 body_interferences 0
+Checking middle middle_pip90.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip90.0 collisions 4 body_interferences 0
+Checking middle middle_pip100.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip100.0 collisions 4 body_interferences 0
+Checking middle middle_pip110.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_pip110.0 collisions 4 body_interferences 0
+Checking middle middle_dip0.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip0.0 collisions 4 body_interferences 0
+Checking middle middle_dip10.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip10.0 collisions 4 body_interferences 0
+Checking middle middle_dip20.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip20.0 collisions 4 body_interferences 0
+Checking middle middle_dip30.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip30.0 collisions 4 body_interferences 0
+Checking middle middle_dip40.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip40.0 collisions 4 body_interferences 0
+Checking middle middle_dip50.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip50.0 collisions 4 body_interferences 0
+Checking middle middle_dip60.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip60.0 collisions 4 body_interferences 0
+Checking middle middle_dip70.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip70.0 collisions 4 body_interferences 0
+Checking middle middle_dip80.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_dip80.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion-15.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+middle_mcp_flexion-15.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion-5.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+middle_mcp_flexion-5.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion0.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_mcp_flexion0.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion5.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+middle_mcp_flexion5.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion15.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion15.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion25.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion25.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion35.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion35.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion45.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion45.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion55.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion55.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion65.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion65.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion75.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion75.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion85.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion85.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_flexion90.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw phalanx_1
+middle_mcp_flexion90.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_abduction-15.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.44813143819804113, 'outer_radius_mm': 0.45, 'clearance_mm': -0.001868561801958879}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4454501886868473, 'outer_radius_mm': 0.45, 'clearance_mm': -0.004549811313152685}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.44934157314930856, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0006584268506914515}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.44655995572800833, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0034400442719916824}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+middle_mcp_abduction-15.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_abduction-5.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.44739537816308395, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0026046218369160656}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4468187531639724, 'outer_radius_mm': 0.45, 'clearance_mm': -0.003181246836027607}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.34007002995026897, 'outer_radius_mm': 0.45, 'clearance_mm': -0.10992997004973104}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472140560871991, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027859439128009034}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+middle_mcp_abduction-5.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_abduction0.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+middle_mcp_abduction0.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_abduction5.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472140560871994, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002785943912800626}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.44779299714049925, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002207002859500762}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': -9.999999991118215e-07, 'outer_radius_mm': 0.45, 'clearance_mm': -0.4500009999999991}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.44739537816308395, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0026046218369160656}]
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_abduction_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_outer_jaw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw phalanx_1
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_-1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_structural_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_1 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 phalanx_1
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_flexion_-1_pulley
+Body common middle_mcp_positive_yaw_outlet_hub_right_jaw_2 mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_outer_jaw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+Body common middle_mcp_positive_yaw_outlet_M0p4_pinch_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw mcp_carrier
+Body common middle_mcp_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw mcp_carrier
+middle_mcp_abduction5.0 collisions 4 body_interferences 0
+Checking middle middle_mcp_abduction15.0
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.44655995572795604, 'outer_radius_mm': 0.45, 'clearance_mm': -0.003440044272043974}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.44934157314930856, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0006584268506914515}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.16863759132030728, 'outer_radius_mm': 0.45, 'clearance_mm': -0.28136240867969275}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.44813143819804113, 'outer_radius_mm': 0.45, 'clearance_mm': -0.001868561801958879}]
+Body common middle_mcp_negative_yaw_outlet_outer_jaw mcp_flexion_1_pulley
+Body common middle_mcp_negative_yaw_outlet_M0p4_pinch_screw mcp_flexion_1_pulley
+middle_mcp_abduction15.0 collisions 4 body_interferences 0
+Checking middle fist
+Route findings [{'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}, {'tendon': 'middle_mcp_flexion_positive', 'group': 'middle_mcp_flexion_positive_yaw_reaction', 'solid': 'middle_mcp_positive_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703365, 'outer_radius_mm': 0.45, 'clearance_mm': -0.0027577957296635036}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_structural_jaw_1', 'centerline_distance_mm': 0.11511162378535247, 'outer_radius_mm': 0.45, 'clearance_mm': -0.3348883762146475}, {'tendon': 'middle_mcp_flexion_negative', 'group': 'middle_mcp_flexion_negative_yaw_reaction', 'solid': 'middle_mcp_negative_yaw_outlet_outer_jaw', 'centerline_distance_mm': 0.4472422042703367, 'outer_radius_mm': 0.45, 'clearance_mm': -0.002757795729663337}]
+fist collisions 4 body_interferences 0

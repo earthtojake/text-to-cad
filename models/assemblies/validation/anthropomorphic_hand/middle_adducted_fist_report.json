@@ -1,0 +1,57 @@
+{
+  "scope": [
+    "phalanx_1",
+    "phalanx_2",
+    "phalanx_3",
+    "mcp_abduction_1_pulley",
+    "mcp_abduction_-1_pulley",
+    "mcp_flexion_1_pulley",
+    "mcp_flexion_-1_pulley",
+    "mcp_flexion_shaft_envelope",
+    "pip_1_pulley",
+    "pip_-1_pulley",
+    "pip_shaft_envelope",
+    "dip_1_pulley",
+    "dip_-1_pulley",
+    "dip_shaft_envelope",
+    "mcp_carrier"
+  ],
+  "source_sha256": {
+    "finger_routing.py": "0befd07b030429bd05f3e2f3db276e5025ec06c384da5f42dc5b324b7db887c4",
+    "bowden_mcp.py": "537ff065a7b4d0b375c6ead6436de1fc953fb4c5cfde45d00227278dce20af61",
+    "yaw_transport.py": "72f9838c8fc28b7d3dd062dd7e766b524503953876344d767d47b2c42e866ce0",
+    "pip_transport.py": "7bd2dea49dcded900f6480698cf7936e9ee3969bcc6cc1a1eb94502fad225301",
+    "phalanx.py": "4dfc5a0f722b483e248d52264bc6f2391a0610ef3c0aa79a36dcb625a2bd59da",
+    "pulley.py": "513d794bedc452a0c28097fae91ddc423e71ac58f9b9000043569f0d31a9dea4",
+    "universal_carrier.py": "9763c4630dd6250c2908f4e3837f1a3c1dcda77539e02842d1671ab831ac72e9",
+    "layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af"
+  },
+  "rows": [
+    {
+      "label": "adducted_full_fist",
+      "pose": {
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "minimum_radius_mm": 3.499999999999996,
+      "maximum_join_gap_mm": 4.322062729257126e-14,
+      "maximum_tangent_error": 4.917125636165641e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2673109935831727,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": -5.0,
+          "middle_mcp_flexion": 90,
+          "middle_pip": 110,
+          "middle_dip": 80
+        },
+        "exact_distances_tested": 95,
+        "collisions": []
+      },
+      "pass": true
+    }
+  ],
+  "pass": true
+}

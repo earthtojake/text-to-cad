@@ -1,0 +1,113 @@
+{
+  "pass": true,
+  "guide_step_sha256": "36e887943f357a170fb6a57ac0b7b82fdb997e91c060a0b8aff134b9d7b61cca",
+  "guide_count": 29,
+  "hardware_count": 15,
+  "poses": 13,
+  "rows": [
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -45
+      },
+      "interferences": [],
+      "new_exact_pairs": 54
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -35
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -25
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -15
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": -5
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 0
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 5
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 15
+      },
+      "interferences": [],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 25
+      },
+      "interferences": [],
+      "new_exact_pairs": 10
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 35
+      },
+      "interferences": [],
+      "new_exact_pairs": 10
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 45
+      },
+      "interferences": [],
+      "new_exact_pairs": 9
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 55
+      },
+      "interferences": [],
+      "new_exact_pairs": 10
+    },
+    {
+      "pose": {
+        "wrist_abduction": 10,
+        "wrist_flexion": 60
+      },
+      "interferences": [],
+      "new_exact_pairs": 10
+    }
+  ]
+}

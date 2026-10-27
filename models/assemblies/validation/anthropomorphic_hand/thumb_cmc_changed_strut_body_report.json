@@ -1,0 +1,20 @@
+{
+  "scope": "changed child four-liner structural jaw only; other bodies verified separately; palm host pending",
+  "body_count": 1,
+  "rows": [
+    {
+      "pose": {},
+      "route_distance_checks": 15,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "hardware": "frame_0"
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

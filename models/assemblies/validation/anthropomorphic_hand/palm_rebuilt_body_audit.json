@@ -1,0 +1,436 @@
+{
+  "rows": [
+    {
+      "name": "fifth_metacarpal_cupping_truss",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.1489683779171022
+    },
+    {
+      "name": "wrist_palm_cradle",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 10.635823156775942
+    },
+    {
+      "name": "index_proximal_frame",
+      "frame": "index_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_carrier",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_proximal_frame",
+      "frame": "middle_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_carrier",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.6392396095987327
+    },
+    {
+      "name": "ring_proximal_frame",
+      "frame": "ring_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_carrier",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 1.7049148857723364
+    },
+    {
+      "name": "little_proximal_frame",
+      "frame": "little_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "little_mcp_carrier",
+      "frame": "little_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_metacarpal_frame",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 2.6287314067094156
+    },
+    {
+      "name": "thumb_cmc_carrier",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 4.602043094960061
+    },
+    {
+      "name": "wrist_flexion_positive_drive_pulley",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "wrist_flexion_negative_drive_pulley",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_positive_drive_pulley",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_negative_drive_pulley",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_pulley",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_pulley",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_pulley",
+      "frame": "index_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_pulley",
+      "frame": "index_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_pulley",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_pulley",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_pulley",
+      "frame": "middle_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_pulley",
+      "frame": "middle_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_pulley",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_pulley",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_pulley",
+      "frame": "ring_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_pulley",
+      "frame": "ring_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_pulley",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 1.0688146058789196
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_pulley",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 5.662503057880476
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_pulley",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 0.0041277111851054605
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_pulley",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_positive_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_keyed_shaft",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "palm_cup_retaining_ring",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_positive_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_palmar_stub_keyed_shaft",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_palmar_stub_retaining_ring",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_abduction_dorsal_drive_stub_retaining_ring",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_positive_bushing",
+      "frame": "index_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_keyed_shaft",
+      "frame": "index_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "index_mcp_flexion_retaining_ring",
+      "frame": "index_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_positive_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_palmar_stub_keyed_shaft",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_palmar_stub_retaining_ring",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_abduction_dorsal_drive_stub_retaining_ring",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_negative_bushing",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_positive_bushing",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_keyed_shaft",
+      "frame": "middle_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "middle_mcp_flexion_retaining_ring",
+      "frame": "middle_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_positive_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_palmar_stub_keyed_shaft",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_palmar_stub_retaining_ring",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_abduction_dorsal_drive_stub_retaining_ring",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_negative_bushing",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_positive_bushing",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_keyed_shaft",
+      "frame": "ring_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "ring_mcp_flexion_retaining_ring",
+      "frame": "ring_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_negative_bushing",
+      "frame": "little_mcp_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "little_mcp_flexion_keyed_shaft",
+      "frame": "little_mcp_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.05434911257181453
+    },
+    {
+      "name": "thumb_cmc_abduction_palmar_stub_keyed_shaft",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_palmar_stub_retaining_ring",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_abduction_dorsal_drive_stub_retaining_ring",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_bushing",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_keyed_shaft",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 0.0
+    },
+    {
+      "name": "thumb_cmc_flexion_retaining_ring",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 0.0
+    }
+  ],
+  "failures": [
+    {
+      "name": "fifth_metacarpal_cupping_truss",
+      "frame": "palm_cup",
+      "intersection_mm3": 0.1489683779171022
+    },
+    {
+      "name": "wrist_palm_cradle",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 10.635823156775942
+    },
+    {
+      "name": "middle_mcp_carrier",
+      "frame": "middle_mcp_abduction",
+      "intersection_mm3": 0.6392396095987327
+    },
+    {
+      "name": "ring_mcp_carrier",
+      "frame": "ring_mcp_abduction",
+      "intersection_mm3": 1.7049148857723364
+    },
+    {
+      "name": "thumb_metacarpal_frame",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 2.6287314067094156
+    },
+    {
+      "name": "thumb_cmc_carrier",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 4.602043094960061
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_pulley",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 1.0688146058789196
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_pulley",
+      "frame": "thumb_cmc_abduction",
+      "intersection_mm3": 5.662503057880476
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_pulley",
+      "frame": "thumb_cmc_flexion",
+      "intersection_mm3": 0.0041277111851054605
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_bushing",
+      "frame": "wrist_flexion",
+      "intersection_mm3": 0.05434911257181453
+    }
+  ]
+}

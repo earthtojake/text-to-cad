@@ -1,0 +1,310 @@
+{
+  "step_sha256": "060f03559bd6e8808a7cc9ac944b3a6c0d32dfca9cd4a689dc81420539b2a1ce",
+  "body_count": 33,
+  "mutual": {
+    "pass": true,
+    "bodies": 33,
+    "exact_pairs": 109,
+    "interferences": []
+  },
+  "routes": {
+    "pose": {},
+    "body_count": 33,
+    "exact_distances_tested": 64,
+    "tendon_table": [
+      {
+        "tendon": "thumb_cmc_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_cmc_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_cmc_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_cmc_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_mcp_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_mcp_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_mcp_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_mcp_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_ip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "thumb_ip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_mcp_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_mcp_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_mcp_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_mcp_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_pip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_pip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_dip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "index_dip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_mcp_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_mcp_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_mcp_flexion_positive",
+        "exact_distances_tested": 1,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_mcp_flexion_negative",
+        "exact_distances_tested": 3,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_pip_positive",
+        "exact_distances_tested": 16,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_pip_negative",
+        "exact_distances_tested": 13,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_dip_positive",
+        "exact_distances_tested": 15,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "middle_dip_negative",
+        "exact_distances_tested": 16,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_mcp_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_mcp_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_mcp_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_mcp_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_pip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_pip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_dip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "ring_dip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_mcp_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_mcp_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_mcp_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_mcp_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_pip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_pip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_dip_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "little_dip_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "wrist_abduction_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "wrist_abduction_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "wrist_flexion_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "wrist_flexion_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "palm_cup_positive",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      },
+      {
+        "tendon": "palm_cup_negative",
+        "exact_distances_tested": 0,
+        "clear": true,
+        "collisions": []
+      }
+    ],
+    "collisions": [],
+    "stored_rope_solid_proofs": [],
+    "pass": true
+  },
+  "complete": true,
+  "pass": true
+}

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 25, in <module>
+    op=BRepAlgoAPI_Common();op.SetArguments(aa);op.SetTools(bb);op.SetFuzzyValue(.025);op.Build()
+                                                                                       ~~~~~~~~^^
+KeyboardInterrupt
+istance_to
+    return self.distance_to_with_closest_points(other)[0]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1277, in distance_to_with_closest_points
+    dist_calc.Perform()
+    ~~~~~~~~~~~~~~~~~^^
+KeyboardInterrupt

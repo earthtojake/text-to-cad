@@ -1,0 +1,9049 @@
+{
+  "samples": 127,
+  "lanes": [
+    -5.4,
+    -4.2,
+    -3.0,
+    3.0,
+    4.2,
+    5.4
+  ],
+  "minimum_radius_mm": 3.5963695162859177,
+  "maximum_length_error_mm": 1.7976731214730535e-12,
+  "minimum_liner_surface_gap_lower_bound_mm": 0.22675062069728813,
+  "centerline_envelope": {
+    "minimum": [
+      -9.264086907983344,
+      -12.25,
+      -9.79040989388617
+    ],
+    "maximum": [
+      9.264086907983344,
+      13.35814337858599,
+      12.250000000000002
+    ]
+  },
+  "failed": [],
+  "rows": [
+    {
+      "flex_deg": -25.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.22675062069728813
+    },
+    {
+      "flex_deg": -25.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2769599884906838
+    },
+    {
+      "flex_deg": -25.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.22675062069728813
+    },
+    {
+      "flex_deg": -22.3,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27748629939936287
+    },
+    {
+      "flex_deg": -19.6,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27799401640171284
+    },
+    {
+      "flex_deg": -16.9,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27848230544426833
+    },
+    {
+      "flex_deg": -15.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.278813853319393
+    },
+    {
+      "flex_deg": -14.2,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27895040051380804
+    },
+    {
+      "flex_deg": -11.5,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": -8.799999999999997,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": -6.099999999999998,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": -5.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": -3.3999999999999986,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": -0.6999999999999993,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.2386175191038028
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -19.2,
+      "liner_surface_gap_lower_bound_mm": 0.24167976760545284
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -18.4,
+      "liner_surface_gap_lower_bound_mm": 0.24463723445249552
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -17.6,
+      "liner_surface_gap_lower_bound_mm": 0.24750043459255877
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -16.8,
+      "liner_surface_gap_lower_bound_mm": 0.25026610305202357
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -16.0,
+      "liner_surface_gap_lower_bound_mm": 0.2529026293892557
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -15.2,
+      "liner_surface_gap_lower_bound_mm": 0.25543453243668346
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -14.399999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.25786189252847735
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -13.6,
+      "liner_surface_gap_lower_bound_mm": 0.26018197650062735
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -12.8,
+      "liner_surface_gap_lower_bound_mm": 0.26238668383471964
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -12.0,
+      "liner_surface_gap_lower_bound_mm": 0.26446199706837803
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -11.2,
+      "liner_surface_gap_lower_bound_mm": 0.2664244948434925
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -10.399999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.26822519831367686
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -10.0,
+      "liner_surface_gap_lower_bound_mm": 0.26907437423845815
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -9.6,
+      "liner_surface_gap_lower_bound_mm": 0.26987575728533686
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -8.799999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.27139571907624827
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -8.0,
+      "liner_surface_gap_lower_bound_mm": 0.27271497014667123
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -7.199999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.2739032026788103
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -6.399999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.2749688863232208
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -5.6,
+      "liner_surface_gap_lower_bound_mm": 0.2759110871734579
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -4.799999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.27672905495920974
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -4.0,
+      "liner_surface_gap_lower_bound_mm": 0.2774221376861187
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -3.1999999999999993,
+      "liner_surface_gap_lower_bound_mm": 0.2779898046781025
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -2.3999999999999986,
+      "liner_surface_gap_lower_bound_mm": 0.27843164469394177
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -1.5999999999999979,
+      "liner_surface_gap_lower_bound_mm": 0.2787473688809238
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": -0.7999999999999972,
+      "liner_surface_gap_lower_bound_mm": 0.27893684755486625
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 0.8000000000000007,
+      "liner_surface_gap_lower_bound_mm": 0.27893684755486714
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 1.6000000000000014,
+      "liner_surface_gap_lower_bound_mm": 0.2787473688809229
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 2.400000000000002,
+      "liner_surface_gap_lower_bound_mm": 0.2784316446939411
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 3.200000000000003,
+      "liner_surface_gap_lower_bound_mm": 0.2779898046781034
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 4.0,
+      "liner_surface_gap_lower_bound_mm": 0.2774221376861187
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 4.800000000000001,
+      "liner_surface_gap_lower_bound_mm": 0.27672905495920974
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 5.600000000000001,
+      "liner_surface_gap_lower_bound_mm": 0.27591108717345836
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 6.400000000000002,
+      "liner_surface_gap_lower_bound_mm": 0.2749688863232208
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 7.200000000000003,
+      "liner_surface_gap_lower_bound_mm": 0.2739032026788103
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 8.0,
+      "liner_surface_gap_lower_bound_mm": 0.27271497014667123
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 8.8,
+      "liner_surface_gap_lower_bound_mm": 0.27139571907624827
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 9.600000000000001,
+      "liner_surface_gap_lower_bound_mm": 0.2698757572853373
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 10.0,
+      "liner_surface_gap_lower_bound_mm": 0.26907437423845815
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 10.400000000000002,
+      "liner_surface_gap_lower_bound_mm": 0.26822519831367797
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 11.200000000000003,
+      "liner_surface_gap_lower_bound_mm": 0.2664244948434925
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 12.0,
+      "liner_surface_gap_lower_bound_mm": 0.26446199706837803
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 12.800000000000004,
+      "liner_surface_gap_lower_bound_mm": 0.26238668383471875
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 13.600000000000001,
+      "liner_surface_gap_lower_bound_mm": 0.26018197650062713
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 14.399999999999999,
+      "liner_surface_gap_lower_bound_mm": 0.25786189252847735
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 15.200000000000003,
+      "liner_surface_gap_lower_bound_mm": 0.25543453243668346
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 16.0,
+      "liner_surface_gap_lower_bound_mm": 0.2529026293892557
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 16.800000000000004,
+      "liner_surface_gap_lower_bound_mm": 0.25026610305202357
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 17.6,
+      "liner_surface_gap_lower_bound_mm": 0.24750043459255877
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 18.400000000000006,
+      "liner_surface_gap_lower_bound_mm": 0.24463723445249552
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 19.200000000000003,
+      "liner_surface_gap_lower_bound_mm": 0.24167976760545307
+    },
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.2386175191038028
+    },
+    {
+      "flex_deg": 2.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 4.700000000000003,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 5.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 7.400000000000006,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 10.100000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 12.800000000000004,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 15.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 15.5,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 18.200000000000003,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 20.900000000000006,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 23.6,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 25.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 26.300000000000004,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 29.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 30.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23849682411674766
+    },
+    {
+      "flex_deg": 30.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23849682411674766
+    },
+    {
+      "flex_deg": 31.700000000000003,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 34.400000000000006,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 35.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 37.1,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 39.80000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 42.5,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 45.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 45.2,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 47.900000000000006,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 50.60000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 53.30000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 55.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 56.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 58.7,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 60.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23283395150467034
+    },
+    {
+      "flex_deg": 60.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23283395150467034
+    },
+    {
+      "flex_deg": 61.400000000000006,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 64.10000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 65.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 66.80000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 69.5,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 72.2,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 74.9,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 75.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 77.60000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27899999999999847
+    },
+    {
+      "flex_deg": 80.30000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2791849204154807
+    },
+    {
+      "flex_deg": 83.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2795147705948847
+    },
+    {
+      "flex_deg": 85.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2796523202977229
+    },
+    {
+      "flex_deg": 85.7,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2797456179359322
+    },
+    {
+      "flex_deg": 88.4,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.28013117834097534
+    },
+    {
+      "flex_deg": 90.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.2298167511630137
+    },
+    {
+      "flex_deg": 90.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.2298167511630137
+    },
+    {
+      "flex_deg": 91.10000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2801374713838566
+    },
+    {
+      "flex_deg": 93.80000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.280618658294138
+    },
+    {
+      "flex_deg": 95.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2806522301525566
+    },
+    {
+      "flex_deg": 96.50000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2805166885537035
+    },
+    {
+      "flex_deg": 99.2,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.28072216562847696
+    },
+    {
+      "flex_deg": 101.9,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2802144641772587
+    },
+    {
+      "flex_deg": 104.60000000000002,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27959390016710806
+    },
+    {
+      "flex_deg": 105.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2794982698774312
+    },
+    {
+      "flex_deg": 107.30000000000001,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.2790122144068582
+    },
+    {
+      "flex_deg": 110.0,
+      "yaw_deg": -20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23449697206032527
+    },
+    {
+      "flex_deg": 110.0,
+      "yaw_deg": 0.0,
+      "liner_surface_gap_lower_bound_mm": 0.27830859196100455
+    },
+    {
+      "flex_deg": 110.0,
+      "yaw_deg": 20.0,
+      "liner_surface_gap_lower_bound_mm": 0.23449697206032527
+    }
+  ],
+  "control_samples": [
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.76055251680553
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.0953264717921245
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.404349235085682
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.015572670936838,
+        6.361818848826445,
+        7.057183172710137,
+        -6.754809038517268
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.018377565964331,
+        6.085573570368807,
+        7.061432373020796,
+        -7.008157527863304
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.043102617459872,
+        5.815896435054307,
+        7.048091055046579,
+        -7.249958477689793
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932668083481261
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.043102617459872,
+        5.815896435054307,
+        7.048091055046579,
+        -7.249958477689793
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.018377565964331,
+        6.085573570368807,
+        7.061432373020796,
+        -7.008157527863304
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.015572670936838,
+        6.361818848826445,
+        7.057183172710137,
+        -6.754809038517268
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.404349235085682
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.0953264717921245
+      ]
+    },
+    {
+      "flex": -25.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.76055251680553
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -22.3,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919547148291269
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -19.6,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912795337331882
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -16.9,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.91259125461878
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -15.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.916456959907937
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -14.2,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.919088913341772
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -11.5,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.932414883419609
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -8.799999999999997,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.952665649620874
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -6.099999999999998,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.979905280098484
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -5.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.9930146194280125
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -3.3999999999999986,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.014163500377993
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": -0.6999999999999993,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.055434256809825
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.772379166451009
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.1468580488787445
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.488704877206769
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.864586498095192
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.091229744733568
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.305462177218918
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.823292939486977
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.179180897088322
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.505542035858416
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.830542605442086
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.050348409279803
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -19.2,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.2585041477885515
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.874385288905879
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.211993944195856
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.522982491022616
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.7966043824851665
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.009395061849082
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -18.4,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.211286804166684
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.925640136610247
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.245281184515483
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.541016924475938
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.76278091574174
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.968377522512394
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -17.6,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.163815554729689
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.977041908853426
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.279026744783941
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.55963580946924
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.729081387487139
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.927303730956401
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.8,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.116095880626379
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.028575517175462
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.313214895301547
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.578829425091618
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.695515075854538
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.886181749799459
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -16.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.0681333389859935
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.080226339810551
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.347830059996334
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.59858787048673
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.662091354788064
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.845019767954133
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -15.2,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.019933566259598
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.131980203592569
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.3828568254548275
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.618901078882583
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.628819693838903
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.803826104033113
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -14.399999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.971502281700907
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.183823366378436
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.418279948967285
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.63975883139856
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.5957096577934715
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.762609209794783
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -13.6,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.922845290993071
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.2357425000029325
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.4540843656328875
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.6611507705963335
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.562770906122576
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.7213776736243815
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.8,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.873968490028175
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.2877246737737496
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.490255194572568
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.683066413744208
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.530013192240162
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.6801402240460455
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -12.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.824877868846512
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.339757338510787
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.526777744303176
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.70549516576738
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.497446362559691
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.638905733260515
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -11.2,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.775579515743021
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.391828311130009
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.563637517305835
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.728426331859414
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4650803553361955
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.597683220702653
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.399999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.726079621548734
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.417874452114671
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.582189386053926
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.740076953806466
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.448975790627531
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.577079315970436
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -10.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.701256060309242
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.443925759769626
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.600820213855958
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.7518491297331895
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.432925199281594
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.556481856612318
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -9.6,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.676384484095256
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.496038189452031
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.638311735146441
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.775752701492286
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4009910119406594
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.515310965611277
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.799999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.626500512870829
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.548154428279391
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.676098185755729
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.800126125106629
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.36928799781487
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4741800302782835
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -8.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.576434233876802
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.60026361413895
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.7141658755044
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.824958425478772
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.337826446221123
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.433098694713454
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -7.199999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.526192294693818
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.652355181926898
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.752501320743244
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.850238585089811
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.30661672887235
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.392076768082354
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -6.399999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.475781469767277
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.70441885126372
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.791091245114791
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.875955554216334
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.275669297166755
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.351124228129108
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -5.6,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4252086659222565
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.756444614693868
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.829922579828343
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.902098260712165
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.244994679172678
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.310251224647067
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.799999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.374480928118272
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.8084227263551425
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.868982463487101
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.92865561935084
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.214603476295908
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.269468082894285
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -4.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.323605445454777
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.860343691103332
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.908258241504262
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.955616540726706
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.184506359616622
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.228785306940222
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -3.1999999999999993,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.272589557438781
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912198254077633
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.947737465143169
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.982969939714706
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.154714065883126
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.188213582928556
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -2.3999999999999986,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.221440760526257
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.963977390691959
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.987407890214966
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.010704743490405
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.125237393150072
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.147763782240199
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -1.5999999999999979,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.170166714949452
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.015672297037295
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.027257475465327
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.038809899113574
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.096087196049061
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.107446964538809
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": -0.7999999999999972,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.118775251842791
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.067274380680207
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.118775251842791
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.107446964538809
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.096087196049064
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.038809899113574
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.027257475465327
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 0.8000000000000007,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.0156722970372964
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.170166714949452
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.147763782240199
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.125237393150072
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.010704743490405
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.987407890214966
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 1.6000000000000014,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.963977390691959
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.221440760526257
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.188213582928556
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.154714065883127
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.982969939714706
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.947737465143169
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 2.400000000000002,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.912198254077635
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.272589557438785
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.228785306940222
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.184506359616622
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.955616540726703
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.908258241504262
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 3.200000000000003,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.860343691103332
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.323605445454777
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.269468082894285
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.214603476295908
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.92865561935084
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.868982463487101
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.8084227263551425
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.374480928118272
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.310251224647067
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.244994679172678
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.902098260712165
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.829922579828343
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 4.800000000000001,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.756444614693868
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4252086659222565
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.351124228129108
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.275669297166755
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.875955554216334
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.791091245114791
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 5.600000000000001,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.704418851263717
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.475781469767277
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.392076768082354
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.30661672887235
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.850238585089811
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.752501320743244
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 6.400000000000002,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.652355181926898
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.526192294693819
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.433098694713453
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.3378264462211265
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.824958425478772
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.714165875504402
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 7.200000000000003,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.600263614138947
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.576434233876802
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4741800302782835
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.36928799781487
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.800126125106629
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.676098185755729
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.548154428279391
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.626500512870829
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.515310965611277
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.400991011940659
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.775752701492286
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.638311735146441
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 8.8,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.496038189452031
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.676384484095256
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.556481856612318
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.432925199281594
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.751849129733191
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.60082021385596
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 9.600000000000001,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.443925759769628
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.701256060309242
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.577079315970436
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.448975790627531
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.740076953806466
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.582189386053926
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.417874452114671
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.726079621548734
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.597683220702653
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4650803553361955
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.728426331859414
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.563637517305834
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 10.400000000000002,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.391828311130009
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.775579515743021
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.638905733260515
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.497446362559691
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.70549516576738
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.526777744303172
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 11.200000000000003,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.339757338510787
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.824877868846512
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.6801402240460455
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.530013192240162
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.683066413744208
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.490255194572568
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.2877246737737496
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.873968490028178
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.721377673624384
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.562770906122576
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.6611507705963335
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.4540843656328875
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 12.800000000000004,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.2357425000029325
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.922845290993071
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.76260920979478
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.59570965779347
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.63975883139856
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.418279948967285
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 13.600000000000001,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.183823366378436
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.971502281700907
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.803826104033113
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.628819693838903
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.618901078882583
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.3828568254548275
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 14.399999999999999,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.131980203592569
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.019933566259598
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.845019767954133
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.662091354788063
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.598587870486728
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.347830059996335
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 15.200000000000003,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.080226339810551
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.0681333389859935
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.886181749799459
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.695515075854538
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.578829425091618
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.313214895301547
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.028575517175462
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.116095880626379
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.9273037309564005
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.729081387487139
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.55963580946924
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.279026744783938
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 16.800000000000004,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.977041908853424
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.163815554729689
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.968377522512394
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.76278091574174
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.541016924475938
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.245281184515483
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 17.6,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.925640136610247
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.211286804166684
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.009395061849083
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.7966043824851665
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.522982491022616
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.2119939441958545
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 18.400000000000006,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.874385288905879
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.258504147788551
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.050348409279803
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.830542605442086
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.505542035858421
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.179180897088323
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 19.200000000000003,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.823292939486976
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.305462177218918
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.091229744733568
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.864586498095192
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.488704877206769
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.1468580488787445
+      ]
+    },
+    {
+      "flex": 0.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -4.772379166451009
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 2.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.103674836540772
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 4.700000000000003,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.158805589110837
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 5.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.165351846715382
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 7.400000000000006,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.220710269337344
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 10.100000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.289236994126884
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 12.800000000000004,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.364199779367113
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.429888909609636
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 15.5,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.4453805991428625
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 18.200000000000003,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.532531889931565
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 20.900000000000006,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.625379408403896
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 23.6,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.723625343596106
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 25.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.776588559639062
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 26.300000000000004,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.826951582548464
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 29.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.935023032435737
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.845758738977078
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.160665565466147
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.452106041476818
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.652364083990484
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.853109973184342
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.043440669288048
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.043440669288048
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.853109973184342
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.652364083990484
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.452106041476818
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -6.160665565466147
+      ]
+    },
+    {
+      "flex": 30.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -5.845758738977078
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 31.700000000000003,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.047490910782349
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 34.400000000000006,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.16399592731425
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 35.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.190397398127941
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 37.1,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.284171295036574
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 39.80000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.40764552299052
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 42.5,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.534044957760134
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.6533648119578075
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 45.2,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.662996054335758
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 47.900000000000006,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.794127368822713
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 50.60000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.927071275388519
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 53.30000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.061465417659734
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 55.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.146667628533491
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 56.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.19695391056997
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 58.7,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.333188312598367
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.592096205693056
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.799349968520788
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.995058649719689
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.833015320303076
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.977287297286246
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        6.922903977523844,
+        6.973532322371624,
+        6.999646840577908,
+        -9.123694776932
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        6.922903977523844,
+        6.973532322371624,
+        6.999646840577908,
+        -9.123694776932
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.977287297286246
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.833015320303076
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.995058649719689
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.799349968520788
+      ]
+    },
+    {
+      "flex": 60.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -7.592096205693056
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 61.400000000000006,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.469828390670779
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 64.10000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.606542701002223
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 65.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.652074667625685
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 66.80000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.743009009121348
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 69.5,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -8.878914571499035
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 72.2,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.013956299837272
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 74.9,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.147840827357701
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 75.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.152773560943759
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 77.60000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        7.0,
+        7.0,
+        7.0,
+        -9.280284494521366
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 80.30000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.934712720168674,
+        6.938359861505889,
+        6.9347127201686725,
+        -9.430083880393287
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 83.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.828409801704583,
+        6.826948354621277,
+        6.82840980170457,
+        -9.594046645798175
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.719770816266981,
+        6.782559900758499,
+        6.719770816266949,
+        -9.704475771462103
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 85.7,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.687621893495594,
+        6.751460688022074,
+        6.687621893491453,
+        -9.747365003017203
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 88.4,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.569370857765153,
+        6.62294055300767,
+        6.569370857765776,
+        -9.914524016550535
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        6.999601733865579,
+        6.955259209037307,
+        6.938677057779528,
+        -9.363136421190703
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        6.999066442023054,
+        6.8993383941838635,
+        6.84904122360151,
+        -9.496332998739748
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        6.927818283274314,
+        6.828659354417614,
+        6.7607962540294375,
+        -9.630076595290978
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        5.929642996685408,
+        6.524079613860477,
+        6.121739307233407,
+        -10.233706994707255
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        5.687788407004106,
+        6.571691320765963,
+        5.952981365336831,
+        -10.311132978780687
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        5.496134756408391,
+        6.479394701243512,
+        5.771535874723656,
+        -10.428058139159228
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        5.496134756408391,
+        6.479394701243512,
+        5.771535874723656,
+        -10.428058139159228
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        5.687788407004106,
+        6.571691320765963,
+        5.952981365336831,
+        -10.311132978780687
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        5.929642996685408,
+        6.524079613860477,
+        6.121739307233407,
+        -10.233706994707255
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        6.927818283274314,
+        6.828659354417614,
+        6.7607962540294375,
+        -9.630076595290978
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        6.999066442023054,
+        6.8993383941838635,
+        6.84904122360151,
+        -9.496332998739748
+      ]
+    },
+    {
+      "flex": 90.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        6.999601733865579,
+        6.955259209037307,
+        6.938677057779528,
+        -9.363136421190703
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 91.10000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.389707858370609,
+        6.620842872047241,
+        6.389707858370576,
+        -10.04369235393733
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 93.80000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.256848345425587,
+        6.460447235286753,
+        6.2568483454255786,
+        -10.217930747320008
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 95.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.1776195920036905,
+        6.449256615813897,
+        6.17761959200368,
+        -10.276871876800772
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 96.50000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        6.0548785420371996,
+        6.494437148764938,
+        6.054878542037196,
+        -10.331819493569947
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 99.2,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        5.868962367649772,
+        6.406370367885854,
+        5.8689623676495,
+        -10.480822226140287
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 101.9,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        5.668805615749851,
+        6.373602085143567,
+        5.668805615749846,
+        -10.610014968351416
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 104.60000000000002,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        5.423851780998605,
+        6.47179154709622,
+        5.423851780998206,
+        -10.693785808864368
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 105.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        5.386603684257555,
+        6.486965743730058,
+        5.38660368425735,
+        -10.705570902144805
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 107.30000000000001,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        5.213751547921003,
+        6.299405490151936,
+        5.213751547921006,
+        -10.86335545072947
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": -5.4,
+      "parameters": [
+        5.978571325068933,
+        6.317452870186995,
+        5.649650169723317,
+        -10.5837238967727
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": -4.2,
+      "parameters": [
+        5.770552684644544,
+        6.285176195000737,
+        5.542170813297158,
+        -10.668586626437477
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": -3.0,
+      "parameters": [
+        5.552643796254136,
+        6.302797002771753,
+        5.40325451298927,
+        -10.734345984406637
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": 3.0,
+      "parameters": [
+        4.407321870637339,
+        6.63934485273522,
+        4.668266129059626,
+        -10.934288758589602
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": 4.2,
+      "parameters": [
+        4.187071346206104,
+        6.646051759475363,
+        4.507335379142269,
+        -10.98757375126786
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": -20.0,
+      "lane": 5.4,
+      "parameters": [
+        3.9434068220295506,
+        6.715571521754333,
+        4.369290154588937,
+        -11.015815582506715
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": -5.4,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": -4.2,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": -3.0,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": 3.0,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": 4.2,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 0.0,
+      "lane": 5.4,
+      "parameters": [
+        4.9504460049326156,
+        6.408423724306934,
+        4.950446004932626,
+        -10.93588789732596
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": -5.4,
+      "parameters": [
+        3.9434068220295506,
+        6.715571521754333,
+        4.369290154588937,
+        -11.015815582506715
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": -4.2,
+      "parameters": [
+        4.187071346206104,
+        6.646051759475363,
+        4.507335379142269,
+        -10.98757375126786
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": -3.0,
+      "parameters": [
+        4.407321870637339,
+        6.63934485273522,
+        4.668266129059626,
+        -10.934288758589602
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": 3.0,
+      "parameters": [
+        5.552643796254136,
+        6.302797002771753,
+        5.40325451298927,
+        -10.734345984406637
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": 4.2,
+      "parameters": [
+        5.770552684644544,
+        6.285176195000737,
+        5.542170813297158,
+        -10.668586626437477
+      ]
+    },
+    {
+      "flex": 110.0,
+      "yaw": 20.0,
+      "lane": 5.4,
+      "parameters": [
+        5.978571325068933,
+        6.317452870186995,
+        5.649650169723317,
+        -10.5837238967727
+      ]
+    }
+  ],
+  "limitations": "Local guides and full-length shape only. Whole-hand hardware and intermediate unsampled parameter poses need their own gate."
+}

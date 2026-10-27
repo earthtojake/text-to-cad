@@ -1,0 +1,18 @@
+{
+  "parts": 32,
+  "solids": 32,
+  "all_valid": true,
+  "boolean_pairs_tested": 114,
+  "collisions": [
+    {
+      "a": "middle_mcp_abduction_positive_drive_pulley",
+      "b": "middle_mcp_carrier",
+      "intersection_mm3": 21.38333935182049
+    },
+    {
+      "a": "middle_mcp_abduction_positive",
+      "b": "middle_mcp_carrier",
+      "intersection_mm3": 0.01456858834730813
+    }
+  ]
+}

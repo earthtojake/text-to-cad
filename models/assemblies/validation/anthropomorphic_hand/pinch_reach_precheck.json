@@ -1,0 +1,28 @@
+{
+  "scope": "Position-only reachability before pad geometry/collisions; not final pinch",
+  "residual": 0.14269549554534547,
+  "pose": {
+    "index_mcp_abduction": -19.999999999999996,
+    "index_mcp_flexion": 76.57934962345304,
+    "index_pip": 70.11057612800876,
+    "index_dip": 22.24958047250164,
+    "thumb_cmc_abduction": -24.999999999999996,
+    "thumb_cmc_flexion": 39.17077877825242,
+    "thumb_mcp_abduction": -14.999999999999998,
+    "thumb_mcp_flexion": 0.0005239873535783372,
+    "thumb_ip": 72.21172040084184
+  },
+  "pad_reference_centers": [
+    [
+      -35.999999999999986,
+      74.51232184450248,
+      53.89162370140033
+    ],
+    [
+      -40.949367185021515,
+      74.05657139725139,
+      54.47820001712244
+    ]
+  ],
+  "distance": 5.004799274346938
+}

@@ -1,0 +1,2700 @@
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE flat_open True cache 130
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 24 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 30 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE full_fist_candidate True cache 202
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 25 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE precision_pinch_candidate True cache 237
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 24 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 30 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_abduction_-20 True cache 280
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 28 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_abduction_-10 True cache 310
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_abduction_0 True cache 310
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_abduction_10 True cache 343
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 10 exact distances, 0 collisions
+COMPLETE POSE wrist_abduction_20 True cache 381
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 43 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 25 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 32 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_-45 True cache 434
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 32 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_-35 True cache 467
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 30 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_-25 True cache 519
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_-15 True cache 569
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_-5 True cache 595
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_0 True cache 595
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_5 True cache 625
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 30 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_15 True cache 667
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 31 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 10 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_25 True cache 698
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 43 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 31 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 11 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_35 True cache 751
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 31 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 11 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_45 True cache 781
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 31 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 12 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_55 True cache 811
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 22 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 30 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 12 exact distances, 0 collisions
+COMPLETE POSE wrist_flexion_60 True cache 841
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE palm_cup_0 True cache 841
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE palm_cup_10 True cache 851
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE palm_cup_20 True cache 863
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 23 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE palm_cup_25 True cache 877
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_abduction_-20 True cache 879
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_abduction_-10 True cache 887
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_abduction_0 True cache 887
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_abduction_10 True cache 895
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_abduction_20 True cache 903
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_-15 True cache 908
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_-5 True cache 912
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_0 True cache 912
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_5 True cache 917
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_15 True cache 922
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_25 True cache 927
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_35 True cache 932
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_45 True cache 937
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_55 True cache 942
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_65 True cache 947
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_75 True cache 952
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_85 True cache 957
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_mcp_flexion_90 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_0 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_10 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_20 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_30 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_40 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_50 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_60 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_70 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_80 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_90 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_100 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_pip_110 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_0 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_10 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_20 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_30 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_40 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_50 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_60 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_70 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE index_dip_80 True cache 961
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_abduction_-15 True cache 969
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_abduction_-5 True cache 971
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_abduction_0 True cache 971
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_abduction_5 True cache 979
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_abduction_15 True cache 988
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_-15 True cache 993
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_-5 True cache 997
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_0 True cache 997
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_5 True cache 1002
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_15 True cache 1007
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_25 True cache 1012
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_35 True cache 1017
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_45 True cache 1022
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_55 True cache 1027
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_65 True cache 1032
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_75 True cache 1037
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_85 True cache 1042
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_mcp_flexion_90 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_0 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_10 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_20 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_30 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_40 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_50 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_60 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_70 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_80 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_90 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_100 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_pip_110 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_0 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_10 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_20 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_30 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_40 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_50 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_60 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_70 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE middle_dip_80 True cache 1047
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_abduction_-15 True cache 1055
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_abduction_-5 True cache 1063
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_abduction_0 True cache 1063
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_abduction_5 True cache 1065
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_abduction_15 True cache 1073
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_-15 True cache 1078
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_-5 True cache 1082
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_0 True cache 1082
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_5 True cache 1087
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_15 True cache 1092
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_25 True cache 1097
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_35 True cache 1102
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_45 True cache 1107
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_55 True cache 1112
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_65 True cache 1117
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_75 True cache 1122
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_85 True cache 1127
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_mcp_flexion_90 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_0 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_10 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_20 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_30 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_40 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_50 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_60 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_70 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_80 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_90 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_100 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_pip_110 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_0 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_10 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_20 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_30 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_40 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_50 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_60 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_70 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE ring_dip_80 True cache 1131
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_-25 True cache 1138
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_-15 True cache 1145
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_-5 True cache 1152
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_0 True cache 1152
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_5 True cache 1159
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_15 True cache 1166
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_abduction_25 True cache 1167
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_-15 True cache 1171
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 28 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_-5 True cache 1174
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_0 True cache 1174
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_5 True cache 1178
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_15 True cache 1182
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_25 True cache 1186
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_35 True cache 1190
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_45 True cache 1194
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_55 True cache 1198
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_65 True cache 1202
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_75 True cache 1206
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_85 True cache 1210
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 29 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_mcp_flexion_90 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_0 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_10 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_20 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_30 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_40 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_50 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_60 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_70 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_80 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_90 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_100 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_pip_110 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_0 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_10 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_20 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_30 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_40 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_50 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_60 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_70 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE little_dip_80 True cache 1214
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 40 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_-25 True cache 1232
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_-15 True cache 1249
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_-5 True cache 1263
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_0 True cache 1263
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 40 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_5 True cache 1277
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_15 True cache 1291
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 36 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_25 True cache 1305
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 36 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_35 True cache 1319
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 36 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_abduction_45 True cache 1333
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 43 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_-15 True cache 1350
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 43 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_-5 True cache 1366
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_0 True cache 1366
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_5 True cache 1381
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 41 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_15 True cache 1398
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 40 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_25 True cache 1414
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_35 True cache 1431
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_45 True cache 1447
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 42 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 21 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_55 True cache 1464
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 43 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 20 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_cmc_flexion_65 True cache 1482
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_abduction_-15 True cache 1483
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_abduction_-5 True cache 1484
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_abduction_0 True cache 1484
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_abduction_5 True cache 1486
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_abduction_15 True cache 1488
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_0 True cache 1488
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_10 True cache 1489
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_20 True cache 1490
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_30 True cache 1491
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_40 True cache 1492
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_50 True cache 1493
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_60 True cache 1494
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 39 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_mcp_flexion_70 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_0 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_10 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_20 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_30 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_40 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_50 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_60 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_70 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_80 True cache 1495
+placing hardware
+bounding hardware
+bounded 1 bodies; 295 exact prototypes
+bounded 201 bodies; 295 exact prototypes
+starting route/body pairs
+checked 1/48 thumb_mcp_abduction_positive: 38 exact distances, 0 collisions
+checked 2/48 index_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 3/48 middle_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 4/48 ring_mcp_flexion_positive: 19 exact distances, 0 collisions
+checked 5/48 little_mcp_flexion_positive: 27 exact distances, 0 collisions
+checked 6/48 wrist_flexion_positive: 8 exact distances, 0 collisions
+COMPLETE POSE thumb_ip_85 True cache 1495

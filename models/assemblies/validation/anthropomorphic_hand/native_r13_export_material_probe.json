@@ -1,0 +1,70 @@
+{
+  "scope": "Native material equivalence between audited components and the R13 export.\n\nSTEP re-export can rebuild pcurves, so BREP bytes need not be identical. Both\ndirected native differences must have no faces to establish material equality.\nThis gate complements direct strict validation of the assembled export.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_export_material_equivalence.py": "e244f6a8756ddaf75337a39c8e9501fb71e008326d1fd176b50a9d760d19357a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/mechanical_candidate_r13_build_inputs.json": "de3e0866c73cf8863aff79eb5b5801c9765a4c512512c1da7aec2bbeab2d83f6",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/phalanx_r5_boolean.py": "fb3ba6f83751543d7afd0ac9b40b3a7a6d43caefe9103e9acce8b7f444cb715c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525.step": "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803.step": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173.step": "7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0.step": "141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0.step": "ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572.step": "fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99.step": "b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72.step": "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f.step": "6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5.step": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d.step": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65.step": "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d.step": "815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/9857785fe29900c52ef2fe59398f26c14145577c6601f419156981b6b0c439d9.step": "9857785fe29900c52ef2fe59398f26c14145577c6601f419156981b6b0c439d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586.step": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01.step": "5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7.step": "5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/060f03559bd6e8808a7cc9ac944b3a6c0d32dfca9cd4a689dc81420539b2a1ce.step": "060f03559bd6e8808a7cc9ac944b3a6c0d32dfca9cd4a689dc81420539b2a1ce",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/bcce4a38d1031c017575b81b23e7e55fea8efb8f44fa5b3e1f6488ee844004c5.step": "bcce4a38d1031c017575b81b23e7e55fea8efb8f44fa5b3e1f6488ee844004c5"
+  },
+  "rows": [
+    {
+      "body": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "added_faces": 0,
+      "removed_faces": 0,
+      "added_solids": 0,
+      "removed_solids": 0,
+      "added_volume_mm3": 0,
+      "removed_volume_mm3": 0,
+      "pass_": true
+    },
+    {
+      "body": "index_fingertip_conformal_bridge",
+      "added_faces": 0,
+      "removed_faces": 0,
+      "added_solids": 0,
+      "removed_solids": 0,
+      "added_volume_mm3": 0,
+      "removed_volume_mm3": 0,
+      "pass_": true
+    },
+    {
+      "body": "middle_proximal_frame",
+      "added_faces": 0,
+      "removed_faces": 0,
+      "added_solids": 0,
+      "removed_solids": 0,
+      "added_volume_mm3": 0,
+      "removed_volume_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "expected_count": 3,
+  "full_export_coverage": false,
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

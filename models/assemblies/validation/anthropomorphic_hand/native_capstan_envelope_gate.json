@@ -1,0 +1,2081 @@
+{
+  "scope": "Native six-turn envelope proof for each spool and captured rope termination.\n\nEach operational stored rope is a prefix of the same six-turn swept tube after\nundoing its spool rotation. A zero intersection for that containing tube proves\nevery such prefix clear of the co-rotating capstan, ferrule and bond line.\nThe changing external lead and other hardware remain separate checks.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_capstan_envelope.py": "1aefb92044fc9716d148122d8bf9d3d7c60caa68d26150d0948a7a94264e09ae",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/assembly.py": "9e8d9a4b8997d25ee811b21de285a714a42d43d665140c0ddc63d9a755a7fe6e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/capstan_path.py": "f6462bb55f711b974696fdd8548ce0c4a32ee35a48495faa0b8aa0ad6dd49b4a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/transport_guide.py": "fe1c4cefd4252e8b0a4a257d334f621f73917f6b3bd9f415dcf684ffc2ba8dc5",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/phalanx_r5_boolean.py": "fb3ba6f83751543d7afd0ac9b40b3a7a6d43caefe9103e9acce8b7f444cb715c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b"
+  },
+  "body_revisions": {
+    "actuator_thumb_cmc_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_cmc_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_mcp_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_thumb_ip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_mcp_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_pip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_index_dip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_mcp_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_pip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_middle_dip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_mcp_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_pip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_ring_dip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_mcp_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_pip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_little_dip_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_abduction_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_wrist_flexion_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_positive_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_positive_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_positive_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_negative_capstan": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_negative_terminal_ferrule": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    },
+    "actuator_palm_cup_negative_capstan_terminal_bond_line": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "forearm"
+    }
+  },
+  "occurrences": [
+    {
+      "body": "actuator_thumb_cmc_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_cmc_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_cmc_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_cmc_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_mcp_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_ip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_ip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_ip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_thumb_ip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_ip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_thumb_ip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_mcp_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_mcp_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_pip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_pip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_pip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_pip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_pip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_pip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_dip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_dip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_dip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_index_dip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_dip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_index_dip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_mcp_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_pip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_pip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_pip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_pip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_pip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_pip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_dip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_dip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_dip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_middle_dip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_dip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_middle_dip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_mcp_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_pip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_pip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_pip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_pip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_pip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_pip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_dip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_dip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_dip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_ring_dip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_dip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_ring_dip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_mcp_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_mcp_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_pip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_pip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_pip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_pip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_pip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_pip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_dip_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_dip_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_dip_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_little_dip_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_dip_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_little_dip_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_abduction_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_abduction_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_abduction_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_abduction_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_abduction_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_abduction_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_flexion_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_flexion_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_flexion_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_wrist_flexion_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_flexion_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_wrist_flexion_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_palm_cup_positive_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_palm_cup_positive_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_palm_cup_positive_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 0.0
+    },
+    {
+      "body": "actuator_palm_cup_negative_capstan",
+      "kind": "capstan",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_palm_cup_negative_terminal_ferrule",
+      "kind": "terminal_ferrule",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    },
+    {
+      "body": "actuator_palm_cup_negative_capstan_terminal_bond_line",
+      "kind": "capstan_terminal_bond_line",
+      "identical_native_topology": true,
+      "maximum_canonical_placement_error": 1.224646799147e-16
+    }
+  ],
+  "envelope_checks": [
+    {
+      "kind": "capstan",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "kind": "terminal_ferrule",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "kind": "capstan_terminal_bond_line",
+      "intersection_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "canonical_path": [
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          0.0,
+          -2.4
+        ],
+        [
+          7.0,
+          3.865993248815555,
+          -2.333333333333333
+        ],
+        [
+          3.865993248815555,
+          7.0,
+          -2.2666666666666666
+        ],
+        [
+          0.0,
+          7.0,
+          -2.1999999999999997
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          4.286263797015736e-16,
+          7.0,
+          -2.1999999999999997
+        ],
+        [
+          -3.8659932488155544,
+          7.0,
+          -2.133333333333333
+        ],
+        [
+          -7.0,
+          3.8659932488155553,
+          -2.0666666666666664
+        ],
+        [
+          -7.0,
+          4.286263797015736e-16,
+          -1.9999999999999998
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          8.572527594031472e-16,
+          -2.0
+        ],
+        [
+          -7.000000000000001,
+          -3.865993248815554,
+          -1.9333333333333333
+        ],
+        [
+          -3.8659932488155557,
+          -6.999999999999999,
+          -1.8666666666666667
+        ],
+        [
+          -8.572527594031472e-16,
+          -7.0,
+          -1.8
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -1.2858791391047208e-15,
+          -7.0,
+          -1.7999999999999998
+        ],
+        [
+          3.8659932488155535,
+          -7.000000000000001,
+          -1.7333333333333332
+        ],
+        [
+          6.999999999999999,
+          -3.865993248815556,
+          -1.6666666666666665
+        ],
+        [
+          7.0,
+          -1.2858791391047208e-15,
+          -1.5999999999999999
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          -1.7145055188062944e-15,
+          -1.5999999999999999
+        ],
+        [
+          7.000000000000001,
+          3.865993248815553,
+          -1.5333333333333332
+        ],
+        [
+          3.8659932488155566,
+          6.999999999999999,
+          -1.4666666666666666
+        ],
+        [
+          1.7145055188062944e-15,
+          7.0,
+          -1.4
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          2.1431318985078682e-15,
+          7.0,
+          -1.4
+        ],
+        [
+          -3.8659932488155526,
+          7.000000000000001,
+          -1.3333333333333333
+        ],
+        [
+          -6.999999999999999,
+          3.865993248815557,
+          -1.2666666666666666
+        ],
+        [
+          -7.0,
+          2.1431318985078682e-15,
+          -1.2
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          2.5717582782094417e-15,
+          -1.1999999999999997
+        ],
+        [
+          -7.000000000000002,
+          -3.865993248815552,
+          -1.133333333333333
+        ],
+        [
+          -3.8659932488155575,
+          -6.999999999999998,
+          -1.0666666666666664
+        ],
+        [
+          -2.5717582782094417e-15,
+          -7.0,
+          -0.9999999999999997
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -3.000384657911015e-15,
+          -7.0,
+          -0.9999999999999998
+        ],
+        [
+          3.8659932488155517,
+          -7.000000000000002,
+          -0.9333333333333331
+        ],
+        [
+          6.999999999999998,
+          -3.865993248815558,
+          -0.8666666666666665
+        ],
+        [
+          7.0,
+          -3.000384657911015e-15,
+          -0.7999999999999997
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          -3.429011037612589e-15,
+          -0.7999999999999998
+        ],
+        [
+          7.000000000000002,
+          3.8659932488155513,
+          -0.7333333333333332
+        ],
+        [
+          3.8659932488155584,
+          6.999999999999998,
+          -0.6666666666666665
+        ],
+        [
+          3.429011037612589e-15,
+          7.0,
+          -0.5999999999999998
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          3.857637417314163e-15,
+          7.0,
+          -0.5999999999999999
+        ],
+        [
+          -3.865993248815551,
+          7.000000000000002,
+          -0.5333333333333332
+        ],
+        [
+          -6.999999999999998,
+          3.865993248815559,
+          -0.46666666666666656
+        ],
+        [
+          -7.0,
+          3.857637417314163e-15,
+          -0.3999999999999998
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          4.2862637970157365e-15,
+          -0.3999999999999999
+        ],
+        [
+          -7.000000000000003,
+          -3.8659932488155504,
+          -0.33333333333333326
+        ],
+        [
+          -3.8659932488155593,
+          -6.999999999999997,
+          -0.2666666666666666
+        ],
+        [
+          -4.2862637970157365e-15,
+          -7.0,
+          -0.19999999999999987
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -1.7149388052519063e-14,
+          -7.0,
+          -0.19999999999999973
+        ],
+        [
+          3.8659932488155375,
+          -7.00000000000001,
+          -0.13333333333333308
+        ],
+        [
+          6.99999999999999,
+          -3.865993248815572,
+          -0.0666666666666664
+        ],
+        [
+          7.0,
+          -1.7149388052519063e-14,
+          3.0531133177191805e-16
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          -5.143516556418883e-15,
+          4.440892098500626e-16
+        ],
+        [
+          7.000000000000003,
+          3.8659932488155495,
+          0.06666666666666711
+        ],
+        [
+          3.86599324881556,
+          6.999999999999997,
+          0.13333333333333378
+        ],
+        [
+          5.143516556418883e-15,
+          7.0,
+          0.20000000000000048
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -6.862354939681296e-15,
+          7.0,
+          0.20000000000000018
+        ],
+        [
+          -3.8659932488155615,
+          6.9999999999999964,
+          0.26666666666666683
+        ],
+        [
+          -7.0000000000000036,
+          3.865993248815548,
+          0.3333333333333335
+        ],
+        [
+          -7.0,
+          -6.862354939681296e-15,
+          0.40000000000000024
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          6.00076931582203e-15,
+          0.40000000000000036
+        ],
+        [
+          -7.0000000000000036,
+          -3.8659932488155486,
+          0.466666666666667
+        ],
+        [
+          -3.865993248815561,
+          -6.9999999999999964,
+          0.5333333333333337
+        ],
+        [
+          -6.00076931582203e-15,
+          -7.0,
+          0.6000000000000004
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -1.8863893571325358e-14,
+          -7.0,
+          0.6000000000000001
+        ],
+        [
+          3.865993248815536,
+          -7.000000000000011,
+          0.6666666666666667
+        ],
+        [
+          6.999999999999989,
+          -3.8659932488155735,
+          0.7333333333333334
+        ],
+        [
+          7.0,
+          -1.8863893571325358e-14,
+          0.8000000000000002
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          -6.858022075225178e-15,
+          0.8000000000000003
+        ],
+        [
+          7.0000000000000036,
+          3.865993248815548,
+          0.8666666666666669
+        ],
+        [
+          3.8659932488155615,
+          6.9999999999999964,
+          0.9333333333333336
+        ],
+        [
+          6.858022075225178e-15,
+          7.0,
+          1.0000000000000002
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -5.147849420875002e-15,
+          7.0,
+          1.0000000000000004
+        ],
+        [
+          -3.86599324881556,
+          6.999999999999997,
+          1.066666666666667
+        ],
+        [
+          -7.000000000000003,
+          3.8659932488155495,
+          1.1333333333333337
+        ],
+        [
+          -7.0,
+          -5.147849420875002e-15,
+          1.2000000000000004
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          7.715274834628325e-15,
+          1.2000000000000002
+        ],
+        [
+          -7.000000000000004,
+          -3.8659932488155473,
+          1.2666666666666668
+        ],
+        [
+          -3.8659932488155624,
+          -6.999999999999996,
+          1.3333333333333335
+        ],
+        [
+          -7.715274834628325e-15,
+          -7.0,
+          1.4000000000000001
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -2.0578399090131653e-14,
+          -7.0,
+          1.4000000000000004
+        ],
+        [
+          3.8659932488155344,
+          -7.0000000000000115,
+          1.466666666666667
+        ],
+        [
+          6.9999999999999885,
+          -3.8659932488155753,
+          1.5333333333333337
+        ],
+        [
+          7.0,
+          -2.0578399090131653e-14,
+          1.6000000000000003
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          7.0,
+          -8.572527594031473e-15,
+          1.6
+        ],
+        [
+          7.000000000000004,
+          3.8659932488155464,
+          1.6666666666666667
+        ],
+        [
+          3.8659932488155633,
+          6.999999999999996,
+          1.7333333333333334
+        ],
+        [
+          8.572527594031473e-15,
+          7.0,
+          1.8
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -3.4333439020687072e-15,
+          7.0,
+          1.8000000000000003
+        ],
+        [
+          -3.8659932488155584,
+          6.999999999999998,
+          1.866666666666667
+        ],
+        [
+          -7.000000000000002,
+          3.8659932488155513,
+          1.9333333333333336
+        ],
+        [
+          -7.0,
+          -3.4333439020687072e-15,
+          2.0000000000000004
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -7.0,
+          3.4298776105038126e-14,
+          2.0000000000000004
+        ],
+        [
+          -7.000000000000019,
+          -3.8659932488155206,
+          2.0666666666666673
+        ],
+        [
+          -3.865993248815589,
+          -6.999999999999981,
+          2.1333333333333337
+        ],
+        [
+          -3.4298776105038126e-14,
+          -7.0,
+          2.2000000000000006
+        ]
+      ]
+    },
+    {
+      "kind": "bezier",
+      "points": [
+        [
+          -2.2292904608937945e-14,
+          -7.0,
+          2.2000000000000006
+        ],
+        [
+          3.8659932488155326,
+          -7.000000000000012,
+          2.2666666666666675
+        ],
+        [
+          6.999999999999988,
+          -3.865993248815577,
+          2.333333333333334
+        ],
+        [
+          7.0,
+          -2.2292904608937945e-14,
+          2.400000000000001
+        ]
+      ]
+    }
+  ],
+  "rope_radius_mm": 0.3,
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

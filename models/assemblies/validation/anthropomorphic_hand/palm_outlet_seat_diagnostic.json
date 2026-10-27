@@ -1,0 +1,56 @@
+[
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_structural_lower_jaw_1",
+    "protected_band_R": 3.1,
+    "intersection_mm3": 0.10471496166007042
+  },
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_structural_lower_jaw_1",
+    "protected_band_R": 2.9,
+    "intersection_mm3": 0.08249389814346889
+  },
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_structural_lower_jaw_1",
+    "protected_band_R": 2.7,
+    "intersection_mm3": 0.05475194259404481
+  },
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 3.1,
+    "intersection_mm3": 0.10471496166019159
+  },
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 2.9,
+    "intersection_mm3": 0.08249389814358533
+  },
+  {
+    "sample": "full_fist_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 2.7,
+    "intersection_mm3": 0.05475194259413162
+  },
+  {
+    "sample": "precision_pinch_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 3.1,
+    "intersection_mm3": 0.42150894130450517
+  },
+  {
+    "sample": "precision_pinch_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 2.9,
+    "intersection_mm3": 0.13086929488382376
+  },
+  {
+    "sample": "precision_pinch_candidate",
+    "body": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "protected_band_R": 2.7,
+    "intersection_mm3": 0.0019045987097083242
+  }
+]

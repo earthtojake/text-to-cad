@@ -1,0 +1,168 @@
+{
+  "scope": "Focused native thumb-arm interfaces and reported neighbours across CMC yaw.\n\nThis diagnoses a candidate before the all-neighbour225-pose rigid/tendon gates.\nThe native arm, unchanged bore datums, seven known obstacles and palm are tested.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_thumb_arm_candidate.py": "f87d6c539ea3e55db83bee73cfbde6cae06bd70f11c430da21163644223d946d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_reaction_arm_clearance_r4.step": "864339fb7b0aaad1c494d5373f2a6c4b329568967bc49752306cb8906f407250",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72.step": "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_static_route_packet_manifest.json": "723c68d60117cab8fee8f4dce74455e455b6d469cb996f0afae2d09474e7629e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/44136fa355b3678a.json.gz": "d395771e9a6f07966f9acdf304030a4ccb2b8b44987cd43649c090d3db938619",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/edfc278fa4f237a6.json.gz": "49d8b05b185867c5a0802ecef498ae16d7b69adb729c56a8d49c425203a3cc7c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6337354acff3ae26.json.gz": "710a41b36dd9ccedecf353ca0bf19c873b0342c38f5cf8bbdb226a245e04e62b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/689e668dc3b644a6.json.gz": "7020c9926fd6a44adc393340413397b57d7bad66c77ce9a1edb25dd9f3fef87d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ac7657ffe29e09d1.json.gz": "29975eae7a29683b9395020930a3f7263ee183432fdbdfe81bca998b1123fc16",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/45eb0b1922785ad7.json.gz": "88b0ac773253d666b2d967e119fc32e135b46d817657ddf563836d320174154a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/12dc45d494febc85.json.gz": "8d5dc3ae310103b48fcf2f84857d6772c98f7bb26076ea1c8608021df8cecd12",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/d9e878d0d764e4a3.json.gz": "0ad56cf6c0d765733fc9a9025e846a7b87adec2401de23bd0e2550f7db4b84b2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0ae29bcc5cf9624f.json.gz": "28653ac28111696ba563837064dbce6e1f3a3b60e1a69dfa5f2d083a2f9faa92",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c1a14ab2c888ed33.json.gz": "63dafc6f0bdaa6939d0e75d31ecc46b8f0226eb22f326d940d6ccf049869d548"
+  },
+  "bores": [
+    {
+      "center": [
+        -0.9,
+        -3.275,
+        -7.95
+      ],
+      "radius": 0.22,
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "center": [
+        0,
+        -3.5,
+        -15.2
+      ],
+      "radius": 0.32,
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "center": [
+        0,
+        3.5,
+        -15.2
+      ],
+      "radius": 0.32,
+      "intersection_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "rows": [
+    {
+      "sample": "flat_open",
+      "pose": {},
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.46716237110813674,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.4649421703585327,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.46648301693022143,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.4671417255230448,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_0",
+      "pose": {
+        "thumb_cmc_abduction": 0.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.46716237110813674,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_5",
+      "pose": {
+        "thumb_cmc_abduction": 5.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.46730411914298225,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_15",
+      "pose": {
+        "thumb_cmc_abduction": 15.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.4680182931947264,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_25",
+      "pose": {
+        "thumb_cmc_abduction": 25.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.46906304287184414,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.47282226443570224,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "collisions": [],
+      "tendon_centerline_gap_mm": 0.4830398593691149,
+      "tendon_radius_mm": 0.45,
+      "boundary_proof": null,
+      "pass_": true
+    }
+  ],
+  "complete": true,
+  "changed_during_audit": [],
+  "pass": true
+}

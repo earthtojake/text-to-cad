@@ -1,0 +1,8 @@
+{
+  "original_volume": 251.78417719868673,
+  "revised_volume": 251.66056377240574,
+  "removed_volume": 0.12361342628099692,
+  "cutter_radius": 0.5,
+  "unchanged_tendon_radius": 0.45,
+  "contact_sample": "wrist_flexion_35"
+}

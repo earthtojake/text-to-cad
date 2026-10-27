@@ -1,0 +1,8 @@
+index mcp_outlet unattached ['index_mcp_outlet_comb_structural_lower_jaw_1', 'index_mcp_outlet_comb_structural_lower_jaw_2', 'index_mcp_outlet_comb_structural_lower_jaw_3', 'index_mcp_outlet_comb_scalloped_upper_jaw', 'index_mcp_outlet_comb_rail_left_cap', 'index_mcp_outlet_comb_rail_left_M0p6_screw', 'index_mcp_outlet_comb_liner_left_M0p6_screw', 'index_mcp_outlet_comb_rail_right_cap', 'index_mcp_outlet_comb_rail_right_M0p6_screw', 'index_mcp_outlet_comb_liner_right_M0p6_screw'] interference []
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 29, in <module>
+    v=common_volume(p,allp[k])
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_guide_combs.py", line 47, in common_volume
+    op.SetFuzzyValue(1e-6);op.Build()
+                           ~~~~~~~~^^
+KeyboardInterrupt

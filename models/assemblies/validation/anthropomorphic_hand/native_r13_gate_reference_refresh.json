@@ -1,0 +1,7 @@
+{
+  "reason": "Replace the invalidated first finger-audit prerequisite with the corrected, completed audit; no geometry expression changes.",
+  "old_document_sha256": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+  "old_document_archive": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9.step",
+  "new_document_sha256": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+  "byte_identical": true
+}

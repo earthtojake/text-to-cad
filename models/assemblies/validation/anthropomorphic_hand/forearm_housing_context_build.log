@@ -1,0 +1,7 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.68}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":132.281}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"building","phase":"Meshing components","progress":null,"elapsed":133.306}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":133.308}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/forearm_housing_context.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":210.947}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/forearm_housing_context.step

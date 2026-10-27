@@ -1,0 +1,410 @@
+{
+  "rows": [
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 21,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7224,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "flat_open",
+      "pose": {}
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 561,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7341,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "wrist_flexion_-45",
+      "pose": {
+        "wrist_flexion": -45.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 65,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7717,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "wrist_flexion_25",
+      "pose": {
+        "wrist_flexion": 25.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 34,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7330,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7245,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "index_mcp_flexion_0",
+      "pose": {
+        "index_mcp_flexion": 0.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 31,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7237,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "index_mcp_flexion_75",
+      "pose": {
+        "index_mcp_flexion": 75.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 16,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7244,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "index_pip_50",
+      "pose": {
+        "index_pip": 50.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 14,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7236,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "index_dip_10",
+      "pose": {
+        "index_dip": 10.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 4,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7257,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 28,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7226,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 27,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7240,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 5,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7258,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 12,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7240,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 8,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7251,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "ring_mcp_abduction_-5",
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 28,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7227,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "ring_mcp_flexion_15",
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 7,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7242,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "ring_mcp_flexion_90",
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 12,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7241,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "ring_pip_70",
+      "pose": {
+        "ring_pip": 70.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 12,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7237,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "ring_dip_30",
+      "pose": {
+        "ring_dip": 30.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 6,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7243,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 30,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7222,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 29,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7233,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 18,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7245,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 14,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7234,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 1,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7217,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 30,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7290,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_cmc_flexion_-15",
+      "pose": {
+        "thumb_cmc_flexion": -15.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 26,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7341,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 43,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7213,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_mcp_flexion_10",
+      "pose": {
+        "thumb_mcp_flexion": 10.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 22,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7229,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_ip_10",
+      "pose": {
+        "thumb_ip": 10.0
+      }
+    },
+    {
+      "body_count": 2594,
+      "processed": 2594,
+      "exact_booleans": 20,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 7231,
+      "collisions": [],
+      "complete": true,
+      "pass": true,
+      "sample": "thumb_ip_85",
+      "pose": {
+        "thumb_ip": 85.0
+      }
+    }
+  ],
+  "complete": true,
+  "pass_": true
+}

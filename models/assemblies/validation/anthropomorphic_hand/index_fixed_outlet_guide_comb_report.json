@@ -1,0 +1,376 @@
+{
+  "finger": "index",
+  "scope": "routes_and_bodies",
+  "rows": [
+    {
+      "pose": {},
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "neutral",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_pip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 10.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 20.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 30.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 40.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip40.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 50.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip50.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 60.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_pip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 70.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_pip70.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 80.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_pip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 90.0
+      },
+      "exact_distances_tested": 28,
+      "collisions": [],
+      "label": "index_pip90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 100.0
+      },
+      "exact_distances_tested": 28,
+      "collisions": [],
+      "label": "index_pip100.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_pip": 110.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_pip110.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 10.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 20.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 30.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 40.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip40.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 50.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip50.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 60.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 70.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_dip70.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_dip": 80.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_dip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": -15.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": -5.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion-5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 5.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_mcp_flexion5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 15.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_mcp_flexion15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 25.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_mcp_flexion25.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 35.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_mcp_flexion35.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 45.0
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "index_mcp_flexion45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 55.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_mcp_flexion55.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 65.0
+      },
+      "exact_distances_tested": 26,
+      "collisions": [],
+      "label": "index_mcp_flexion65.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 75.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 85.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion85.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 90.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_flexion90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_abduction": -20.0
+      },
+      "exact_distances_tested": 29,
+      "collisions": [],
+      "label": "index_mcp_abduction-20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_abduction": -10.0
+      },
+      "exact_distances_tested": 29,
+      "collisions": [],
+      "label": "index_mcp_abduction-10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_abduction": 0.0
+      },
+      "exact_distances_tested": 25,
+      "collisions": [],
+      "label": "index_mcp_abduction0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_abduction": 10.0
+      },
+      "exact_distances_tested": 29,
+      "collisions": [],
+      "label": "index_mcp_abduction10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_abduction": 20.0
+      },
+      "exact_distances_tested": 32,
+      "collisions": [],
+      "label": "index_mcp_abduction20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "index_mcp_flexion": 90,
+        "index_pip": 110,
+        "index_dip": 80
+      },
+      "exact_distances_tested": 27,
+      "collisions": [],
+      "label": "fist",
+      "body_interferences": []
+    }
+  ],
+  "pass": true
+}

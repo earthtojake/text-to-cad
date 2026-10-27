@@ -1,0 +1,102 @@
+{
+  "sample_count": 225,
+  "method": "0.1 mm conservative curve sampling; expanded axial band and 0.050001 mm radial reserve",
+  "rows": {
+    "index_mcp_abduction": {
+      "minimum_safe_outer_radius": 2.469925794706342,
+      "sample": "index_mcp_flexion_90",
+      "tendon": "index_pip_negative",
+      "group": "index_pip_negative_proximal_guide",
+      "point": [
+        -2.8127072157353368,
+        -0.9534900547279221,
+        14.166938110749184
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.5,
+        13.7
+      ]
+    },
+    "middle_mcp_abduction": {
+      "minimum_safe_outer_radius": 2.4764419610843675,
+      "sample": "full_fist_candidate",
+      "tendon": "middle_pip_negative",
+      "group": "middle_pip_negative_proximal_guide",
+      "point": [
+        -2.9759985697896543,
+        0.05143163616500601,
+        14.126126126126122
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.5,
+        13.7
+      ]
+    },
+    "ring_mcp_abduction": {
+      "minimum_safe_outer_radius": 2.4681771490251534,
+      "sample": "full_fist_candidate",
+      "tendon": "ring_pip_positive",
+      "group": "ring_pip_positive_proximal_guide",
+      "point": [
+        2.9673536381606826,
+        -0.0699564896556808,
+        14.151006711409396
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.5,
+        13.7
+      ]
+    },
+    "little_mcp_abduction": {
+      "minimum_safe_outer_radius": 2.4357071285172616,
+      "sample": "little_mcp_flexion_90",
+      "tendon": "little_pip_positive",
+      "group": "little_pip_positive_proximal_guide",
+      "point": [
+        2.595894643210606,
+        -1.3710263371623483,
+        14.16271551724138
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.5,
+        13.7
+      ]
+    },
+    "thumb_cmc_abduction": {
+      "minimum_safe_outer_radius": 0.37894734530783625,
+      "sample": "thumb_cmc_flexion_65",
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "point": [
+        0.6234411600725451,
+        0.6195734933377821,
+        14.223032002801355
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        13.0,
+        15.2
+      ]
+    },
+    "thumb_mcp_abduction": {
+      "minimum_safe_outer_radius": 5.32929795009158,
+      "sample": "thumb_mcp_flexion_70",
+      "tendon": "thumb_ip_positive",
+      "group": "thumb_ip_positive_mcp_reaction",
+      "point": [
+        0.11146376720885343,
+        5.828233186664583,
+        11.05396825383539
+      ],
+      "tube_radius": 0.45,
+      "axial_band": [
+        11.5,
+        13.7
+      ]
+    }
+  }
+}

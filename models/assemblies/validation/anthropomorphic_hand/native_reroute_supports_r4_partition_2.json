@@ -1,0 +1,1805 @@
+{
+  "rows": [
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 59,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 0,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 31,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 35,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 15,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 67,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "wrist_flexion_-25",
+      "pose": {
+        "wrist_flexion": -25.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 61,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "wrist_flexion_5",
+      "pose": {
+        "wrist_flexion": 5.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 12,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 81,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "wrist_flexion_45",
+      "pose": {
+        "wrist_flexion": 45.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "palm_cup_10",
+      "pose": {
+        "palm_cup": 10.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_mcp_abduction_-10",
+      "pose": {
+        "index_mcp_abduction": -10.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_mcp_flexion_-15",
+      "pose": {
+        "index_mcp_flexion": -15.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_mcp_flexion_15",
+      "pose": {
+        "index_mcp_flexion": 15.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_mcp_flexion_55",
+      "pose": {
+        "index_mcp_flexion": 55.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_mcp_flexion_90",
+      "pose": {
+        "index_mcp_flexion": 90.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_pip_30",
+      "pose": {
+        "index_pip": 30.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_pip_70",
+      "pose": {
+        "index_pip": 70.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_pip_110",
+      "pose": {
+        "index_pip": 110.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_dip_30",
+      "pose": {
+        "index_dip": 30.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "index_dip_70",
+      "pose": {
+        "index_dip": 70.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_mcp_abduction_0",
+      "pose": {
+        "middle_mcp_abduction": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_mcp_abduction_5",
+      "pose": {
+        "ring_mcp_abduction": 5.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_mcp_flexion_0",
+      "pose": {
+        "ring_mcp_flexion": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_mcp_flexion_35",
+      "pose": {
+        "ring_mcp_flexion": 35.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_mcp_flexion_75",
+      "pose": {
+        "ring_mcp_flexion": 75.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_pip_10",
+      "pose": {
+        "ring_pip": 10.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_pip_50",
+      "pose": {
+        "ring_pip": 50.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_pip_90",
+      "pose": {
+        "ring_pip": 90.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_dip_10",
+      "pose": {
+        "ring_dip": 10.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "ring_dip_50",
+      "pose": {
+        "ring_dip": 50.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_mcp_abduction_-25",
+      "pose": {
+        "little_mcp_abduction": -25.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_mcp_abduction_5",
+      "pose": {
+        "little_mcp_abduction": 5.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_mcp_flexion_-5",
+      "pose": {
+        "little_mcp_flexion": -5.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_mcp_flexion_25",
+      "pose": {
+        "little_mcp_flexion": 25.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_mcp_flexion_65",
+      "pose": {
+        "little_mcp_flexion": 65.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_pip_0",
+      "pose": {
+        "little_pip": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_pip_40",
+      "pose": {
+        "little_pip": 40.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_pip_80",
+      "pose": {
+        "little_pip": 80.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_dip_0",
+      "pose": {
+        "little_dip": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_dip_40",
+      "pose": {
+        "little_dip": 40.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "little_dip_80",
+      "pose": {
+        "little_dip": 80.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_cmc_abduction_0",
+      "pose": {
+        "thumb_cmc_abduction": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 22,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 42,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_cmc_flexion_0",
+      "pose": {
+        "thumb_cmc_flexion": 0.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 7,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 49,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_cmc_flexion_35",
+      "pose": {
+        "thumb_cmc_flexion": 35.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_mcp_abduction_-15",
+      "pose": {
+        "thumb_mcp_abduction": -15.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_mcp_abduction_15",
+      "pose": {
+        "thumb_mcp_abduction": 15.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_mcp_flexion_30",
+      "pose": {
+        "thumb_mcp_flexion": 30.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_mcp_flexion_70",
+      "pose": {
+        "thumb_mcp_flexion": 70.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_ip_30",
+      "pose": {
+        "thumb_ip": 30.0
+      }
+    },
+    {
+      "body_count": 3039,
+      "processed": 3039,
+      "exact_booleans": 0,
+      "native_distance_separations": 0,
+      "congruent_proof_reuse": 58,
+      "collisions": [
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008320072573145395
+        },
+        {
+          "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.2833312134172258
+        }
+      ],
+      "complete": true,
+      "pass": false,
+      "pair_scope": {
+        "any_endpoint_in": [
+          "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "thumb_radial_shared_guide_bank_structural"
+        ],
+        "unchanged_pair_gate": "separate frozen baseline certificate required"
+      },
+      "sample": "thumb_ip_70",
+      "pose": {
+        "thumb_ip": 70.0
+      }
+    }
+  ],
+  "complete": true
+}

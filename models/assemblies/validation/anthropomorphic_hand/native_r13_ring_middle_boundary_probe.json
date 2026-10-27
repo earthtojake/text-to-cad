@@ -1,0 +1,7 @@
+{
+  "agrees": true,
+  "epsilon": 1e-10,
+  "maximum_scalar_difference": 8.845146837188622e-13,
+  "maximum_difference_path": "/faces/20/loops/0/2/curve/knots/25",
+  "mismatches": []
+}

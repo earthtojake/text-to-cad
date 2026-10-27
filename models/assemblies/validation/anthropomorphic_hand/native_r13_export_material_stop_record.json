@@ -1,0 +1,15 @@
+{
+  "time": "2026-09-06T21:28:46.769152+00:00",
+  "reason": "Preserve completed native Boolean evidence; remaining ring-middle cut is unresolved and 72 identity-related mismatches already prevent this equality gate from passing.",
+  "pids": [
+    38628,
+    58170,
+    58171
+  ],
+  "completed_proof_classes": 1229,
+  "expected_proof_classes": 1230,
+  "failed_proof_classes": 72,
+  "checkpoint": "models/assemblies/validation/anthropomorphic_hand/native_r13_export_material_stopped_partial.json",
+  "checkpoint_sha256": "2e8ba2aee8453bf1a8eca1d9130c42a417f43e332800245c16db7af1b44447c4",
+  "gate_pass": false
+}

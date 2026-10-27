@@ -1,0 +1,119 @@
+subset little_fingertip_silicone_pad {'body': 'little_fingertip_silicone_pad', 'new_volume_mm3': 217.36210910798158, 'old_volume_mm3': 266.57321320466286, 'new_outside_old_mm3': 0.0, 'pass': True}
+subset little_fingertip_conformal_bridge {'body': 'little_fingertip_conformal_bridge', 'new_volume_mm3': 29.314468217780203, 'old_volume_mm3': 33.21688219439642, 'new_outside_old_mm3': 0.0, 'pass': True}
+subset little_fingertip_radial_M0p8_socket_screw {'body': 'little_fingertip_radial_M0p8_socket_screw', 'new_volume_mm3': 1.7959947617320982, 'old_volume_mm3': 1.7959947617320982, 'new_outside_old_mm3': 0.0, 'pass': True}
+subset little_fingertip_ulnar_M0p8_socket_screw {'body': 'little_fingertip_ulnar_M0p8_socket_screw', 'new_volume_mm3': 1.795994761732098, 'old_volume_mm3': 1.795994761732098, 'new_outside_old_mm3': 0.0, 'pass': True}
+subset little_fingertip_radial_M0p8_captive_insert {'body': 'little_fingertip_radial_M0p8_captive_insert', 'new_volume_mm3': 0.8842906541892758, 'old_volume_mm3': 0.8842906541892758, 'new_outside_old_mm3': 0.0, 'pass': True}
+subset little_fingertip_ulnar_M0p8_captive_insert {'body': 'little_fingertip_ulnar_M0p8_captive_insert', 'new_volume_mm3': 0.8842906542183248, 'old_volume_mm3': 0.8842906542183248, 'new_outside_old_mm3': 0.0, 'pass': True}
+{
+  "pass": true,
+  "source_sha256": "0cdf5ca7445d7d036e8933658279be1cb6a588f0978b9b7e254749924f6dde18",
+  "subset": [
+    {
+      "body": "little_fingertip_silicone_pad",
+      "new_volume_mm3": 217.36210910798158,
+      "old_volume_mm3": 266.57321320466286,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_conformal_bridge",
+      "new_volume_mm3": 29.314468217780203,
+      "old_volume_mm3": 33.21688219439642,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_radial_M0p8_socket_screw",
+      "new_volume_mm3": 1.7959947617320982,
+      "old_volume_mm3": 1.7959947617320982,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_ulnar_M0p8_socket_screw",
+      "new_volume_mm3": 1.795994761732098,
+      "old_volume_mm3": 1.795994761732098,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_radial_M0p8_captive_insert",
+      "new_volume_mm3": 0.8842906541892758,
+      "old_volume_mm3": 0.8842906541892758,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    },
+    {
+      "body": "little_fingertip_ulnar_M0p8_captive_insert",
+      "new_volume_mm3": 0.8842906542183248,
+      "old_volume_mm3": 0.8842906542183248,
+      "new_outside_old_mm3": 0.0,
+      "pass": true
+    }
+  ],
+  "mount": {
+    "bridge_host_gap_mm": 0.0,
+    "pad_bridge_gap_mm": 1.7763568394002505e-15,
+    "screw_bridge_gaps_mm": [
+      4.440892098500626e-16,
+      4.440892098500626e-16
+    ],
+    "insert_host_gaps_mm": [
+      0.0,
+      0.0
+    ],
+    "internal_pair_overlap_mm3": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "repaired_full_fist": {
+    "group": "little_mcp_flexion_positive_yaw_reaction",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "pad_centerline_distance_mm": 0.8342651541767453,
+    "outer_radius_mm": 0.45,
+    "clearance_mm": 0.3842641541767453
+  },
+  "scope": "Only little silicone pad and its carrier change, by shrinking nested XY ellipsoids at fixed center/height; all other pads and hardware are identical. Exact new-minus-old solid tests certify subset containment, so every prior noninterference result remains valid. The only failed full-fist route/body pair is explicitly remeasured against the repaired skin."
+}

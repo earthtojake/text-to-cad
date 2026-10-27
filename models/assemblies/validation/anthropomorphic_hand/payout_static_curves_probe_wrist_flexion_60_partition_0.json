@@ -1,0 +1,806 @@
+{
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/generate_payout_static_packets.py": "bef85ba0e75c13075c0a8c0e268f4e2bc4493b5ee8f9028ffbc8070821e5288f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_static_route_packet_manifest.json": "723c68d60117cab8fee8f4dce74455e455b6d469cb996f0afae2d09474e7629e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/actuator_payout.py": "232611f2b37510eb9a5684fadc3ae411632a28c66f9a96d0327faba833501466",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/forearm_routing.py": "ff8e20b3463c9b85340545d54db3a1131907342799e1ccdb141edfe1b86a2819",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/capstan_path.py": "f6462bb55f711b974696fdd8548ce0c4a32ee35a48495faa0b8aa0ad6dd49b4a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/path_analysis.py": "c4ee07eb874cda5208620fd4492afaf13e6e2a01485892fb140b5784ad08fcd6",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_payout_static_curves.py": "9c15a48d632173a852b5b26fd7051466082ed1072bdf6f65c3853ddf2e58ad1a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/payout_static_route_packet_manifest.json": "1a6559791f769343cfc363bc1723571ae99ec3be26503fcd38453849d23249ed",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_static_route_packets.py": "b9be4a27779f66d069c94076de54172996a0fb73cb2ade8491cbe7f149d15c4d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_tendon_self_spacing.py": "721126ef75534622192e4c173a14cc4866343f50d5ac478338da3bfa1926e73d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_hand_route_pairs.py": "89f1b73bd14cef702572673e17dfbf1ce881cf2cf3db4626083f560fefac1665",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/finger_routing.py": "823861e0ccc5ddba477cb8c91348986c5249b784db1644e430e273dc08cdc5e7"
+  },
+  "rows": [
+    {
+      "sample": "wrist_flexion_60",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "curve_gate": {
+        "tendon_table": [
+          {
+            "tendon": "thumb_cmc_abduction_positive",
+            "length_mm": 471.36473387563564,
+            "minimum_radius_mm": 3.7998279980234506,
+            "maximum_join_gap_mm": 2.842170943040401e-14,
+            "maximum_tangent_error": 1.4680584641739002e-14,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_cmc_abduction_negative",
+            "length_mm": 456.9122329400698,
+            "minimum_radius_mm": 5.283541739855324,
+            "maximum_join_gap_mm": 5.0242958677880805e-15,
+            "maximum_tangent_error": 1.6968063050897114e-14,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_cmc_flexion_positive",
+            "length_mm": 434.58185449479845,
+            "minimum_radius_mm": 3.799863137565134,
+            "maximum_join_gap_mm": 2.929642751054232e-14,
+            "maximum_tangent_error": 7.414188654145125e-15,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_cmc_flexion_negative",
+            "length_mm": 430.6854568710413,
+            "minimum_radius_mm": 4.285564281898508,
+            "maximum_join_gap_mm": 4.351167857633658e-15,
+            "maximum_tangent_error": 7.079305124792038e-15,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_mcp_abduction_positive",
+            "length_mm": 432.09497422513346,
+            "minimum_radius_mm": 3.5492266883870354,
+            "maximum_join_gap_mm": 2.864289338439558e-14,
+            "maximum_tangent_error": 1.95266981980639e-14,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_mcp_abduction_negative",
+            "length_mm": 429.61681750987475,
+            "minimum_radius_mm": 3.5484633982631197,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 6.925506271117699e-15,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_mcp_flexion_positive",
+            "length_mm": 388.6558371357263,
+            "minimum_radius_mm": 3.7651859612466505,
+            "maximum_join_gap_mm": 1.7763568394002505e-14,
+            "maximum_tangent_error": 1.2526415998443722e-14,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_mcp_flexion_negative",
+            "length_mm": 385.9094711661157,
+            "minimum_radius_mm": 3.8186731928989617,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 3.144597701847062e-15,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_ip_positive",
+            "length_mm": 370.9706299730325,
+            "minimum_radius_mm": 3.499999999999998,
+            "maximum_join_gap_mm": 1.4210854715202004e-14,
+            "maximum_tangent_error": 3.62011298826416e-14,
+            "clear": true
+          },
+          {
+            "tendon": "thumb_ip_negative",
+            "length_mm": 370.1961862550009,
+            "minimum_radius_mm": 3.499999999999998,
+            "maximum_join_gap_mm": 5.329070518200751e-15,
+            "maximum_tangent_error": 7.464340755830013e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_mcp_abduction_positive",
+            "length_mm": 314.0178969710658,
+            "minimum_radius_mm": 5.4999999999999964,
+            "maximum_join_gap_mm": 1.464821375527116e-14,
+            "maximum_tangent_error": 4.114467152831425e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_mcp_abduction_negative",
+            "length_mm": 307.9024811390777,
+            "minimum_radius_mm": 5.5,
+            "maximum_join_gap_mm": 7.944109290391274e-15,
+            "maximum_tangent_error": 1.958207003236276e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_mcp_flexion_positive",
+            "length_mm": 522.670977719255,
+            "minimum_radius_mm": 4.518516674781812,
+            "maximum_join_gap_mm": 2.864289338439558e-14,
+            "maximum_tangent_error": 4.75520328598701e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_mcp_flexion_negative",
+            "length_mm": 518.0436375241,
+            "minimum_radius_mm": 4.5185166747818055,
+            "maximum_join_gap_mm": 2.8435583831733384e-14,
+            "maximum_tangent_error": 1.3835340126960807e-14,
+            "clear": true
+          },
+          {
+            "tendon": "index_pip_positive",
+            "length_mm": 523.5163093532111,
+            "minimum_radius_mm": 3.6458983003100682,
+            "maximum_join_gap_mm": 2.909377512977897e-14,
+            "maximum_tangent_error": 7.273341175874895e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_pip_negative",
+            "length_mm": 519.6733686851247,
+            "minimum_radius_mm": 3.645898300234464,
+            "maximum_join_gap_mm": 1.0658141036401503e-14,
+            "maximum_tangent_error": 6.268798605020218e-14,
+            "clear": true
+          },
+          {
+            "tendon": "index_dip_positive",
+            "length_mm": 510.32276826695335,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 9.769962616701378e-15,
+            "maximum_tangent_error": 6.50064749098153e-15,
+            "clear": true
+          },
+          {
+            "tendon": "index_dip_negative",
+            "length_mm": 508.14638190653767,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 5.6774267261209077e-14,
+            "clear": true
+          },
+          {
+            "tendon": "middle_mcp_abduction_positive",
+            "length_mm": 397.2288322401691,
+            "minimum_radius_mm": 5.5,
+            "maximum_join_gap_mm": 3.03543989777123e-14,
+            "maximum_tangent_error": 6.190777741195083e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_mcp_abduction_negative",
+            "length_mm": 388.7792700978393,
+            "minimum_radius_mm": 5.5,
+            "maximum_join_gap_mm": 1.5987211554602254e-14,
+            "maximum_tangent_error": 3.1812861081365563e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_mcp_flexion_positive",
+            "length_mm": 352.04983666031393,
+            "minimum_radius_mm": 4.518516674781799,
+            "maximum_join_gap_mm": 1.724530548492318e-14,
+            "maximum_tangent_error": 2.104133052923695e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_mcp_flexion_negative",
+            "length_mm": 354.82477082968813,
+            "minimum_radius_mm": 4.518516674781801,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 3.783856212467818e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_pip_positive",
+            "length_mm": 356.6053905520925,
+            "minimum_radius_mm": 3.645898300310128,
+            "maximum_join_gap_mm": 1.517719948885615e-14,
+            "maximum_tangent_error": 4.733069581961413e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_pip_negative",
+            "length_mm": 361.25528055931517,
+            "minimum_radius_mm": 3.645898300234543,
+            "maximum_join_gap_mm": 1.5987211554602254e-14,
+            "maximum_tangent_error": 2.5363836010266277e-15,
+            "clear": true
+          },
+          {
+            "tendon": "middle_dip_positive",
+            "length_mm": 602.3245970846334,
+            "minimum_radius_mm": 3.499999999999992,
+            "maximum_join_gap_mm": 2.8916994303251375e-14,
+            "maximum_tangent_error": 1.3884768314213153e-14,
+            "clear": true
+          },
+          {
+            "tendon": "middle_dip_negative",
+            "length_mm": 598.4548242276658,
+            "minimum_radius_mm": 3.499999999999992,
+            "maximum_join_gap_mm": 5.329070518200751e-15,
+            "maximum_tangent_error": 3.2611324954540432e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_mcp_abduction_positive",
+            "length_mm": 480.0239584361594,
+            "minimum_radius_mm": 5.500000000000001,
+            "maximum_join_gap_mm": 2.9524418711792076e-14,
+            "maximum_tangent_error": 6.4526872686699995e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_mcp_abduction_negative",
+            "length_mm": 465.94742581417887,
+            "minimum_radius_mm": 5.5,
+            "maximum_join_gap_mm": 7.32410687763558e-15,
+            "maximum_tangent_error": 3.4371627271790306e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_mcp_flexion_positive",
+            "length_mm": 432.5711930830962,
+            "minimum_radius_mm": 4.518516674781815,
+            "maximum_join_gap_mm": 3.00540469234687e-14,
+            "maximum_tangent_error": 4.376418199760027e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_mcp_flexion_negative",
+            "length_mm": 431.7609193667243,
+            "minimum_radius_mm": 4.518516674781829,
+            "maximum_join_gap_mm": 1.5987211554602254e-14,
+            "maximum_tangent_error": 7.243992546153685e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_pip_positive",
+            "length_mm": 432.09883783816247,
+            "minimum_radius_mm": 3.645898300286744,
+            "maximum_join_gap_mm": 2.9777166713245526e-14,
+            "maximum_tangent_error": 5.6381928936604705e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_pip_negative",
+            "length_mm": 433.7418017192841,
+            "minimum_radius_mm": 3.6458983002930534,
+            "maximum_join_gap_mm": 2.842170943040401e-14,
+            "maximum_tangent_error": 1.3196243790466618e-14,
+            "clear": true
+          },
+          {
+            "tendon": "ring_dip_positive",
+            "length_mm": 418.97353108651475,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 1.7763568394002505e-14,
+            "maximum_tangent_error": 4.608282384119473e-15,
+            "clear": true
+          },
+          {
+            "tendon": "ring_dip_negative",
+            "length_mm": 423.41664718808477,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 1.020439314654103e-14,
+            "maximum_tangent_error": 4.848971347931139e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_mcp_abduction_positive",
+            "length_mm": 313.8174901481342,
+            "minimum_radius_mm": 3.799997168389373,
+            "maximum_join_gap_mm": 1.5888218580782548e-14,
+            "maximum_tangent_error": 4.6526197540637786e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_mcp_abduction_negative",
+            "length_mm": 300.3382356169864,
+            "minimum_radius_mm": 3.648006035533234,
+            "maximum_join_gap_mm": 7.105427357601002e-15,
+            "maximum_tangent_error": 4.401080638313722e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_mcp_flexion_positive",
+            "length_mm": 523.5334490986894,
+            "minimum_radius_mm": 3.6499923292338834,
+            "maximum_join_gap_mm": 2.929642751054232e-14,
+            "maximum_tangent_error": 1.1239399642175762e-14,
+            "clear": true
+          },
+          {
+            "tendon": "little_mcp_flexion_negative",
+            "length_mm": 519.3423073568057,
+            "minimum_radius_mm": 4.510314224540538,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 1.0655836857715297e-14,
+            "clear": true
+          },
+          {
+            "tendon": "little_pip_positive",
+            "length_mm": 509.47081741139164,
+            "minimum_radius_mm": 3.6458983002109866,
+            "maximum_join_gap_mm": 3.03543989777123e-14,
+            "maximum_tangent_error": 7.479113760267347e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_pip_negative",
+            "length_mm": 508.2497415263451,
+            "minimum_radius_mm": 3.645898300181253,
+            "maximum_join_gap_mm": 7.105427357601002e-15,
+            "maximum_tangent_error": 6.461272813211175e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_dip_positive",
+            "length_mm": 492.1618756914465,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 2.864289338439558e-14,
+            "maximum_tangent_error": 7.453490494015632e-15,
+            "clear": true
+          },
+          {
+            "tendon": "little_dip_negative",
+            "length_mm": 493.5856571798846,
+            "minimum_radius_mm": 3.500000000000004,
+            "maximum_join_gap_mm": 7.105427357601002e-15,
+            "maximum_tangent_error": 8.349546123023008e-15,
+            "clear": true
+          },
+          {
+            "tendon": "wrist_abduction_positive",
+            "length_mm": 346.1735027847645,
+            "minimum_radius_mm": 3.799823841632288,
+            "maximum_join_gap_mm": 1.4210854715202004e-14,
+            "maximum_tangent_error": 2.055591628835943e-15,
+            "clear": true
+          },
+          {
+            "tendon": "wrist_abduction_negative",
+            "length_mm": 334.4433080862793,
+            "minimum_radius_mm": 3.7999562100054347,
+            "maximum_join_gap_mm": 1.4210854715202004e-14,
+            "maximum_tangent_error": 1.85268467234323e-15,
+            "clear": true
+          },
+          {
+            "tendon": "wrist_flexion_positive",
+            "length_mm": 281.8020797109205,
+            "minimum_radius_mm": 3.799889882606279,
+            "maximum_join_gap_mm": 1.464821375527116e-14,
+            "maximum_tangent_error": 1.480143044531119e-14,
+            "clear": true
+          },
+          {
+            "tendon": "wrist_flexion_negative",
+            "length_mm": 443.98295800608213,
+            "minimum_radius_mm": 3.7997245244348954,
+            "maximum_join_gap_mm": 1.5888218580782548e-14,
+            "maximum_tangent_error": 2.1562912857037234e-15,
+            "clear": true
+          },
+          {
+            "tendon": "palm_cup_positive",
+            "length_mm": 287.59048263316726,
+            "minimum_radius_mm": 3.7999703882984766,
+            "maximum_join_gap_mm": 1.5888218580782548e-14,
+            "maximum_tangent_error": 3.277099722766193e-15,
+            "clear": true
+          },
+          {
+            "tendon": "palm_cup_negative",
+            "length_mm": 294.1185374176816,
+            "minimum_radius_mm": 3.7998218997011186,
+            "maximum_join_gap_mm": 3.552713678800501e-15,
+            "maximum_tangent_error": 3.4807515088490028e-15,
+            "clear": true
+          }
+        ],
+        "conflicts": [],
+        "minimum_checked_gap_mm": 0.023692971828150666,
+        "new_exact_cloud_distance_pairs": 1015,
+        "identical_path_pair_proofs_reused": 0,
+        "pass": true
+      },
+      "self_spacing": [
+        {
+          "tendon": "thumb_cmc_abduction_positive",
+          "sample_points": 5649,
+          "nonlocal_close_pairs": 20149,
+          "minimum_checked_gap_mm": 0.09987762345436488,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_abduction_negative",
+          "sample_points": 5690,
+          "nonlocal_close_pairs": 11755,
+          "minimum_checked_gap_mm": 0.09986304063760063,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "sample_points": 5336,
+          "nonlocal_close_pairs": 17447,
+          "minimum_checked_gap_mm": 0.09986284213180505,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "sample_points": 5365,
+          "nonlocal_close_pairs": 13519,
+          "minimum_checked_gap_mm": 0.09986158611914062,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "sample_points": 5394,
+          "nonlocal_close_pairs": 20068,
+          "minimum_checked_gap_mm": 0.09990217876715221,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "sample_points": 5483,
+          "nonlocal_close_pairs": 13837,
+          "minimum_checked_gap_mm": 0.09986221588690966,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "sample_points": 4844,
+          "nonlocal_close_pairs": 20201,
+          "minimum_checked_gap_mm": 0.09987518522293046,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "sample_points": 4935,
+          "nonlocal_close_pairs": 13960,
+          "minimum_checked_gap_mm": 0.09991336964554284,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "sample_points": 4857,
+          "nonlocal_close_pairs": 20054,
+          "minimum_checked_gap_mm": 0.0998798518697682,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "thumb_ip_negative",
+          "sample_points": 4976,
+          "nonlocal_close_pairs": 13927,
+          "minimum_checked_gap_mm": 0.09986325120417602,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "sample_points": 3887,
+          "nonlocal_close_pairs": 22430,
+          "minimum_checked_gap_mm": 0.09986726361657336,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "sample_points": 4327,
+          "nonlocal_close_pairs": 11682,
+          "minimum_checked_gap_mm": 0.09986157345908439,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "sample_points": 6342,
+          "nonlocal_close_pairs": 23413,
+          "minimum_checked_gap_mm": 0.09986315808513888,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "sample_points": 6482,
+          "nonlocal_close_pairs": 11523,
+          "minimum_checked_gap_mm": 0.09986169865714908,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_positive",
+          "sample_points": 6373,
+          "nonlocal_close_pairs": 23107,
+          "minimum_checked_gap_mm": 0.09986163498625752,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_pip_negative",
+          "sample_points": 6604,
+          "nonlocal_close_pairs": 12191,
+          "minimum_checked_gap_mm": 0.09998104992221099,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_positive",
+          "sample_points": 6338,
+          "nonlocal_close_pairs": 22903,
+          "minimum_checked_gap_mm": 0.09986214486404729,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "index_dip_negative",
+          "sample_points": 6817,
+          "nonlocal_close_pairs": 12159,
+          "minimum_checked_gap_mm": 0.09997951244795386,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_positive",
+          "sample_points": 4716,
+          "nonlocal_close_pairs": 22568,
+          "minimum_checked_gap_mm": 0.09986636852971317,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "sample_points": 5035,
+          "nonlocal_close_pairs": 11436,
+          "minimum_checked_gap_mm": 0.09986156041118241,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "sample_points": 4415,
+          "nonlocal_close_pairs": 22700,
+          "minimum_checked_gap_mm": 0.09986529690119036,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "sample_points": 4868,
+          "nonlocal_close_pairs": 12009,
+          "minimum_checked_gap_mm": 0.09986283161967865,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_positive",
+          "sample_points": 4560,
+          "nonlocal_close_pairs": 22443,
+          "minimum_checked_gap_mm": 0.09987079975762356,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "sample_points": 5062,
+          "nonlocal_close_pairs": 12477,
+          "minimum_checked_gap_mm": 0.09987556097473058,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "sample_points": 7426,
+          "nonlocal_close_pairs": 23318,
+          "minimum_checked_gap_mm": 0.09986422285138027,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "middle_dip_negative",
+          "sample_points": 7806,
+          "nonlocal_close_pairs": 11985,
+          "minimum_checked_gap_mm": 0.09986328623509552,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "sample_points": 5671,
+          "nonlocal_close_pairs": 22787,
+          "minimum_checked_gap_mm": 0.09986506721043228,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "sample_points": 5774,
+          "nonlocal_close_pairs": 11318,
+          "minimum_checked_gap_mm": 0.09986203527871693,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "sample_points": 5274,
+          "nonlocal_close_pairs": 23008,
+          "minimum_checked_gap_mm": 0.09986161713263528,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_mcp_flexion_negative",
+          "sample_points": 5526,
+          "nonlocal_close_pairs": 11855,
+          "minimum_checked_gap_mm": 0.09986232111593815,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_positive",
+          "sample_points": 5287,
+          "nonlocal_close_pairs": 22715,
+          "minimum_checked_gap_mm": 0.09986644380510631,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_pip_negative",
+          "sample_points": 5689,
+          "nonlocal_close_pairs": 12388,
+          "minimum_checked_gap_mm": 0.09987959610308114,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_positive",
+          "sample_points": 5421,
+          "nonlocal_close_pairs": 22456,
+          "minimum_checked_gap_mm": 0.09987055890751281,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "ring_dip_negative",
+          "sample_points": 5770,
+          "nonlocal_close_pairs": 12589,
+          "minimum_checked_gap_mm": 0.09986555929615434,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_positive",
+          "sample_points": 4006,
+          "nonlocal_close_pairs": 20499,
+          "minimum_checked_gap_mm": 0.09987001990309205,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_abduction_negative",
+          "sample_points": 4150,
+          "nonlocal_close_pairs": 12337,
+          "minimum_checked_gap_mm": 0.09987572593581726,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "sample_points": 6457,
+          "nonlocal_close_pairs": 20555,
+          "minimum_checked_gap_mm": 0.09987244424847361,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "sample_points": 6438,
+          "nonlocal_close_pairs": 12808,
+          "minimum_checked_gap_mm": 0.09986419035464908,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_positive",
+          "sample_points": 6461,
+          "nonlocal_close_pairs": 21662,
+          "minimum_checked_gap_mm": 0.09986204246897254,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_pip_negative",
+          "sample_points": 6651,
+          "nonlocal_close_pairs": 12924,
+          "minimum_checked_gap_mm": 0.09986465377025175,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_positive",
+          "sample_points": 6428,
+          "nonlocal_close_pairs": 21638,
+          "minimum_checked_gap_mm": 0.09986307646896728,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "little_dip_negative",
+          "sample_points": 6784,
+          "nonlocal_close_pairs": 12936,
+          "minimum_checked_gap_mm": 0.09986293664629284,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_positive",
+          "sample_points": 4542,
+          "nonlocal_close_pairs": 16073,
+          "minimum_checked_gap_mm": 0.09999999999999007,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "wrist_abduction_negative",
+          "sample_points": 4289,
+          "nonlocal_close_pairs": 16073,
+          "minimum_checked_gap_mm": 0.09999999999999007,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_positive",
+          "sample_points": 3593,
+          "nonlocal_close_pairs": 18116,
+          "minimum_checked_gap_mm": 0.0998864037652831,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "wrist_flexion_negative",
+          "sample_points": 8963,
+          "nonlocal_close_pairs": 18716,
+          "minimum_checked_gap_mm": 0.09986279221378433,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_positive",
+          "sample_points": 3705,
+          "nonlocal_close_pairs": 19675,
+          "minimum_checked_gap_mm": 0.09986209161894985,
+          "failures": [],
+          "pass": true
+        },
+        {
+          "tendon": "palm_cup_negative",
+          "sample_points": 4822,
+          "nonlocal_close_pairs": 12373,
+          "minimum_checked_gap_mm": 0.09988163719222673,
+          "failures": [],
+          "pass": true
+        }
+      ],
+      "pass_": true
+    }
+  ],
+  "complete": true
+}

@@ -1,0 +1,139 @@
+{
+  "coordinate_contract": "Every STEP is already in assembled neutral coordinates. Apply only the named frame delta for motion. Do not overwrite the immutable baseline STEP inputs.",
+  "bodies": [
+    {
+      "step": "models/assemblies/STEP/anthropomorphic_hand/palm_main_final_rom_review.step",
+      "sha256": "6c2e669df4f176c530c5b1c8623c861b942ca60d1e75cb346bd2548f6a32adf4",
+      "name": "palm_metacarpal_truss",
+      "frame": "wrist_flexion",
+      "system": "palm",
+      "kind": "frame",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "solid_count": 1
+    },
+    {
+      "step": "models/assemblies/STEP/anthropomorphic_hand/palm_little_comb_rom_review.step",
+      "sha256": "0cbb95eaad8463d34ce50a9eae879d01cb4c02adb56ae2531b01c2278477f015",
+      "name": "fifth_metacarpal_cupping_truss",
+      "frame": "palm_cup",
+      "system": "palm",
+      "kind": "frame",
+      "neutral_placement": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "solid_count": 1
+    }
+  ],
+  "bearing_datums": {
+    "finger_positive_MCP": {
+      "centers": [
+        [
+          -36,
+          101,
+          12.5
+        ],
+        [
+          -12,
+          105,
+          12.5
+        ],
+        [
+          12,
+          100,
+          12.5
+        ],
+        [
+          36,
+          89,
+          12.5
+        ]
+      ],
+      "thickness": 2,
+      "bore_radius": 1.83,
+      "complete_annulus_outer_radius": 2.3,
+      "outer_rims": "Original rear rib landings remain beyondR2.3, sculpted around225 tendon/comb envelopes."
+    },
+    "finger_negative_MCP": {
+      "z": -16.5,
+      "thickness": 2,
+      "bore_radius": 2.53,
+      "original_outer_radius": 3.75,
+      "little_flange_pocket": "R2.8 belowZ\u221217.5 only; complete sleeve band preserved."
+    },
+    "CMC_positive": {
+      "center": [
+        -35,
+        36,
+        9.3
+      ],
+      "thickness": 1.4,
+      "bore_radius": 1.58,
+      "outer_radius": 1.85
+    },
+    "CMC_negative": {
+      "center": [
+        -35,
+        36,
+        -18
+      ],
+      "thickness": 2,
+      "bore_radius": 2.53,
+      "outer_radius": 4.15
+    }
+  },
+  "unchanged_datums": [
+    "Both palm-to-wrist feet and R1.65 bores",
+    "Three removable palm-pad mounts and R0.8 bores",
+    "Cup axis and both fixed/moving bearing pairs",
+    "CMC dorsal parent comb patch",
+    "Dorsal MCP clamp envelopes"
+  ]
+}

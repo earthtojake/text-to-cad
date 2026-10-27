@@ -1,0 +1,64 @@
+{
+  "step_sha256": "48d7b41c22d460404392a651c5ef0cf07b188c1bf11d9507de0ae94f00cd369c",
+  "complete": true,
+  "rows": [
+    {
+      "loader": "read_step",
+      "volume": 516.8756258642334,
+      "bounds": {
+        "min": [
+          -9.000000100000072,
+          -3.5500000999999997,
+          -6.870000100000002
+        ],
+        "max": [
+          9.000000100000035,
+          48.5500001,
+          4.5250001000001125
+        ]
+      },
+      "solids": 1,
+      "faces": 105,
+      "edges": 245,
+      "topology_valid": true,
+      "contains_positive_rail": true,
+      "section_common_solids": 0,
+      "strict": {
+        "solidCount": 1,
+        "volumes": [
+          516.8756258642334
+        ],
+        "reasons": []
+      }
+    },
+    {
+      "loader": "native_STEP_import",
+      "volume": 516.8775064579492,
+      "bounds": {
+        "min": [
+          -9.000000100000118,
+          -3.5500001000000005,
+          -6.870000099999952
+        ],
+        "max": [
+          9.000000100000175,
+          48.5500001,
+          4.525000100000094
+        ]
+      },
+      "solids": 1,
+      "faces": 105,
+      "edges": 245,
+      "topology_valid": true,
+      "contains_positive_rail": true,
+      "section_common_solids": 1,
+      "strict": {
+        "solidCount": 1,
+        "volumes": [
+          516.8775064579492
+        ],
+        "reasons": []
+      }
+    }
+  ]
+}

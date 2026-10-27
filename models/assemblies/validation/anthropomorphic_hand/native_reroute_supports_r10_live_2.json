@@ -1,0 +1,43 @@
+{
+  "body_count": 3039,
+  "processed": 3039,
+  "exact_booleans": 0,
+  "native_distance_separations": 0,
+  "congruent_proof_reuse": 52,
+  "collisions": [
+    {
+      "a": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+      "b": "thumb_radial_shared_guide_bank_structural",
+      "intersection_mm3": 0.01171447026256043
+    },
+    {
+      "a": "thumb_cmc_fixed_flex_-1_host_cap",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.008931207795219893
+    },
+    {
+      "a": "thumb_cmc_parent_inlet_comb_structural_jaw",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.09689244216601939
+    },
+    {
+      "a": "thumb_cmc_fixed_flex_shared_structural",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.6971281815511413
+    },
+    {
+      "a": "thumb_cmc_fixed_flex_-1_host_M0p6_screw",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.004283416216401597
+    }
+  ],
+  "complete": true,
+  "pass": false,
+  "pair_scope": {
+    "any_endpoint_in": [
+      "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "thumb_radial_shared_guide_bank_structural"
+    ],
+    "unchanged_pair_gate": "separate frozen baseline certificate required"
+  }
+}

@@ -1,0 +1,346 @@
+{
+  "scope": "all48 complete tendons: capstan termination through wrist/hand to driven termination",
+  "tendon_table": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "length_mm": 471.3647338756357,
+      "minimum_radius_mm": 6.946683349019714,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "length_mm": 456.91223294006977,
+      "minimum_radius_mm": 6.946683349019714,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "length_mm": 434.58185449479834,
+      "minimum_radius_mm": 3.9243494194630753,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "length_mm": 430.6854568710414,
+      "minimum_radius_mm": 3.8639997773139325,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "length_mm": 432.09497422513334,
+      "minimum_radius_mm": 3.6500000001204302,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.6651134375294657e-15
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "length_mm": 429.61681750987486,
+      "minimum_radius_mm": 3.6474138542493573,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.347931402919179e-15
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "length_mm": 392.65583713572653,
+      "minimum_radius_mm": 3.650000000064096,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "length_mm": 389.9094711661172,
+      "minimum_radius_mm": 3.6499999999998716,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.887762621811037e-15
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "length_mm": 370.9706299730325,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "length_mm": 370.19618625500084,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "length_mm": 310.05002883209744,
+      "minimum_radius_mm": 5.499999999999998,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "length_mm": 307.9024811390777,
+      "minimum_radius_mm": 5.499999999999997,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "length_mm": 522.670977719255,
+      "minimum_radius_mm": 4.518516674781746,
+      "maximum_join_gap_mm": 2.864289338439558e-14,
+      "maximum_tangent_error": 2.9499359079002526e-15
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "length_mm": 518.0436375240998,
+      "minimum_radius_mm": 4.518516674781824,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 2.9499359079002526e-15
+    },
+    {
+      "tendon": "index_pip_positive",
+      "length_mm": 523.516309353211,
+      "minimum_radius_mm": 3.6458983003101464,
+      "maximum_join_gap_mm": 1.5888218580782548e-14,
+      "maximum_tangent_error": 2.6656914905538386e-15
+    },
+    {
+      "tendon": "index_pip_negative",
+      "length_mm": 519.6733686851247,
+      "minimum_radius_mm": 3.6458983002344842,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "index_dip_positive",
+      "length_mm": 510.32276826695335,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.897149936107019e-15
+    },
+    {
+      "tendon": "index_dip_negative",
+      "length_mm": 508.14638190653767,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 1.897149936107019e-15
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "length_mm": 397.2288322401691,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "length_mm": 388.77927009783934,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "length_mm": 352.04983666031393,
+      "minimum_radius_mm": 4.518516674781811,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.1111946021038246e-15
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "length_mm": 354.8247708296884,
+      "minimum_radius_mm": 4.5185166747818215,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "length_mm": 356.6053905520925,
+      "minimum_radius_mm": 3.6458983003100056,
+      "maximum_join_gap_mm": 1.4458497151625688e-14,
+      "maximum_tangent_error": 2.6021081501853116e-15
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "length_mm": 361.25528055931505,
+      "minimum_radius_mm": 3.6458983002345513,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "length_mm": 602.3245970846334,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "length_mm": 598.4548242276657,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "length_mm": 480.0239584361594,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "length_mm": 465.94742581417887,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "length_mm": 432.57119308309615,
+      "minimum_radius_mm": 4.5185166747818055,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "length_mm": 431.7609193667243,
+      "minimum_radius_mm": 4.51851667478182,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "length_mm": 432.0988378381624,
+      "minimum_radius_mm": 3.6458983002867593,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "length_mm": 433.74180171928407,
+      "minimum_radius_mm": 3.6458983002930627,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "length_mm": 418.9735310865147,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.517719948885615e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "length_mm": 423.4166471880848,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 4.1111946021038246e-15
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "length_mm": 313.81749014813414,
+      "minimum_radius_mm": 3.8255801886839484,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "length_mm": 300.33823561698637,
+      "minimum_radius_mm": 3.648006035533232,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.6021081501853116e-15
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "length_mm": 523.5334490986894,
+      "minimum_radius_mm": 3.6499923292338368,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "length_mm": 519.3423073568057,
+      "minimum_radius_mm": 4.510314224540535,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.0411201962889075e-15
+    },
+    {
+      "tendon": "little_pip_positive",
+      "length_mm": 509.4708174113917,
+      "minimum_radius_mm": 3.6458983002110235,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15
+    },
+    {
+      "tendon": "little_pip_negative",
+      "length_mm": 508.2497415263449,
+      "minimum_radius_mm": 3.6458983001812704,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15
+    },
+    {
+      "tendon": "little_dip_positive",
+      "length_mm": 492.1618756914465,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.732067169519928e-15
+    },
+    {
+      "tendon": "little_dip_negative",
+      "length_mm": 493.5856571798846,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.237726045655905e-15
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "length_mm": 346.17350278476454,
+      "minimum_radius_mm": 3.799823841632288,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "length_mm": 334.44330808627933,
+      "minimum_radius_mm": 3.7999562100054347,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "length_mm": 281.8020797109205,
+      "minimum_radius_mm": 3.799889882606279,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "length_mm": 443.98295800608213,
+      "minimum_radius_mm": 3.79996861833533,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "length_mm": 287.59048263316737,
+      "minimum_radius_mm": 3.799734476351213,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "length_mm": 294.11853741768164,
+      "minimum_radius_mm": 3.799846463479884,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15
+    }
+  ],
+  "minimum_checked_gap_lower_bound_mm": 0.024096517191138367,
+  "group_pairs_tested": 731,
+  "conflicts": [],
+  "pass": true,
+  "pose": {}
+}

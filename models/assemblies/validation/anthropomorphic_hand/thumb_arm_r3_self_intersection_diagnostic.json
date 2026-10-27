@@ -1,0 +1,84 @@
+[
+  {
+    "status": "BOPAlgo_CheckStatus.BOPAlgo_SelfIntersect",
+    "faults": [
+      {
+        "side": "GetFaultyShapes1",
+        "type": "TopAbs_ShapeEnum.TopAbs_FACE",
+        "bounds": [
+          [
+            -41.95704686316636,
+            33.27326537143871,
+            -9.120307834820853
+          ],
+          [
+            -32.71867816369163,
+            40.943326878078885,
+            -7.660022540574003
+          ]
+        ],
+        "faces": 1,
+        "edges": 7
+      },
+      {
+        "side": "GetFaultyShapes1",
+        "type": "TopAbs_ShapeEnum.TopAbs_FACE",
+        "bounds": [
+          [
+            -41.95704686316636,
+            40.463326678078424,
+            -14.90000010000002
+          ],
+          [
+            -41.47704666316566,
+            40.943326878078885,
+            -9.099999899999993
+          ]
+        ],
+        "faces": 1,
+        "edges": 3
+      }
+    ]
+  },
+  {
+    "status": "BOPAlgo_CheckStatus.BOPAlgo_SelfIntersect",
+    "faults": [
+      {
+        "side": "GetFaultyShapes1",
+        "type": "TopAbs_ShapeEnum.TopAbs_FACE",
+        "bounds": [
+          [
+            -41.95704686316636,
+            40.463326678078424,
+            -14.90000010000002
+          ],
+          [
+            -41.47704666316566,
+            40.943326878078885,
+            -9.099999899999993
+          ]
+        ],
+        "faces": 1,
+        "edges": 3
+      },
+      {
+        "side": "GetFaultyShapes1",
+        "type": "TopAbs_ShapeEnum.TopAbs_FACE",
+        "bounds": [
+          [
+            -41.95704686316636,
+            33.92140006505479,
+            -16.414990428811105
+          ],
+          [
+            -32.00220024799935,
+            40.943326878078885,
+            -14.8999999
+          ]
+        ],
+        "faces": 1,
+        "edges": 11
+      }
+    ]
+  }
+]

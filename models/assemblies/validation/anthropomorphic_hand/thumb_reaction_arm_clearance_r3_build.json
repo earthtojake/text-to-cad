@@ -1,0 +1,80 @@
+{
+  "scope": "Piecewise reaction arm routed outside both CMC drums and all tendon poses.",
+  "paths": [
+    [
+      [
+        -0.62,
+        -3.275,
+        -7.9
+      ],
+      [
+        1.8,
+        -3.275,
+        -7.9
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -7.9
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -9.1
+      ]
+    ],
+    [
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -9.1
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -11.0333333333333
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -12.9666666666667
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -14.9
+      ]
+    ],
+    [
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -14.9
+      ],
+      [
+        -1.4239150568688284,
+        8.075423574700105,
+        -16.1
+      ],
+      [
+        1.8,
+        -3.5,
+        -16.9
+      ],
+      [
+        0.4,
+        -3.5,
+        -15.2
+      ]
+    ]
+  ],
+  "inherited_machining_mm3": 0.004471441145488969,
+  "raw_volume_mm3": 6.8806551062291,
+  "final_volume_mm3": 6.876185386883392,
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_reaction_arm_clearance_r3.py": "222ed69c38e41da91faa2627d4bbd578f8ece9fe2b13bd19cc1bcadc7f52c90b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_negative_jaw_repair_review.step": "0fe5b9cca48ed3c3087e12f943c2ba8a977f76de78fb7053a8e60a2917e95ea2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f"
+  },
+  "pass_": true
+}

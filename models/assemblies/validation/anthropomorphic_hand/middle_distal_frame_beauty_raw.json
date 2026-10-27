@@ -1,0 +1,12 @@
+{
+  "name": "middle_distal_frame",
+  "added_mm3": 0.0,
+  "removed_mm3": 0.0,
+  "old_volume_mm3": 279.5204916870034,
+  "new_volume_mm3": 279.5204916870034,
+  "volume_conservation_error_mm3": 0.0,
+  "valid": true,
+  "solids": 1,
+  "subset_pass": true,
+  "proof": "Identical evaluated source AST for distal=True, then raw OCCT self-difference."
+}

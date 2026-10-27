@@ -1,0 +1,35 @@
+{
+  "pass": false,
+  "step_sha256": "910c5d595a3d18fdaef1c599e9face2918ddbf600faedfa07bef544962be9864",
+  "source_sha256": "1def44b83fc3fe201f71d825fb28b88c54d8f078065e4114443ca010a69cdb4c",
+  "bodies": 56,
+  "pose_count": 1,
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "packet_source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff",
+      "collisions": [
+        {
+          "body": "little_cup_fixed_bank_row_01_structural_1",
+          "route": "little_mcp_abduction_positive",
+          "group": "little_mcp_abduction_positive_wrist_guide",
+          "clearance_mm": -0.2088664331957242
+        },
+        {
+          "body": "little_cup_child_bank_structural_2",
+          "route": "little_pip_negative",
+          "group": "little_pip_negative_cup_reaction",
+          "clearance_mm": -0.07352903090830343
+        },
+        {
+          "body": "little_cup_child_bank_structural_2",
+          "route": "little_dip_negative",
+          "group": "little_dip_negative_cup_reaction",
+          "clearance_mm": -0.10285174090561972
+        }
+      ],
+      "exact_distances": 245
+    }
+  ]
+}

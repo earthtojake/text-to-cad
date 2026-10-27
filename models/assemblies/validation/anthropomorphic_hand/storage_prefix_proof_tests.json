@@ -1,0 +1,6 @@
+{
+  "valid_cases": 240,
+  "adversarial_cases_rejected": 4,
+  "maximum_control_point_residual_mm": 2.6645352591003757e-14,
+  "pass_": true
+}

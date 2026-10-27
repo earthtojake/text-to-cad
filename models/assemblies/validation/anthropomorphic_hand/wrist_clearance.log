@@ -1,0 +1,32 @@
+Built wrist frames
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/three_d.py", line 367, in fillet
+    new_shape = self._make_3d_result(fillet_builder.Shape())
+                                     ~~~~~~~~~~~~~~~~~~~~^^
+OCP.OCP.Standard.Standard_Failure: BRep_API: command not done
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/palm_frame.py", line 34, in _blend_junctions
+    try:shape=shape.fillet(.03,edges)
+              ~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/three_d.py", line 371, in fillet
+    raise ValueError(
+    ...<2 lines>...
+    ) from err
+ValueError: Failed creating a fillet with radius of 0.03, try a smaller value or use max_fillet() to find the largest valid fillet radius
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/wrist_clearance.py", line 16, in <module>
+    palm=make_palm_frame();print('Built palm',flush=True)
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/palm_frame.py", line 141, in make_palm_frame
+    return _finish(p,label,bores,nodes)
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/palm_frame.py", line 70, in _finish
+    s=_blend_junctions(s,blend_nodes,label)
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/palm_frame.py", line 48, in _blend_junctions
+    if pending:raise ValueError(f'{label}: blend junction {index} at {(x,y,z)} has {len(pending)} unresolved contours: {[(round(e.length,3),str(e.position_at(.5))) for e in pending]}')
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: palm_metacarpal_truss: blend junction 0 at (-24, 14, -10.2) has 5 unresolved contours: [(3.059, 'Vector: (X=-20.8417, Y=14.9567, Z=-9.99137)'), (1.689, 'Vector: (X=-22.5093, Y=14.7073, Z=-12.5335)'), (0.94, 'Vector: (X=-23.2516, Y=15.4705, Z=-11.7759)'), (0.873, 'Vector: (X=-22.1327, Y=16.6981, Z=-8.91537)'), (0.696, 'Vector: (X=-21.5441, Y=16.1899, Z=-8.93895)')]

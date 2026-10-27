@@ -1,0 +1,14 @@
+{
+  "finger": "index",
+  "scope": "routes_and_bodies",
+  "rows": [
+    {
+      "pose": {},
+      "exact_distances_tested": 50,
+      "collisions": [],
+      "label": "neutral",
+      "body_interferences": []
+    }
+  ],
+  "pass": true
+}

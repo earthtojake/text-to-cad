@@ -1,0 +1,433 @@
+{
+  "scope": "all_hardware",
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "exact_distances_tested": 117,
+      "collisions": [
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "phalanx_1",
+          "centerline_distance_mm": -1e-06,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "label": "middle_mcp_abduction_-5",
+      "pose": {
+        "middle_mcp_abduction": -5.0
+      },
+      "exact_distances_tested": 95,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_abduction_5",
+      "pose": {
+        "middle_mcp_abduction": 5.0
+      },
+      "exact_distances_tested": 95,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_abduction_15",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "exact_distances_tested": 117,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_-15",
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "exact_distances_tested": 94,
+      "collisions": [
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "phalanx_1",
+          "centerline_distance_mm": -1e-06,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.450001
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.2715624565009252,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.1784375434990748
+        }
+      ]
+    },
+    {
+      "label": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      },
+      "exact_distances_tested": 93,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      },
+      "exact_distances_tested": 89,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_15",
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "exact_distances_tested": 87,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      },
+      "exact_distances_tested": 83,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_35",
+      "pose": {
+        "middle_mcp_flexion": 35.0
+      },
+      "exact_distances_tested": 83,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_45",
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "exact_distances_tested": 82,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_55",
+      "pose": {
+        "middle_mcp_flexion": 55.0
+      },
+      "exact_distances_tested": 87,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      },
+      "exact_distances_tested": 83,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_75",
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "exact_distances_tested": 85,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_mcp_flexion_90",
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "exact_distances_tested": 87,
+      "collisions": [
+        {
+          "tendon": "middle_pip_positive",
+          "group": "middle_pip_positive_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.323945582289509,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.12605441771049103
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.3239455818993956,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.12605441810060442
+        }
+      ]
+    },
+    {
+      "label": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_10",
+      "pose": {
+        "middle_pip": 10.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_20",
+      "pose": {
+        "middle_pip": 20.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_30",
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "exact_distances_tested": 85,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      },
+      "exact_distances_tested": 84,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_50",
+      "pose": {
+        "middle_pip": 50.0
+      },
+      "exact_distances_tested": 84,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "exact_distances_tested": 85,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_70",
+      "pose": {
+        "middle_pip": 70.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_90",
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_100",
+      "pose": {
+        "middle_pip": 100.0
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "middle_pip_110",
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "exact_distances_tested": 87,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_10",
+      "pose": {
+        "middle_dip": 10.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_30",
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_50",
+      "pose": {
+        "middle_dip": 50.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_60",
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_70",
+      "pose": {
+        "middle_dip": 70.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "exact_distances_tested": 88,
+      "collisions": []
+    },
+    {
+      "label": "full_fist",
+      "pose": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "exact_distances_tested": 85,
+      "collisions": [
+        {
+          "tendon": "middle_pip_positive",
+          "group": "middle_pip_positive_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.323945582289509,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.12605441771049103
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.3239455818993956,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.12605441810060442
+        }
+      ]
+    },
+    {
+      "label": "precision_pinch",
+      "pose": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 40,
+        "middle_pip": 60,
+        "middle_dip": 30
+      },
+      "exact_distances_tested": 86,
+      "collisions": []
+    },
+    {
+      "label": "spread_flex",
+      "pose": {
+        "middle_mcp_abduction": 15,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "exact_distances_tested": 104,
+      "collisions": [
+        {
+          "tendon": "middle_pip_positive",
+          "group": "middle_pip_positive_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.34982950510662253,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.10017049489337748
+        },
+        {
+          "tendon": "middle_pip_negative",
+          "group": "middle_pip_negative_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 0.24896388955577806,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.20103611044422195
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "group": "middle_dip_positive_mcp_reaction",
+          "solid": "phalanx_1",
+          "centerline_distance_mm": -1e-06,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.450001
+        },
+        {
+          "tendon": "middle_dip_positive",
+          "group": "middle_dip_positive_mcp_reaction",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": -9.999999995559107e-07,
+          "outer_radius_mm": 0.45,
+          "clearance_mm": -0.45000099999999954
+        }
+      ]
+    }
+  ]
+}

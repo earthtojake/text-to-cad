@@ -1,0 +1,55 @@
+{
+  "scoped_pass": true,
+  "body_count": 24,
+  "step_sha256": "fedf2fe2aa14ffb578fe1eb4d79881aef9d7067bc9a118a6333448eed1f59c6b",
+  "strict_every_placement_pass": true,
+  "actual_body_rows": [
+    {
+      "pose": "neutral",
+      "pass": true,
+      "original_report": "thumb_cmc_mounts_thumb_bodies_report.json",
+      "changed_body_report": "thumb_cmc_changed_strut_body_report.json",
+      "method": "23 unchanged bodies retain checks; revised structural jaw rechecked versus every other mount, thumb hardware, and routes",
+      "palm_host_certificate": "pending rebuild"
+    },
+    {
+      "pose": "final precision pinch",
+      "pass": true,
+      "original_report": "thumb_cmc_mounts_pinch_thumb_bodies_report.json",
+      "changed_body_report": "thumb_cmc_changed_strut_pinch_report.json",
+      "method": "23 unchanged bodies retain checks; revised structural jaw rechecked versus every other mount, thumb hardware, and routes",
+      "palm_host_certificate": "pending rebuild"
+    }
+  ],
+  "tendon_mount_gate": {
+    "pass": true,
+    "poses": 25,
+    "all_mounts_original_distance_checks": 2407,
+    "revised_body_distance_checks": 329,
+    "reports": [
+      "thumb_cmc_mounts_routes_report.json",
+      "thumb_cmc_changed_strut_routes_report.json"
+    ]
+  },
+  "parent_attachment": {
+    "frame": "CMC parent",
+    "point": [
+      2.98,
+      -8,
+      -17.98
+    ],
+    "axis": [
+      0,
+      0,
+      1
+    ],
+    "footprint_mm": [
+      4,
+      1
+    ]
+  },
+  "palm_host_certificate": "pending palm rebuild",
+  "articulated_mount_body_sweep_certificate": "pending final assembly",
+  "animation_certificate": false,
+  "full_assembly_certificate": false
+}

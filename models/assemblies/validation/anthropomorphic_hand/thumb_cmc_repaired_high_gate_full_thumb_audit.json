@@ -1,0 +1,100 @@
+{
+  "scope": [
+    "frame_0",
+    "shaft_0",
+    "carrier_0",
+    "frame_1",
+    "shaft_1",
+    "carrier_1",
+    "frame_2",
+    "shaft_2",
+    "thumb_cmc_abduction_-1_pulley",
+    "thumb_cmc_abduction_1_pulley",
+    "thumb_cmc_flexion_-1_pulley",
+    "thumb_cmc_flexion_1_pulley",
+    "thumb_mcp_abduction_-1_pulley",
+    "thumb_mcp_abduction_1_pulley",
+    "thumb_mcp_flexion_-1_pulley",
+    "thumb_mcp_flexion_1_pulley",
+    "thumb_ip_-1_pulley",
+    "thumb_ip_1_pulley"
+  ],
+  "rows": [
+    {
+      "label": "cmc_65.0_-25.0",
+      "pose": {
+        "thumb_cmc_flexion": 65.0,
+        "thumb_cmc_abduction": -25.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 7.944109290391274e-15,
+      "maximum_tangent_error": 4.809489474369235e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.019997364505322412,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 174,
+      "pass": true
+    },
+    {
+      "label": "cmc_60.0_0.0",
+      "pose": {
+        "thumb_cmc_flexion": 60.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 4.988751057464144e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.019874221525127855,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 188,
+      "pass": true
+    },
+    {
+      "label": "cmc_55.0_0.0",
+      "pose": {
+        "thumb_cmc_flexion": 55.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "minimum_radius_mm": 3.499999999999999,
+      "maximum_join_gap_mm": 7.32410687763558e-15,
+      "maximum_tangent_error": 4.813332199111203e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.019999947172597787,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 191,
+      "pass": true
+    },
+    {
+      "label": "cmc_50.0_0.0",
+      "pose": {
+        "thumb_cmc_flexion": 50.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 7.32410687763558e-15,
+      "maximum_tangent_error": 4.751414884126792e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.02500372132231443,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 192,
+      "pass": true
+    },
+    {
+      "label": "cmc_45.0_0.0",
+      "pose": {
+        "thumb_cmc_flexion": 45.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "minimum_radius_mm": 3.499999999999999,
+      "maximum_join_gap_mm": 2.6645352591003757e-15,
+      "maximum_tangent_error": 4.69596533805652e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.02003341221319377,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 189,
+      "pass": true
+    }
+  ],
+  "pass": true
+}
