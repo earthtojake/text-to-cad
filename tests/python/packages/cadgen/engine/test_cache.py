@@ -512,7 +512,7 @@ class CacheTest(unittest.TestCase):
                "every document out of memory and held on disk alone")
         self.assertTrue(all(self.file(ident).is_file() for ident in idents), "nothing evicts a document")
         cache = self.ask({"op": "status"})["cache"]
-        self.assertEqual(sorted(cache), ["bytes", "documents", "enabled", "failures", "idleSeconds", "moved", "root",
+        self.assertEqual(sorted(cache), ["bytes", "documents", "enabled", "failures", "idleSeconds", "root",
                                          "written"], "no cap, no evictions")
         self.assertEqual((cache["documents"], cache["root"]), (3, str(self.cache)))
         total = sum(self.file(ident).stat().st_size for ident in idents)

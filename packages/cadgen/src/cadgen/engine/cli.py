@@ -570,8 +570,10 @@ def summary_text(summary: dict[str, Any]) -> str:
                 continue
             weight = f"{_number(row['mass'])} kg" if row["mass"] is not None else "no density"
             lines.append(f"  {row['name']}: {weight}, {', '.join(row['parts'])}")
-        if summary["unweighed"]:
-            lines.append(f"  no material: {', '.join(summary['unweighed'])}")
+        assigned = {part for row in summary["materials"] for part in row["parts"]}
+        missing = [part for part in summary["unweighed"] if part not in assigned]
+        if missing:
+            lines.append(f"  no material: {', '.join(missing)}")
     else:
         lines.append("materials   none set")
 

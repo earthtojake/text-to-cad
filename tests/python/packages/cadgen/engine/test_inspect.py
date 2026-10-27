@@ -205,6 +205,7 @@ class SummaryTextTest(unittest.TestCase):
 
         from cadgen.engine import document
         from cadgen.engine.api import _summary
+        from cadgen.engine.cli import summary_text
 
         material = FinishedMaterial(RangeMaterial(name="Imported paint", density=None),
                                     pbr=PbrProperties.create("Paint", color="#ff0000"))
@@ -219,6 +220,8 @@ class SummaryTextTest(unittest.TestCase):
                 if measured:
                     row["mass"] = None
                     self.assertIsNone(summary["mass"])
+                    self.assertIn("Imported paint: no density, part", summary_text(summary))
+                self.assertNotIn("no material:", summary_text(summary))
                 self.assertEqual(summary["materials"], [row])
 
     def test_names_a_file_carries_are_printed_without_their_control_characters(self) -> None:
