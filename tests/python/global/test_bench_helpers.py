@@ -95,7 +95,7 @@ class WorkCopyTest(unittest.TestCase):
             corpus_bench.copy_project(source, work)
             self.assertEqual((work / "src/part.py").read_text(encoding="utf-8"), SCRIPT)
             self.assertEqual((work / "STEP/imported/input.step").read_bytes(), b"pinned fixture")
-            self.assertEqual(sorted(str(path.relative_to(work)) for path in work.rglob("*") if path.is_file()),
+            self.assertEqual(sorted(path.relative_to(work).as_posix() for path in work.rglob("*") if path.is_file()),
                              ["STEP/imported/input.step", "src/part.py"])
             with self.assertRaises(FileExistsError):
                 corpus_bench.copy_project(source, work)
