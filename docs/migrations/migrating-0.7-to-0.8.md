@@ -65,8 +65,7 @@ are gone.
 2. **Run cadgen through the `cadgen` command.** 0.8 installs one, `~/.local/bin/cadgen`,
    written by `cadgen doctor` and by the CAD app's server. It runs a registered
    installation, picked by the first of: a version named (`cadgen +0.8.0 ...`), the
-   `CADGEN_VERSION` variable, a `cadgen.toml` in the project or a folder above it
-   (`version = "0.8.0"`), the engine the shell's agent app holds, a running engine, and the
+   `CADGEN_VERSION` variable, the engine the shell's agent app holds, a running engine, and the
    newest installation registered. `cadgen run SCRIPT.py` runs a model script with that
    installation's Python, so the scripts, the commands and the CAD app share one engine:
 
@@ -75,7 +74,7 @@ are gone.
    | `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.21 python src/model.py` | `cadgen run src/model.py` |
    | `uvx ... --from cadgen==0.7.21 cadgen <verb>` | `cadgen <verb>` |
    | `uvx ... python -m unittest ...` | `cadgen run -m unittest ...` |
-   | a version kept in step with the plugin by hand | nothing (the plugin's), or a `cadgen.toml` with `version = "0.8.0"` |
+   | a version kept in step with the plugin by hand | nothing (the plugin's), or `cadgen +0.8.0 ...` for an explicit version |
 
    If `cadgen` is not on your PATH, or says 0.8.0 is not installed, run
    `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen doctor` once.

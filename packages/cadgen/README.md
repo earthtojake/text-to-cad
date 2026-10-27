@@ -397,9 +397,8 @@ registered, cache folders no record names; none written in the last seven days);
 `cadgen mcp` the stateless proxy an agent host starts; and `cadgen telemetry` the person's answer. A
 model builds by running its script: `python model.py`, or `cadgen +<version> run model.py` through
 the `cadgen` command, which picks the installation by the first that names one, in this order
-(`_internal/proxy.py`): `+<version>`, `CADGEN_VERSION`, a project's `cadgen.toml` (`version =
-"<version>"`), the engine held by this shell's host, any running engine (the newest version
-first), and the newest installation registered.
+(`_internal/proxy.py`): `+<version>`, `CADGEN_VERSION`, the engine held by this shell's host,
+any running engine (the newest version first), and the newest installation registered.
 
 Coming from 0.7: cadgen 0.7.x kept a cache store, which can hold gigabytes, at
 `~/.cache/cadgen` (macOS and Linux; `$XDG_CACHE_HOME/cadgen` when that is set),

@@ -323,8 +323,8 @@ def forget(version: str, folder=None) -> None:
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cadgen command: runs the installation of cadgen that `+<version>`, CADGEN_VERSION, a
-# cadgen.toml or a running engine names (cadgen._internal.proxy), through the one registered last.
+# The cadgen command: runs the installation of cadgen that `+<version>`, CADGEN_VERSION or
+# a running engine names (cadgen._internal.proxy), through the one registered last.
 # Every cadgen writes this same file as it registers (cadgen doctor, the CAD app's server).
 if [ -n "$CADGEN_STATE_DIR" ]; then state=$CADGEN_STATE_DIR
 elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cadgen"
@@ -345,8 +345,8 @@ exit 1
 
 _CMD = """@echo off\r
 rem {mark}{revision}\r
-rem The cadgen command: runs the installation of cadgen that +<version>, CADGEN_VERSION, a\r
-rem cadgen.toml or a running engine names (cadgen._internal.proxy), through the one registered last.\r
+rem The cadgen command: runs the installation of cadgen that +<version>, CADGEN_VERSION or\r
+rem a running engine names (cadgen._internal.proxy), through the one registered last.\r
 setlocal EnableDelayedExpansion\r
 if defined CADGEN_STATE_DIR (set "state=!CADGEN_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cadgen-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cadgen-state")\r
 rem A record's python and cadgen lines are: space "KEY": "PATH", -- split at each quote, PATH is the\r

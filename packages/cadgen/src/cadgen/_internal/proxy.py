@@ -5,19 +5,17 @@ The proxy's ``sh`` runs this module with the interpreter registered last
 
 a. ``+<version>`` as the first argument (``cadgen +0.8.0 export ...``: what the skills run);
 b. ``CADGEN_VERSION``;
-c. ``version = "<version>"`` in the first ``cadgen.toml``, from the current folder up, that says one;
-d. the installation whose engine runs and is held by a CAD app server of the host this shell is
+c. the installation whose engine runs and is held by a CAD app server of the host this shell is
    (``engine_host.shell``: its variables; the hold names its host, ``cadgen.mcp.host.family``);
-e. any installation whose engine runs, the newest version first;
-f. the newest installation registered.
+d. any installation whose engine runs, the newest version first;
+e. the newest installation registered.
 
-A version named (a-c) that is not registered, or whose interpreter is gone, fails in one line that
+A version named (a-b) that is not registered, or whose interpreter is gone, fails in one line that
 names the command that installs it. So only a version (``installations.VERSION``: a digit, then
-letters, digits and ``.+_-``) is named: anything else -- a ``cadgen.toml`` of a downloaded project
-whose ``version`` carries spaces, shell or uv options -- is refused without building a command of
-it. A ``cadgen.toml`` another user owns, or that everyone may write (one in a shared folder above
-this one), names nothing: it is passed over. The engines are found by their doors in the engine folder,
-each asked its ``status`` at once and waited for ``ASK_SECONDS`` at most: only (d) and (e) ask.
+letters, digits and ``.+_-``) is named: anything else -- a value carrying spaces, shell or uv
+options -- is refused without building a command of it. The engines are found by their doors in
+the engine folder, each asked its ``status`` at once and waited for ``ASK_SECONDS`` at most:
+only (c) and (d) ask.
 
 Then ``cadgen [+V] run ARGS`` runs that installation's ``python ARGS`` (a model script, ``-m``,
 ``-c``), and anything else its ``cadgen`` console script with the arguments: by ``exec``, so the
@@ -35,7 +33,6 @@ import os
 import sys
 
 ASK_SECONDS = 0.5
-CONFIG = "cadgen.toml"
 NOT_INSTALLED = ("cadgen {version} is not installed: run `uvx --no-config --managed-python --python 3.13 "
                  "--from cadgen=={version} cadgen doctor` once, outside any sandbox or with its permission")
 # The ``cadgen`` command's own words (``installations._SH``) when no installation is registered.
@@ -58,33 +55,14 @@ def version_key(version: str) -> tuple:
     return (ranked is not None, ranked or ())
 
 
-def named(args: list[str], environ, cwd: str | None) -> tuple[str | None, list[str]]:
-    """The version the command names (a-c), and the arguments left to run. ``Refused`` for one
-    that is no version: never echoed into the command the refusal names. ``cwd`` None: a shell
-    whose folder was removed, where no ``cadgen.toml`` is looked for."""
+def named(args: list[str], environ) -> tuple[str | None, list[str]]:
+    """The version the command names (a-b), and the arguments left to run. ``Refused`` for one
+    that is no version: never echoed into the command the refusal names."""
     if args and args[0].startswith("+") and len(args[0]) > 1:
         return _version(args[0][1:], "its first argument"), args[1:]
     if environ.get("CADGEN_VERSION"):
         return _version(environ["CADGEN_VERSION"], "CADGEN_VERSION"), args
-    if cwd is None:
-        return None, args
-    folder = os.path.abspath(cwd)
-    while True:
-        config = os.path.join(folder, CONFIG)
-        if os.path.isfile(config) and _users_own(config):
-            import tomllib
-
-            try:
-                with open(config, "rb") as handle:
-                    version = tomllib.load(handle).get("version")
-            except (OSError, ValueError, RecursionError) as error:
-                raise Refused(f"cadgen: {config}: {error}") from None
-            if isinstance(version, str) and version:
-                return _version(version, config), args
-        parent = os.path.dirname(folder)
-        if parent == folder:
-            return None, args
-        folder = parent
+    return None, args
 
 
 def _version(version: str, source: str) -> str:
@@ -96,25 +74,12 @@ def _version(version: str, source: str) -> str:
     return version
 
 
-def _users_own(config: str) -> bool:
-    """Whether ``config`` is this user's: on POSIX a file of this user's that not everyone may
-    write. A ``cadgen.toml`` in a shared folder above the current one (``/tmp``, say) is another
-    user's to plant. Windows: any."""
-    if os.name == "nt":
-        return True
-    try:
-        found = os.stat(config)
-    except OSError:
-        return False
-    return found.st_uid == os.getuid() and not found.st_mode & 0o002
-
-
 def _same(one: str, other: str) -> bool:
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
 
 
 def choose(version: str | None, records: list[dict], engines, host: str | None) -> dict:
-    """The record to run (a-f); ``engines()`` the running engines' statuses, asked only for (d)-(e)."""
+    """The record to run (a-e); ``engines()`` the running engines' statuses, asked only for (c)-(d)."""
     from cadgen._internal.installations import alive
 
     if version is not None:
@@ -192,11 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         from cadgen._internal.installations import records
         from cadgen._internal.engine_host import shell
 
-        try:
-            cwd: str | None = os.getcwd()
-        except OSError:  # its folder removed under the shell (a pruned worktree)
-            cwd = None
-        version, args = named(args, os.environ, cwd)
+        version, args = named(args, os.environ)
         record = choose(version, records(), engines, shell())
     except Refused as refusal:
         print(refusal, file=sys.stderr)

