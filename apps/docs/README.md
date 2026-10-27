@@ -167,9 +167,6 @@ with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 
 ## Social previews
 
-Regenerate with `node scripts/brand/export-social-preview.mjs` from the repo root
-(`--still` for PNG only); see [the authoring recipe](../../scripts/brand/README.md#social-preview).
-
 `public/social-preview-products.png` is the static share image, paired with
 `public/social-preview-products.mp4`: a 12-second, 1200×630 recording of the
 animated TEXTTOCAD SVG and the planetary GLB's existing `meshCycle` clip
