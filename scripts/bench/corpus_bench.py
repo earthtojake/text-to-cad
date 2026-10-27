@@ -11,47 +11,16 @@ from one place; ``compare.py`` sets its rows beside the old engine's recorded nu
     .venv/bin/python scripts/bench/corpus_bench.py                       # every model in corpus.json
     .venv/bin/python scripts/bench/corpus_bench.py --model l_bracket     # one (repeat for more)
 
-A model (``corpus.json``, beside this script) is a project folder (``root``, relative to the
-repository; ``../name`` is a checkout kept beside it), the folder its builds run from (``cwd``,
-relative to the project), the folders put on ``PYTHONPATH`` beside cadgen's (``pythonpath``),
-its ``targets`` (``script.py``, as ``python
-script.py`` builds it, or ``script.py::model`` for one model of a script), its document
-(``xbf``: where the batch saves the model its stem names, whose document the serve and
-snapshot steps read), one ``edit`` (``{file, from, to}``: ``from`` occurs exactly once in ``file``), the
-inputs a build reads that are never committed (``needs``) and a ``note``. Each is copied to
-``<out>/work/<name>`` without its outputs (``XBF/``, ``DXF/``; an APFS clone on macOS), so the
-checkout is never written, and the copy's model (the function its ``xbf`` stem names) declares
-that document, ``@xbf(out=...)`` above its ``@model`` (``with_xbf``), so each build saves it and a
-restart takes it, as the old engine reloaded its store. It is built on a daemon of its own
-(``CADGEN_ENGINE_DIR``, a folder of ``--engine-dir`` per model, emptied first; telemetry off) in
-these steps:
+Each configured Python script runs its own explicit calls, unchanged, in a fresh client
+process. A report recorder measures those calls without introducing any. The configured
+``document`` selects an actual report by script and function, never by the export filename.
+Builds run cold, unchanged, edited, reverted, after a restart with the engine's document
+cache, and after a restart without that cache. Export, serve, mesh and snapshot are separate
+steps reading the selected document's id. No exported file is used as a build cache.
 
-1. ``cold``: the first build, on a fresh daemon, with no xbf to take;
-2. ``noop``: the same build again, warm;
-3. ``edit``: the configured edit, built;
-4. ``revert``: the file's original bytes, built;
-5. ``restart``: the daemon stopped, the unchanged model built again, its xbf taken;
-6. ``restart-cold``: the daemon stopped and the xbf deleted, the model built again: a restart
-   with nothing to take;
-7. ``serve``, ``mesh-cold``, ``mesh-warm``, ``structure``: the document served
-   (``cadgen serve``), every part meshed on the server's pool (``POST /api/doc/<id>/mesh``),
-   again with its meshes dropped, and the structure a page reads first (``export``, the document
-   saved by ``cadgen export <id>``, only when a build left none);
-8. ``snapshot-first``, ``snapshot``: ``cadgen snapshot --json`` of the document, twice.
-
-A build is what ``python script.py`` asks for (``cadgen.engine.api.build_script``, which
-``Model.build()`` calls too), in a process of its own: its ``wall`` is that process's, from
-interpreter start to exit, as an agent waits for ``python script.py``; ``wall_api`` is the
-daemon's round trip. Its row sums the engine's report over every model the targets built:
-``timings`` (``load``, ``body``, ``names``, ``document``, a second per file kind written; a model
-taken from its file: ``key``, ``read``), memo ``hits``, ``misses`` and ``uncached`` calls,
-``bodies_run``, ``bodies_replayed`` and ``bodies_loaded``, ``cache`` (``file`` or ``memory`` when
-every model was taken whole, else why not: ``cache_reason``), ``parts``, ``files`` (per kind:
-written, kept, bytes, seconds), ``xbf_bytes`` (the configured document's, where a model
-declares it; the ``export`` step's otherwise), the workers'
-resident memory after it (``rss_mb``, from ``cadgen status --json``) and the 1- and 5-minute load
-average before it (``load``, ``load5``). The first row (``"kind": "run"``) says what ran: the
-commit, the cadgen imported, the interpreter, the machine.
+Source copies and each model's engine, state, cache and launcher directories belong to this
+batch alone. Telemetry and browser opening are disabled. See ``README.md`` for the config,
+measurement boundaries, comparison limits and outputs.
 """
 
 from __future__ import annotations
@@ -76,32 +45,44 @@ from typing import Any, Iterable, NamedTuple
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = Path(__file__).with_name("corpus.json")
 BUILDS = ("cold", "noop", "edit", "revert", "restart", "restart-cold")
-NOT_COPIED = frozenset({"XBF", "DXF", "__pycache__", ".DS_Store"})  # a cold build starts with no xbf
-MODEL_KEYS = frozenset({"name", "root", "cwd", "pythonpath", "targets", "xbf", "edit", "needs", "note"})
-REQUIRED = ("name", "root", "targets", "xbf", "edit")
+NOT_COPIED = frozenset({"XBF", "DXF", "__pycache__", ".DS_Store", ".git", ".venv", "venv",
+                        "node_modules", "tmp", ".claude", ".codex", ".pytest_cache", ".pio"})
+MODEL_KEYS = frozenset({"name", "root", "cwd", "pythonpath", "targets", "document", "xbf", "edit",
+                        "needs", "note", "comparison_note"})
+REQUIRED = ("name", "root", "targets", "document", "xbf", "edit")
 EDIT_KEYS = frozenset({"file", "from", "to"})
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
-TARGET = re.compile(r"[^:]+\.py(::[A-Za-z_][A-Za-z0-9_]*)?")
+TARGET = re.compile(r"[^:]+\.py")
+DOCUMENT = re.compile(r"[^:]+\.py::[A-Za-z_][A-Za-z0-9_]*")
 TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
 MARK = "corpus-bench:"  # the line the build process answers on
 
-# A build as ``python script.py`` asks for it (``Model.build()`` for ``script.py::model``), in a process
-# of its own: each target through the daemon, its log on stderr, one answer line on stdout.
+# Record only builds requested by the program's own calls. The normal Python control flow,
+# including __main__ and a failure stopping subsequent calls, stays in charge. No engine verb
+# executes or selects source for the runner. Instrumentation adds no CAD work to the wall.
 DRIVER = """
-import json, sys
+import json, runpy, sys
 from pathlib import Path
 from cadgen.engine import api
 builds = []
-for target in json.loads(sys.argv[1]):
-    script, _sep, function = target.partition("::")
-    try:
-        found = api.build_script(Path(script), [function] if function else None, progress=False,
-                                 log=lambda text: print(text, file=sys.stderr))
-    except Exception as error:
-        builds.append({"target": target, "error": f"{type(error).__name__}: {error}"})
-    else:
-        builds.append({"target": target, "models": found.models, "wall": found.wall, "fresh": found.fresh})
-print(MARK + json.dumps({"builds": builds}), flush=True)
+script = sys.argv[1]
+build_script = api.build_script
+def recorded(*args, **kwargs):
+    found = build_script(*args, **kwargs)
+    builds.append({"target": script, "models": found.models, "wall": found.wall, "fresh": found.fresh})
+    return found
+api.build_script = recorded
+sys.argv = [script]
+sys.path[0] = str(Path(script).parent)
+answer = {"builds": builds}
+try:
+    runpy.run_path(script, run_name="__main__")
+except BaseException as error:
+    if not isinstance(error, SystemExit) or error.code not in (None, 0):
+        answer["error"] = f"{type(error).__name__}: {error}"
+        raise
+finally:
+    print("\\n" + MARK + json.dumps(answer), flush=True)
 """.replace("MARK", repr(MARK))
 PROBE = "import json, sys, cadgen; print(json.dumps({'cadgen': cadgen.__file__, 'python': sys.version.split()[0]}))"
 
@@ -133,14 +114,19 @@ def _shape_problems(model: dict[str, Any], names: set[str]) -> list[str]:
         found.append("`xbf` names an .xbf")
     targets = model.get("targets")
     if "targets" in model and (not isinstance(targets, list) or not targets or not all(
-            isinstance(target, str) and TARGET.fullmatch(target) and _relative(target.partition("::")[0])
+            isinstance(target, str) and TARGET.fullmatch(target) and _relative(target)
             for target in targets)):
-        found.append("`targets` is a list of `script.py` or `script.py::model`")
+        found.append("`targets` is a list of Python scripts (`script.py`)")
+    document = model.get("document")
+    if "document" in model and (not isinstance(document, str) or not DOCUMENT.fullmatch(document)
+                                or not _relative(document.partition("::")[0])):
+        found.append("`document` selects a built model by `script.py::function`, relative to cwd")
     for key in ("pythonpath", "needs"):
         if key in model and (not isinstance(model[key], list) or not all(_relative(path) for path in model[key])):
             found.append(f"`{key}` is a list of relative paths")
-    if "note" in model and not isinstance(model["note"], str):
-        found.append("`note` is text")
+    for key in ("note", "comparison_note"):
+        if key in model and (not isinstance(model[key], str) or not model[key].strip()):
+            found.append(f"`{key}` is non-empty text")
     edit = model.get("edit")
     if "edit" in model:
         if not isinstance(edit, dict) or set(edit) != EDIT_KEYS or not all(
@@ -161,15 +147,13 @@ def _file_problems(model: dict[str, Any], root: Path) -> list[str]:
     if not cwd.is_dir():
         return [f"no folder {model.get('cwd')} in {model['root']}"]
     found = [f"no script {target} in {model['root']}/{model.get('cwd', '.')}" for target in model["targets"]
-             if not (cwd / target.partition("::")[0]).is_file()]
+             if not (cwd / target).is_file()]
     found += [f"no folder {folder} (pythonpath)" for folder in model.get("pythonpath", []) if not (project / folder).is_dir()]
     found += [f"no {need}: an input the build reads that is never committed (the model's README says how to "
               "put it there)" for need in model.get("needs", []) if not (project / need).exists()]
-    script = cwd / declared_script(model)
-    if script.is_file() and with_xbf(script.read_text(encoding="utf-8"), Path(model["xbf"]).stem, "x.xbf") is None:
-        found.append(f"{declared_script(model)} has no `@model` directly above `def {Path(model['xbf']).stem}(` "
-                     "(the model the xbf stem names) or no `from cadgen import` line before it: its work copy "
-                     "cannot declare the xbf")
+    selected = cwd / model["document"].partition("::")[0]
+    if not selected.is_file():
+        found.append(f"no document script {model['document']} in {model['root']}/{model.get('cwd', '.')}")
     edit = model["edit"]
     path = project / edit["file"]
     if not path.is_file():
@@ -179,36 +163,6 @@ def _file_problems(model: dict[str, Any], root: Path) -> list[str]:
         if count != 1:
             found.append(f"the edit's `from` occurs {count} times in {edit['file']}, not once")
     return found
-
-
-XBF_IMPORT = "from cadgen import xbf as _corpus_bench_xbf  # corpus_bench: the work copy declares its xbf"
-
-
-def with_xbf(source: str, function: str, out: str) -> str | None:
-    """A script's ``source`` with the model ``function`` declaring its document,
-    ``@xbf(out=out)`` on the line above its ``@model``, and that decorator imported after the
-    script's first ``from cadgen import`` line; None when the script has no top-level ``@model``
-    directly above ``def function(`` or no single-line ``from cadgen import``."""
-    lines = source.splitlines(keepends=True)
-    at = next((index for index in range(1, len(lines))
-               if lines[index].startswith(f"def {function}(") and lines[index - 1].strip() == "@model"), None)
-    imported = next((index for index, line in enumerate(lines)
-                     if line.startswith("from cadgen import ") and "(" not in line), None)
-    if at is None or imported is None or imported > at:
-        return None
-    lines.insert(at - 1, f"@_corpus_bench_xbf(out={out!r})\n")
-    lines.insert(imported + 1, XBF_IMPORT + "\n")
-    return "".join(lines)
-
-
-def declared_script(model: dict[str, Any]) -> str:
-    """The target script (relative to the model's ``cwd``) whose model the ``xbf`` stem names."""
-    stem = Path(model["xbf"]).stem
-    for target in model["targets"]:
-        script, _sep, function = target.partition("::")
-        if (function or Path(script).stem) == stem:
-            return script
-    return model["targets"][0].partition("::")[0]
 
 
 def problems(config: Any, root: Path | None = None) -> list[str]:
@@ -266,9 +220,9 @@ def build_row(answer: Any, document: str | None = None) -> dict[str, Any]:
                            "misses": 0, "uncached": 0, "bodies_run": 0, "bodies_replayed": 0, "bodies_loaded": 0,
                            "cache": None, "cache_reason": None, "parts": 0, "files": {}, "xbf_bytes": None}
     builds = answer.get("builds") if isinstance(answer, dict) else None
-    if not builds:
+    if not isinstance(builds, list):
         return {**row, "ok": False, "error": "the build process gave no answer"}
-    errors: list[str] = []
+    errors: list[str] = [str(answer["error"])] if answer.get("error") else []
     taken: list[str] = []
     for build in builds:
         if "error" in build:
@@ -309,6 +263,8 @@ def build_row(answer: Any, document: str | None = None) -> dict[str, Any]:
                     row["xbf_bytes"] = int(file.get("bytes") or 0)
     if taken and len(taken) == row["models"]:
         row["cache"] = "+".join(sorted(set(taken)))
+    if not row["models"] and not errors:
+        errors.append("the scripts made no model calls")
     if errors:
         row["ok"] = False
         row["error"] = "\n".join(errors)[-4000:]
@@ -369,7 +325,7 @@ def _body(row: dict[str, Any] | None) -> str:
 
 
 def _taken(row: dict[str, Any] | None) -> str:
-    """After a restart's wall: what it took whole (``file``, the xbf), or that it took nothing."""
+    """After a restart's wall: what it took whole (the engine's document cache), or that it took nothing."""
     if row is None or "cache" not in row:
         return ""
     return f" ({row['cache']})" if row["cache"] else " (not taken)"
@@ -482,22 +438,51 @@ def remove(path: Path) -> None:
 
 
 def copy_project(source: Path, work: Path) -> None:
-    """The project at ``source`` as a fresh folder ``work``, every entry but its outputs
-    (``NOT_COPIED``): on macOS an APFS clone (``cp -c``), so large inputs cost no copy."""
-    remove(work)
-    work.mkdir(parents=True)
-    for entry in sorted(source.iterdir()):
-        if entry.name in NOT_COPIED:
-            continue
-        target = work / entry.name
+    """Copy source and inputs, never local environments or metadata; refuse symlinks so a
+    script, edit or export in the copy cannot write through one into the owner's checkout."""
+    source, work = source.resolve(), work.resolve()
+    if work.is_relative_to(source):
+        raise ValueError("the work copy must be outside its source project")
+
+    def excluded(folder: str, names: list[str]) -> set[str]:
+        for name in names:
+            if name not in NOT_COPIED and (Path(folder) / name).is_symlink():
+                raise ValueError(f"copy refuses symlink {Path(folder) / name}")
+        return set(names) & NOT_COPIED
+
+    def copied(source_file: str, target_file: str) -> str:
         if sys.platform == "darwin":
-            if subprocess.run(["cp", "-c", "-R", str(entry), str(target)], capture_output=True).returncode == 0:
-                continue
-            remove(target)
-        if entry.is_dir():
-            shutil.copytree(entry, target, symlinks=True, ignore=shutil.ignore_patterns(*NOT_COPIED))
-        else:
-            shutil.copy2(entry, target)
+            done = subprocess.run(["cp", "-c", source_file, target_file], capture_output=True)
+            if done.returncode == 0:
+                return target_file
+        return shutil.copy2(source_file, target_file)
+
+    shutil.copytree(source, work, ignore=excluded, copy_function=copied)
+
+
+def document_id(answer: dict[str, Any], script: str, function: str) -> str:
+    """Select a successfully built document from reports, including called child models.
+    A missing or ambiguous result is an error, never a guessed id or a filename fallback."""
+    matches = set()
+    pending = [report for build in answer["builds"] for report in build.get("models", [])]
+    while pending:
+        report = pending.pop()
+        source = report.get("source") or {}
+        if (_same(source.get("script", ""), script) and source.get("name") == function
+                and report.get("ok") and report.get("id")):
+            matches.add(report["id"])
+        pending.extend((report.get("child_models") or {}).values())
+    if len(matches) != 1:
+        raise ValueError(f"expected one built document for {script}::{function}; found {len(matches)}")
+    return matches.pop()
+
+
+def inside(work: Path, path: Path) -> Path:
+    """Every writable benchmark artifact stays in its work copy, including through symlinks."""
+    resolved = path.resolve()
+    if not resolved.is_relative_to(work.resolve()):
+        raise ValueError(f"path escapes the work copy: {path}")
+    return resolved
 
 
 def git(*args: str) -> str | None:
@@ -519,7 +504,7 @@ def probe(python: str, cadgen_src: Path) -> dict[str, Any] | str:
     as text when it imports none, or another (the venv's editable install, say)."""
     env = {**os.environ, "PYTHONPATH": str(cadgen_src), **TELEMETRY_OFF}
     try:
-        done = subprocess.run([python, "-c", PROBE], env=env, capture_output=True, text=True, timeout=300)
+        done = subprocess.run([python, "-B", "-c", PROBE], env=env, capture_output=True, text=True, timeout=300)
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"{python}: {error}"
     if done.returncode:
@@ -540,6 +525,8 @@ class Model(NamedTuple):
     targets: list[str]
     scripts: list[str]
     document: Path
+    selection: tuple[str, str]
+    comparison_note: str | None
     edit: Path
     before: str
     after: str
@@ -548,16 +535,20 @@ class Model(NamedTuple):
 def prepare(spec: dict[str, Any], out: Path, engine_dir: Path, cadgen_src: Path) -> Model:
     work = out / "work" / spec["name"]
     cwd = work / spec.get("cwd", ".")
-    scripts, targets = [], []
-    for target in spec["targets"]:
-        script, _sep, function = target.partition("::")
-        path = str((cwd / script).resolve())
-        scripts.append(path)
-        targets.append(path + (f"::{function}" if function else ""))
+    scripts = [str((cwd / target).resolve()) for target in spec["targets"]]
+    selected_script, _, function = spec["document"].partition("::")
     path = os.pathsep.join([str(cadgen_src), *(str(work / folder) for folder in spec.get("pythonpath", []))])
-    env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine_dir / spec["name"]), "PYTHONPATH": path, **TELEMETRY_OFF}
-    return Model(spec["name"], work, cwd, env, targets, scripts, work / spec["xbf"], work / spec["edit"]["file"],
-                 spec["edit"]["from"], spec["edit"]["to"])
+    private = out / "runtime" / spec["name"]
+    env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine_dir / spec["name"]),
+           "CADGEN_STATE_DIR": str(private / "state"), "CADGEN_CACHE_DIR": str(private / "cache"),
+           "CADGEN_LAUNCHER_DIR": str(private / "launcher"), "CADGEN_ENGINE_PORT": "0",
+           "CADGEN_ENGINE_STANDBY": "0", "PYTHONPATH": path,
+           "PYTHONPYCACHEPREFIX": str(private / "cache" / "pycache"),
+           "BROWSER": str(out / "no-browser.py") + " %s", **TELEMETRY_OFF}
+    env.pop("PYTHONDONTWRITEBYTECODE", None)  # compile into this model's private prefix
+    return Model(spec["name"], work, cwd, env, scripts, scripts, work / spec["xbf"],
+                 (str((cwd / selected_script).resolve()), function), spec.get("comparison_note"),
+                 work / spec["edit"]["file"], spec["edit"]["from"], spec["edit"]["to"])
 
 
 class Bench:
@@ -567,7 +558,7 @@ class Bench:
         self.out, self.python, self.timeout, self.limit = out, python, timeout, limit
         self.rows: list[dict[str, Any]] = []
         self.failed = False
-        self.ids: dict[str, dict[str, str]] = {}  # per model: the id of each model its last build built
+        self.ids: dict[str, str] = {}  # the selected document id, from its actual build report
 
     def emit(self, row: dict[str, Any]) -> None:
         row = {**row, "at": datetime.now().isoformat(timespec="seconds")}
@@ -593,15 +584,16 @@ class Bench:
     def stop(self, model: Model) -> None:
         done, _wall = self.run(model, ["-m", "cadgen.cli", "stop"], timeout=300)
         if done is None or done.returncode:
-            print(f"{model.name}: its daemon did not stop: {done.stderr[-500:] if done else 'no answer'}",
-                  file=sys.stderr, flush=True)
+            raise RuntimeError(f"its daemon did not stop: {done.stderr[-500:] if done else 'no answer'}")
 
     def status(self, model: Model) -> Any:
         done, _wall = self.run(model, ["-m", "cadgen.cli", "status", "--json"], timeout=120)
-        try:
-            return json.loads(done.stdout) if done is not None and done.returncode == 0 else None
-        except ValueError:
-            return None
+        if done is None or done.returncode:
+            raise RuntimeError(f"status failed: {done.stderr[-500:] if done else 'no answer'}")
+        found = json.loads(done.stdout)
+        if not isinstance(found, dict) or "workers" not in found:
+            raise ValueError("status returned no workers list")
+        return found
 
     def step(self, model: Model, step: str, wall: float, load: dict[str, float], **row: Any) -> dict[str, Any]:
         row = {"kind": "step", "model": model.name, "step": step, "wall": round(wall, 3), **load, **row}
@@ -626,42 +618,63 @@ class Bench:
     def build(self, model: Model, step: str) -> dict[str, Any]:
         top = {"top": top_three()} if step in ("cold", "restart-cold") and self.limit is not None else {}
         load = self.quiet(model)
-        done, wall = self.run(model, ["-c", DRIVER, json.dumps(model.targets)])
-        if done is None:
-            row = {"ok": False, "error": f"no answer in {self.timeout:.0f} s"}
-        else:
-            answer = driver_answer(done.stdout)
-            row = build_row(answer, str(model.document))
-            self.ids[model.name] = {report["source"]["name"]: report["id"]
-                                    for build in (answer or {}).get("builds") or [] for report in build.get("models") or []
-                                    if isinstance(report.get("source"), dict) and report.get("id")}
-            if done.returncode and row["ok"]:
-                row = {**row, "ok": False, "error": f"the build process exited {done.returncode}"}
-            if not row["ok"]:
-                row["stderr"] = done.stderr[-3000:]
-        row["rss_mb"] = worker_memory(self.status(model), model.scripts)
+        answer: dict[str, Any] = {"builds": []}
+        wall = 0.0
+        stderr = []
+        for script in model.targets:
+            done, elapsed = self.run(model, ["-c", DRIVER, script])
+            wall += elapsed
+            result = driver_answer(done.stdout) if done is not None else None
+            if result is not None:
+                answer["builds"].extend(result["builds"])
+            if done is not None:
+                stderr.append(done.stderr)
+            if done is None or done.returncode or result is None:
+                answer["error"] = (result or {}).get("error") or (
+                    f"{script}: process exited {done.returncode} without a valid answer" if done else
+                    f"{script}: no answer in {self.timeout:.0f} s")
+                break
+        row = build_row(answer, str(model.document))
+        if row["ok"]:
+            try:
+                self.ids[model.name] = document_id(answer, *model.selection)
+                row["document_id"] = self.ids[model.name]
+                row["rss_mb"] = worker_memory(self.status(model), model.scripts)
+            except (ValueError, RuntimeError) as error:
+                row.update(ok=False, error=str(error))
+        if not row["ok"]:
+            row["stderr"] = "\n".join(stderr)[-3000:]
+        if model.comparison_note:
+            row["comparison_note"] = model.comparison_note
         return self.step(model, step, wall, load, **row, **top)
 
     def document(self, model: Model) -> None:
         """The document saved, served and meshed whole, its structure read, and two snapshots."""
-        if not model.document.is_file():
-            # A model that declares no xbf: its document saved from the engine, by its id.
-            load = loads()
-            ident = self.ids.get(model.name, {}).get(model.document.stem)
-            done, wall = (None, 0.0) if ident is None else self.run(
-                model, ["-m", "cadgen.cli", "export", ident, str(model.document), "--json"], timeout=1800)
-            if done is None or done.returncode or not model.document.is_file():
-                self.step(model, "export", wall, load, ok=False,
-                          error=(done.stderr[-2000:] if done else f"no model {model.document.stem} was built"))
-                return
-            self.step(model, "export", wall, load, ok=True, xbf_bytes=model.document.stat().st_size)
+        ident = self.ids[model.name]
+        inside(model.work, model.document)
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cadgen.cli", "serve", str(model.document)], timeout=600)
+        done, wall = self.run(model, ["-m", "cadgen.cli", "export", ident, str(model.document), "--json"], timeout=1800)
+        report = last_json(done.stdout) if done is not None else None
+        files = report.get("files") if isinstance(report, dict) else None
+        if (done is None or done.returncode or not report or report.get("ok") is not True
+                or not isinstance(files, list) or len(files) != 1 or files[0].get("kind") != "xbf"
+                or not _same(files[0].get("path", ""), str(model.document)) or not model.document.is_file()
+                or files[0].get("bytes") != model.document.stat().st_size):
+            self.step(model, "export", wall, load, ok=False,
+                      error=(report or {}).get("error") or (done.stderr[-2000:] if done else "no answer")
+                            or "export returned an invalid file report")
+            return
+        self.step(model, "export", wall, load, ok=True, document_id=ident,
+                  xbf_bytes=files[0]["bytes"], xbf_seconds=files[0]["seconds"], written=files[0]["written"])
+        load = self.quiet(model)
+        done, wall = self.run(model, ["-m", "cadgen.cli", "serve", ident], timeout=600)
         url = (done.stdout.strip().splitlines() or [""])[-1] if done is not None else ""
         page = urllib.parse.urlsplit(url)
-        ident = page.path.strip("/")
-        if done is None or done.returncode or not page.netloc or not ident:
-            self.step(model, "serve", wall, load, ok=False, error=(done.stderr[-2000:] if done else "no answer"))
+        if (done is None or done.returncode or page.hostname not in ("127.0.0.1", "localhost", "::1")
+                or page.path.strip("/") != ident or page.scheme != "http"):
+            self.step(model, "serve", wall, load, ok=False, error=(done.stderr[-2000:] if done else "no answer")
+                      or "serve returned no loopback URL for the built document")
+            return
         else:
             self.step(model, "serve", wall, load, ok=True)
             # The page is ``<engine>/<id>?token=...``: the document's routes are under
@@ -677,10 +690,13 @@ class Bench:
                                                                        headers={**auth, "x-cadgen-viewer": "1"}),
                                                 timeout=self.timeout) as response:  # noqa: S310 - the engine, on loopback
                         answer = json.loads(response.read())
+                        required = {"seconds", "parts", "meshed", "triangles", "bytes", "unmeshed", "mode", "workers", "per_part"}
+                        if not isinstance(answer, dict) or not required <= answer.keys():
+                            raise ValueError("mesh returned an invalid report")
                 except Exception as error:  # noqa: BLE001 - a bench row, not a program
                     self.step(model, step, time.perf_counter() - started, load, ok=False,
                               error=f"{type(error).__name__}: {error}")
-                    break
+                    return
                 self.step(model, step, time.perf_counter() - started, load, ok=True,
                           **{key: answer.get(key) for key in ("seconds", "parts", "meshed", "triangles", "bytes",
                                                               "unmeshed", "mode", "workers")},
@@ -690,62 +706,73 @@ class Bench:
                 with urllib.request.urlopen(urllib.request.Request(api, headers=auth), timeout=600) as response:  # noqa: S310 - the engine, on loopback
                     data = response.read()
                 structure = json.loads(data)
+                if not isinstance(structure, dict) or not {"prototypes", "instances"} <= structure.keys():
+                    raise ValueError("structure returned no prototypes or instances")
                 self.step(model, "structure", time.perf_counter() - started, load, ok=True, bytes=len(data),
                           prototypes=len(structure.get("prototypes") or []),
                           instances=len(structure.get("instances") or []))
             except Exception as error:  # noqa: BLE001 - a bench row, not a program
                 self.step(model, "structure", time.perf_counter() - started, load, ok=False,
                           error=f"{type(error).__name__}: {error}")
+                return
         pictures = self.out / "snapshots"
         pictures.mkdir(exist_ok=True)
         for step in ("snapshot-first", "snapshot"):
             png = pictures / f"{model.name}{'-first' if step == 'snapshot-first' else ''}.png"
             load = self.quiet(model)
-            done, wall = self.run(model, ["-m", "cadgen.cli", "snapshot", str(model.document), str(png), "--json"],
+            done, wall = self.run(model, ["-m", "cadgen.cli", "snapshot", ident, str(png), "--json"],
                                   timeout=1800)
             report = last_json(done.stdout) if done is not None else None
             report = report if isinstance(report, dict) else {}
-            if done is not None and done.returncode == 0 and png.is_file():
+            if (done is not None and done.returncode == 0 and png.is_file() and report.get("width")
+                    and report.get("height") and isinstance(report.get("timings"), dict)):
                 self.step(model, step, wall, load, ok=True, timings=report.get("timings"), width=report.get("width"),
                           height=report.get("height"), png_bytes=png.stat().st_size)
             else:
-                self.step(model, step, wall, load, ok=False, error=(done.stderr[-2000:] if done else "no answer"))
+                self.step(model, step, wall, load, ok=False, error=report.get("error") or
+                          (done.stderr[-2000:] if done else "no answer") or "snapshot returned an invalid report")
+                return
 
     def model(self, spec: dict[str, Any], engine_dir: Path, cadgen_src: Path, keep: bool) -> None:
         """Every step of one model, on its work copy and its own daemon; the daemon stopped after,
         and the copy removed unless kept."""
         model = prepare(spec, self.out, engine_dir, cadgen_src)
-        copy_project(ROOT / spec["root"], model.work)
-        script = model.cwd / declared_script(spec)
-        declared = with_xbf(script.read_text(encoding="utf-8"), model.document.stem,
-                            Path(os.path.relpath(model.document, script.parent)).as_posix())
-        if declared is None:
-            raise SystemExit(f"corpus_bench: {script} cannot declare its xbf")
-        script.write_text(declared, encoding="utf-8")
-        self.stop(model)  # one a previous batch left in this model's own folder
-        remove(Path(model.env["CADGEN_ENGINE_DIR"]))
-        original = model.edit.read_bytes()
+        original = None
+        phase = "setup"
+        stopped = False
         try:
+            copy_project(ROOT / spec["root"], model.work)
+            inside(model.work, model.edit)
+            inside(model.work, model.document)
+            original = model.edit.read_bytes()
             for step in BUILDS:
+                phase = step
                 if step == "edit":
                     model.edit.write_bytes(original.decode("utf-8").replace(model.before, model.after, 1).encode("utf-8"))
                 elif step == "revert":
                     model.edit.write_bytes(original)
-                elif step == "restart":
+                elif step in ("restart", "restart-cold"):
                     self.stop(model)
-                elif step == "restart-cold":
-                    self.stop(model)
-                    if model.document.exists():
-                        model.document.unlink()
+                    if step == "restart-cold":
+                        remove(Path(model.env["CADGEN_CACHE_DIR"]) / "documents")
                 if not self.build(model, step)["ok"]:
                     return
+            phase = "document"
             self.document(model)
+        except Exception as error:  # noqa: BLE001 - record the failed measurement, never continue it
+            self.step(model, phase, 0, loads(), ok=False, error=f"{type(error).__name__}: {error}")
         finally:
-            self.stop(model)
-            if keep:
-                model.edit.write_bytes(original)
-            else:
-                remove(model.work)
+            if model.cwd.is_dir():
+                try:
+                    self.stop(model)
+                    stopped = True
+                except Exception as error:  # noqa: BLE001 - retain its files when the process may still use them
+                    self.step(model, "stop", 0, loads(), ok=False, error=str(error))
+            if original is not None:
+                if keep or not stopped:
+                    model.edit.write_bytes(original)
+                else:
+                    remove(model.work)
 
 
 def _processes() -> dict[int, tuple[int, float, str]]:
@@ -819,7 +846,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="check the config and the interpreter, run nothing")
     parser.add_argument("--out", type=Path, help="the batch's folder (default: tmp/bench/corpus-<time>)")
     parser.add_argument("--engine-dir", type=Path, default=Path(tempfile.gettempdir()) / "cadgen-bench",
-                        help="each model's daemon in a folder of its own here (CADGEN_ENGINE_DIR)")
+                        help="parent for a fresh batch folder containing each model's private engine door")
     parser.add_argument("--python", default=sys.executable, help="the interpreter that builds (default: this one)")
     parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/cadgen/src",
                         help="the cadgen it imports (default: this checkout's)")
@@ -857,7 +884,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"steps: {', '.join(BUILDS)}, export, serve, mesh-cold, mesh-warm, structure, snapshot-first, snapshot")
         if isinstance(found_cadgen, dict):
             print(f"cadgen {found_cadgen['cadgen']} (Python {found_cadgen['python']}, {args.python})")
-        print(f"daemons in {args.engine_dir}/<model>")
+        print(f"daemons in a fresh batch folder under {args.engine_dir}; private state/cache/launcher under --out/runtime")
         for text in found:
             print(f"problem: {text}")
         print("ok" if not found else f"{len(found)} problem{'s' if len(found) != 1 else ''}")
@@ -868,7 +895,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     out = (args.out or ROOT / "tmp" / "bench" / f"corpus-{datetime.now():%Y%m%d-%H%M%S}").resolve()
-    out.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        print(f"corpus_bench: output folder already exists: {out}; choose a fresh folder", file=sys.stderr)
+        return 2
+    out.mkdir(parents=True)
+    args.engine_dir.mkdir(parents=True, exist_ok=True)
+    args.engine_dir = Path(tempfile.mkdtemp(prefix="corpus-", dir=args.engine_dir))
+    browser = out / "no-browser.py"
+    browser.write_text(f"#!{args.python}\nimport sys\nfrom pathlib import Path\n"
+                       f"with Path({str(out / 'browser-requests.log')!r}).open('a') as log:\n"
+                       "    log.write(repr(sys.argv[1:]) + '\\n')\n", encoding="utf-8")
+    browser.chmod(0o700)
     bench = Bench(out, args.python, args.timeout, args.max_load)
     run = {"kind": "run", "started": datetime.now().isoformat(timespec="seconds"), "commit": git("rev-parse", "HEAD"),
            "branch": git("rev-parse", "--abbrev-ref", "HEAD"), "dirty": bool(git("status", "--porcelain")),

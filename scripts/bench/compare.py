@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Main against this branch: the old engine's recorded numbers beside a corpus batch's, per model.
+"""Recorded store-engine baseline against this branch: the old engine's recorded numbers beside a corpus batch's, per model.
 
 A manual report, never run in CI; it prints Markdown, and ``--out`` writes it too (under ``tmp/``:
 never committed).
@@ -8,13 +8,12 @@ never committed).
 
 The new side is ``corpus_bench.py``'s rows, per model: the median wall of its ``cold``, ``noop``
 and ``edit`` builds over every batch given (a failed step counts for nothing), and its document:
-the xbf's size and the seconds its cold build took to write it. The old side is
+the xbf's size and its separately measured export time. The old side is
 ``old-engine-numbers.json`` beside this script (``--old`` for another), kept by hand: the old
 engine's (#568's store engine before the xbf engine, not a main release) cold, no-op and edit, each a range of seconds, and
 the STEP its model wrote, each number with the note it was recorded in (``source``) and the words
 that say it (``line``). Nothing here runs the old engine: a model or a measure with no old number
-says "no old number; rebuild on main to fill", and filling one is a build on main, recorded in
-that file with its source.
+says "no recorded old number". This command never fills a missing baseline by running old code.
 
 The table has a row per model and measure, old beside new, and the speedup: old over new, a range
 where the old number is one; for the file, how many times smaller the xbf is than the STEP. The
@@ -32,7 +31,7 @@ from typing import Any, Iterable
 
 OLD = Path(__file__).with_name("old-engine-numbers.json")
 TIMES = (("cold", "cold"), ("noop", "no-op"), ("edit", "edit"))
-NO_OLD = "no old number; rebuild on main to fill"
+NO_OLD = "no recorded old number"
 TIME_KEYS = frozenset({"seconds", "approx", "source", "line", "note"})
 FILE_KEYS = frozenset({"kind", "MB", "seconds", "source", "line", "note"})
 
@@ -112,8 +111,12 @@ def new_numbers(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             continue
         mine = found.setdefault(row["model"], {"declares": set(), "failed": set()})
         step = row.get("step")
+        if row.get("comparison_note"):
+            mine.setdefault("comparison_notes", set()).add(row["comparison_note"])
         if step == "export" and row.get("ok") and row.get("xbf_bytes"):
-            mine.setdefault("xbf_mb", []).append(row["xbf_bytes"] / 1e6)  # a model that declares no xbf
+            mine.setdefault("xbf_mb", []).append(row["xbf_bytes"] / 1e6)
+            if isinstance(row.get("xbf_seconds"), (int, float)):
+                mine.setdefault("xbf_seconds", []).append(row["xbf_seconds"])
             continue
         if step not in ("cold", "noop", "edit"):
             continue
@@ -128,7 +131,7 @@ def new_numbers(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             mine.setdefault("xbf_mb", []).append(row["xbf_bytes"] / 1e6)
             if isinstance((files.get("xbf") or {}).get("seconds"), (int, float)):
                 mine.setdefault("xbf_seconds", []).append(files["xbf"]["seconds"])
-    return {model: {key: sorted(values) if key in ("declares", "failed") else statistics.median(values)
+    return {model: {key: sorted(values) if key in ("declares", "failed", "comparison_notes") else statistics.median(values)
                     for key, values in measures.items()} for model, measures in found.items()}
 
 
@@ -181,11 +184,13 @@ def table(old: dict[str, Any], rows: list[dict[str, Any]]) -> str:
             lines.append(f"| {model} | all | {NO_OLD} | {_summary(mine)} | — |")
             continue
         failed = (mine or {}).get("failed", ())
+        limitations = (mine or {}).get("comparison_notes", [])
+        notes += [f"- {model}: {note}" for note in limitations]
         for key, label in TIMES:
             entry, value = theirs.get(key), (mine or {}).get(key)
             old_cell = NO_OLD if entry is None else _range(entry) + cite(entry)
             new_cell = f"{seconds(value)} s" if value is not None else "failed" if key in failed else "not run"
-            speedup = "—" if entry is None else _times(entry, value)
+            speedup = "workload differs" if limitations and value is not None else "—" if entry is None else _times(entry, value)
             lines.append(f"| {model} | {label} | {old_cell} | {new_cell} | {speedup} |")
         entry, size = theirs.get("file"), (mine or {}).get("xbf_mb")
         old_cell = NO_OLD if entry is None else (f"{entry['kind'].upper()} {entry['MB']:g} MB"
@@ -216,8 +221,9 @@ def table(old: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     if load:
         lines.append(f"Its 1-minute load average over the steps: {min(load):.1f}–{max(load):.1f}.")
     declared = [f"{model} ({', '.join(mine['declares'])})" for model, mine in new.items() if mine.get("declares")]
-    lines.append("A new wall is the build's process, as `python model.py` waits for it, and holds every file the model "
-                 "declares" + (f": besides the xbf, {'; '.join(declared)}." if declared else "."))
+    lines.append("A new wall is the script's process, including every explicit model call and any declared files. "
+                 "The benchmark's xbf export is measured separately." +
+                 (f" Other declared files: {'; '.join(declared)}." if declared else ""))
     lines += ["", old.get("about", "")]
     return "\n".join(lines).rstrip() + "\n"
 
