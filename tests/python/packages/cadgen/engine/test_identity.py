@@ -98,8 +98,9 @@ class HandOverTest(Fixture):
         named = self.script("named.py", "# a script\n")
         ident = self.record(named, "part", "bracket", line=3)
         self.assertEqual(ident, derived_id(self.folder, "bracket"), "a REPL's hand-over in the folder names it")
-        with self.assertRaisesRegex(ValueError, f"declared at {named}:3; hand it over under another name"):
+        with self.assertRaises(ValueError) as refused:
             handed(self.registry, ident, str(self.folder), "bracket")
+        self.assertIn(f"declared at {named}:3; hand it over under another name", str(refused.exception))
         released(self.registry, named, ["bracket"])
         handed(self.registry, ident, str(self.folder), "bracket")  # its script declares it no more
         self.record(named, "part", "bracket", line=3)

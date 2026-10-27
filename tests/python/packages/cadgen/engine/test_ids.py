@@ -109,8 +109,8 @@ class IdsTest(unittest.TestCase):
         self.assertEqual(left.id, derived_id(self.folder, "arm"))
         with self.assertRaises(ValueError) as collision:
             load(self.folder / "right.py", "right", "@xbf('r.xbf', name='arm')")
-        self.assertIn(f"{self.folder / 'left.py'}:2", str(collision.exception))
-        self.assertIn(f"{self.folder / 'right.py'}:2", str(collision.exception))
+        self.assertIn(f"{canonical(self.folder / 'left.py')}:2", str(collision.exception))
+        self.assertIn(f"{canonical(self.folder / 'right.py')}:2", str(collision.exception))
         another = load(self.folder / "other" / "right.py", "right", "@xbf('r.xbf', name='arm')")
         self.assertNotEqual(another.id, left.id)
         a = load(self.folder / "a.py", "duplicate")

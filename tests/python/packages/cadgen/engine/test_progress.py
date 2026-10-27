@@ -206,9 +206,10 @@ class EventTest(unittest.TestCase):
     """The one shape every job's frames have, and its closed vocabulary (``progress.event``)."""
 
     def test_an_event_has_one_shape_and_a_closed_vocabulary(self) -> None:
-        found = progress.event("export", "write", job="arm.xbf", outputs=[Path("/w/arm.step")], detail="arm.step",
+        output = Path("/w/arm.step")
+        found = progress.event("export", "write", job="arm.xbf", outputs=[output], detail="arm.step",
                                done=1, total=2, elapsed_ms=250)
-        self.assertEqual(found, {"kind": "export", "stage": "write", "job": "arm.xbf", "outputs": ["/w/arm.step"],
+        self.assertEqual(found, {"kind": "export", "stage": "write", "job": "arm.xbf", "outputs": [str(output)],
                                  "detail": "arm.step", "done": 1, "total": 2, "elapsedMs": 250})
         self.assertEqual(progress.event("build", "load", job="a.py"),
                          {"kind": "build", "stage": "load", "job": "a.py", "outputs": [], "detail": "", "done": 0,
