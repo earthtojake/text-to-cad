@@ -53,7 +53,10 @@ See [positioning](positioning.md) for datums and joints, and
 ## Colour and materials
 
 Use build123d's native `bd_materials` objects. Set materials after geometric operations,
-then set any explicit colour: build123d's material setter also sets colour.
+then set any explicit colour: build123d's material setter also sets colour. A transmissive
+material infers preview alpha (`transmission=1` gives `0.3`), even with PBR `opacity=1`.
+For an opaque base colour with physical transmission, assign an opaque `body.color`
+after its material.
 
 ```python
 from bd_materials import metals

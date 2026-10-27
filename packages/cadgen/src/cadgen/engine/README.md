@@ -1926,7 +1926,10 @@ paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 For a project's own material, use a native factory such as `metals.custom_metal`, or
 `FinishedMaterial(RangeMaterial(name="Coating", density=None), pbr=PbrProperties.create(
 "Coating", color="#202830", roughness=0.7))`. Unknown density remains unknown in
-inspection. Assign materials and paints after geometric operations. Native assignments,
+inspection. Assign materials and paints after geometric operations. Native material
+assignment infers a preview alpha for transmission (`transmission=1` gives `0.3`), even
+when its PBR `opacity=1`. For an opaque base colour with physical transmission, assign
+an opaque shape colour after the material. Native assignments,
 inheritance and copying follow build123d; a child whose inherited value has already been
 read can retain that cached value, so assign assembly materials before reading children.
 

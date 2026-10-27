@@ -85,6 +85,7 @@ def bench():
     print_.label, print_.material = "print", PLA
     pane = bd.Box(40, 3, 30, align=(bd.Align.CENTER, bd.Align.MIN, bd.Align.MIN))
     pane.label, pane.material = "pane", GLASS
+    pane.color = bd.Color("#ffffff")  # Keep base alpha 1; transmission is the material's.
     paint(print_, print_.faces().sort_by(bd.Axis.Z)[-1], LACQUER)
     left = bd.Pos(0, -50, 0) * bd.Box(10, 10, 10)
     left.label, left.material = "left", STAINLESS

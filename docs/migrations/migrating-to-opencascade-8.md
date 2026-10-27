@@ -81,7 +81,10 @@ paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 ```
 
 Set material after geometry, then set an explicit colour: native material assignment
-also sets shape colour. `PbrProperties.override` returns a new look to assign back;
+also sets shape colour. For transmission, native assignment infers a preview alpha
+(`transmission=1` gives alpha `0.3`), even when PBR `opacity=1`. To keep an opaque base
+colour with physical transmission, set `housing.color = "#606b78"` after assigning the
+material, as above. `PbrProperties.override` returns a new look to assign back;
 it replaces the old `.but(...)` pattern. Native family factories such as
 `metals.custom_metal` create custom physics.
 
