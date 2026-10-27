@@ -275,6 +275,42 @@ test('schema 7 counts the controls a person used, and how long a tool that stays
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 200));
 });
 
+test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
+  const kinds = ['model', 'xbf'];
+  const events = kinds.flatMap(kind => [
+    { ...ENGINE.events[0], kind },
+    { ...ENGINE.events[1], kind },
+    { name: 'files', kind, count: 1 },
+    { ...ENGINE.events[3], kind },
+    { ...ENGINE.events[4], kind },
+  ]);
+  const batch = { ...CONTROLS, schema: 8, events: [...events, CONTROLS.events[0]] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    batch.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  assert.equal(new Set(store.rows.map(row => row.id)).size, batch.events.length);
+  for (const schema of [6, 7]) {
+    const old = memory();
+    const file = { name: 'files', kind: 'xbf', count: 1 };
+    assert.equal((await send(old, 'POST', '/v1/events', { ...ENGINE, schema, events: [file] })).status, 204);
+    assert.equal(old.rows[0].kind, 'xbf');
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema,
+      events: [{ ...file, kind: 'model' }] })).status, 400);
+  }
+  // Safe deployment probe: a known kind with an invalid count reaches count validation and stores nothing.
+  const refused = memory();
+  const response = await send(refused, 'POST', '/v1/events', { ...batch,
+    events: [{ name: 'files', kind: 'model', count: 0 }] });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'events[0].count counts nothing');
+  assert.deepEqual(refused.rows, []);
+  for (const kind of ['models', 'model.py']) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...batch,
+      events: [{ name: 'files', kind, count: 1 }] })).status, 400);
+  }
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -370,7 +406,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 7 }, // a schema no release sends
+    { ...BATCH, schema: 9 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },

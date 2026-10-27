@@ -6,14 +6,14 @@ did (``api._facts``). ``observe`` is cadgen's: appended by cadgen's package ``__
 the moment the engine's verbs are imported, never sooner, so a process that does not use the engine
 imports none of it. It counts these events (``analytics.EVENTS``):
 
-- a ``build`` of kind ``xbf``, by who asked (``via``): ``python model.py``, or a Python caller's
+- a ``build`` of kind ``model``, by who asked (``via``): ``python model.py``, or a Python caller's
   ``Model.build()``, is ``script`` (no command builds one now; ``command`` is still a value
   ``analytics.VIAS`` reads, which releases before 0.8 sent). How it ended (``crashed``: its
   worker died under it; ``cancelled``: interrupted), whether its documents were their xbfs taken whole
   (``cached``: every model's ``cache.used``), how long it took, and why it failed (``build_failure``,
   ``analytics.told_failure``);
 - an export: a ``build`` of each destination's kind, asked as a build is, the verb's time shared out;
-- a ``snapshot`` of the source's kind (``xbf`` for a model drawn from its worker), and why one failed
+- a ``snapshot`` of the source's kind (``model`` for a live model; ``xbf`` for an actual file), and why one failed
   (``snapshot_failure``);
 - ``feature``: a model calling other models or of several parts (``assembly``), one writing mesh files
   (``declared_mesh``), an export or a snapshot posing joints (``kinematics``);
@@ -43,9 +43,9 @@ command: str | None = None
 # Commands that serve others and count their own work: a verb one asks for is a view's, not a build.
 SERVERS = frozenset({"viewer", "mcp", "server"})
 API = "cadgen.engine.api"
-# An engine kind as telemetry names a format (``analytics.KINDS``); a model's document is an xbf.
+# An engine kind as telemetry names it (``analytics.KINDS``): models are distinct from file formats.
 KINDS = {"xbf": "xbf", "step": "step", "glb": "glb", "stl": "stl", "threemf": "3mf", "dxf": "dxf", "urdf": "urdf",
-         "sdf": "sdf", "srdf": "srdf", "model": "xbf"}
+         "sdf": "sdf", "srdf": "srdf", "model": "model"}
 MESHES = frozenset({"stl", "glb", "threemf"})
 
 
@@ -151,7 +151,7 @@ def counts(facts: dict[str, Any], via: str) -> dict[str, Any]:
     features: list[str] = []
     if verb == "build":
         cached = outcome == "ok" and bool(models) and all(model.get("cached") for model in models)
-        builds.append({"kind": "xbf", "via": via, "outcome": outcome, "seconds": seconds, "cached": cached, **failure})
+        builds.append({"kind": "model", "via": via, "outcome": outcome, "seconds": seconds, "cached": cached, **failure})
         if any(model.get("children") or (model.get("parts") or 0) > 1 for model in models):
             features.append("assembly")
         if any(MESHES & set(model.get("files") or ()) for model in models):

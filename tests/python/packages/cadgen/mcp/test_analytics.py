@@ -287,7 +287,7 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (7, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (8, "app", "claude-directory", "tabs", "codex-mcp-client"))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -323,7 +323,7 @@ class ServerCountsTest(_Tmp):
         # The agent cannot speak for the person's hands.
         self.assertEqual(self.http(server, "POST", "/__cad/analytics/activity", report, agent=True)[0], 403)
         self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[-1]["schema"], 7)
+        self.assertEqual(sent[-1]["schema"], 8)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
             {"name": "control", "control": "display_xray", "count": 1, "seconds": 0},
             {"name": "control", "control": "pencil", "count": 2, "seconds": 395},
@@ -1087,6 +1087,18 @@ class NeverInTheWayTest(_Tmp):
         self.assertEqual(sent[1]["events"], [{"name": "tool", "tool": "cad_show", "calls": 1, "errors": 0}])
         following.send_kept()
         self.assertEqual(len(sent), 2)  # sent once taken, never again
+
+    def test_a_previous_schema_batch_is_retried_unchanged_by_a_new_sender(self) -> None:
+        choose(True, by="cli", path=self.path)
+        with mock.patch("cadgen.analytics.SCHEMA", 7):
+            old = Recorder(path=self.path, send=lambda payload: True)
+            old.built("xbf", "script", "ok", seconds=1.0)
+            old.close()
+        [kept] = [json.loads(line)["batch"] for line in (self.tmp / KEPT).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual((kept["schema"], kept["events"][0]["kind"]), (7, "xbf"))
+        sent: list[dict] = []
+        Recorder(path=self.path, send=lambda payload: sent.append(payload) or True).send_kept()
+        self.assertEqual(sent, [kept], "a persisted batch keeps its schema, kind and deduplication identity")
 
     def test_a_kept_batch_is_sent_only_under_the_answer_it_was_kept_under(self) -> None:
         choose(True, by="cli", path=self.path)

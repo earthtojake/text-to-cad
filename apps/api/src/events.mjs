@@ -45,7 +45,9 @@
  * sender a command starts when no CAD app or viewer has sent what commands counted. A schema before it names
  * neither. Schema 7 is schema 6 with the viewers' controls (`control`), and room for more events in a batch
  * (`MAX_EVENTS_7`): one per control a person used that window. A receiver that reads a new schema is deployed
- * before any release sends it.
+ * before any release sends it. Schema 8 adds `model` for live model builds, views and snapshots, while
+ * actual file formats (including opened/exported `xbf`) keep their names. Earlier `xbf` rows remain as sent:
+ * their mixed model/file usage cannot be separated after the fact.
  */
 
 import { createHash } from 'node:crypto';
@@ -79,6 +81,7 @@ const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
+const KINDS_8 = new Set([...KINDS_6, 'model']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cadgen/analytics.py`: `CONTROLS`, the page's own in `@text-to-cad/ui`'s
@@ -337,6 +340,9 @@ const SCHEMAS = new Map([
     origin: byProcess(PROCESSES_6), named: true }],
   // The controls a person used in a CAD view, and room in a batch for one event each.
   [7, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_6,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
+  // A live model is distinct from an actual file, even an xbf. Older schemas keep their own vocabulary.
+  [8, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
 ]);
 

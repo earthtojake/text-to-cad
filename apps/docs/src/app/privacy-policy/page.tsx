@@ -62,13 +62,13 @@ export default function PrivacyPolicyPage() {
                 home’s search, filters, layout and card menus), each as a name from a fixed list, with how many times each was used and, for a
                 tool that stays on (the tool in hand, or Preview), how many whole seconds it was on --
                 never what you typed, a value you chose (other than a choice that is itself a name on the
-                list, such as a display mode or a clip axis), or the name of a file or a part; how many different files of each format
-                (such as STEP or STL) a CAD view showed for the first time that day, told apart on your
-                computer and sent only as a number; how many models were built and files exported, of
-                which format, whether a model script or a <code>cadgen</code> command asked, how they
+                list, such as a display mode or a clip axis), or the name of a file or a part; how many different live models
+                and files of each format (such as XBF, STEP or STL) a CAD view showed for the first time that day, told apart on your
+                computer and sent only as a number; how many models were built and files exported,
+                with live models counted separately from each exported file format, whether a model script or a <code>cadgen</code> command asked, how they
                 ended (finished, failed, crashed or stopped), how many were reused from an earlier
                 build rather than built again, and how long they took; how many snapshots were drawn,
-                of which format, how many failed and how long they took; why each build or snapshot
+                of a live model or which file format, how many failed and how long they took; why each build or snapshot
                 failed, again as one of a fixed set of words cadgen chooses from the kind of error and
                 whose code raised it (such as an error in your model’s code, a CAD operation the
                 geometry kernel could not do, a module or file that is not there, a picture that could
