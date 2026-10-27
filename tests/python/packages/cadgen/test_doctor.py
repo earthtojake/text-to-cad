@@ -123,7 +123,8 @@ class DoctorTests(unittest.TestCase):
             with self.subTest(first=first), mock.patch.dict("os.environ", {"PATH": os.pathsep.join([first, second])}):
                 code, out, err = _run(["--no-server", str(self.state)])
             self.assertEqual((code, err), (0, ""))
-            self.assertIn(f"command  {command} OK{hint}\n", out)
+            # Windows PATH lookup can use PATHEXT's .EXE spelling for the fixture's .exe file.
+            self.assertIn(os.path.normcase(f"command  {command} OK{hint}\n"), os.path.normcase(out))
         if os.name != "nt":
             other.chmod(0o644)  # an earlier non-executable file does not shadow the command
             with mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(venv), folder])}):
