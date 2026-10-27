@@ -269,8 +269,7 @@ ORDER = ("crank", "master", "artrod", "piston", "camring", "camidler", "tappet",
 
 
 def _identity(location) -> bool:
-    found = location.to_tuple()
-    return all(abs(v) < 1e-9 for v in (*found[0], *found[1]))
+    return all(abs(v) < 1e-9 for v in (*location.position, *location.orientation))
 
 
 def _held(holder, joint) -> bd.Location:
