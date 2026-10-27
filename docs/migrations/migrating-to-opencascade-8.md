@@ -50,7 +50,8 @@ above.
 
 Independent of the kernel, build123d 0.12 removed its deprecated API:
 `Vector.to_tuple()` → `tuple(vector)`; `Face.make_plane()` → an unlimited face
-is `Face(BRepBuilderAPI_MakeFace(plane.wrapped).Face())`; `Location.to_tuple`,
+is `Face(BRepBuilderAPI_MakeFace(plane.wrapped).Face())`; `Location.to_tuple()` →
+`(tuple(location.position), tuple(location.orientation))`;
 `Location.to_axis`, `Axis.to_plane`, `Edge.to_axis`, `Edge.to_wire`,
 `Wire.to_wire`, `Face.to_arcs` and `Shape.relocate` are gone, and the centre
 arcs take `arc_size` in place of `end_angle`/`angular_direction`. `Vertex.X/Y/Z`
@@ -69,3 +70,31 @@ PBR fields. To read it, use `ConvertToCommonMaterial().EmissiveColor`. cadgen us
 native conversions for XBF and GLB materials. The scalar topology checkers name fewer
 faults than the unavailable status list; an invalid shape with no accessible diagnostic
 remains an error, never a valid result.
+
+## Export changes and known kernel issues
+
+Regenerating a STEP file with OCP 8 can rewrite much of its text even when its
+geometry is unchanged. Compare dimensions, volume, solid count and rendered
+geometry; a textual STEP diff alone does not establish a geometry change.
+This was observed in the [original migration review](https://github.com/earthtojake/text-to-cad/pull/628#issuecomment-6190559383).
+
+The 8.0.1 candidate still has two geometry regressions independently reproduced
+on macOS arm64:
+
+- [`BRepBndLib.AddOptimal_s` can underbound a B-spline shape](https://github.com/Open-Cascade-SAS/OCCT/issues/1604).
+  cadgen's existing free-form loft test measures a 60 mm span as 59.912 mm;
+  sampling the surface still finds the full 60 mm. The test remains unchanged
+  and fails on macOS; the same dependency versions pass it in Linux CI. Tessellating the part or relaxing the expectation would hide
+  the failure of the exact-bounds contract.
+- [A sweep with a binormal guide can distort the profile](https://github.com/gumyr/build123d/issues/1474).
+  A 6 × 6 rectangle swept 30 mm along a straight line, with a parallel guide,
+  has volume 1,080 mm³ on the released 0.8.0 dependencies. On OCP 8.0.1 it has
+  volume 1,072.310 mm³ and a 6.331 mm width, while still reporting valid.
+  Shape validity alone does not establish dimensional correctness.
+
+These findings block the candidate release; the native API port does not fix
+them. The separate [F1 airbox loft Boolean instability](https://github.com/Open-Cascade-SAS/OCCT/issues/1643)
+also occurs on 7.9 and is not a newly introduced OCP 8 regression. The sample
+retains its existing guarded fuzzy union: check that the result contains at
+least approximately the larger input volume, then use the authored fallback
+when it does not. This is a sample-specific guard, not a general Boolean repair.

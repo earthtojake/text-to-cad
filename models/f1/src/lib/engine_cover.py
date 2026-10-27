@@ -180,7 +180,9 @@ def _fuse(base, extras):
     A union can never be smaller than its larger operand, and OCC sometimes
     returns a fragment anyway: the airbox duct's lofted B-spline body fused
     with the mouth lip that overlaps its end comes back as the lip alone on
-    OpenCascade 8. Volume is the tell, as in drivetrain._fuse. When the union
+    the tested OpenCascade 8 build. This is a longstanding Boolean instability:
+    small coordinate changes also reproduce it on 7.9 (OCCT issue #1643).
+    Volume is the tell, as in drivetrain._fuse. When the union
     comes back short, a 10 um fuzzy tolerance (invisible at any render
     resolution) is tried, and its result replaces the short one only if it is
     a whole union; otherwise the short result stands, as it always has.
