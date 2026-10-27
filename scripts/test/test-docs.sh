@@ -8,6 +8,3 @@ cd "$REPO_ROOT"
 
 section "Documentation checks"
 npm --prefix apps/docs run check
-
-section "Animated brand marks"
-node --test scripts/brand/*.test.mjs

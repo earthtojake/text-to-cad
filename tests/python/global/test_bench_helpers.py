@@ -1,6 +1,6 @@
 """The manual benchmarks' pure helpers (``scripts/bench``): AGENTS.md runs only those in a test
 runner, never a batch. ``corpus_bench.py``'s config check, a build step's row and the batch's
-table; ``compare.py``'s JSONL reading, its check of the old engine's numbers and its table.
+table.
 Nothing here builds, serves or draws: the fixtures are a file in a temporary folder and rows
 written by hand."""
 
@@ -27,7 +27,6 @@ def _load(name: str):
 
 
 corpus_bench = _load("corpus_bench")
-compare = _load("compare")
 
 
 def model(**overrides):
@@ -213,58 +212,6 @@ class TableTest(unittest.TestCase):
                                    "1.85 / 0.88 | 1.04 | 3800 | 8.6–17.2 |")
         self.assertEqual(lines[3], "| plate | failed | — | — | — | — | — | — | — | — | — | — |")
 
-
-class CompareTest(unittest.TestCase):
-    def test_rows_are_read_line_by_line(self):
-        rows, bad = compare.read_rows(['{"kind": "run"}\n', "\n", "not json\n", "[1]\n", '{"kind": "step"}'])
-        self.assertEqual(rows, [{"kind": "run"}, {"kind": "step"}])
-        self.assertEqual(bad, [3, 4])
-
-    def test_the_seeded_old_numbers_hold_their_sources(self):
-        old = json.loads((BENCH / "old-engine-numbers.json").read_text(encoding="utf-8"))
-        self.assertEqual(compare.old_problems(old), [])
-        self.assertEqual(sorted(old["models"]), ["hypercar", "juno", "tom"])
-
-    def test_a_bad_old_number_is_named(self):
-        self.assertEqual(compare.old_problems({"models": {"arm": {
-            "cold": {"seconds": [5, 3], "source": "notes.md:1", "line": "cold 5 s"},
-            "speed": {},
-            "file": {"kind": "step", "line": "STEP 4 MB"}}}}),
-            ["arm.cold: `seconds` is [low, high], 0 < low <= high", "arm.speed: no such measure (cold, noop, edit, file)",
-             "arm.file: no `source`", "arm.file: `MB` is its size"])
-
-    def test_explicit_exports_are_measured_and_changed_workloads_have_no_speedup(self):
-        rows = [step("arm", "cold", wall=4, comparison_note="This script now calls its link models too."),
-                step("arm", "export", xbf_bytes=2_000_000, xbf_seconds=0.3)]
-        old = {"models": {"arm": {"cold": {"seconds": [8, 8], "source": "notes", "line": "8 s"}}}}
-        text = compare.table(old, rows)
-        self.assertIn("| arm | cold | 8 s [1] | 4.00 s | workload differs |", text)
-        self.assertIn("xbf 2.0 MB, written in 0.30 s", text)
-        self.assertIn("This script now calls its link models too.", text)
-        self.assertNotIn("2.0×", text)
-
-    def test_old_beside_new_with_the_speedup(self):
-        old = {"models": {
-            "arm": {"cold": {"seconds": [420, 600], "source": "notes.md:3", "line": "cold 7–10 min"},
-                    "edit": {"seconds": [24, 29], "source": "notes.md:3", "line": "cold 7–10 min", "note": "answered"},
-                    "file": {"kind": "step", "MB": 419, "seconds": [24, 26], "source": "notes.md:4", "line": "STEP 419 MB"}},
-            "car": {"cold": {"seconds": [240, 240], "approx": True, "source": "notes.md:5", "line": "cold ~4 min"}}}}
-        rows = [step("arm", "cold", wall=150.0, xbf_bytes=59_000_000, files={"xbf": {"seconds": 3.5}}),
-                step("arm", "cold", wall=140.0, xbf_bytes=59_000_000, files={"xbf": {"seconds": 3.1}}),  # a second batch
-                step("arm", "noop", wall=1.5), step("arm", "edit", wall=8.0),
-                step("wing", "cold", wall=12.0, xbf_bytes=2_000_000),
-                {"kind": "step", "model": "car", "step": "cold", "ok": False}]
-        text = compare.table(old, rows)
-        for line in ("| arm | cold | 420–600 s [1] | 145 s | 2.9–4.1× |",
-                     f"| arm | no-op | {compare.NO_OLD} | 1.50 s | — |",
-                     "| arm | edit | 24–29 s [1] | 8.00 s | 3.0–3.6× |",
-                     "| arm | file | STEP 419 MB, written in 24–26 s [2] | xbf 59.0 MB, written in 3.30 s | 7.1× smaller |",
-                     f"| wing | all | {compare.NO_OLD} | cold 12.0 s · xbf 2.0 MB | — |",
-                     "| car | cold | ~240 s [3] | failed | — |",
-                     "1. notes.md:3: “cold 7–10 min”",
-                     "- arm edit: answered"):
-            with self.subTest(line=line):
-                self.assertIn(line + "\n", text)
 
 
 if __name__ == "__main__":

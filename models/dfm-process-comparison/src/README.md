@@ -11,6 +11,6 @@ writes a file of it when one is wanted.
 - `cnc.py`: thicker walls and optional floor root fillets.
 
 Shared geometry lives in `lib/tray_geometry.py`. The original's write-up (its
-[`README.md`](../README.md): the comparison, its checks and limitations) and its checks and
-figure ([`scripts/verify.py`](../scripts/verify.py), [`scripts/figure.py`](../scripts/figure.py),
-reading STEP and STL exports, which `cadgen export` writes) are beside this folder.
+[`README.md`](../README.md): the comparison, its checks and limitations) and its checks
+([`scripts/verify.py`](../scripts/verify.py), reading STEP exports from
+`cadgen export`) are beside this folder.

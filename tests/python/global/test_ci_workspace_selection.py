@@ -67,7 +67,6 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^apps/api/src/[^/]*\.test\.mjs$",                   # test-api.sh (node --test)
-            r"^scripts/brand/[^/]*\.test\.mjs$",                          # test-docs.sh
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
@@ -292,13 +291,13 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_the_docs_job_reads_no_model(self):
         # The docs site ships its committed hero GLB and nothing in its build or check reads
         # models/: the planetary model and the engine code that exports it select no docs job.
-        # Its hand sync (sync-hero-glb.mjs) and the GLB are docs files like any other.
+        # The committed GLB selects the docs job.
         for path in ("models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py",
                      "packages/cadgen/src/cadgen/gltf.py",
                      "packages/cadgen/src/cadgen/engine/animations.py"):
             with self.subTest(path=path):
                 self.assertEqual(route(path)["docs"], "false")
-        for path in ("apps/docs/scripts/sync-hero-glb.mjs", "apps/docs/public/hero/planetary.glb"):
+        for path in ("apps/docs/public/hero/planetary.glb",):
             with self.subTest(path=path):
                 self.assertEqual(route(path)["docs"], "true")
 
@@ -316,9 +315,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
             "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs"},
-            "scripts/brand/generate-logos.mjs": {"docs", "skills"},
+            "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
-            "scripts/bench/old-engine-numbers.json": {"skills"},
+            "scripts/bench/corpus.json": {"skills"},
         }
         for path, expected in cases.items():
             with self.subTest(path=path):

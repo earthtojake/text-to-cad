@@ -5,7 +5,7 @@ A manual measurement, never run in CI (``AGENTS.md``); what it writes goes under
 folder, ``tmp/bench/corpus-<time>/`` by default: ``rows.jsonl`` (one JSON object a line, each
 appended as its step ends, so a crash loses nothing), ``table.md`` (rewritten after each model)
 and the snapshots. Run it once every change it measures is in the branch, on a quiet machine,
-from one place; ``compare.py`` sets its rows beside the old engine's recorded numbers.
+from one place.
 
     .venv/bin/python scripts/bench/corpus_bench.py --dry-run             # the config, checked
     .venv/bin/python scripts/bench/corpus_bench.py                       # every model in corpus.json

@@ -1,6 +1,8 @@
 # Scripts
 
-Durable repo commands, one folder per concern. Every file here is called by a
+Reusable contributor commands, one folder per concern. Keep asset authoring and
+one-off investigations in ignored `tmp/`, even when they have their own tests or
+documentation. Every file here is called by a
 GitHub Actions workflow, the pre-commit hook, a test, or a documented developer
 step; nothing else belongs here (one-off helpers go in `tmp/`).
 
@@ -204,8 +206,7 @@ this edit still BUILD? It no longer has anything to say about the index.
 `build/library.mjs` — the esbuild library build `packages/core` and
 `packages/ui` share; each package's `scripts/build.mjs` calls it.
 
-`brand/` — the logo generators: `generate-logos.mjs` draws the brand SVGs and the
-models' profiles, `export-logos.mjs` exports every other logo file from them.
+`brand/` — `export-logos.mjs` exports app and plugin icons from the committed SVGs.
 Run by hand when the brand changes; ordinary builds use the committed files. See
 [the brand recipe](brand/README.md).
 
@@ -218,8 +219,7 @@ hand when the studio or the look changes.
 `bench/` — manual measurements, never run in CI ([`bench/README.md`](bench/README.md)):
 `corpus_bench.py`, the corpus batch (the xbf engine's cold, no-op, edit, revert and
 restart builds of the models in `corpus.json`, then each document's whole mesh and a
-snapshot); `compare.py`, a batch beside the old engine's recorded numbers
-(`old-engine-numbers.json`), model by model; and `occt_parity.py`, the viewer against
+snapshot); and `occt_parity.py`, the viewer against
 OCCT, mode by mode. Their reports are local output under `tmp/`, never committed here;
 only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`).
 

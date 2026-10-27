@@ -19,7 +19,7 @@ export const support = {
 // How a model is made, under the overview: the README's How it works, step for step. Code is in
 // backticks, which the page sets as code.
 export const howItWorks = [
-  "Your agent writes each model as a Python script, with build123d.",
+  "Your agent writes each model as a Python script with build123d, built on Open CASCADE.",
   "Running the script, `python model.py`, builds the model with cadgen's engine into an `.xbf` document (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The engine keeps each model's work in memory, so an edit rebuilds only what it changed.",
   "The CAD viewer shows the model in your agent app or your browser, and follows every rebuild.",
 ];

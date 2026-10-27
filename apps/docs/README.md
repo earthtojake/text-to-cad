@@ -48,17 +48,8 @@ with no backend), one of the few CAD files Git holds
 frames it, draws each part's folds and outline in the hero's edge colour, and plays the
 clip slowed to a display pace. The site and its checks read only that committed file;
 nothing in the docs app's build or `npm run check` reads the sample corpus. Refresh it
-by hand after changing the model:
-
-```
-node apps/docs/scripts/sync-hero-glb.mjs
-```
-
-That hand step reads `models/` on purpose. It builds the model with this checkout's
-cadgen (`PYTHON_BIN`, default the repository's `.venv`), exports the document the model
-wrote, and checks the new file against the model's source (the motion's name and
-duration) and the page (the clip it plays), then reads it and plays the clip through
-@text-to-cad/core's GLB path. Commit the GLB it writes.
+by hand after changing the model using `cadgen export`. Preserve the `meshCycle`
+clip and verify playback before committing the refreshed GLB.
 
 ## The shape of the app
 
@@ -67,7 +58,7 @@ src/app/         # routes
 src/components/  # site components incl. the CAD hero renderers
 src/lib/         # site utilities
 public/hero/     # the hero's GLB, a plain file (never LFS)
-scripts/         # the hero's hand sync (sync-hero-glb.mjs) and the icon's
+scripts/         # loading-icon export and verification
 ```
 
 ## Brand and loading icon
@@ -83,11 +74,10 @@ SVGs, PNGs and animated SVGs, followed by the original animated loading-icon pla
 is the SVG's own SMIL, inside a `<picture>` whose reduced-motion source is the static mark. The
 original mesh, animation and the shared UI loading assets stay unchanged.
 
-The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs` and
-`node scripts/brand/animate-logos.mjs`; `node scripts/brand/export-logos.mjs` then
-refreshes the PNGs, favicons and every app's copy (run all three from the repository root). See [the brand recipe](../../scripts/brand/README.md)
-for the letters, projection and palette. These are checked-in assets; ordinary
-builds do not regenerate them.
+The source vectors are committed in `public/brand/`. After editing them, run
+`node scripts/brand/export-logos.mjs` from the repository root to refresh PNGs,
+favicons and app copies. See [the export instructions](../../scripts/brand/README.md).
+Artwork authoring stays local; ordinary builds use the committed assets.
 
 The loading-icon playground retains play/pause, speed, five palettes, drag to
 rotate, zoom, and PNG/GLB downloads. It starts paused for reduced motion.

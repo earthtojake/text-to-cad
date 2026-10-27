@@ -6,21 +6,15 @@ Design physical products with AI.
 
 [Website](https://www.texttocad.dev)
 
-[![GitHub stars](https://img.shields.io/github/stars/earthtojake/text-to-cad?style=for-the-badge&logo=github&label=Stars)](https://github.com/earthtojake/text-to-cad/stargazers)
-[![skills.sh](https://skills.sh/b/earthtojake/text-to-cad?style=for-the-badge)](https://skills.sh/earthtojake/text-to-cad)
-[![Downloads](https://img.shields.io/pepy/dt/cadgen?style=for-the-badge&logo=pypi&logoColor=white&label=downloads)](https://pepy.tech/projects/cadgen)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
-[![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
-[![cadgen](https://img.shields.io/pypi/v/cadgen?style=for-the-badge&logo=pypi&logoColor=white&label=cadgen)](https://pypi.org/project/cadgen/)
-[![build123d](https://img.shields.io/badge/build123d-0.11-2F6FB0?style=for-the-badge)](https://github.com/gumyr/build123d)
-[![Open CASCADE](https://img.shields.io/badge/Open%20CASCADE-7.9-E2001A?style=for-the-badge)](https://dev.opencascade.org)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](packages/cadgen/pyproject.toml)
+[![cadgen](https://img.shields.io/pypi/v/cadgen?style=flat&logo=pypi&logoColor=white&label=cadgen)](https://pypi.org/project/cadgen/)
+[![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)](LICENSE)
+[![skills.sh](https://skills.sh/b/earthtojake/text-to-cad?style=flat)](https://skills.sh/earthtojake/text-to-cad)
+[![Downloads](https://img.shields.io/pepy/dt/cadgen?style=flat&logo=pypi&logoColor=white&label=downloads)](https://pepy.tech/projects/cadgen)
 
-[![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
-[![Follow @earthtojake](https://img.shields.io/badge/Follow-%40earthtojake-000000?style=for-the-badge&logo=x)](https://x.com/earthtojake)
-[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/earthtojake)
-
-<a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>
+[![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
+[![Follow @earthtojake](https://img.shields.io/badge/Follow-%40earthtojake-000000?style=flat&logo=x)](https://x.com/earthtojake)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-EA4AAA?style=flat&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/earthtojake)
 
 </div>
 
@@ -37,7 +31,7 @@ Gemini and Grok.
 
 ### How it works
 
-1. Your agent writes each model as a Python script, with build123d.
+1. Your agent writes each model as a Python script with [build123d](https://github.com/gumyr/build123d), built on [Open CASCADE](https://dev.opencascade.org).
 2. Running the script, `python model.py`, builds the model with cadgen's engine
    into an `.xbf` document (its parts, names, colours, materials and joints) and
    the STEP, GLB, STL or 3MF files the script declares. The engine keeps each
@@ -59,6 +53,8 @@ By default, text-to-cad sends usage stats and crash reports, tagged with a rando
 ID and never including your files, paths or prompts; turn them off with
 `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
 the rest.
+
+The runtime supports Python 3.11+; the launch commands use uv-managed Python 3.13.
 
 Or install it yourself:
 
@@ -371,3 +367,6 @@ Branch from `main` and open PRs against `main`. For the local workflow, testing 
 agent apps and validation, see [CONTRIBUTING.md](CONTRIBUTING.md); an agent working in
 the repository starts at [AGENTS.md](AGENTS.md). A security problem is reported privately,
 as [SECURITY.md](SECURITY.md) says.
+
+
+<a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>

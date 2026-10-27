@@ -80,31 +80,6 @@ configuration. `--keep` retains source copies with the edit reverted. The normal
 stops each private daemon. These are manual measurements, not CI tests; the global
 suite tests the pure configuration, copy, selection, aggregation and comparison helpers.
 
-## Recorded store-engine baseline against this branch
-
-`compare.py` sets a batch beside the old engine's numbers, model by model:
-
-```sh
-.venv/bin/python scripts/bench/compare.py tmp/bench/corpus-<time>/rows.jsonl [more rows.jsonl ...] \
-  --out tmp/bench/compare.md
-```
-
-The new side is the median of each model's `cold`, `noop` and `edit` walls over
-the batches given, and its explicitly exported xbf's size and write time. Current
-build walls exclude the benchmark's export; the recorded store-engine walls include
-their original work, so those boundaries must accompany any performance claim.
-Juno's current script also calls its 28 link models, whereas its baseline built the
-robot alone: its build speedup is withheld and the difference is printed. The old side is
-`old-engine-numbers.json`, kept by hand: what #568's store engine measured before the
-xbf engine (2026-10-19, at 830f3ae86, a 0.8.0 branch with main through 0.7.24 merged, not
-a main release; on the maintainer's machine, at load 7–10), each a range of
-seconds or the STEP's size, with the note it was recorded in and the words that say
-it. Nothing here runs the old engine. tom, hypercar and juno have numbers; every
-other model, and every missing measure, says "no recorded old number". The command
-never runs old code to fill gaps. The table has a row per model and measure, old beside new, and the
-speedup (old over new; for the file, how many times smaller the xbf is than the
-STEP), then the sources.
-
 ## Viewer against OCCT, mode by mode
 
 ```sh

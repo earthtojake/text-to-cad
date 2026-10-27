@@ -53,13 +53,12 @@ claim cost or cycle-time optimization.
 ## Reproduce
 
 Use the repository's cadgen/build123d environment, plus trimesh, numpy, rtree,
-networkx, lxml and matplotlib for analysis/figure generation. From this folder (each
+networkx and lxml for analysis. From this folder (each
 script is described in [`src/README.md`](src/README.md)):
 
 ```sh
 for model in src/*.py; do python "$model"; done
 python scripts/verify.py
-python scripts/figure.py
 ```
 
 From the repository root, run these for `baseline` and `fdm`:
@@ -70,8 +69,7 @@ python skills/dfam-check/scripts/dfam_tool.py orientations models/dfm-process-co
 ```
 
 CAD exports, the facts JSON and scratch images are regenerable and ignored:
-`verify.py` writes `tmp/geometry-facts.json` and `figure.py` writes the share
-image `tmp/manufacturing-comparison.png`. Nothing from a run is committed;
+`verify.py` writes `tmp/geometry-facts.json`. The comparison illustration was authored locally. Nothing from a run is committed;
 rerun the commands above to reproduce the numbers this README quotes.
 
 
