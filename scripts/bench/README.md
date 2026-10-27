@@ -19,55 +19,68 @@ warm, and times every step:
 .venv/bin/python scripts/bench/corpus_bench.py --model l_bracket # one; repeat --model for more
 ```
 
-A model in `corpus.json` is its project folder (`root`, from the repository), the
-folder its builds run from (`cwd`), the folders put on `PYTHONPATH` beside
-cadgen's (`pythonpath`), its `targets` (`script.py`, as `python script.py` builds
-it, or `script.py::model`), its document (`xbf`: where the batch saves the model its stem names), one `edit` (`{file, from, to}`,
-`from` found exactly once in `file`), the inputs a build reads that are never
-committed (`needs`: tom's pinned STEP) and a `note`. The models, smallest first:
-`l_bracket`, `planetary_gear`, `qdd`, `motorbike`, `case`, `juno`, `movement`,
-`tom`, `hypercar` and `f1`, all from `models/` but `tom`, which lives in its own
-repository: its `root` is the checkout beside this one, `../tom-cad` (a worktree has no
-such sibling: give `--config` a copy of `corpus.json` whose `tom` root spells the way
-up). `--dry-run` checks every key, that each file is there and each edit's `from`
-occurs once, and that the interpreter imports this checkout's cadgen (`--cadgen-src`;
-not the venv's editable install), and runs nothing.
+A model in `corpus.json` names its project folder (`root`, relative to this repository),
+working folder (`cwd`, within that project), import folders (`pythonpath`, within the
+project), and `targets`: Python scripts relative to `cwd`. Each script runs with its
+own `__main__` control flow in a separate client process. `document` selects a model
+that those calls actually built, as `script.py::function` relative to `cwd`. It does
+not execute that function. The selected report supplies the document's actual id;
+missing, failed or ambiguous selections fail the step. `xbf` names a separate export
+destination, independent of the selected function's name. `edit` is `{file, from, to}`,
+with `from` occurring exactly once; `needs` lists required inputs. `note` describes the
+case. `comparison_note` records a workload difference that prevents a build speedup
+comparison with the recorded baseline.
 
-Each model is copied into the batch's folder without its `XBF/` (an APFS clone on
-macOS), so the checkout is never written. In the copy, the model its `xbf` stem names
-declares that document (`@xbf(out=...)` above its `@model`), so each build saves it and
-a restart takes it, as the old engine reloaded its store after a restart: the restart
-row compares like with like. It is built on an engine daemon of its own
-(`CADGEN_ENGINE_DIR`: a folder per model under `--engine-dir`, emptied first;
-telemetry off), step by step:
+The models, smallest first, are `l_bracket`, `planetary_gear`, `qdd`, `motorbike`,
+`case`, `juno`, `movement`, `tom`, `hypercar` and `f1`. Tom stays in its own repository:
+its default root is `../tom-cad`. A worktree or isolated clone may have no such sibling;
+give `--config` a copy of `corpus.json` with the relative path to the external checkout
+or copied checkout. `--dry-run` checks configuration, files, edits and the selected
+interpreter's cadgen import (`--cadgen-src`), without building anything. It does not
+infer calls from source or promise that a script calls the selected model.
 
-- `cold`: a fresh daemon, no xbf to take;
-- `noop`: the same build, warm;
-- `edit`: the configured edit, built;
-- `revert`: the file's original bytes, built;
-- `restart`: the daemon stopped and the unchanged model built again, its xbf taken;
-- `restart-cold`: the daemon stopped and the xbf deleted, the model built again: a
-  restart with nothing to take;
-- `serve`, `mesh-cold`, `mesh-warm`, `structure`: the document served (`cadgen
-  serve`), every part meshed on the server's pool (`POST /api/doc/<id>/mesh`), again
-  with its meshes dropped, and the structure a page reads first (`export`, the
-  document saved by `cadgen export <id>`, only when a build left none);
-- `snapshot-first`, `snapshot`: `cadgen snapshot --json` of the document, twice.
+Each project is copied into a fresh output folder. Source stays unchanged except for
+the configured edit and its revert. Local Git metadata, virtual environments,
+`node_modules`, scratch directories and XBF/DXF outputs are excluded at every level;
+pinned inputs such as `STEP/imported` are retained. A symlink is refused, so a copied
+edit or output cannot write through it into the original checkout. Files use APFS
+clones where available. An existing output folder is refused.
 
-A build runs as `python script.py` asks for it (`cadgen.engine.api.build_script`)
-in a process of its own, so its wall is what an agent waits for, interpreter start
-to exit. Its row adds the engine's report, summed over the models it built: the
-timings, memo hits and misses, bodies run, replayed and loaded, whether it took its
-xbf whole (and if not, why), the files written and kept with their bytes, the
-worker's memory after it (`cadgen status --json`) and the load average before it.
+Every model gets private engine, state, cache and launcher directories. The door is
+under a fresh batch folder in `--engine-dir`; the other three directories are under
+`<out>/runtime/<model>`. The engine uses a free port, no standby worker, telemetry off,
+and a browser stub that records any attempted launch in `<out>/browser-requests.log`.
+The batch never stops another batch's engine or clears its cache. Steps are:
 
-The batch writes `tmp/bench/corpus-<time>/` (`--out` for another): `rows.jsonl`, a
-row per step appended as the step ends (the first says what ran: the commit, the
-cadgen, the interpreter, the machine); `table.md`, a line per model, rewritten after
-each; and the snapshots. A failed step is a row too, with its error, and ends its
-model. `--keep` keeps the work copies.
+- `cold`: a fresh daemon and empty private document cache;
+- `noop`: the unchanged script, on the same daemon;
+- `edit`, `revert`: the configured edit, then the file's original bytes;
+- `restart`: stop successfully, then run with the private document cache retained;
+- `restart-cold`: stop successfully, remove only that private cache's `documents/`,
+  then run again. Bytecode stays warm; declared or exported files are never cache inputs;
+- `export`: explicitly export the selected document id to `xbf`, recording bytes and
+  translation time separately from build walls;
+- `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
+  (`POST /api/doc/<id>/mesh`), mesh again after dropping those meshes on the now-warm
+  pool, then read the page's structure. No file is substituted for the model document;
+- `snapshot-first`, `snapshot`: draw that document id twice with `cadgen snapshot --json`.
 
-## Main against this branch
+The small measurement driver runs the target with Python's `runpy` and records reports
+returned by `api.build_script` when the script's explicit model calls reach it. It
+introduces no model call, decorator or export. A build wall covers interpreter startup,
+the whole script and report capture; `wall_api` sums its calls' engine round trips.
+Rows include timings, memo counts, bodies run/replayed/loaded, cache source/reason,
+declared files and worker memory. HTTP and command result shapes are checked; a failed
+step records its error and ends that model. Failure to stop preserves its working files.
+
+The batch writes `tmp/bench/corpus-<time>/` (`--out` selects another fresh folder):
+`rows.jsonl`, appended after every step; `table.md`, updated after each model; snapshots;
+and private runtime state. The first row records the commit, interpreter, platform and
+configuration. `--keep` retains source copies with the edit reverted. The normal exit
+stops each private daemon. These are manual measurements, not CI tests; the global
+suite tests the pure configuration, copy, selection, aggregation and comparison helpers.
+
+## Recorded store-engine baseline against this branch
 
 `compare.py` sets a batch beside the old engine's numbers, model by model:
 
@@ -77,15 +90,18 @@ model. `--keep` keeps the work copies.
 ```
 
 The new side is the median of each model's `cold`, `noop` and `edit` walls over
-the batches given, and its xbf's size and write time. The old side is
+the batches given, and its explicitly exported xbf's size and write time. Current
+build walls exclude the benchmark's export; the recorded store-engine walls include
+their original work, so those boundaries must accompany any performance claim.
+Juno's current script also calls its 28 link models, whereas its baseline built the
+robot alone: its build speedup is withheld and the difference is printed. The old side is
 `old-engine-numbers.json`, kept by hand: what #568's store engine measured before the
 xbf engine (2026-10-19, at 830f3ae86, a 0.8.0 branch with main through 0.7.24 merged, not
 a main release; on the maintainer's machine, at load 7–10), each a range of
 seconds or the STEP's size, with the note it was recorded in and the words that say
 it. Nothing here runs the old engine. tom, hypercar and juno have numbers; every
-other model, and every measure missing, says "no old number; rebuild on main to
-fill", and filling one is a build of that model on `main`, recorded in the file
-with its source. The table has a row per model and measure, old beside new, and the
+other model, and every missing measure, says "no recorded old number". The command
+never runs old code to fill gaps. The table has a row per model and measure, old beside new, and the
 speedup (old over new; for the file, how many times smaller the xbf is than the
 STEP), then the sources.
 
