@@ -221,6 +221,59 @@ class PersonStateGuard(unittest.TestCase):
             self.assertNotIn(str(person.joinpath(*inside.split("/"))), tests_wrote)
 
 
+class WindowsProcessExit(unittest.TestCase):
+    """An unreadable process is not an exited one; only the native signal permits cleanup."""
+
+    def native(self):
+        from types import SimpleNamespace
+        from tests.python.support import engine_daemon
+
+        api = mock.Mock(WAIT_OBJECT_0=0, WAIT_TIMEOUT=258)
+        api.OpenProcess.return_value = 0x100000001  # a HANDLE must not be narrowed to ctypes' default int
+        module = mock.patch.dict("sys.modules", {"_winapi": api})
+        platform = mock.patch.object(engine_daemon, "os", SimpleNamespace(name="nt"))
+        module.start()
+        platform.start()
+        self.addCleanup(module.stop)
+        self.addCleanup(platform.stop)
+        return engine_daemon, api
+
+    def test_cleanup_waits_for_the_native_signal_and_a_timeout_is_not_exit(self):
+        helper, api = self.native()
+        for result, expected in ((api.WAIT_TIMEOUT, False), (api.WAIT_OBJECT_0, True)):
+            with self.subTest(result=result):
+                api.WaitForSingleObject.return_value = result
+                self.assertIs(helper.await_exit(123, within=0.25), expected)
+                api.WaitForSingleObject.assert_called_with(0x100000001, 250)
+                api.CloseHandle.assert_called_with(0x100000001)
+                self.assertIs(helper._alive(123), not expected)
+                api.WaitForSingleObject.assert_called_with(0x100000001, 0)
+
+    def test_only_a_missing_pid_means_already_exited_and_other_errors_are_said(self):
+        helper, api = self.native()
+        for code in (87, 5):  # ERROR_INVALID_PARAMETER (gone), ERROR_ACCESS_DENIED (not observed)
+            error = OSError("cannot open process")
+            error.winerror = code
+            api.OpenProcess.side_effect = error
+            with self.subTest(code=code):
+                if code == 87:
+                    self.assertTrue(helper.await_exit(123))
+                else:
+                    with self.assertRaisesRegex(OSError, "cannot open process"):
+                        helper.await_exit(123)
+                    with self.assertRaisesRegex(OSError, "cannot open process"):
+                        helper._alive(123)
+        api.WaitForSingleObject.assert_not_called()
+        api.CloseHandle.assert_not_called()
+
+    def test_a_failed_wait_is_said_and_its_handle_is_closed(self):
+        helper, api = self.native()
+        api.WaitForSingleObject.side_effect = OSError("native wait failed")
+        with self.assertRaisesRegex(OSError, "native wait failed"):
+            helper.await_exit(123)
+        api.CloseHandle.assert_called_once_with(0x100000001)
+
+
 class HangGuard(unittest.TestCase):
     def test_a_live_caller_can_prepare_its_input_before_starting_a_daemon(self):
         from tests.python.support import engine_daemon

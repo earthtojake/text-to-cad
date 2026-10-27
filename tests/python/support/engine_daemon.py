@@ -196,17 +196,7 @@ def _processes(env: dict[str, str]) -> list[tuple[str, int]]:
 
 def _alive(pid: int) -> bool:
     if os.name == "nt":
-        import ctypes
-
-        kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
-            return False
-        try:
-            code = ctypes.c_ulong()
-            return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
-        finally:
-            kernel.CloseHandle(handle)
+        return not _windows_exited(pid, 0)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -214,6 +204,23 @@ def _alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _windows_exited(pid: int, milliseconds: int) -> bool:
+    """The native termination signal, not an exit-code query: a failed query never means gone.
+    Holding the handle throughout the wait also keeps the PID from being reused underneath it."""
+    import _winapi
+
+    try:
+        handle = _winapi.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+    except OSError as error:
+        if error.winerror == 87:  # ERROR_INVALID_PARAMETER: this PID no longer exists
+            return True
+        raise
+    try:
+        return _winapi.WaitForSingleObject(handle, milliseconds) == _winapi.WAIT_OBJECT_0
+    finally:
+        _winapi.CloseHandle(handle)
 
 
 def await_exit(pid: int | None, within: float = 30.0) -> bool:
@@ -224,12 +231,7 @@ def await_exit(pid: int | None, within: float = 30.0) -> bool:
     look alive, nothing is waited for."""
     if os.name != "nt" or pid is None:
         return True
-    deadline = time.monotonic() + within
-    while _alive(pid):
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.05)
-    return True
+    return _windows_exited(pid, max(0, int(within * 1000)))
 
 
 def survivors(env: dict[str, str], within: float = 60.0) -> list[tuple[str, int]]:
