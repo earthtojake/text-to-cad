@@ -56,11 +56,13 @@ are gone.
 
 ## Prerequisites
 
-1. **Update the plugin, or the pin.** The CAD plugin and its skills run cadgen as
-   `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen`; a
-   project that pins cadgen itself moves its pin to `cadgen==0.8.0`. The Python floor is
-   unchanged (3.11). cadgen no longer depends on Playwright: snapshots are drawn by
-   OCCT, so no headless browser is downloaded.
+1. **Update the plugin, or the pin.** The plugin starts its server through
+   `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen mcp`,
+   which installs and registers cadgen. Skills then run commands as `cadgen +0.8.0 ...`
+   and model scripts as `cadgen +0.8.0 run SCRIPT.py`, through that installation's
+   launcher. A project that pins cadgen itself moves its pin to `cadgen==0.8.0`.
+   The Python floor is unchanged (3.11). cadgen no longer depends on Playwright:
+   snapshots are drawn by OCCT, so no headless browser is downloaded.
 
 2. **Run cadgen through the `cadgen` command.** 0.8 installs one, `~/.local/bin/cadgen`,
    written by `cadgen doctor` and by the CAD app's server. It runs a registered
@@ -78,6 +80,10 @@ are gone.
 
    If `cadgen` is not on your PATH, or says 0.8.0 is not installed, run
    `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen doctor` once.
+
+   A project's old venv may shadow the launcher with its own `cadgen`, even when
+   `~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.0 doctor` to see which
+   executable wins, and use the full launcher path until PATH is corrected.
 
 3. **Set `PYTHONPATH` where the project's import root needs it**, as for `python SCRIPT`:
    `PYTHONPATH=src cadgen run src/camera/payload.py`.
@@ -711,7 +717,11 @@ the viewer, or take the names `cadgen inspect` prints. Code of your own that add
 occurrences by tree position (`o1.2.15`) for its own purposes may keep doing so; cadgen no
 longer reads them.
 
-**A check calls the model and measures what it returns:**
+**A check calls the model and measures what it returns.** Copy the project helpers
+`world_parts` and `find_part` from
+[Opening geometry](../../skills/cad/references/inspection-and-validation.md#opening-geometry)
+into the check first. They accumulate each parent's placement before measuring and
+refuse a missing or ambiguous leaf label:
 
 ```python
 # 0.7                                         # 0.8
@@ -719,8 +729,9 @@ from cadgen import read_scene                 from cadgen.geometry import closes
 scene = read_scene("STEP/kit.step")
 ...                                           from kit import kit
 
-                                              parts = {p.label: p for p in kit().shape.leaves}
-                                              print(closest_points(parts["plate"], parts["post"]).distance)
+                                              tree = kit().shape
+                                              plate, post = find_part(tree, "plate"), find_part(tree, "post")
+                                              print(closest_points(plate, post).distance)
 ```
 
 `cadgen.geometry` (`closest_points`, `overlap_volume`, `mass_properties`, the topology
@@ -735,8 +746,10 @@ modules (`cadgen.store.trees.capture_tree`, `cadgen.store.objects.read_object`,
 `cadgen._internal.doors.document_tree`). The sidecar is never written and the modules are
 gone. Read instead:
 
-- the geometry from the model, `robot().shape` (its `.leaves` in world coordinates, or
-  `.children` and `.location` for the tree), or from an exported STEP with `read_step`;
+- the geometry from the model, `robot().shape`, or from an exported STEP with `read_step`.
+  Both keep a tree of `.children` and parent-relative `.location` values; `.leaves`
+  alone does not apply ancestors' placements. Use `world_parts` above for measurements
+  in world coordinates;
 - the mechanism from your own data (step 1's records), or from `cadgen inspect <id> --json`,
   whose summary lists the joints, their ranges, the states and the sequences.
 

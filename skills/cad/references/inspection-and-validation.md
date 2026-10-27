@@ -38,31 +38,59 @@ def bracket():
 
 ## Opening geometry
 
+A model's `.shape`, `read_step(path)` and `read_xbf(path)` return a build123d tree.
+Each node's `location` is relative to its parent. `.children`, `.descendants` and
+`.leaves` expose those nodes without accumulating ancestor placements. Before comparing
+parts in different sub-assemblies, copy these helpers into the project's check script:
+
 ```python
 import build123d as bd
 
+
+def world_parts(node, parent=None):
+    here = (bd.Location() if parent is None else parent) * node.location
+    if node.children:
+        for child in node.children:
+            yield from world_parts(child, here)
+    else:
+        yield node.located(here)   # a copy with the full placement, not an extra move
+
+
+def find_part(tree, label):
+    matches = [part for part in world_parts(tree) if part.label == label]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one part labelled {label!r}, found {len(matches)}")
+    return matches[0]
+```
+
+These are project helpers, not cadgen imports. `find_part` requires a unique leaf label:
+it refuses both missing and repeated labels. For repeated components, walk a known branch
+while accumulating its parents' locations, or use an occurrence path with
+`cadgen inspect` ([references](#references)).
+
+```python
+from cadgen import read_step
 from kit import kit
 
-doc = kit().shape                                     # the model, as a build123d tree
-for part in doc.leaves:                               # every placed part, world coordinates
-    print(part.label, part.volume)
+doc = kit().shape
+for part in world_parts(doc):
+    print(part.label, part.volume, part.bounding_box().center())
 
-hand = next(node for node in doc.descendants if node.label == "hand")   # an assembly: a Compound
-fingers = [node for node in hand.children if node.label == "finger"]    # its components, in order
-top = fingers[1].faces().sort_by(bd.Axis.Z)[-1]                         # build123d's own selectors
+finger = find_part(doc, "index_finger")
+top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
+plate = find_part(read_step("kit.step"), "plate")
 ```
 
 - Calling a model from a plain script builds it in the engine (a replay when nothing
-  changed) and returns its document, whose `.shape` is a build123d compound tree: each assembly a `Compound` of its
-  components, each part named, coloured and given its material, in world coordinates.
-  `read_xbf(path)` and `read_step(path)` read a file into the same tree. Walk it by labels
-  (`children`, `descendants`, `leaves`) and select within a part with build123d
+  changed) and returns its document, whose `.shape` keeps each assembly's placement.
+  Walk it by labels and select within a part with build123d
   (`faces()`, `edges()`, `sort_by`, `filter_by`).
 - A ref a person gave names one element exactly: `cadgen inspect` answers it
   ([below](#which-code-made-it)), and its facts (centroid, box, surface) tell which
   face of the part it is.
-- `bounding_box()` is the world-aligned envelope; `bounding_box(optimal=False)` is a
-  fast conservative one for curved geometry.
+- `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
+  world-aligned after accumulating placements as above; `bounding_box(optimal=False)`
+  is a fast conservative one for curved geometry.
 
 ## References
 

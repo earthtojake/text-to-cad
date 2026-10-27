@@ -6,8 +6,9 @@ command. It registers this installation (``<state>/installations/<version>.json`
 proxy, ``~/.local/bin/cadgen`` (``cadgen._internal.installations``), through which the skills run
 ``cadgen +<version>``, and says what it found: each written, already right, or a folder it cannot
 write (a sandbox's), the records of installations whose interpreter is gone, a file in the
-proxy's place that is not cadgen's, and what cadgen left behind that no cadgen running now needs
-(``cadgen._internal.leftovers``: engine records of an older format, the bytecode of installations no
+proxy's place that is not cadgen's, another command shadowing it on PATH, and what cadgen left
+behind that no cadgen running now needs (``cadgen._internal.leftovers``: engine records of an
+older format, the bytecode of installations no
 longer registered, cache folders no record names), and cadgen 0.7's store and state files, with
 their size and when they were last written. ``--prune`` removes those records, the per-version
 launchers (``cadgen-<version>``, ``cadgen-python-<version>``) earlier builds published beside the
@@ -93,14 +94,17 @@ def _server(start: bool = True) -> str:
             + (f", cadgen {version}" if version else "") + f", {workers_text(answer)} ({where})")
 
 
-def _on_path(folder: str) -> bool:
-    """Whether ``folder`` is on this shell's ``PATH``, however either spells it."""
-    import os
+def _command_path_hint(path: str) -> str:
+    """How to reach the proxy when PATH does not resolve ``cadgen`` to it."""
+    from shutil import which
 
-    def same(entry: str) -> bool:
-        return os.path.normcase(os.path.realpath(os.path.expanduser(entry))) == os.path.normcase(os.path.realpath(folder))
-
-    return any(same(entry) for entry in os.environ.get("PATH", "").split(os.pathsep) if entry)
+    found = which("cadgen")
+    if found is not None:
+        if os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(path)):
+            return ""
+        return f"; shadowed on PATH by `{os.path.abspath(found)}`; run `{path}` explicitly"
+    folder = _home(os.path.dirname(path))
+    return f"; run it as `{path}` until `{folder}` is on your PATH"
 
 
 def _home(path: str) -> str:
@@ -207,15 +211,13 @@ def _setup() -> list[str]:
                 setup.FOREIGN: "is not cadgen's (left alone): remove it to run cadgen +<version> by it",
                 setup.MISSING: "missing", setup.STALE: "stale"}[status]
 
-        folder = os.path.dirname(path)
-        # The folder off PATH: the command is there, but the shell does not find it by its name.
-        unfound = "" if _on_path(folder) else f"; run it as `{path}` until `{_home(folder)}` is on your PATH"
+        path_hint = _command_path_hint(path)
         if error:
             lines.append(f"command  {path} {said}; cannot write it here ({error}): run this outside any sandbox")
         elif status in (setup.MISSING, setup.STALE) and version:
-            lines.append(f"command  {path} written (was {said}){unfound}")
+            lines.append(f"command  {path} written (was {said}){path_hint}")
         elif status in (setup.OK, setup.NEWER):
-            lines.append(f"command  {path} {said}{unfound}")
+            lines.append(f"command  {path} {said}{path_hint}")
         else:
             lines.append(f"command  {path} {said}")
         for record in setup.records():

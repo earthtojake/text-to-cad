@@ -61,6 +61,7 @@ class DoctorTests(unittest.TestCase):
                                                      "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": "",
                                                      # The cadgen command goes to a folder of the test's, never ~/.local/bin.
                                                      "CADGEN_LAUNCHER_DIR": str(self.state / "bin"),
+                                                     "PATH": str(self.state / "unrelated-bin"),
                                                      "CADGEN_INSTALLATION_VERSION": "",
                                                      # And no engine starts: a private folder, in a shell
                                                      # whose sandbox refuses one (`engine_host.SANDBOXES`).
@@ -103,6 +104,30 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(f"registry {record} dangling: its interpreter {found[1]} is gone", gone)
         self.assertEqual(pruned, f"removed {record}\n")
         self.assertFalse(record.exists())
+
+    def test_the_report_warns_when_another_cadgen_shadows_the_proxy(self) -> None:
+        from cadgen._internal import installations
+
+        command, _, error = installations.write_proxy()
+        self.assertIsNone(error)
+        venv = self.state / "project-venv" / "bin"
+        venv.mkdir(parents=True)
+        other = venv / ("cadgen.exe" if os.name == "nt" else "cadgen")
+        other.write_text("not executed: PATH lookup only", encoding="utf-8")
+        other.chmod(0o755)
+        folder = str(Path(command).parent)
+        for first, second, hint in (
+            (str(venv), folder, f"; shadowed on PATH by `{other}`; run `{command}` explicitly"),
+            (folder, str(venv), ""),
+        ):
+            with self.subTest(first=first), mock.patch.dict("os.environ", {"PATH": os.pathsep.join([first, second])}):
+                code, out, err = _run(["--no-server", str(self.state)])
+            self.assertEqual((code, err), (0, ""))
+            self.assertIn(f"command  {command} OK{hint}\n", out)
+        if os.name != "nt":
+            other.chmod(0o644)  # an earlier non-executable file does not shadow the command
+            with mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(venv), folder])}):
+                self.assertIn(f"command  {command} OK\n", _run(["--no-server", str(self.state)])[1])
 
     def test_doctor_through_the_proxy_names_a_development_installation_by_its_version(self) -> None:
         """A development install run through the ``cadgen`` command, with nothing in its environment

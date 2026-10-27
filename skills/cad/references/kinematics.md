@@ -301,7 +301,8 @@ where to review one.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. Measure a pose by posing the model in the check:
+mid-motion. Measure a pose by posing the model in the check, using `find_part` and
+`world_parts` copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
 from cadgen.ap242 import posed
@@ -309,6 +310,7 @@ from cadgen.geometry import overlap_volume
 
 from hinge import hinge
 
-parts = {part.label: part for part in posed(hinge(), "open").leaves}
-print(overlap_volume(parts["arm"].solids()[0], parts["base"].solids()[0]))   # 0: the open arm clears the base
+tree = posed(hinge(), "open")
+arm, base = find_part(tree, "arm"), find_part(tree, "base")
+print(overlap_volume(arm.solids()[0], base.solids()[0]))   # 0: the open arm clears the base
 ```

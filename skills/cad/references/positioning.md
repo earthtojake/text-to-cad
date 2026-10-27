@@ -90,7 +90,8 @@ There is no generic alignment mode that guesses which points or axes the design
 means: a check names the mating features and states the relationship in Python
 ([inspection](inspection-and-validation.md)).
 
-For example, for the enclosure's two mating faces:
+For example, for the enclosure's two mating faces, using `find_part` and `world_parts`
+copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
 import build123d as bd
@@ -98,9 +99,8 @@ import build123d as bd
 from enclosure import enclosure
 
 doc = enclosure().shape
-parts = {part.label: part for part in doc.leaves}
-fixed = parts["base"].faces().sort_by(bd.Axis.Z)[-1]     # the base's top
-moving = parts["lid"].faces().sort_by(bd.Axis.Z)[0]      # the lid's underside
+fixed = find_part(doc, "base").faces().sort_by(bd.Axis.Z)[-1]   # the base's world-Z top
+moving = find_part(doc, "lid").faces().sort_by(bd.Axis.Z)[0]    # the lid's world-Z underside
 n = fixed.normal_at().normalized()
 m = moving.normal_at().normalized()
 signed_gap_mm = (moving.center() - fixed.center()).dot(n)
@@ -114,4 +114,5 @@ A plane gap and parallelism test does not establish lateral alignment or
 overlapping face footprints, and accepting either parallel direction misses a
 flipped part. A screw pattern's spacing is between the analytic centers of its
 circular edges, clear space between bodies is `closest_points`, and
-`shape.bounding_box().size` is the world-aligned envelope.
+`shape.bounding_box().size` is the world-aligned envelope once ancestor placements
+have been applied.

@@ -55,6 +55,10 @@ command's `--help` lists its flags. The first launch downloads cadgen and may ou
 host's server start timeout (Claude Code: 30 s by default, raised by setting `MCP_TIMEOUT` in
 milliseconds; Codex: the plugin asks for 300 s); a restart resumes the download.
 
+A project venv can put its own `cadgen` ahead of the launcher on PATH, even when
+`~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.0 doctor` to diagnose that
+case and use that full launcher path for commands until PATH is corrected.
+
 One engine serves the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cadgen status` lists its workers
 and the documents it holds; `cadgen stop` stops it, and any older one left running.
@@ -290,14 +294,18 @@ A check is a Python script that calls the model and measures what it returns, so
 tests the model as it is now. Write one only when the person asks for a dimension, a fit
 or a mass, or when the change is numeric and the number matters ([Pictures](#pictures)):
 
+Copy `world_parts` and `find_part` from
+[Opening geometry](references/inspection-and-validation.md#opening-geometry) into the check
+first. They accumulate parent placements; raw `.leaves` do not.
+
 ```python
 from cadgen.geometry import closest_points
 
 from assembly import assembly
 
-kit = assembly().shape                              # rebuilt (replayed), returned as a tree
-parts = {part.label: part for part in kit.leaves}   # every placed part, world coordinates
-plate, post = parts["plate"], parts["standoff_left"]
+kit = assembly().shape                       # rebuilt (replayed), returned as a tree
+plate = find_part(kit, "plate")               # copied into world coordinates
+post = find_part(kit, "standoff_left")        # refuses missing or repeated labels
 print(plate.bounding_box().size)              # the envelope: not a hole's diameter or a wall's thickness
 print(closest_points(plate, post).distance)   # 0: the standoff sits on the plate
 ```
