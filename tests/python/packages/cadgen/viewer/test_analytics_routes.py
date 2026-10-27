@@ -125,9 +125,8 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(self.sent[-1]["events"], [{"name": "files", "kind": "stl", "count": 1}])
         self.assertNotIn(".stl", json.dumps(self.sent))
 
-    def test_a_models_page_is_a_file_shown_its_document_an_xbf_once_a_day(self) -> None:
-        # The page a model's run names (`/<id>`) shows its document: a look at a file like any other, counted by its
-        # format once that day however often it is opened again, and never a build.
+    def test_a_models_page_is_counted_apart_from_an_xbf_file_once_a_day(self) -> None:
+        # A model and an actual XBF file are counted separately, each once a day, and never as builds.
         from cadgen.engine.ids import model_id
         from cadgen.engine.registry import Registry
 
@@ -141,10 +140,16 @@ class ViewerAnalyticsTest(unittest.TestCase):
             self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": ident})[0], 200)
         # An id no document has is no page shown.
         self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": model_id(script, "gone")})[0], 200)
+        path = self.root / "exported.xbf"
+        path.write_bytes(b"file fixture")
+        for _ in range(2):
+            self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": str(path)})[0], 200)
         self.assertTrue(self.app.analytics.flush())
         [payload] = self.sent
-        self.assertEqual(payload["events"], [{"name": "files", "kind": "xbf", "count": 1}])
+        self.assertEqual(payload["events"], [{"name": "files", "kind": "model", "count": 1},
+                                           {"name": "files", "kind": "xbf", "count": 1}])
         self.assertNotIn(ident, json.dumps(payload))
+        self.assertNotIn(str(path), json.dumps(payload))
 
     def test_a_page_says_its_quick_edits_and_its_crashes_and_a_route_that_breaks_is_one(self) -> None:
         self.request("POST", "/__cad/analytics", {"share": True})

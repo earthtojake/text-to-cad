@@ -25,16 +25,17 @@ exits, each batch under an id of its own and stamped with the time it was made:
   answer; the CAD Viewer that did not start; cadgen's own bug -- never the failure's message;
 - ``view`` (the apps): how many times a CAD view was touched by a person or switched models --
   time spent looking at a model calls no tool, and is use all the same;
-- ``files`` (the apps): how many distinct files of each format (``step``, ``stl``, ...) a CAD view
-  showed for the first time that day -- a model's page among them, its document an ``xbf`` -- told apart
-  here, by path (a document by its id), and sent as a number;
-- ``build`` (the engine's verbs): for each format and who asked (``VIAS``), how many builds and exports,
+- ``files`` (the apps): how many distinct models (kind ``model``) and files of each format (``xbf``,
+  ``step``, ``stl``, ...) a CAD view showed for the first time that day -- told apart here, by path
+  (a model by its id), and sent as a number;
+- ``build`` (the engine's verbs): model builds (kind ``model``) and exports (the destination format),
+  by who asked (``VIAS``),
   how each ended (``OUTCOMES``: failed, lost its worker, or stopped by whoever asked), how many took their
   xbf whole without building, and how long they took;
 - ``build_failure`` (the engine's verbs): how many of those failed for each reason (``BUILD_FAILURES``),
   one word decided where the build failed (``build_failure``), from what the error is and whose code
   raised it -- the model's, the CAD kernel's under it, cadgen's -- never from its message;
-- ``snapshot`` (the command that rendered it): for each format, how many renders, how many failed,
+- ``snapshot`` (the command that rendered it): for each source kind (``model`` or a file format), how many renders, how many failed,
   and how long they took;
 - ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
   the snapshot failed (``cadgen._internal.engine_telemetry``);
@@ -155,11 +156,12 @@ from cadgen.settings import read_section, settings_path, update_section
 LOG = logging.getLogger("cadgen.analytics")
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 8: live models have their own kind (``model``), distinct from files, including exported/opened xbfs;
 # 7: the controls a person used in a CAD view (``control``), and room for one event each (``MAX_EVENTS``); 6: the
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 7
+SCHEMA = 8
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
@@ -168,6 +170,7 @@ SCHEMA = 7
 # the daemon sent before -- and a batch's random id and time link nothing its process's id did not. Nor schema 7:
 # which of a view's controls a person used, and how long a tool was in hand, is the use a view already counted
 # (``view``, ``feature``'s Quick Edit) told apart by control, under the same install and process ids.
+# Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -311,10 +314,10 @@ UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # own string, never sent.
 UNKNOWN_TOOL = "cad_unknown"
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``), the
-# engine's document (``.xbf``) among them.
+# native document file (``.xbf``) among them; a live model has no file extension.
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
               ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".xbf": "xbf"}
-KINDS = frozenset(FILE_KINDS.values())  # a format, as every event names it
+KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual file format
 # Who sends: the CAD app, the browser viewer, and the sender a command starts when nothing else has taken what
 # commands counted (``cadgen._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
@@ -1535,11 +1538,11 @@ class Recorder:
 
     @_guarded(lambda: None)
     def opened_document(self, ident: Any) -> None:
-        """A model's page has its document on screen (``/<id>``): a look at a file like any other, the engine's
-        document (``xbf``), counted the first time today and told apart by its id here, never sent. Nothing is
+        """A model's page has its document on screen (``/<id>``): counted as ``model`` the first time today
+        and told apart by its id here, never sent. An opened .xbf is a file (``opened``). Nothing is
         built for it, nor counted as a build."""
         if isinstance(ident, str) and ident:
-            self._shown_once(f"document:{ident}", "xbf")  # never an absolute path, which a file's key is
+            self._shown_once(f"document:{ident}", "model")  # never an absolute path, which a file's key is
 
     def _shown_once(self, key: str, kind: str) -> None:
         """A file or a document, by ``key``, counted under ``kind`` the first time today it is shown."""
@@ -1557,7 +1560,7 @@ class Recorder:
     @_guarded(lambda: None)
     def built(self, kind: str, via: str, outcome: str, seconds: float = 0.0, *, cached: bool = False,
               reason: str | None = None) -> None:
-        """A build (or an export) of a ``kind`` of model asked for ``via`` one of ``VIAS``, ended as one of
+        """A model build, or an export of a file format, asked for ``via`` one of ``VIAS``, ended as one of
         ``OUTCOMES`` after ``seconds``; ``cached``: its xbf was taken whole, and nothing was built. A failed one
         failed for ``reason`` (one of ``BUILD_FAILURES``; anything else is ``other``)."""
         if kind not in KINDS or via not in VIAS or outcome not in OUTCOMES:
@@ -1571,7 +1574,7 @@ class Recorder:
 
     @_guarded(lambda: None)
     def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None) -> None:
-        """A snapshot of a ``kind`` of file was rendered, or failed to be, for ``reason`` (one of
+        """A snapshot of a model or file format was rendered, or failed to be, for ``reason`` (one of
         ``SNAPSHOT_FAILURES``; anything else is ``other``)."""
         if kind in KINDS:
             self._note("snapshot", (kind,), {"count": 1, "failed": not ok, "seconds": _seconds(seconds)})

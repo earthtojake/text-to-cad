@@ -630,7 +630,7 @@ class CadApp:
     def _change_recents(self, payload) -> dict:
         """A change to the library -- ``{action, path, png?}``, a file by its absolute path, a model by
         its id (its entry's ``path``) -- answered with the library as it now is. A file opened is
-        also counted for analytics, and so is a model's page, its document an ``xbf``; a model's entry
+        also counted for analytics, and so is a model's page, under its own ``model`` kind; a model's entry
         is the engine's, written when it builds, so only when a page opened it (``open``), pinning, its
         picture and its deletion (``delete``: the document, ``delete_document``) change it. A file's
         entry is removed (``remove``), its file untouched."""

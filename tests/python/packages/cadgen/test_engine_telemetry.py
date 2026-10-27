@@ -1,6 +1,6 @@
 """The engine's verbs counted (``cadgen/_internal/engine_telemetry.py``): cadgen's observer of
 ``cadgen.engine.api`` turns what each build, export and snapshot did into the counts the build daemon
-kept for its builds -- kind ``xbf``, who asked, how it ended and why, the workers' health, cadgen's own
+kept for its builds -- kind ``model``, who asked, how it ended and why, the workers' health, cadgen's own
 crashes -- keeps them in the spool, and a command starts the sender (``telemetry_send``, process ``cli``)
 when nothing has taken the spool for a window. Nothing is counted where the environment says no."""
 
@@ -96,26 +96,26 @@ class EngineTelemetryTest(unittest.TestCase):
         built = facts(models=[{"ok": True, "cached": True, "children": 0, "parts": 3, "files": ["glb", "xbf"]}],
                       worker={"fresh": True, "retired": True, "died": None}, program=True)
         self.assertEqual(engine_telemetry.counts(built, "script"), {
-            "builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 0.5, "cached": True}],
+            "builds": [{"kind": "model", "via": "script", "outcome": "ok", "seconds": 0.5, "cached": True}],
             "features": ["assembly", "declared_mesh"], "health": {"workers": 1, "recycles": 1}})
         died = facts(ok=False, worker={**WORKER, "died": -11}, error=error(None, engine=True))
         self.assertEqual(engine_telemetry.counts(died, "command"), {
-            "builds": [{"kind": "xbf", "via": "command", "outcome": "crashed", "seconds": 0.5, "cached": False}],
+            "builds": [{"kind": "model", "via": "command", "outcome": "crashed", "seconds": 0.5, "cached": False}],
             "crashes": [analytics.died(-11)], "health": {"crashes": 1}})
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 7.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 8.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (7, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (8, "cli"))
         self.assertEqual(payload["events"], [
-            {"name": "build", "kind": "xbf", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
+            {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
-            {"name": "build", "kind": "xbf", "via": "script", "count": 2, "failed": 1, "crashed": 0, "cancelled": 0,
+            {"name": "build", "kind": "model", "via": "script", "count": 2, "failed": 1, "crashed": 0, "cancelled": 0,
              "cached": 1, "seconds": 1.0, "longest": 0.5},
-            {"name": "build_failure", "kind": "xbf", "via": "script", "reason": "model_error", "count": 1},
+            {"name": "build_failure", "kind": "model", "via": "script", "reason": "model_error", "count": 1},
             {"name": "feature", "feature": "assembly", "count": 1},
             {"name": "feature", "feature": "declared_mesh", "count": 1},
             {"name": "health", "workers": 1, "crashes": 1, "recycles": 1, "refusals": 0},
@@ -125,13 +125,14 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists(), "the spool is the sender's now")
 
     def test_an_export_counts_a_build_of_each_destination_and_a_snapshot_its_source(self) -> None:
-        exported = facts("export", source="xbf", outputs=[
-            {"kind": "step", "seconds": 0.1}, {"kind": "threemf", "seconds": 0.2}, {"kind": "dxf", "seconds": 0.1}])
+        exported = facts("export", source="model", outputs=[
+            {"kind": "step", "seconds": 0.1}, {"kind": "threemf", "seconds": 0.2}, {"kind": "dxf", "seconds": 0.1},
+            {"kind": "xbf", "seconds": 0.1}])
         self.assertEqual(engine_telemetry.counts(exported, "command"), {
-            "builds": [{"kind": kind, "via": "command", "outcome": "ok", "seconds": 0.5 / 3, "cached": False}
-                       for kind in ("step", "3mf", "dxf")]})
+            "builds": [{"kind": kind, "via": "command", "outcome": "ok", "seconds": 0.5 / 4, "cached": False}
+                       for kind in ("step", "3mf", "dxf", "xbf")]})
         drawn = engine_telemetry.counts(facts("snapshot", source="model", found=True, pose=False), "script")
-        self.assertEqual(drawn, {"snapshots": [{"format": "xbf", "ok": True, "seconds": 0.5}]})
+        self.assertEqual(drawn, {"snapshots": [{"format": "model", "ok": True, "seconds": 0.5}]})
         # A snapshot at a pose is the one use of kinematics a verb tells: an export has no pose.
         posed = engine_telemetry.counts(facts("snapshot", source="model", found=True, pose=True), "script")
         self.assertEqual(posed["features"], ["kinematics"])
@@ -139,7 +140,7 @@ class EngineTelemetryTest(unittest.TestCase):
         # drawings and robot descriptions as documents and meshes are.
         from cadgen.engine import api
 
-        for suffix, kind in ((".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"), (".sdf", "sdf"),
+        for suffix, kind in ((".xbf", "xbf"), (".step", "step"), (".3mf", "3mf"), (".dxf", "dxf"), (".urdf", "urdf"), (".sdf", "sdf"),
                              (".srdf", "srdf")):
             told = api._facts("snapshot", (self.tmp / f"secret{suffix}", self.tmp / "out.png"), {}, {}, None, None, 0.5)
             self.assertEqual(engine_telemetry.counts(told, "command"),
@@ -158,6 +159,34 @@ class EngineTelemetryTest(unittest.TestCase):
         # No OpenGL to draw with: the picture was not drawn.
         self.assertEqual(why(error("RuntimeError", engine=True, here=True)), "render_error")
 
+    def test_snapshot_sources_and_failures_keep_model_and_file_kinds_through_the_spool(self) -> None:
+        from cadgen.engine import api
+        from cadgen.engine.snapshot import SnapshotRefused
+
+        ident = "c9b8b08f-8634-5011-a447-55648e01d810"
+        file = self.tmp / "private.xbf"
+        file.touch()
+        # Direct sources (Python, CLI, MCP) and Quick Edit packets use the same observed verb.
+        for source, kind in ((ident, "model"), (file, "xbf")):
+            for packet in (False, True):
+                for failed in (False, True):
+                    heard = {"source": source} if packet else {}
+                    args = () if packet else (source, self.tmp / "out.png")
+                    refusal = SnapshotRefused("private detail") if failed else None
+                    told = api._facts("snapshot", args, {"job": "private.packet"} if packet else {},
+                                      heard, None, refusal, 0.5)
+                    counted = engine_telemetry.counts(told, "command")
+                    self.assertEqual(counted["snapshots"][0]["format"], kind)
+                    self.assertTrue(analytics.spool(counted, path=self.settings))
+        [payload] = self.sent()
+        snapshots = [event for event in payload["events"] if event["name"] == "snapshot"]
+        self.assertEqual([(row["kind"], row["count"], row["failed"]) for row in snapshots],
+                         [("model", 4, 2), ("xbf", 4, 2)])
+        failures = [event for event in payload["events"] if event["name"] == "snapshot_failure"]
+        self.assertEqual([(row["kind"], row["count"]) for row in failures], [("model", 2), ("xbf", 2)])
+        self.assertNotIn("private", json.dumps(payload))
+        self.assertNotIn(ident, json.dumps(payload))
+
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
         for switch in ({"DO_NOT_TRACK": "1"}, {"CADGEN_TELEMETRY": "0"}, {"CADGEN_ENGINE_WORKER": "1"}):
             with mock.patch.dict(os.environ, switch):
@@ -166,7 +195,7 @@ class EngineTelemetryTest(unittest.TestCase):
             engine_telemetry.observe(facts())
         self.assertEqual(self.spooled(), [])
         engine_telemetry.observe(facts(program=True))
-        self.assertEqual(self.spooled(), [{"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 0.5,
+        self.assertEqual(self.spooled(), [{"builds": [{"kind": "model", "via": "script", "outcome": "ok", "seconds": 0.5,
                                                        "cached": False}]}])
         analytics.choose(False, by="cli", path=self.settings, forget=lambda _id: True)
         engine_telemetry.observe(facts())
@@ -205,7 +234,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 7, "xbf"))
+                         ("cli", 8, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):
@@ -277,7 +306,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
                           second.get("health")), ("step", "command", "ok", None), "its worker was warm")
         self.assertEqual((third["builds"][0]["via"], third["builds"][0]["outcome"], third["health"], third["crashes"]),
                          ("script", "crashed", {"crashes": 1}, [analytics.died(3)]))
-        self.assertEqual({build["kind"] for counts in (first, third) for build in counts["builds"]}, {"xbf"})
+        self.assertEqual({build["kind"] for counts in (first, third) for build in counts["builds"]}, {"model"})
 
     def test_a_telemetry_batch_holds_no_id_and_no_path(self) -> None:
         """Verbs by document id -- a pointer model's and a shape's handed over, one refused, one whose body
@@ -322,7 +351,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         spooled = spool.read_text(encoding="utf-8")
         counted = [json.loads(line)["counts"] for line in spooled.splitlines()]
         outcomes = [(build["kind"], build["outcome"]) for counts in counted for build in counts.get("builds", [])]
-        self.assertIn(("xbf", "failed"), outcomes, "the body that raised was counted")
+        self.assertIn(("model", "failed"), outcomes, "the body that raised was counted")
         self.assertEqual(outcomes.count(("stl", "ok")), 2, "both exports by id were counted")
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")

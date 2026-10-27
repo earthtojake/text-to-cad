@@ -8,6 +8,7 @@ batch refused. Read as text, so this needs nothing installed.
 
 from __future__ import annotations
 
+import ast
 import re
 import unittest
 from pathlib import Path
@@ -23,7 +24,7 @@ def names(path: Path, start: str, end: str) -> list[str]:
     body = text[text.index(start) + len(start):]
     body = body[:body.index(end)]
     body = re.sub(r"(?m)(?://|#).*$", "", body)  # comments name words that are no control
-    return re.findall(r"""['"]([a-z][a-z0-9_]*)['"]""", body)
+    return re.findall(r"""['"]([a-z0-9][a-z0-9_]*)['"]""", body)
 
 
 class TheControlsAreOneVocabulary(unittest.TestCase):
@@ -38,6 +39,24 @@ class TheControlsAreOneVocabulary(unittest.TestCase):
         # A name says what was used, never a value: snake_case words of the page's choosing.
         for name in page:
             self.assertRegex(name, r"^[a-z]+(?:_[a-z]+)*$")
+
+
+class TheKindsAreOneVocabulary(unittest.TestCase):
+    def test_current_sender_kinds_match_its_receiver_schema(self) -> None:
+        # File suffixes are local lookup keys; only their formats and the closed model word cross the wire.
+        tree = ast.parse(CADGEN.read_text(encoding="utf-8"))
+        assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+                       for target in node.targets if isinstance(target, ast.Name)}
+        formats = set(ast.literal_eval(assignments["FILE_KINDS"]).values())
+        extra = names(CADGEN, "KINDS = frozenset({", "})")
+        receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
+                       + names(RECEIVER, "const KINDS_6 = new Set([", "]);")
+                       + names(RECEIVER, "const KINDS_8 = new Set([", "]);"))
+        self.assertEqual(formats | set(extra), receiver)
+        self.assertIn("model", extra)
+        self.assertIn("xbf", formats)
+        schema = ast.literal_eval(assignments["SCHEMA"])
+        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_8")
 
 
 if __name__ == "__main__":
