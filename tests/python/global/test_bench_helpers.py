@@ -93,13 +93,13 @@ class WorkCopyTest(unittest.TestCase):
                 (source / name).mkdir()
                 (source / name / "local").write_bytes(b"must not copy")
             corpus_bench.copy_project(source, work)
-            self.assertEqual((work / "src/part.py").read_text(), SCRIPT)
+            self.assertEqual((work / "src/part.py").read_text(encoding="utf-8"), SCRIPT)
             self.assertEqual((work / "STEP/imported/input.step").read_bytes(), b"pinned fixture")
             self.assertEqual(sorted(str(path.relative_to(work)) for path in work.rglob("*") if path.is_file()),
                              ["STEP/imported/input.step", "src/part.py"])
             with self.assertRaises(FileExistsError):
                 corpus_bench.copy_project(source, work)
-            self.assertEqual((source / "src/part.py").read_text(), SCRIPT)
+            self.assertEqual((source / "src/part.py").read_text(encoding="utf-8"), SCRIPT)
 
     def test_symlinks_cannot_turn_a_copy_or_edit_into_an_original_write(self):
         with temporary_directory(prefix="bench-link-") as folder:
@@ -107,13 +107,13 @@ class WorkCopyTest(unittest.TestCase):
             source = root / "source"
             source.mkdir()
             outside = root / "original.py"
-            outside.write_text(SCRIPT)
+            outside.write_text(SCRIPT, encoding="utf-8")
             (source / "part.py").symlink_to(outside)
             with self.assertRaisesRegex(ValueError, "refuses symlink"):
                 corpus_bench.copy_project(source, root / "work")
             with self.assertRaisesRegex(ValueError, "escapes the work copy"):
                 corpus_bench.inside(source, source / "part.py")
-            self.assertEqual(outside.read_text(), SCRIPT)
+            self.assertEqual(outside.read_text(encoding="utf-8"), SCRIPT)
 
     def test_every_mutable_engine_path_is_private_even_with_owner_overrides(self):
         with temporary_directory(prefix="bench-private-") as folder:
