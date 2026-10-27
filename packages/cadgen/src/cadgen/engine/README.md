@@ -352,6 +352,7 @@ only, and a file's id is derived again from its path after a restart.
 | `build.py` | one build: load the script afresh (as Python imports it: a package's module by its dotted name), one memo run, document, element names, files: every model's that ran |
 | `delta.py` | the line under the run line: a built tree's facts (`facts`: its occurrences, its world bounds -- each part's box, kept by its geometry key, measured where it decides the model's -- its parts' geometry keys and looks, and its joints, configuration sequences and warnings), worked out in the worker, and the daemon's delta of them against the build before (`delta`), kept beside each record and in the registry's |
 | `previous.py` | the model's build closure on its xbf's main label (`manifest`), the release from the version beside the code and the platform, the closure made again before the body runs (`again`) |
+| `document_migrations.py` | supported persisted `xbf/8` to `xbf/9` material conversion in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes |
 | `document.py` | result to XCAF (prototypes, instances, names, colours, materials, element names; a mesh face refused, `mesh_faces`), a warm build's patch of the document it kept, atomic BinXCAF save, read-back of an xbf or a foreign STEP, and a saved document's main-label strings rewritten in its bytes (`relabel`) |
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
@@ -965,6 +966,13 @@ document does; no worker of its script starts and nothing runs. Loaded, it is un
 budget like any document, and leaves memory for its file again when the budget needs the room. The
 record is authoritative: a cache file missing, or not the size its record says, is not cached.
 
+A cached `xbf/8` snapshot is converted in memory when read, just like an explicit file
+(**Document compatibility**). Viewing, inspection, snapshots, imports and exports require no
+model source or execution. The original cache bytes, record and revision remain unchanged;
+loading a conversion does not schedule a cache rewrite. Unsupported or failed format conversion
+preserves those bytes and that record and reports a clear error. Explicitly running the model
+still compares the current build key and rebuilds where it differs.
+
 A run takes it too, every model alike. A build is handed the cache's `documents/` folder, and a
 fresh worker -- after a restart, or once the script's worker retired -- reads a model's cache file
 before its body runs (**Build closure**): with the key the model has now, the document is taken
@@ -1000,8 +1008,9 @@ the command that builds it again (**The rebuild command**).
 **Kept until deleted.** Nothing removes a cache file on its own: the cache has no size cap, no
 least recently used and no age, and keeps every model document -- a shape handed over's as a
 model's -- until a person deletes it, its record and its file together (**Delete**). The one other
-removal is a file whose bytes do not read: it goes, its record kept without `cache`, and the next
-build writes it again (`Models.unreadable`). A save that fails is logged and listed by `cadgen
+removal is a corrupt file whose bytes do not read: it goes, its record kept without `cache`,
+and the next build writes it again (`Models.unreadable`). An unsupported document format or a
+failed saved-format conversion preserves the cache file and record (**Document compatibility**). A save that fails is logged and listed by `cadgen
 status`, never raised: with the cache folder read-only, or not writable at all, the engine saves
 nothing and does everything else as it would.
 
@@ -1407,9 +1416,12 @@ Preview -- is an input. A posed or partial file is a function in the model's cod
   them), checked before the job and, by its `mtime_ns-size`, again in the worker.
 
 The page offers what the file's kind writes, and nothing is inspected first: an engine document
-(a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf -- an xbf's xbf its original bytes
-(`original`), as an xbf is not written from another -- and DXF where the page draws it flat on
-z=0; a mesh file as the other two mesh kinds and nothing else. A job the writer refuses (a DXF
+(a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
+download returns its original bytes (`original`), including an `xbf/8` file converted in
+memory for viewing. Use
+`cadgen export old.xbf upgraded.xbf` to save that conversion to a different path
+(**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
+file offers the other two mesh kinds and nothing else. A job the writer refuses (a DXF
 whose drawing checks fail) fails with its reason. A changed source is refused, saying to open Export again. There is no source bundle in
 this interface.
 
@@ -1436,7 +1448,10 @@ changed or new one fails in one line naming the folder and its mode.
   what it would write however the script has changed since, and nothing is built); from Python, a
   `Model` (called first, as the program's own call of it is: taken from its key or the engine's
   cache, or replayed, when nothing changed; then exported by its handle) too. An xbf is written from a
-  STEP; never from an xbf, which already is the document. Several destinations read the document
+  STEP. An ordinary current-format xbf is not written from another xbf, which already is the
+  document. A loaded `xbf/8` converted in memory is the exception: export to a different XBF
+  path serializes the complete upgraded XCAF document atomically; the source path is refused
+  (**Document compatibility**). Several destinations read the document
   once, and every destination is checked before any is written; an export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
@@ -2691,31 +2706,43 @@ record on the main label, the closure counts none, and an animated document is t
 join the key; release and Python are recorded); `xbf/9`, materials use native bd_materials
 physics and `PbrProperties`, and both material libraries join the key.
 
-**Document compatibility.** The persisted-document exception to law 15 starts at `xbf/9`.
-Future format changes must provide backward reading or automatic data migrations so saved
-geometry, placements, appearance, names and mechanism data remain available for viewing and
-export without the model's source or execution. A cadgen version bump alone is not a reason to
-migrate a document. Additive fields with defaults may need only reader support; changed units,
-field meanings or label layouts need a versioned conversion when the new reader cannot interpret
-them directly. Changes only to build keys invalidate build reuse without making the saved
-snapshot unreadable.
+**Document compatibility.** The engine reads `xbf/8` and `xbf/9`. Loading an `xbf/8`
+document converts its persisted material metadata to native material data in memory before
+viewing, inspection, snapshots, import or export. No model source is needed or executed.
+Geometry, placements, names, appearance, physical meaning, painted faces, mechanism and animation
+data remain the saved document's. Reading a current `xbf/9` is unchanged; formats outside this
+supported set are refused with a clear error.
 
-Future conversions must be tested against saved fixtures of the supported formats, including
-the underlying OCCT binary reader. They must preserve the document's meaning and original build
-provenance: converting metadata does not mean the geometry was built by the new kernel. A
-conversion must not execute model code or replace original bytes until it succeeds; an unsupported
-version or failed conversion must leave those bytes recoverable, including in the document cache.
-Retired Python material classes and authoring APIs need not remain available to do this.
+The conversion is idempotent. It leaves the original build closure and toolchain provenance
+unchanged: metadata conversion does not mean the geometry was built by the current kernel.
+A separate migration record identifies the conversion (`Loaded.migration`, `Source.migration`)
+without replacing that provenance. Opening a file never rewrites its bytes. A cached snapshot
+is read the same way without rewriting its bytes, changing its record or advancing its revision.
+An unsupported or failed conversion preserves the original bytes and cache record.
 
-**The 0.8.1 baseline cutover.** Because the material representation had only just shipped,
-this transition deliberately provides no backward reader, in-place migration or material
-payload adapter for formats before `xbf/9`. Earlier cadgen XBF files are refused by format
-validation; rebuild models from source to produce current documents. On an explicit build an
-older cache is not reused. Reading an incompatible cached document removes that cached copy and
-asks for a rebuild; reading an explicit XBF file leaves the file untouched. Preserve older files
-or cache copies before this upgrade if source is unavailable. This is the exception for the
-initial baseline, not the policy for future format changes. The JSON identity migration
-(**Identity migration**) is independent of document contents.
+To keep an upgraded file, explicitly export the converted document to a different XBF path:
+
+```bash
+cadgen export saved-v8.xbf upgraded-v9.xbf
+```
+
+This serializes the complete upgraded XCAF document, including its separate migration record,
+and replaces the destination atomically only after success. Export back to the source path is
+refused. The migration record retains the original file path and its closure's relative-path
+base, so saving in a different directory does not silently rebase the original build provenance.
+A cached document exported by id to XBF writes the upgraded document too, preserving its known
+document id and source script. Historical caches did not record the declared XBF folder: their
+closure base is explicitly unknown, never guessed from the export destination. Export over the
+engine's original cache file is refused. The existing
+refusal of ordinary current-format XBF-to-XBF translation remains. The viewer's `original`
+download of an opened XBF file returns its original bytes, even when the displayed document was
+converted in memory; use the explicit export above to persist the conversion.
+
+Saved-document access is separate from build reuse. Explicit source execution compares the
+current format, material libraries and other build inputs with the original build key and
+builds normally when they differ. No build closure is restamped to manufacture a cache hit.
+The JSON identity migration (**Identity migration**) is independent of document contents, and
+this data conversion restores no retired Python authoring API or class.
 
 Before a body runs or is replayed, the build makes the closure again -- the script loaded,
 its modules digested, each input hashed again -- and compares its key with the one the model's

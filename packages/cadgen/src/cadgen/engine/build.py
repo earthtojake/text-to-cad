@@ -863,10 +863,10 @@ def taken(script: Path, name: str) -> bytes | None:
 # The held documents this process read last, by their bytes' digest and name: an export, a snapshot
 # and an inspection of one document after another read its bytes once, as a file's read is held.
 _HELD_KEPT = 4
-_HELD: "dict[tuple[str, str], Any]" = {}
+_HELD: "dict[tuple[str, str, str], Any]" = {}
 
 
-def held_source(payload: bytes, name: str) -> Any:
+def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None) -> Any:
     """A document's xbf bytes -- the ones its worker made of it before it retired
     (``models.Models.drain``), or the engine's cache file of it (``cache``) -- as an
     ``export.Source``, read in memory as an on-disk xbf is (``document.read_bytes``): its mechanism,
@@ -874,12 +874,29 @@ def held_source(payload: bytes, name: str) -> Any:
     (``name``). The source has no path: it is no file. The last few read are kept (``_HELD``)."""
     import hashlib
 
-    key = (hashlib.blake2b(payload, digest_size=20).hexdigest(), name)
+    from cadgen.engine.document_migrations import DocumentCompatibilityError
+
+    key = (hashlib.blake2b(payload, digest_size=20).hexdigest(), name,
+           json.dumps(origin, sort_keys=True, separators=(",", ":")))
     found = _HELD.pop(key, None)
     if found is None:
         try:
             found = _read_held(payload, name)
+            found.origin = origin
+        except DocumentCompatibilityError:
+            # Unsupported or failed conversions leave the saved snapshot recoverable. Only
+            # unreadable binary data takes the cache-eviction path below.
+            raise
         except Exception as error:  # noqa: BLE001 - bytes that do not read are said so, by their type
+            from cadgen.engine import document, previous
+
+            writer, _closure = previous._head(payload[:previous._HEAD_BYTES])
+            version = document.written_format(writer)
+            if version is not None and version != previous.FORMAT:
+                # The binary reader can fail before the format converter is reached. A
+                # historical/future snapshot is still recoverable; do not call it corrupt.
+                raise DocumentCompatibilityError(
+                    f"cannot read saved {version}: {error}; the original document is preserved") from error
             raise Unreadable(str(error)) from error
     _HELD[key] = found  # the most recent last
     while len(_HELD) > _HELD_KEPT:
@@ -898,7 +915,8 @@ def _read_held(payload: bytes, name: str) -> Any:
     return export.Source(structure, {p.key: p.shape for p in loaded.prototypes}, live=False,
                          xcaf=loaded.doc, world=lambda occurrence: loaded.worlds.get(occurrence),
                          local=lambda occurrence: loaded.locals.get(occurrence),
-                         mechanism=loaded.mechanism, foreign=False, path=None, animations=loaded.animations)
+                         mechanism=loaded.mechanism, foreign=False, path=None, animations=loaded.animations,
+                         migration=loaded.migration)
 
 
 def _statuses(run: Any, name: str) -> dict[str, str]:

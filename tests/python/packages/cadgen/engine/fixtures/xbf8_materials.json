@@ -1,0 +1,525 @@
+{
+  "generator": "make_xbf8_fixture.py",
+  "versions": {
+    "cadgen": "0.8.0",
+    "build123d": "0.11.1",
+    "cadquery-ocp-novtk": "7.9.3.1.1"
+  },
+  "python": "3.13.13",
+  "sha256": "73a31c126ff4ef4505e3062da258ca099c642157d7974b1c0e8cf39af9fcc7d7",
+  "bytes": 16240,
+  "writer": "cadgen.engine xbf/8 (cadgen 0.8.0)",
+  "closure": {
+    "schema": "cadgen.engine closure/2",
+    "engine": {
+      "release": "cadgen 0.8.0",
+      "format": "xbf/8",
+      "digest": "old-writer-fixture"
+    },
+    "libs": {
+      "build123d": "0.11.1",
+      "OCP": "7.9.3.1"
+    },
+    "platform": {
+      "python": "3.13.13",
+      "system": "Darwin",
+      "arch": "arm64"
+    },
+    "source": {
+      "kind": "script",
+      "path": "../unavailable/legacy_model.py",
+      "function": "legacy_kit"
+    },
+    "modules": [
+      [
+        "../unavailable/legacy_model.py",
+        "dddddddddddddddddddddddddddddddd"
+      ]
+    ],
+    "symbols": {},
+    "inputs": [
+      [
+        "read",
+        "../unavailable/dimensions.json",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    ],
+    "bodies": 1,
+    "key": "87b81d4366128345ead473bfa9629d4e"
+  },
+  "physical": {
+    "name": "Legacy test alloy",
+    "density": 7850.0,
+    "family": "metal",
+    "standard": "TEST-ALLOY-8",
+    "source": "fixture: measured coupon, old SI units",
+    "description": "Saved alloy with independently authored visual finishes",
+    "young_modulus": 210000000000.0,
+    "poisson_ratio": 0.29,
+    "yield_strength": 355000000.0,
+    "ultimate_strength": 610000000.0,
+    "thermal_expansion": 1.23e-05,
+    "thermal_conductivity": 42.5,
+    "specific_heat": 470.0,
+    "isotropic": false
+  },
+  "appearance": {
+    "metallic": 0.3,
+    "roughness": 0.6,
+    "ior": 1.45,
+    "anisotropy": 0.4,
+    "anisotropy_rotation": 0.7,
+    "transmission": 0.5,
+    "transmission_color": "#bed4e8",
+    "transmission_depth": 0.02,
+    "coat": 0.6,
+    "coat_roughness": 0.15,
+    "emissive": "#28405a",
+    "emissive_strength": 2.5
+  },
+  "structure": {
+    "name": "legacy_kit",
+    "units": "mm",
+    "prototypes": [
+      {
+        "index": 0,
+        "key": "c5fe02ce7874008da258d9f77bfc30d8",
+        "name": "block",
+        "color": [
+          0.215861,
+          0.351533,
+          0.527115,
+          0.8
+        ],
+        "faceNames": {
+          "1": "block_face_1",
+          "2": "block_face_2",
+          "3": "block_face_3",
+          "4": "block_face_4",
+          "5": "block_face_5",
+          "6": "block_face_6"
+        },
+        "edgeNames": {
+          "1": "block_edge_1"
+        },
+        "vertexNames": {
+          "1": "block_vertex_1"
+        },
+        "faceColors": {
+          "6": [
+            0.090842,
+            0.401978,
+            0.184475,
+            0.2
+          ]
+        },
+        "material": {
+          "name": "Legacy test alloy",
+          "family": "metal",
+          "standard": "TEST-ALLOY-8",
+          "description": "Saved alloy with independently authored visual finishes",
+          "source": "fixture: measured coupon, old SI units",
+          "density": 7850.0,
+          "youngModulus": 210000000000.0,
+          "poissonRatio": 0.29,
+          "yieldStrength": 355000000.0,
+          "ultimateStrength": 610000000.0,
+          "thermalExpansion": 1.23e-05,
+          "thermalConductivity": 42.5,
+          "specificHeat": 470.0,
+          "isotropic": false,
+          "color": [
+            0.215861,
+            0.351533,
+            0.527115,
+            0.8
+          ],
+          "metallic": 0.3,
+          "roughness": 0.6,
+          "ior": 1.45,
+          "anisotropy": 0.4,
+          "anisotropyRotation": 0.7,
+          "transmission": 0.5,
+          "transmissionColor": [
+            0.514918,
+            0.658375,
+            0.806952
+          ],
+          "transmissionDepth": 0.02,
+          "coat": 0.6,
+          "coatRoughness": 0.15,
+          "emissive": [
+            0.021219,
+            0.051269,
+            0.102242
+          ],
+          "emissiveStrength": 2.5
+        },
+        "faceMaterials": {
+          "6": {
+            "name": "Legacy test alloy",
+            "family": "metal",
+            "standard": "TEST-ALLOY-8",
+            "description": "Saved alloy with independently authored visual finishes",
+            "source": "fixture: measured coupon, old SI units",
+            "density": 7850.0,
+            "youngModulus": 210000000000.0,
+            "poissonRatio": 0.29,
+            "yieldStrength": 355000000.0,
+            "ultimateStrength": 610000000.0,
+            "thermalExpansion": 1.23e-05,
+            "thermalConductivity": 42.5,
+            "specificHeat": 470.0,
+            "isotropic": false,
+            "color": [
+              0.090842,
+              0.401978,
+              0.184475,
+              0.2
+            ],
+            "metallic": 0.3,
+            "roughness": 0.6,
+            "ior": 1.45,
+            "anisotropy": 0.4,
+            "anisotropyRotation": 0.7,
+            "transmission": 0.5,
+            "transmissionColor": [
+              0.514918,
+              0.658375,
+              0.806952
+            ],
+            "transmissionDepth": 0.02,
+            "coat": 0.6,
+            "coatRoughness": 0.15,
+            "emissive": [
+              0.021219,
+              0.051269,
+              0.102242
+            ],
+            "emissiveStrength": 2.5
+          }
+        }
+      },
+      {
+        "index": 1,
+        "key": "455e2730e74056fc1950198c2931cd74",
+        "name": "pin",
+        "color": null,
+        "faceNames": {
+          "1": "pin_face_1",
+          "2": "pin_face_2",
+          "3": "pin_face_3"
+        },
+        "edgeNames": {
+          "1": "pin_edge_1"
+        },
+        "vertexNames": {
+          "1": "pin_vertex_1"
+        },
+        "faceColors": {},
+        "material": {
+          "name": "Legacy test alloy",
+          "family": "metal",
+          "standard": "TEST-ALLOY-8",
+          "description": "Saved alloy with independently authored visual finishes",
+          "source": "fixture: measured coupon, old SI units",
+          "density": 7850.0,
+          "youngModulus": 210000000000.0,
+          "poissonRatio": 0.29,
+          "yieldStrength": 355000000.0,
+          "ultimateStrength": 610000000.0,
+          "thermalExpansion": 1.23e-05,
+          "thermalConductivity": 42.5,
+          "specificHeat": 470.0,
+          "isotropic": false,
+          "color": [
+            0.8,
+            0.8,
+            0.8,
+            1.0
+          ],
+          "metallic": 0.75,
+          "roughness": 0.12,
+          "ior": 1.62,
+          "anisotropy": 0.4,
+          "anisotropyRotation": 0.7,
+          "transmission": 0.5,
+          "transmissionColor": [
+            0.514918,
+            0.658375,
+            0.806952
+          ],
+          "transmissionDepth": 0.02,
+          "coat": 0.6,
+          "coatRoughness": 0.15,
+          "emissive": [
+            0.021219,
+            0.051269,
+            0.102242
+          ],
+          "emissiveStrength": 2.5
+        },
+        "faceMaterials": {}
+      },
+      {
+        "index": 2,
+        "key": "c5fe02ce7874008da258d9f77bfc30d8",
+        "name": "block_copy",
+        "color": [
+          0.057805,
+          0.246201,
+          0.603827,
+          0.6
+        ],
+        "faceNames": {
+          "1": "block_copy_face_1",
+          "2": "block_copy_face_2",
+          "3": "block_copy_face_3",
+          "4": "block_copy_face_4",
+          "5": "block_copy_face_5",
+          "6": "block_copy_face_6"
+        },
+        "edgeNames": {
+          "1": "block_copy_edge_1"
+        },
+        "vertexNames": {
+          "1": "block_copy_vertex_1"
+        },
+        "faceColors": {
+          "6": [
+            0.090842,
+            0.401978,
+            0.184475,
+            0.2
+          ]
+        },
+        "material": {
+          "name": "Legacy test alloy",
+          "family": "metal",
+          "standard": "TEST-ALLOY-8",
+          "description": "Saved alloy with independently authored visual finishes",
+          "source": "fixture: measured coupon, old SI units",
+          "density": 7850.0,
+          "youngModulus": 210000000000.0,
+          "poissonRatio": 0.29,
+          "yieldStrength": 355000000.0,
+          "ultimateStrength": 610000000.0,
+          "thermalExpansion": 1.23e-05,
+          "thermalConductivity": 42.5,
+          "specificHeat": 470.0,
+          "isotropic": false,
+          "color": [
+            0.057805,
+            0.246201,
+            0.603827,
+            0.6
+          ],
+          "metallic": 0.3,
+          "roughness": 0.6,
+          "ior": 1.45,
+          "anisotropy": 0.4,
+          "anisotropyRotation": 0.7,
+          "transmission": 0.5,
+          "transmissionColor": [
+            0.514918,
+            0.658375,
+            0.806952
+          ],
+          "transmissionDepth": 0.02,
+          "coat": 0.6,
+          "coatRoughness": 0.15,
+          "emissive": [
+            0.021219,
+            0.051269,
+            0.102242
+          ],
+          "emissiveStrength": 2.5
+        },
+        "faceMaterials": {
+          "6": {
+            "name": "Legacy test alloy",
+            "family": "metal",
+            "standard": "TEST-ALLOY-8",
+            "description": "Saved alloy with independently authored visual finishes",
+            "source": "fixture: measured coupon, old SI units",
+            "density": 7850.0,
+            "youngModulus": 210000000000.0,
+            "poissonRatio": 0.29,
+            "yieldStrength": 355000000.0,
+            "ultimateStrength": 610000000.0,
+            "thermalExpansion": 1.23e-05,
+            "thermalConductivity": 42.5,
+            "specificHeat": 470.0,
+            "isotropic": false,
+            "color": [
+              0.090842,
+              0.401978,
+              0.184475,
+              0.2
+            ],
+            "metallic": 0.3,
+            "roughness": 0.6,
+            "ior": 1.45,
+            "anisotropy": 0.4,
+            "anisotropyRotation": 0.7,
+            "transmission": 0.5,
+            "transmissionColor": [
+              0.514918,
+              0.658375,
+              0.806952
+            ],
+            "transmissionDepth": 0.02,
+            "coat": 0.6,
+            "coatRoughness": 0.15,
+            "emissive": [
+              0.021219,
+              0.051269,
+              0.102242
+            ],
+            "emissiveStrength": 2.5
+          }
+        }
+      }
+    ],
+    "instances": [
+      {
+        "prototype": 0,
+        "path": "legacy_kit/subassembly/block",
+        "matrix": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "color": null
+      },
+      {
+        "prototype": 1,
+        "path": "legacy_kit/subassembly/pin",
+        "matrix": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          6.0,
+          1.0,
+          1.0
+        ],
+        "color": [
+          0.527115,
+          0.215861,
+          0.051269,
+          0.4
+        ]
+      },
+      {
+        "prototype": 2,
+        "path": "legacy_kit/block_copy",
+        "matrix": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          10.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "color": null
+      },
+      {
+        "prototype": 1,
+        "path": "legacy_kit/pin_instance",
+        "matrix": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          5.0,
+          6.0,
+          1.0,
+          1.0
+        ],
+        "color": [
+          0.401978,
+          0.723055,
+          0.132868,
+          0.466667
+        ]
+      }
+    ],
+    "tree": {
+      "name": "legacy_kit",
+      "children": [
+        {
+          "name": "subassembly",
+          "children": [
+            {
+              "name": "block",
+              "prototype": 0,
+              "instance": 0
+            },
+            {
+              "name": "pin",
+              "prototype": 1,
+              "instance": 1
+            }
+          ]
+        },
+        {
+          "name": "block_copy",
+          "prototype": 2,
+          "instance": 2
+        },
+        {
+          "name": "pin_instance",
+          "prototype": 1,
+          "instance": 3
+        }
+      ]
+    }
+  },
+  "custom_metadata": {
+    "vendor_batch": "lot-17",
+    "vendor_scale": 1.2345,
+    "custom_revision": 7
+  },
+  "total_volume": 49.57079632679489
+}

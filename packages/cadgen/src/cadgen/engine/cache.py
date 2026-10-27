@@ -32,7 +32,8 @@ whose revision is the cache's is never written again.
 
 The key covers the format, native material and kernel library versions, system and architecture,
 along with the model's code and inputs. The closure records cadgen and Python versions without
-keying them. A format change rebuilds from source; older material payloads are not restamped.
+keying them. An explicit build with a changed key rebuilds from source. Reading an older
+supported snapshot converts its metadata in memory, leaving these bytes and its build key alone.
 
 Read: at start the daemon indexes which records have a cache file (``Cache.ensure_index``: a listing
 and a stat each, no record and no byte read). A document with one answers every verb by loading its
@@ -43,7 +44,8 @@ key it holds is the model's (``build._previous``), with nothing run.
 Kept: nothing removes a cache file on its own -- no size cap, no least recently used, no age. A
 document's file goes only with the document, when a person deletes it (its record and its file
 together, ``registry.Registry.delete``), or when its bytes do not read (``models.Models.unreadable``:
-its next build writes it again). It moves only with its record (``identity.repoint``: a moved
+its next build writes it again). Unsupported formats and failed data migrations are retained,
+with an error; they are not corrupt cache entries. It moves only with its record (``identity.repoint``: a moved
 script's record re-attached, a ``key::`` record migrated), landed at the new id before the old goes.
 The memory budget is another thing (``serve.Server.trim``): a document that leaves memory for it is
 read again from here. A save that fails is logged and listed in

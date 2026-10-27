@@ -87,6 +87,8 @@ def refused(source: Any, destination: Any) -> str | None:
     suffixes alone, or None: a mesh holds no B-rep, so no xbf, STEP or DXF is made from one, and
     a mesh file is not written from one of its own kind."""
     source, kind = Path(source), kind_of(destination)
+    if source.suffix.lower() == ".xbf" and kind == "xbf" and source.resolve() == Path(destination).resolve():
+        return "export to a different XBF path; the original document is preserved"
     if source.suffix.lower() not in MESHES:
         return None
     if kind in ("xbf", "step", "dxf"):
@@ -125,7 +127,9 @@ class Source:
                  foreign: bool = False, path: Path | None = None, animations: Any = None,
                  meshes: dict[str, Any] | None = None, mesh: str | None = None,
                  local: Callable[[tuple[int, ...]], Any] | None = None,
-                 local_placements: dict[tuple[int, ...], Any] | None = None) -> None:
+                 local_placements: dict[tuple[int, ...], Any] | None = None,
+                 migration: dict[str, Any] | None = None,
+                 origin: dict[str, Any] | None = None) -> None:
         self.structure = structure
         # Each occurrence's placement in its assembly's frame (``local``), and the same as a table of
         # column-major 4x4s where the document is not in this process to ask (``local_placements``,
@@ -135,6 +139,8 @@ class Source:
         self.shapes = shapes
         self.live = live
         self.xcaf = xcaf
+        self.migration = migration
+        self.origin = origin
         self._world = world
         self.mechanism = mechanism
         # The animations the build's code made (``animations.harvest``): a built source's from its
@@ -176,7 +182,9 @@ class Source:
         return cls(loaded.structure(), {p.key: p.shape for p in loaded.prototypes}, live=False, xcaf=loaded.doc,
                    world=lambda occurrence: loaded.worlds.get(occurrence),
                    local=lambda occurrence: loaded.locals.get(occurrence), mechanism=loaded.mechanism,
-                   foreign=loaded.writer is None, path=loaded.path, animations=loaded.animations)
+                   foreign=loaded.writer is None, path=loaded.path, animations=loaded.animations,
+                   migration=loaded.migration,
+                   origin={"kind": "file", "path": str(loaded.path), "closure_base": str(loaded.path.parent)})
 
     @classmethod
     def built(cls, doc: Any, tree: Any, path: Path | None) -> "Source":
@@ -403,7 +411,10 @@ def translate(document: Any, kind: str | None, path: Any) -> int:
     if why:
         raise ExportRefused(why)
     if kind == "xbf" and not source.foreign and source.path is not None and source.path.suffix.lower() == ".xbf":
-        raise ExportRefused("an xbf is not written from another xbf: the document already is one")
+        if source.migration is None:
+            raise ExportRefused("an xbf is not written from another xbf: the document already is one")
+        if path.resolve() == source.path.resolve():
+            raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
     view = source.view()
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]

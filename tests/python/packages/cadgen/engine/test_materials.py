@@ -142,7 +142,10 @@ class MaterialsTest(unittest.TestCase):
             export.translate(export.Source.read(self.folder / "test.xbf"), "glb", self.folder / "test.glb")
         self.assertFalse((self.folder / "test.glb").exists())
 
-    def test_old_material_document_format_is_refused_and_current_format_reloads(self):
+    def test_future_material_document_format_is_refused_and_current_format_reloads(self):
+        from OCP.Standard import Standard_GUID
+        from OCP.TCollection import TCollection_AsciiString
+        from OCP.TDataStd import TDataStd_AsciiString
         from cadgen.engine import previous
 
         shape = bd.Box(1, 2, 3)
@@ -150,14 +153,15 @@ class MaterialsTest(unittest.TestCase):
         current = self.roundtrip(shape)
         self.assertEqual(document.material_key(current.prototypes[0].material), document.material_key(shape.material))
         path = self.folder / "test.xbf"
-        data = path.read_bytes()
-        marker = f"cadgen.engine {previous.FORMAT} ".encode()
-        self.assertIn(marker, data)
-        path.write_bytes(data.replace(marker, b"cadgen.engine xbf/8 "))
+        TDataStd_AsciiString.Set_s(current.doc.Main(), Standard_GUID(document.WRITER_GUID),
+                                 TCollection_AsciiString("cadgen.engine xbf/99 (cadgen 9.9.9)"))
+        document.save(current.doc, path, compare=False)
+        original = path.read_bytes()
         for read in (document.Loaded, reader.read_xbf):
             with self.subTest(read=read.__name__), self.assertRaisesRegex(
-                    ValueError, "unsupported document format xbf/8.*rebuild the model from source"):
+                    ValueError, f"unsupported document format xbf/99.*expected {previous.FORMAT}"):
                 read(path)
+        self.assertEqual(path.read_bytes(), original)
 
     def test_warm_material_edit_updates_exports_without_geometry_work(self):
         script = self.folder / "model.py"

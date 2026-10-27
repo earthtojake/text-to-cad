@@ -1090,7 +1090,8 @@ _DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daem
 _TRACEBACK = "Traceback (most recent call last):"
 # The engine's refusals, by module and name: a verb that raised one has imported its module already.
 _REFUSALS = (("cadgen.engine.build", "BuildError"), ("cadgen.engine.export", "ExportRefused"),
-             ("cadgen.engine.snapshot", "SnapshotRefused"))
+             ("cadgen.engine.snapshot", "SnapshotRefused"),
+             ("cadgen.engine.document_migrations", "DocumentCompatibilityError"))
 
 _Verb = TypeVar("_Verb", bound=Callable[..., Any])
 

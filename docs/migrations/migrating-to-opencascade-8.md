@@ -109,14 +109,19 @@ but the viewer, GLB export and snapshots explicitly refuse them until UV mapping
 supported.
 
 The XBF format is `xbf/9`; `bd_materials` and `threejs_materials` versions join the build
-key. This is the document compatibility baseline: future format changes must preserve access
-to saved documents through backward reading or automatic data migrations. For this initial
-cutover, earlier engine XBF files are refused by format validation; rebuild models from source.
-There is no in-place format migration. Reading an incompatible cached document removes that
-cached copy, while an explicit XBF file is left untouched. Preserve older files or cache copies
-before upgrading if source is unavailable. The
-[persisted-document policy](../../packages/cadgen/README.md#the-design-laws) separates saved
-document access from whether a new build can reuse its cache.
+key. The engine reads `xbf/8` and `xbf/9`. Opening an `xbf/8` file or cached snapshot
+converts its material metadata in memory, without source code or a rebuild. Original
+source and cache bytes, cache records and revisions, and the build closure and toolchain
+provenance stay unchanged; a separate migration record identifies the conversion.
+
+An explicit `cadgen export saved-v8.xbf upgraded-v9.xbf` saves the complete upgraded XCAF
+document atomically to a different path. Export back over the source path is refused.
+Exporting a cached document by id to XBF also saves its upgraded form. The viewer's
+original-file download keeps the original XBF bytes, and ordinary current-format
+XBF-to-XBF translation remains refused. Unsupported formats or failed conversions preserve
+original bytes and cache records and give a clear error. Explicitly running model source
+still checks its build key and rebuilds normally when it differs. See the
+[persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
 
 OCP 8.0.1 also leaves `XCAFDoc_VisMaterialPBR.EmissiveFactor` unbound. To set it, put emission
 in `XCAFDoc_VisMaterialCommon.EmissiveColor`, call `ConvertToPbrMaterial()`, then set the other
@@ -147,13 +152,11 @@ Two OCP 8.0.1 geometry regressions were independently reproduced on macOS arm64:
   volume 1,072.310 mm³ and a 6.331 mm width, while still reporting valid.
   Shape validity alone does not establish dimensional correctness.
 
-The guided-sweep defect still blocks the candidate release. It reproduces with
-both published OCP 8.0.1 wheel revisions; increasing approximation degree,
-segment count or precision does not reliably recover the intended geometry.
-The native guide frame's second derivative is wrong even for the straight
-parallel-guide case, and `MakePipeShell` exposes no continuity control to avoid
-that derivative. The release retains build123d 0.13/OCP 8 and needs a corrected
-kernel; a validity check alone cannot guard this failure.
+The guided-sweep defect remains an upstream limitation in the published OCP 8.0.1
+wheels. The current model corpus uses no auxiliary-guide sweeps. An experimental kernel
+fix is not shipping in this release, which retains build123d 0.13/OCP 8. For a model that
+uses a guide, check dimensions and volume against the intended profile; shape validity
+alone does not establish correctness.
 
 The separate [F1 airbox loft Boolean instability](https://github.com/Open-Cascade-SAS/OCCT/issues/1643)
 also occurs on 7.9 and is not a newly introduced OCP 8 regression. The sample

@@ -1892,7 +1892,11 @@ class Daemon:
                         "via": worker.script}, b""
             held = self.held_document(ident)
             if held is not None:
-                return held
+                source, data = held
+                # Historical caches did not persist the folder relative closure paths used.
+                # Keep the known identity/source anchor without inventing that missing base.
+                return {**source, "origin": {"kind": "document", "id": ident,
+                                             "script": record["source"]["script"], "closure_base": None}}, data
         if server is not None and ident in server.served and not isinstance(server.served[ident].path, str):
             return {"path": str(server.served[ident].path)}, b""
         known = server.file_of(ident) if server is not None else None
@@ -2090,6 +2094,13 @@ class Daemon:
         if op == "export" and "id" in (request.get("source") or {}):
             ident = str(request["source"]["id"])
             try:
+                cached = self.models.cache.registry()
+                if cached is not None:
+                    original = cached.cache.path(self.models.cache.inside(ident)).resolve()
+                    if any(Path(path).resolve() == original for path in request["destinations"]):
+                        from cadgen.engine.export import ExportRefused
+
+                        raise ExportRefused("export to a different path; the engine's cached document is preserved")
                 source, payload = self.document(ident)
             except ValueError as error:
                 send(refused(error))

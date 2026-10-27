@@ -182,20 +182,19 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name
     that never existed.
 
-    **Persisted-document exception.** Starting with `xbf/9`, future format changes must preserve
-    access to saved documents, including the engine's document cache, through backward reading or
-    automatic data migrations. Opening, viewing and exporting saved work must not require its
-    source or a rebuild just because cadgen was upgraded. Build-cache reuse is separate: changed
-    code or toolchains may require a new build when the model is explicitly run. A migration must
-    preserve the saved geometry and its meaning, keep its original build provenance, and retain
-    the original bytes if conversion is unsupported or fails; it must not execute model code.
-    This exception does not retain retired authoring APIs or classes.
+    **Persisted-document exception.** Saved documents have a separate compatibility contract:
+    opening, viewing, importing and exporting supported formats must not require their source or
+    a rebuild just because cadgen was upgraded. The engine reads `xbf/8` and `xbf/9`; it converts
+    `xbf/8` material metadata in memory, without executing model code or changing source or cache
+    bytes. A separate migration record identifies the conversion while the original build closure
+    and toolchain provenance remain unchanged. Explicit export to a different XBF path can save
+    the upgraded document atomically; opening it does not rewrite it. Unsupported formats and
+    failed conversions preserve the original bytes and cache record and give a clear error.
+    Build-cache reuse is separate: explicitly running a model compares the current key and may
+    rebuild it. This exception retains no retired authoring APIs or classes. The engine's
+    [Build closure](src/cadgen/engine/README.md#build-closure) describes the supported conversion
+    and export behavior.
 
-    **Baseline exception for 0.8.1.** The newly introduced material representation makes the
-    transition to `xbf/9` a deliberate hard cutover: earlier formats still require source rebuilds.
-    This release implements no backward reader or material migration. The engine's
-    [Build closure](src/cadgen/engine/README.md#build-closure) documents the current behavior
-    and the contract for future format changes.
 16. **Closed vocabularies.** Every declaration surface has a closed key/kind set. An unknown key
     is an error naming the supported set, never silently ignored.
 17. **Loud failure or correct output, nothing between.** The cardinal sin is plausible-wrong

@@ -53,8 +53,9 @@ cold build's bytes, build after build. So what is written is always made from wh
 made in this process, and a document read is never written: an edit after a restart runs
 the model.
 
-A document of another format is rebuilt from source. Material schemas are a hard cutover;
-the engine never relabels an older material payload as the current format.
+An explicit build with an older format in its closure is rebuilt from source. Reading a saved
+snapshot is independent: ``document_migrations`` converts supported metadata in memory while
+preserving this original closure. Migration never makes old geometry a current build-cache hit.
 """
 
 from __future__ import annotations

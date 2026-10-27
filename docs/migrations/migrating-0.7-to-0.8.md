@@ -7,9 +7,9 @@ you: ask it to follow this guide. A project still on 0.4 first follows
 [Migrating 0.4 to 0.5](migrating-0.4-to-0.5.md), which ends here. This guide targets
 cadgen 0.8.1 with build123d 0.13.
 
-## Read this first: there is no compatibility layer
+## Read this first: there is no authoring compatibility layer
 
-0.8 ships no backwards compatibility, on purpose:
+0.8 ships no backwards compatibility for authoring and runtime APIs, on purpose:
 
 - No shims, no aliases, no deprecated keyword arguments, and no codemod.
 - **No teaching errors.** A retired flag is an unrecognized argument, a retired name an
@@ -930,17 +930,30 @@ second declaration of it is refused, naming both `file:line`, until the file tha
 is gone or has run again without it (`cadgen run <that file>`). Moving a name to another
 file of its folder keeps its document.
 
-**The 0.8.1 document baseline.** cadgen 0.8.1 writes `xbf/9`. This initial cutover requires
-source rebuilds: earlier engine XBF files are refused by format validation and their cached
-documents are not reused. Run each model's source to write its current document. There is no
-material compatibility layer or in-place closure migration. Reading an incompatible cached
-document removes that cached copy; an explicit XBF file is left untouched. Preserve older files
-or cache copies before upgrading if source is unavailable.
+**Saved XBF documents remain usable.** cadgen 0.8.1 writes `xbf/9` and reads both
+`xbf/8` and `xbf/9`. Opening an `xbf/8` file or cached snapshot automatically converts its
+material metadata in memory, so viewing, inspection, snapshots, imports and exports need
+no model source or execution. Source and cache bytes, the cache record and revision, and
+the original build closure and toolchain provenance remain unchanged. A separate migration
+record describes the conversion. Reading an upgraded document again is idempotent.
 
-From `xbf/9` onward, future format changes must preserve access to saved documents through
-backward reading or automatic data migrations. A new build may need to recompute geometry when
-its source or toolchain changes, but viewing and exporting the saved snapshot must not require
-that rebuild. See the [persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
+To save the upgraded document, choose a different XBF path:
+
+```bash
+cadgen export saved-v8.xbf upgraded-v9.xbf
+```
+
+The complete upgraded XCAF document is saved atomically; exporting over the source path is
+refused. Exporting a cached document by id to XBF also saves its upgraded form. The viewer's
+original-file XBF download still returns the original bytes; use the command above to save
+an upgrade. Ordinary current-format XBF-to-XBF translation remains refused. Unsupported
+formats or failed conversions preserve the original bytes and cache record and report a
+clear error.
+
+When you explicitly run a model's source, its original build key is compared with the
+current one and the model builds normally when they differ. Saved-document access does
+not imply build-cache reuse. See the
+[persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
 
 The independent startup identity pass still gives each JSON record its namespace and
 name, and a model's record the fingerprint of its script. A record that a `key=` named

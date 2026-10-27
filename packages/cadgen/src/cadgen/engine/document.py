@@ -1366,6 +1366,7 @@ class Loaded:
         else:  # read already, from bytes (``read_bytes``): ``path`` names it, and no file is there
             self.version = (0, 0)
             self.doc = doc
+        self.migration = check_format(self.doc)
         self.writer = _label_text(self.doc.Main(), WRITER_GUID)  # None for a file this engine did not write
         self.prototypes: list[Prototype] = []
         self.instances: list[Instance] = []
@@ -1380,7 +1381,6 @@ class Loaded:
         self.locals: dict[tuple[int, ...], Any] = {}
         self.occurrences: dict[str, tuple[int, ...]] = {}
         self.step = self.path.suffix.lower() in (".step", ".stp")
-        check_format(self.doc)
         self._walk()
         self.mechanism = None
         if self.path.suffix.lower() == ".xbf":
@@ -1641,13 +1641,12 @@ def _animations_listed(resolved: Any) -> list[dict[str, Any]]:
     return [{"name": item.name, "duration": item.duration} for item in (resolved or {}).values()]
 
 
-def check_format(doc: Any) -> None:
-    """A cadgen-authored XBF must use this engine's format."""
-    from cadgen.engine.previous import FORMAT
+def check_format(doc: Any) -> dict[str, Any] | None:
+    """Read supported persisted formats in the current representation, in memory only."""
+    from cadgen.engine.document_migrations import upgrade
 
-    found = written_format(_label_text(doc.Main(), WRITER_GUID))
-    if found is not None and found != FORMAT:
-        raise ValueError(f"unsupported document format {found}; expected {FORMAT}; rebuild the model from source")
+    with _XCAF_LOCK:
+        return upgrade(doc)
 
 
 def _read(path: Path) -> Any:

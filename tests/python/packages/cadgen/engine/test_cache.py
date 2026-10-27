@@ -432,6 +432,83 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(self.cli("export", ident, str(out)).returncode, 0, "the next restart reads it")
         self.assertGreater(out.stat().st_size, 0)
 
+    def legacy_cache(self, data: bytes) -> tuple[str, dict]:
+        """Install historical bytes in a real registered model's cache, with its source gone."""
+        ident = self.write("cube")
+        self.run_script("cube")
+        self.cached(ident)
+        self.assertEqual(self.cli("stop").returncode, 0)
+        self.file(ident).write_bytes(data)
+        Registry(self.state).update(ident, lambda record: {
+            **record, "cache": {**record["cache"], "bytes": len(data)},
+        })
+        (self.project / "cube.py").unlink()
+        (self.project / "cube.ran").unlink()
+        return ident, self.record(ident)
+
+    def test_legacy_cached_snapshot_opens_after_restart_without_source_or_rewriting_cache(self) -> None:
+        from cadgen.engine import document, document_migrations, previous
+
+        fixture = Path(__file__).with_name("fixtures") / "xbf8_materials.xbf"
+        original = fixture.read_bytes()
+        ident, record = self.legacy_cache(original)
+        original_closure = previous.read_record(document.read_bytes(original))[1]
+        partial = self.folder / "must-not-write.step"
+        refused = self.cli("export", ident, str(partial), str(self.file(ident)))
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("cached document is preserved", refused.stderr)
+        self.assertFalse(partial.exists())
+        self.assertEqual(self.file(ident).read_bytes(), original)
+        self.assertEqual(self.record(ident), record)
+        for suffix in ("step", "glb", "xbf"):
+            out = self.folder / f"migrated.{suffix}"
+            exported = self.cli("export", ident, str(out))
+            self.assertEqual(exported.returncode, 0, exported.stderr)
+            self.assertGreater(out.stat().st_size, 0)
+        loaded = document.Loaded(self.folder / "migrated.xbf")
+        self.assertEqual(document.written_format(loaded.writer), previous.FORMAT)
+        self.assertEqual(previous.read_record(loaded.doc)[1], original_closure)
+        self.assertEqual(document_migrations.provenance(loaded.doc)["origin"], {
+            "kind": "document", "id": ident, "script": str(self.project / "cube.py"), "closure_base": None,
+        })
+        launched = engine_daemon.run([sys.executable, "-m", "cadgen.viewer", "--json", "--api-only", ident],
+                                     cwd=self.project, env=self.env)
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        self.assertEqual([row["id"] for row in json.loads(launched.stdout)["documents"]], [ident])
+        status, shown = self.page(ident)
+        self.assertEqual(status, 200, shown)
+        self.assertEqual(self.cli("stop").returncode, 0)
+        # The next daemon still opens the original snapshot; no migration cache/revision churn.
+        out = self.folder / "again.step"
+        exported = self.cli("export", ident, str(out))
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertEqual(self.file(ident).read_bytes(), original)
+        self.assertEqual(self.record(ident), record)
+        self.assertFalse(self.ran("cube"))
+
+    def test_unsupported_cached_format_is_preserved_across_restarts(self) -> None:
+        from OCP.Standard import Standard_GUID
+        from OCP.TDataStd import TDataStd_AsciiString
+        from OCP.TCollection import TCollection_AsciiString
+        from cadgen.engine import document
+
+        fixture = Path(__file__).with_name("fixtures") / "xbf8_materials.xbf"
+        doc = document.read_bytes(fixture.read_bytes())
+        TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(document.WRITER_GUID),
+                                 TCollection_AsciiString("cadgen.engine xbf/99 (cadgen 99.0.0)"))
+        original = document.to_bytes(doc)
+        ident, record = self.legacy_cache(original)
+        out = self.folder / "unsupported.step"
+        for _ in range(2):
+            exported = self.cli("export", ident, str(out))
+            self.assertEqual(exported.returncode, 2, exported.stderr)
+            self.assertIn("unsupported document format xbf/99", exported.stderr)
+            self.assertFalse(out.exists())
+            self.assertEqual(self.file(ident).read_bytes(), original)
+            self.assertEqual(self.record(ident), record)
+            self.assertEqual(self.cli("stop").returncode, 0)
+        self.assertFalse(self.ran("cube"))
+
     def test_failed_revisions_before_a_restart_leave_the_cache_to_take(self) -> None:
         self.use(self.folder / "state", self.folder / "cache", CADGEN_ENGINE_CACHE_IDLE="600")  # saved at the stop, as a person's is
         self.said()

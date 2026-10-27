@@ -304,7 +304,8 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         raise export.ExportRefused(f"no document {source_spec['id']} is held in this process: a document id is "
                                    "the engine's, read through its server")
     if "document" in source_spec:
-        source = engine_build.held_source(request.get("payload") or b"", str(source_spec.get("name") or "document"))
+        source = engine_build.held_source(request.get("payload") or b"", str(source_spec.get("name") or "document"),
+                                          origin=source_spec.get("origin"))
     elif (request.get("expected") or source_spec.get("held")) and "script" in source_spec:
         source = engine_build.held(Path(source_spec["script"]), source_spec.get("function"))
         if source is None:
@@ -340,7 +341,7 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         say("read", detail=path.name)
         source = export.Source.read(path)
         log(f"read {path.name} in {time.perf_counter() - clock:.2f}s")
-    if source.mesh and source.path is not None:
+    if source.path is not None:
         for destination in request["destinations"]:  # every one, before anything is written
             why = export.refused(source.path, destination)
             if why:

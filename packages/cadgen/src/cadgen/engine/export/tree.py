@@ -117,5 +117,11 @@ def write_xbf(view: Any, path: Path) -> None:
     """The view as an xbf of its own, saved atomically (``document.save``)."""
     from cadgen.engine import document
 
-    doc = document.to_xcaf(tree_of(view))
+    # A migration edits metadata on the original XCAF tree. Reconstructing it from the
+    # viewer tree would discard its build provenance and preserved legacy attributes.
+    doc = view.source.xcaf if view.source.migration is not None else document.to_xcaf(tree_of(view))
+    if view.source.migration is not None:
+        from cadgen.engine.document_migrations import set_origin
+
+        set_origin(doc, view.source.origin or {"kind": "bytes", "closure_base": None})
     document.save(doc, Path(path), compare=True)
