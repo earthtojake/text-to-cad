@@ -186,7 +186,7 @@ def _facts(loaded: document.Loaded, prototype: document.Prototype) -> dict[str, 
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     def where(kind: int, shape) -> tuple:
         if kind == TopAbs_FACE:
@@ -194,17 +194,17 @@ def _facts(loaded: document.Loaded, prototype: document.Prototype) -> dict[str, 
             BRepGProp.SurfaceProperties_s(shape, props)
             point = props.CentreOfMass()
         elif kind == TopAbs_EDGE:
-            curve = BRepAdaptor_Curve(TopoDS.Edge_s(shape))
+            curve = BRepAdaptor_Curve(TopoDS.Edge(shape))
             point = curve.Value((curve.FirstParameter() + curve.LastParameter()) / 2)
         else:
-            point = BRep_Tool.Pnt_s(TopoDS.Vertex_s(shape))
+            point = BRep_Tool.Pnt_s(TopoDS.Vertex(shape))
         return tuple(round(value, 4) for value in (point.X(), point.Y(), point.Z()))
 
     found = {}
     for kind, names, label in ((TopAbs_FACE, prototype.face_names, "faces"),
                                (TopAbs_EDGE, prototype.edge_names, "edges"),
                                (TopAbs_VERTEX, prototype.vertex_names, "vertices")):
-        mapped = TopTools_IndexedMapOfShape()
+        mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(prototype.shape, kind, mapped)
         found[label] = {where(kind, mapped.FindKey(ordinal)): name for ordinal, name in names.items()}
     return found
@@ -723,24 +723,25 @@ def _usages(doc) -> dict[tuple, dict]:
     usage's, else its product's), its product's name, its usage's own colour, a part's colour
     (its label's, else the one colour its solids are given: what the XCAF reader makes of a STEP
     styling each solid) and a part's placement."""
-    from OCP.TDF import TDF_Label, TDF_LabelSequence
+    from OCP.TDF import TDF_Label
+    from OCP.collections import Sequence_TDF_Label
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
     def part_color(label) -> tuple | None:
         own = document._label_color(label)
         if own is not None:
             return own
-        faces = TopTools_IndexedMapOfShape()
+        faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(XCAFDoc_ShapeTool.GetShape_s(label), TopAbs_FACE, faces)
-        given, subs = {}, TDF_LabelSequence()
+        given, subs = {}, Sequence_TDF_Label()
         XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
         for at in range(1, subs.Length() + 1):
             held, rgba = XCAFDoc_ShapeTool.GetShape_s(subs.Value(at)), document._label_color(subs.Value(at))
             if rgba is not None and held.ShapeType() != TopAbs_FACE:
-                inner = TopTools_IndexedMapOfShape()
+                inner = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
                 TopExp.MapShapes_s(held, TopAbs_FACE, inner)
                 given.update((faces.FindIndex(inner.FindKey(k)), rgba) for k in range(1, inner.Extent() + 1))
         return given[1] if len(given) == faces.Extent() and len(set(given.values())) == 1 else None
@@ -752,7 +753,7 @@ def _usages(doc) -> dict[tuple, dict]:
         own = document._label_color(usage) if usage is not None else None
         if XCAFDoc_ShapeTool.IsAssembly_s(label):
             found[path] = {"name": name, "product": document._label_name(label), "own": own}
-            components = TDF_LabelSequence()
+            components = Sequence_TDF_Label()
             XCAFDoc_ShapeTool.GetComponents_s(label, components, False)
             for at in range(1, components.Length() + 1):
                 component, referred = components.Value(at), TDF_Label()
@@ -764,7 +765,7 @@ def _usages(doc) -> dict[tuple, dict]:
         found[path] = {"name": name, "product": document._label_name(label), "own": own,
                        "color": part_color(label), "matrix": document._matrix(location.Multiplied(shape.Location()))}
 
-    free = TDF_LabelSequence()
+    free = Sequence_TDF_Label()
     XCAFDoc_DocumentTool.ShapeTool_s(doc.Main()).GetFreeShapes(free)
     visit(free.Value(1), None, document._identity(), ())
     return found
@@ -851,13 +852,13 @@ class StepUsagesTest(unittest.TestCase):
     @classmethod
     def components(cls) -> list:
         """Each component of the held document with its placement, the datum it holds."""
-        from OCP.TDF import TDF_LabelSequence
+        from OCP.collections import Sequence_TDF_Label
         from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
-        labels, found = TDF_LabelSequence(), []
+        labels, found = Sequence_TDF_Label(), []
         XCAFDoc_DocumentTool.ShapeTool_s(cls.held.doc.Main()).GetShapes(labels)
         for at in range(1, labels.Length() + 1):
-            components = TDF_LabelSequence()
+            components = Sequence_TDF_Label()
             XCAFDoc_ShapeTool.GetComponents_s(labels.Value(at), components, False)
             found += [(document._entry(component), XCAFDoc_ShapeTool.GetLocation_s(component))
                       for component in (components.Value(place) for place in range(1, components.Length() + 1))]

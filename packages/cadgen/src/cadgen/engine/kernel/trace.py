@@ -142,7 +142,7 @@ from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS
-from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_IndexedMapOfShape
+from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher, IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
 from cadgen.engine.kernel.history import _map, _object_key, listed
 from cadgen.engine.kernel.imported import ELEMENT_NAMES
@@ -1549,7 +1549,7 @@ class Trace:
             group = feature.groups[position] if feature.groups is not None else 0
             made = made_by_group.get(group)
             if made is None:
-                made = made_by_group[group] = [TopTools_IndexedMapOfShape() for _kind in _TOPABS]
+                made = made_by_group[group] = [IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher() for _kind in _TOPABS]
             leaves = _MISSING
             for kind in range(3):
                 held, find, add = table[kind], maps[kind].FindKey, made[kind].Add
@@ -2097,7 +2097,7 @@ def _passes(result: Any, maps: list[Any], table: list[list[tuple | None]]) -> No
         children = [ordinal for ordinal, rule in enumerate(table[child_kind], 1) if rule is None]
         if not children:
             continue
-        ancestors = TopTools_IndexedDataMapOfShapeListOfShape()
+        ancestors = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapesAndAncestors_s(result, _TOPABS[child_kind], _TOPABS[parent_kind], ancestors)
         # Per parent, each of its unnamed children's number among them, in its own order.
         numbers: dict[int, dict[int, int]] = {}
@@ -2130,7 +2130,7 @@ def _passes(result: Any, maps: list[Any], table: list[list[tuple | None]]) -> No
                 table[EDGE][ordinal - 1] = ("l", tuple((VERTEX, lower) for lower in lowers))
     for ordinal in range(1, maps[FACE].Extent() + 1):
         if table[FACE][ordinal - 1] is None:
-            wire = BRepTools.OuterWire_s(TopoDS.Face_s(maps[FACE].FindKey(ordinal)))
+            wire = BRepTools.OuterWire_s(TopoDS.Face(maps[FACE].FindKey(ordinal)))
             if wire.IsNull():
                 continue
             lowers = _lowers(TopExp_Explorer(wire, TopAbs_EDGE), maps[EDGE], named, EDGE)
@@ -2259,7 +2259,7 @@ def _input_index(given: list[tuple[int, list[Any]]], kind: int) -> tuple[Any, An
     if len(given) <= _SCANNED_INPUTS:
         owners = _FirstOwners([(j, held[kind]) for j, held in given])
         return owners, owners
-    elements = TopTools_IndexedMapOfShape()
+    elements = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     union: list[tuple[int, int]] = []
     for j, held in given:
         source = held[kind]
@@ -2358,7 +2358,7 @@ def _own_place(shape: Any) -> tuple:
         explorer = TopExp_Explorer(shape, TopAbs_VERTEX)
         if not explorer.More():
             return 0, 0.0, None
-        return 0, 0.0, BRep_Tool.Pnt_s(TopoDS.Vertex_s(explorer.Current()))
+        return 0, 0.0, BRep_Tool.Pnt_s(TopoDS.Vertex(explorer.Current()))
     return dimension, props.Mass(), props.CentreOfMass()
 
 

@@ -175,16 +175,36 @@ def _bounded(solid, outlines, xs, tol, what):
 
 
 def _fuse(base, extras):
+    """Fuse each extra onto the base.
+
+    A union can never be smaller than its larger operand, and OCC sometimes
+    returns a fragment anyway: the airbox duct's lofted B-spline body fused
+    with the mouth lip that overlaps its end comes back as the lip alone on
+    the tested OpenCascade 8 build. This is a longstanding Boolean instability:
+    small coordinate changes also reproduce it on 7.9 (OCCT issue #1643).
+    Volume is the tell, as in drivetrain._fuse. When the union
+    comes back short, a 10 um fuzzy tolerance (invisible at any render
+    resolution) is tried, and its result replaces the short one only if it is
+    a whole union; otherwise the short result stands, as it always has.
+    """
     out = base
     for e in extras:
         if e is None:
             continue
         try:
             cand = out + e
-            if cand is not None and cand.is_valid and cand.volume > 0:
-                out = cand
+            if cand is None or not cand.is_valid or cand.volume <= 0:
+                continue
         except Exception:
             continue
+        if cand.volume < 0.999 * max(out.volume, e.volume):
+            try:
+                fuzzy = out.fuse(e, tol=1e-2)
+            except Exception:
+                fuzzy = None
+            if fuzzy is not None and fuzzy.is_valid and fuzzy.volume >= 0.999 * max(out.volume, e.volume):
+                cand = fuzzy
+        out = cand
     return out
 
 

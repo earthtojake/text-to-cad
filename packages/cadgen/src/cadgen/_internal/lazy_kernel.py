@@ -69,6 +69,25 @@ class KernelLoader(importlib.util.LazyLoader):
         module.__class__ = KernelModule
 
 
+class Build123dLoader:
+    """The real loader, followed by the engine's material integration."""
+
+    def __init__(self, loader: Any) -> None:
+        self.loader = loader
+
+    def create_module(self, spec: Any) -> Any:
+        return self.loader.create_module(spec)
+
+    def exec_module(self, module: types.ModuleType) -> None:
+        self.loader.exec_module(module)
+        from cadgen.engine.kernel.material import install as material_install
+
+        material_install(module)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.loader, name)
+
+
 class LazyKernelFinder:
     """Finds ``build123d`` and ``OCP`` as ``PathFinder`` does, their loaders made lazy."""
 
@@ -78,7 +97,8 @@ class LazyKernelFinder:
         spec = PathFinder.find_spec(fullname, path, target)
         if spec is None or spec.loader is None or not hasattr(spec.loader, "exec_module"):
             return None  # nothing to defer: the next finder imports it as ever
-        spec.loader = KernelLoader(spec.loader)
+        loader = Build123dLoader(spec.loader) if fullname == "build123d" else spec.loader
+        spec.loader = KernelLoader(loader)
         return spec
 
 
@@ -86,6 +106,11 @@ def install() -> None:
     """Put the finder first on ``sys.meta_path``, once."""
     if not any(isinstance(finder, LazyKernelFinder) for finder in sys.meta_path):
         sys.meta_path.insert(0, LazyKernelFinder())
+    module = sys.modules.get("build123d")
+    if module is not None and type(module) is types.ModuleType and "Shape" in vars(module):
+        from cadgen.engine.kernel.material import install as material_install
+
+        material_install(module)
 
 
 def loaded(name: str) -> bool:

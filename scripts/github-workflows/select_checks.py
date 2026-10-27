@@ -57,7 +57,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
+FLAGS = ("kicad", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -115,7 +115,7 @@ LIGHT_SKILL_TESTS = (
 # and draw through it, the wheel. A skill's commands are cadgen's, and the light contracts that
 # check what a skill documents run on every change.
 CADGEN_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], cadgen=[CADGEN_SUITE],
+    flags=["web_viewer", "packaging", "kicad"], cadgen=[CADGEN_SUITE],
     policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
 )
 
@@ -215,6 +215,10 @@ class Rule:
 
 
 RULES: tuple[Rule, ...] = (
+    Rule(("packages/cadgen/src/cadgen/kicad/**", "packages/cadgen/src/cadgen/pcb.py",
+          "packages/cadgen/src/cadgen/engine/formats/kicad/**", "packages/cadgen/src/cadgen/engine/render/board.py",
+          "tests/python/packages/kicad/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"])),
+
     # Prose inside a code tree is read by the policy contracts alone (the package boundary
     # law, documented commands), never by a build or a test of the code beside it. The one
     # exception, cadgen's README, is the wheel's long description.

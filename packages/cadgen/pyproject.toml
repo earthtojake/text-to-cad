@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.8.0"
+version = "0.8.2"
 description = "CAD models as Python, built by a warm engine into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD Viewer and the tools that show and check them."
 readme = "README.md"
 license = "MIT"
@@ -45,11 +45,12 @@ dependencies = [
   # failure mode is silent: a patch that no longer matches simply stops
   # applying. Raise the ceiling deliberately, after re-running the suite
   # against the new minor.
-  "build123d>=0.11.1,<0.12",
+  "build123d>=0.13.0,<0.14",
   # cadgen imports OCP directly for STEP/XCAF, topology and BREP work.  Match
   # build123d's non-VTK provider: cadgen does not import VTK or cadquery, and
   # this keeps the optional visualization stack out of every CAD install.
-  "cadquery-ocp-novtk>=7.9,<8",
+  # OCP 8 collection, vector and downcast names are used directly.
+  "cadquery-ocp-novtk>=8.0,<8.1",
   "ezdxf",
   # @eng_drawing renders its PDF through ezdxf's drawing add-on, whose
   # matplotlib backend is the page renderer. The add-on also imports Pillow at

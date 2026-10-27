@@ -1,0 +1,12 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Connector_PinSocket_2.54mm") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Connector_PinSocket_2.54mm.pretty") (options "") (descr "KiCad's stock pin sockets"))
+  (lib (name "Connector_PinHeader_2.54mm") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Connector_PinHeader_2.54mm.pretty") (options "") (descr "KiCad's stock pin headers"))
+  (lib (name "TerminalBlock_Phoenix") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/TerminalBlock_Phoenix.pretty") (options "") (descr "KiCad's stock Phoenix terminal blocks"))
+  (lib (name "Resistor_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty") (options "") (descr "KiCad's stock chip resistors"))
+  (lib (name "Capacitor_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Capacitor_SMD.pretty") (options "") (descr "KiCad's stock chip and electrolytic capacitors"))
+  (lib (name "Diode_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Diode_SMD.pretty") (options "") (descr "KiCad's stock SMD diodes"))
+  (lib (name "LED_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/LED_SMD.pretty") (options "") (descr "KiCad's stock chip LEDs"))
+  (lib (name "Package_TO_SOT_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Package_TO_SOT_SMD.pretty") (options "") (descr "KiCad's stock SOT packages"))
+  (lib (name "MountingHole") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/MountingHole.pretty") (options "") (descr "KiCad's stock mounting holes"))
+)

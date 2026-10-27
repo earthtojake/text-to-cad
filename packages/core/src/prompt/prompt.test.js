@@ -67,6 +67,18 @@ test('a reference names its ids as a person reads them: each selector, a range f
   assert.deepEqual(promptReferenceIds({ ...range, target: { kind: 'whole-resource' } }), []);
 });
 
+test('a KiCad board names its references as board selectors, as the agent resolver reads them', () => {
+  const board = { resource: { kind: 'workspace-file', path: '/work/PCB/servo hat.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2'] } };
+  assert.equal(formatPromptReference(referencePart(board).reference), '"/work/PCB/servo hat.kicad_pcb"#U3,J4.A4,net:"a,b",@x1.5y-2');
+  assert.deepEqual(promptReferenceIds(board), ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2']);
+  // A named engine face is not a board selector.
+  assert.throws(() => referencePart({ ...board, target: { kind: 'cad-selector', selectors: [FACE] } }), /invalid CAD/);
+  // A board's copied reference pasted into a note is that reference again, in the board's grammar.
+  assert.deepEqual(parsePromptReference('/work/blinky.kicad_pcb#R1,R1.2,net:VBUS'),
+    { resource: { kind: 'workspace-file', path: '/work/blinky.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#R1', '#R1.2', '#net:VBUS'] } });
+  assert.equal(parsePromptReference('/work/blinky.kicad_pcb#R1 and more'), null);
+});
+
 test('invalid bundles fail before delivery, including dangling relationships and unknown targets', () => {
   assert.throws(() => createPromptContext([textPart('a'), textPart('b')]), /unique/);
   assert.throws(() => createPromptContext([{ id: 'i', kind: 'attachment', name: 'a.pdf', mimeType: 'application/pdf', content: new Blob(), about: ['missing'] }]), /absent reference/);

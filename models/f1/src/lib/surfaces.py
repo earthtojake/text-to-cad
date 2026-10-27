@@ -221,7 +221,7 @@ def obox(shape):
 
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape.wrapped, box, False, True)
-    v = box.Get()
+    v = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return v[:3], v[3:]
 
 
@@ -723,7 +723,7 @@ def bbox(shape):
 
     box = Bnd_Box()
     BRepBndLib.Add_s(shape.wrapped, box, False)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return (xmin, ymin, zmin), (xmax, ymax, zmax)
 
 

@@ -101,7 +101,7 @@ class CopyOnWriteTest(MemoCase):
         box = bd.Solid.make_box(1, 1, 1)
         builder = BRep_Builder()
         for edge in box.edges():  # what ShapeFix_Shape fixes in the shape it is given, in place
-            builder.SameParameter(TopoDS.Edge_s(edge.wrapped), False)
+            builder.SameParameter(TopoDS.Edge(edge.wrapped), False)
         first = box.moved(bd.Location((5, 0, 0)))
         second = box.moved(bd.Location((10, 0, 0)))
         fixer = ShapeFix_Shape(first.wrapped)
@@ -113,7 +113,7 @@ class CopyOnWriteTest(MemoCase):
         from OCP.BRep import BRep_Tool
         from OCP.TopoDS import TopoDS
 
-        return {BRep_Tool.SameParameter_s(TopoDS.Edge_s(edge.wrapped)) for edge in shape.edges()}
+        return {BRep_Tool.SameParameter_s(TopoDS.Edge(edge.wrapped)) for edge in shape.edges()}
 
     def test_a_maker_that_changes_its_input_in_place_is_given_a_copy_of_a_placed_shape(self) -> None:
         before = memo.stats()["copied_on_write"]

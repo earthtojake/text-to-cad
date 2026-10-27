@@ -79,6 +79,10 @@ where those files ship, so these scripts are what produces them.
   suite, narrowed to PATHs as `test-python.sh` is.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
   marks' tests. Called by `test.yml`.
+- `test-kicad.sh` — native board DRC and STEP/mesh export through an installed KiCad 9+.
+  Runs `tests/python/packages/kicad` with private engine/state/cache folders. CI's `kicad`
+  job installs stable KiCad; no footprint library, IPC server or browser is needed.
+
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.

@@ -275,4 +275,29 @@ for written in exported.step exported.stl; do
 done
 echo "   wrote a STEP and an STL from the document"
 
+step "Read, edit and snapshot a native board from the installed wheel"
+"$VENV/bin/python" - <<'PYBOARD' || exit 1
+from pathlib import Path
+from PIL import Image
+from cadgen.engine.api import snapshot
+from cadgen.plot import plot_payload_bytes
+
+board = Path("models/native.kicad_pcb").resolve()
+board.write_text('''(kicad_pcb (version 20241229) (generator "pcbnew")
+ (general (thickness 1.6)) (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+ (gr_rect (start 0 0) (end 40 30) (stroke (width 0.05) (type default)) (fill none) (layer "Edge.Cuts"))
+ (segment (start 5 15) (end 35 15) (width 0.5) (layer "F.Cu") (net 0)))''', encoding="utf-8")
+first = plot_payload_bytes(board)
+image = board.with_suffix(".png")
+snapshot(board, image, width=160, height=120)
+with Image.open(image) as picture:
+    assert picture.size == (160, 120)
+before = image.read_bytes()
+board.write_text(board.read_text().replace("(width 0.5)", "(width 3)"), encoding="utf-8")
+assert plot_payload_bytes(board) != first, "the native file edit must be read again"
+snapshot(board, image, width=160, height=120)
+assert image.read_bytes() != before, "the native file edit must reach the rendered picture"
+print("   a native file edit reached the plot and the engine's PNG without KiCad or a browser")
+PYBOARD
+
 printf '\nInstalled-mode checks passed.\n'

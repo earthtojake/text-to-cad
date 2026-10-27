@@ -448,7 +448,7 @@ def _tip_pod(side, x0, x1, half_w_fn, up_fn, dn_fn, n=13):
     """
     y_tip = side * (G.Y_FIN + G.FIN_HEIGHT * FIN_TAN)
     z_tip = G.FIN_ROOT_Z + G.FIN_HEIGHT
-    secs = [bd.Vertex(*_fin_world(x0, G.FIN_HEIGHT, 0.0, side).to_tuple())]
+    secs = [bd.Vertex(*_fin_world(x0, G.FIN_HEIGHT, 0.0, side))]
     for i in range(1, n - 1):
         x = G.lerp(x0, x1, i / (n - 1))
         w, hu, hd = half_w_fn(x), up_fn(x), dn_fn(x)
@@ -462,7 +462,7 @@ def _tip_pod(side, x0, x1, half_w_fn, up_fn, dn_fn, n=13):
             lo.append(pl.from_local_coords(
                 bd.Vector(w * math.cos(a), -hd * math.sin(a), 0)))
         secs.append(bd.Face(bd.Wire([bd.Spline(*up).edge(), bd.Spline(*lo).edge()])))
-    secs.append(bd.Vertex(*_fin_world(x1, G.FIN_HEIGHT, 0.0, side).to_tuple()))
+    secs.append(bd.Vertex(*_fin_world(x1, G.FIN_HEIGHT, 0.0, side)))
     return bd.loft(secs)
 
 

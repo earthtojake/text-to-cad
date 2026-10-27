@@ -316,7 +316,7 @@ UNKNOWN_TOOL = "cad_unknown"
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``), the
 # native document file (``.xbf``) among them; a live model has no file extension.
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".xbf": "xbf"}
+              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".xbf": "xbf", ".kicad_pcb": "kicad_pcb"}
 KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual file format
 # Who sends: the CAD app, the browser viewer, and the sender a command starts when nothing else has taken what
 # commands counted (``cadgen._internal.telemetry_send``).

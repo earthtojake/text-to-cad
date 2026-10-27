@@ -925,7 +925,8 @@ class Scene:
         full out to ``FLOOR_FADE[0]`` of the model's reach and fading (squared, a long tail) to
         nothing at ``FLOOR_FADE[1]`` of it, so it has no edge from any camera: a disc of rings, the
         fade in its vertices' alpha."""
-        from OCP.Graphic3d import Graphic3d_ArrayOfTriangles, Graphic3d_DisplayPriority, Graphic3d_Vec4ub
+        from OCP.Graphic3d import Graphic3d_ArrayOfTriangles, Graphic3d_DisplayPriority
+        from OCP.collections import Vec4_uint8_t
         from OCP.gp import gp_Pnt
 
         rings, segments = 48, 96
@@ -938,7 +939,7 @@ class Scene:
             fraction = ring / rings
             t = np.clip((fraction - FLOOR_FADE[0] / FLOOR_FADE[1]) / (1 - FLOOR_FADE[0] / FLOOR_FADE[1]), 0, 1)
             fade = (1 - t * t * (3 - 2 * t)) ** 2
-            colour = Graphic3d_Vec4ub(*rgb, int(round(255 * FLOOR_OPACITY * fade)))
+            colour = Vec4_uint8_t(*rgb, int(round(255 * FLOOR_OPACITY * fade)))
             if ring == 0:
                 triangles.AddVertex(gp_Pnt(cx, cy, place["z"]), colour)
                 continue

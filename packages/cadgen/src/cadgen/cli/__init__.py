@@ -48,6 +48,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "sdf snapshot": ("cadgen.cli.sdf_snapshot", "render an SDF to an image"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
+    "pcb drc": ("cadgen.cli.pcb_drc", "check a saved KiCad board with KiCad"),
+    "pcb snapshot": ("cadgen.cli.pcb_snapshot", "render a saved KiCad board"),
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),

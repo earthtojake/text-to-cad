@@ -413,6 +413,9 @@ def holder(path: Path) -> Any:
     (a DXF, ``drawing.Held``), else a document's."""
     from cadgen.engine import formats
 
+    if Path(path).suffix.lower() == ".kicad_pcb":
+        from cadgen.engine.render.board import Held as Board
+        return Board(Path(path))
     if Path(path).suffix.lower() == formats.DRAWING:
         from cadgen.engine.render.drawing import Held as Drawing
 

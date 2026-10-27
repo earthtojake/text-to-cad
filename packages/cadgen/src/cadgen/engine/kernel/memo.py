@@ -183,7 +183,9 @@ from typing import Any, Callable, Iterator
 from OCP.BRep import BRep_TEdge, BRep_TFace, BRep_TVertex
 from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
 from OCP.TopExp import TopExp
-from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
+
+from cadgen.engine.kernel.bounds import box_limits
 
 from cadgen.engine.kernel import history as kernel_history
 from cadgen.engine.kernel import trace as kernel_trace
@@ -245,7 +247,7 @@ def enabled() -> bool:
 
 # --- what is patched ----------------------------------------------------------------------
 #
-# (class, attribute, op label), enumerated from build123d 0.11.1's topology modules.
+# (class, attribute, op label), enumerated from build123d 0.13.0's topology modules.
 # A classmethod's label is prefixed with the class it is called on; ``_bool_op``'s
 # label is the boolean it runs (cut, fuse, common, section, split), as is that of
 # ``_bool_op_list``, the boolean an intersection runs, which hands back its pieces; a
@@ -281,7 +283,6 @@ _INSTANCE_TARGETS = (
     ("Face", "fillet_2d", "fillet_2d"),
     ("Face", "make_holes", "make_holes"),
     ("Face", "project_to_shape", "project_to_shape"),
-    ("Face", "to_arcs", "to_arcs"),
     ("Face", "without_holes", "without_holes"),
     ("Mixin1D", "offset_2d", "offset_2d"),
     ("Mixin1D", "perpendicular_line", "perpendicular_line"),
@@ -304,7 +305,7 @@ _CLASSMETHOD_TARGETS = tuple(
         ("Solid", ("extrude", "extrude_linear_with_rotation", "extrude_taper", "extrude_until",
                    "from_bounding_box", "make_box", "make_cone", "make_cylinder", "make_loft",
                    "make_sphere", "make_torus", "make_wedge", "revolve", "sweep", "sweep_multi", "thicken")),
-        ("Face", ("extrude", "make_bezier_surface", "make_gordon_surface", "make_plane", "make_rect",
+        ("Face", ("extrude", "make_bezier_surface", "make_gordon_surface", "make_rect",
                   "make_surface", "make_surface_from_array_of_points", "make_surface_from_curves",
                   "make_surface_patch", "revolve", "sweep")),
         ("Shell", ("extrude", "make_loft", "revolve", "sweep")),
@@ -959,7 +960,7 @@ def _kept(value: Any) -> Any:
         if kind.__name__ == "Vector":
             return ("vector", (value.X, value.Y, value.Z))
         if kind.__name__ == "BoundBox":
-            return ("box", None if value.wrapped is None else value.wrapped.Get())
+            return ("box", None if value.wrapped is None else box_limits(value.wrapped))
     raise _Unkeyable(f"an answer that is no plain value: {kind.__name__}")
 
 
@@ -1524,8 +1525,9 @@ def _sharing(function: Any) -> Any:
             memo[id(wrapped)] = downcast(wrapped.Located(wrapped.Location()))
             _note_placed(wrapped.TShape())
         for key, value in self.__dict__.items():
-            if key == "topo_parent":
-                result.topo_parent = value
+            if key in ("topo_path", "_history"):
+                # build123d's provenance points outside the copy; retain its references.
+                setattr(result, key, value)
             else:
                 setattr(result, key, copy.deepcopy(value, memo))
             if key == "joints":
@@ -1583,17 +1585,17 @@ def _store_pcurves(result: Any, given: tuple) -> None:
     for shape in given:
         handle = _wrapped(shape)
         if handle is not None:
-            edges = TopTools_IndexedMapOfShape()
+            edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(handle, TopAbs_EDGE, edges)
             find = edges.FindKey
             inputs.update(find(ordinal).TShape() for ordinal in range(1, edges.Extent() + 1))
-    faces = TopTools_IndexedMapOfShape()
+    faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(wrapped, TopAbs_FACE, faces)
     for ordinal in range(1, faces.Extent() + 1):
-        face = TopoDS.Face_s(faces.FindKey(ordinal))
+        face = TopoDS.Face(faces.FindKey(ordinal))
         explorer = TopExp_Explorer(face, TopAbs_EDGE)
         while explorer.More():
-            edge = TopoDS.Edge_s(explorer.Current())
+            edge = TopoDS.Edge(explorer.Current())
             if edge.TShape() not in inputs:
                 try:
                     BRepLib.BuildPCurveForEdgeOnPlane_s(edge, face)
@@ -1717,7 +1719,7 @@ class _Run:
             index = self.made_by(wrapped.TShape())
             if index is not None:
                 return index
-        parent = shape.__dict__.get("topo_parent") if hasattr(shape, "__dict__") else None
+        parent = getattr(shape, "topo_parent", None) if hasattr(shape, "__dict__") else None
         return self.feature_of(parent) if parent is not None and parent is not shape else None
 
     def account(self, handle: Any) -> tuple[dict[str, Any] | None, dict[str, int]]:
@@ -2325,10 +2327,10 @@ def _measured(shape: Any) -> tuple:
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     def each(kind: Any) -> list:
-        found = TopTools_IndexedMapOfShape()
+        found = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, kind, found)
         return [found.FindKey(index) for index in range(1, found.Size() + 1)]
 
@@ -2344,7 +2346,7 @@ def _measured(shape: Any) -> tuple:
     counts = tuple(len(each(kind)) for kind in (TopAbs_SOLID, TopAbs_SHELL))
     faces = sorted(props(face, True) for face in each(TopAbs_FACE))
     edges = sorted(props(edge, False) for edge in each(TopAbs_EDGE))
-    points = sorted(rounded(*BRep_Tool.Pnt_s(TopoDS.Vertex_s(vertex)).Coord()) for vertex in each(TopAbs_VERTEX))
+    points = sorted(rounded(*BRep_Tool.Pnt_s(TopoDS.Vertex(vertex)).Coord()) for vertex in each(TopAbs_VERTEX))
     return counts, tuple(faces), tuple(edges), tuple(points)
 
 
@@ -3023,7 +3025,7 @@ _IN_PLACE = frozenset({"ShapeFix_Shape"})
 def _placed_twice(handle: Any) -> bool:
     """Whether ``handle`` holds one edge's or one vertex's TShape at two places or more."""
     for kind in (TopAbs_EDGE, TopAbs_VERTEX):
-        found = TopTools_IndexedMapOfShape()  # by TShape and place: an edge two faces share is one
+        found = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()  # by TShape and place: an edge two faces share is one
         TopExp.MapShapes_s(handle, kind, found)
         count = found.Extent()
         if count > 1 and len({found.FindKey(ordinal).TShape() for ordinal in range(1, count + 1)}) < count:
@@ -3863,7 +3865,7 @@ def _register_sub(shape: Any, wrapped: Any, tshape: Any, state: _Run) -> "_Made"
     extracted from, and its index in that shape's map of its kind."""
     from build123d.topology import Shape
 
-    parent = shape.__dict__.get("topo_parent")
+    parent = getattr(shape, "topo_parent", None)
     if not isinstance(parent, Shape) or parent is shape:
         return _held(tshape, int(wrapped.ShapeType()), state)
     parent_wrapped = _wrapped(parent)
@@ -3923,7 +3925,7 @@ def _holder(tshape: Any, kind: int) -> tuple["_Made", int]:
     with _LOCK:
         ordinals = _ORDINALS.get((root.tshape, kind))
         if ordinals is None:
-            mapped = TopTools_IndexedMapOfShape()
+            mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(_handle_of(root.tshape), TopAbs_ShapeEnum(kind), mapped)
             ordinals = {}
             for ordinal in range(1, mapped.Extent() + 1):
@@ -3950,7 +3952,7 @@ def _sub_map(parent_wrapped: Any, kind: int) -> Any:
         if found is not None and found[0].IsSame(parent_wrapped):
             _MAPS.move_to_end(key)
             return found[1]
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(parent_wrapped, TopAbs_ShapeEnum(kind), mapped)
     with _LOCK:
         _MAPS[key] = (parent_wrapped.Located(parent_wrapped.Location()), mapped)
@@ -4051,7 +4053,7 @@ class _Made:
             return ("made", self.key[0], self.key[1], self.position, applied)
         if self.held:
             return ("held", self.parent.base(None, state), self.kind, self.index, applied)
-        parent = shape.__dict__.get("topo_parent")
+        parent = getattr(shape, "topo_parent", None)
         if parent is None:
             # It was handed another shape's attributes, ``topo_parent`` None among them --
             # build123d's fuse copies a sketch's onto the first face it fuses, a face of a
@@ -4391,7 +4393,7 @@ class _ShapeState:
         _note_placed(self.wrapped.TShape())
         for name, value in self.attrs.items():
             if name != "_NodeMixin__children":
-                obj.__dict__[name] = value if name == "topo_parent" else copy.deepcopy(value, memo)
+                obj.__dict__[name] = value if name in ("topo_path", "_history") else copy.deepcopy(value, memo)
         if self.children is not None:
             obj.__dict__["_NodeMixin__children"] = [state.fresh(memo) for state in self.children]
         for joint in (obj.__dict__.get("joints") or {}).values():
@@ -4663,7 +4665,7 @@ def _effects(captured: list[_Captured], state: _Run) -> tuple[list[tuple[int, "_
 
 def _mapped(handle: Any) -> tuple[Any, list]:
     """A shape's full ``TopExp`` map, and the TShape of each sub-shape by ordinal."""
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(handle, mapped)
     find = mapped.FindKey
     return mapped, [find(ordinal).TShape() for ordinal in range(1, mapped.Extent() + 1)]

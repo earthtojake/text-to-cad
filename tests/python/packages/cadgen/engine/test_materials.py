@@ -217,6 +217,23 @@ class ColourAndMaterialTest(unittest.TestCase):
         self.assertEqual(self.colour("material"), materials.brass.color, "no colour of its own: the material's")
 
 
+    def test_authored_material_survives_a_copy_and_native_assignment_replaces_it(self) -> None:
+        import build123d as bd
+        from bd_materials import metals
+
+        box = bd.Solid.make_box(2, 3, 4)
+        box.material = materials.brass
+        moved = box.moved(bd.Location((10, 0, 0)))
+        self.assertEqual(moved.material, materials.brass)
+        native = metals.aluminum()
+        moved.material = native
+        self.assertIs(moved.material, native)
+        self.assertEqual(box.material, materials.brass)
+        moved.material = materials.pla
+        moved.material = None
+        self.assertIsNone(moved.material)
+
+
 class MaterialDocumentTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="engine-materials-")).resolve()

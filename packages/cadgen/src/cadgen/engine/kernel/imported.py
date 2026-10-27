@@ -21,10 +21,11 @@ def names(label: Any, shape: Any, held: dict[Any, dict]) -> dict[int, dict[int, 
     read once however often it is placed."""
     from OCP.TCollection import TCollection_AsciiString
     from OCP.TDataStd import TDataStd_Name
-    from OCP.TDF import TDF_LabelSequence, TDF_Tool
+    from OCP.collections import Sequence_TDF_Label
+    from OCP.TDF import TDF_Tool
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
     entry = TCollection_AsciiString()
@@ -34,7 +35,7 @@ def names(label: Any, shape: Any, held: dict[Any, dict]) -> dict[int, dict[int, 
     if found is not None:
         return found
     found = held[key] = {}
-    subs = TDF_LabelSequence()
+    subs = Sequence_TDF_Label()
     XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
     if not subs.Length():
         return found
@@ -55,7 +56,7 @@ def names(label: Any, shape: Any, held: dict[Any, dict]) -> dict[int, dict[int, 
             continue
         elements = maps.get(kind)
         if elements is None:
-            elements = maps[kind] = TopTools_IndexedMapOfShape()
+            elements = maps[kind] = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(shape, element.ShapeType(), elements)
         ordinal = elements.FindIndex(element)
         if ordinal:

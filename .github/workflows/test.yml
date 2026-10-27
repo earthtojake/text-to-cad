@@ -77,6 +77,7 @@ jobs:
       skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
+      kicad: ${{ steps.select.outputs.kicad }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -315,6 +316,34 @@ jobs:
 
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
+
+  # Native board files through stable KiCad: DRC and STEP/mesh export; no IPC server or libraries.
+  kicad:
+    name: KiCad boards
+    needs: changes
+    if: needs.changes.outputs.kicad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install KiCad
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-9.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends kicad
+          kicad-cli version
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Run the KiCad suite
+        run: scripts/test/test-kicad.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.

@@ -319,3 +319,7 @@ Retry reloads only the selected renderer; Report Issue, where the host has a tra
 new issue titled "Issue: ", labelled `bug`, filled in from the card, with the file's name and
 no path of the machine. The card's Details have a copy icon at their top-right corner, which
 copies all of them through the host's clipboard.
+
+The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
+selection, Measure, annotation and Quick Edit host capabilities as the other renderers.
+It consumes the core plot payload; authoring and DRC belong to KiCad and cadgen's file commands.

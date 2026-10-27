@@ -1,3 +1,4 @@
+import { buildBoardRefToken, isBoardRefPath, parseBoardRefSelector, parseBoardRefToken } from '../lib/boardRefs.js';
 import { buildCadRefToken, isDocumentId, isEngineRefFile, isEngineSelector, isLabelSelector, parseCadRefToken } from '../lib/cadRefs.js';
 
 let operationSequence = 0;
@@ -31,7 +32,8 @@ export function validatePromptReference(reference) {
     requireValue(resource.kind === 'workspace-file' || resource.kind === 'cad-model', 'CAD selectors require a file or a model');
     // A document the engine draws (an .xbf, a STEP, a model) is named in the engine's grammar; any
     // other file by its renderer's labels (cadRefs.js).
-    const valid = isEngineRefFile(resource.path) ? isEngineSelector : isLabelSelector;
+    const valid = isBoardRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseBoardRefSelector(selector))
+      : isEngineRefFile(resource.path) ? isEngineSelector : isLabelSelector;
     requireValue(Array.isArray(target.selectors) && target.selectors.length > 0 && target.selectors.every(selector => valid(selector)),
       'invalid CAD selector');
   } else requireValue(target.kind === 'whole-resource', 'unknown reference target');
@@ -103,6 +105,11 @@ export function promptReferenceIds(reference) {
  */
 export function parsePromptReference(text) {
   const line = String(text || '').trim();
+  const board = line ? parseBoardRefToken(line) : null;
+  if (board && isBoardRefPath(board.path) && board.selectors.length) {
+    try { return validatePromptReference({ resource: { kind: 'workspace-file', path: board.path }, target: { kind: 'cad-selector', selectors: board.selectors } }); }
+    catch { return null; }
+  }
   const parsed = line ? parseCadRefToken(line) : null;
   if (!parsed || parsed.token.trim() !== line || !parsed.selectors.length) return null;
   try { return validatePromptReference({ resource: { kind: isDocumentId(parsed.cadPath) ? 'cad-model' : 'workspace-file', path: parsed.cadPath }, target: { kind: 'cad-selector', selectors: parsed.selectors } }); }
@@ -115,7 +122,10 @@ export function formatPromptReference(reference) {
   // A file by its absolute path, a URL as it is.
   const path = reference.resource.kind === 'url' ? reference.resource.url : reference.resource.path;
   requireValue(path.length > 0, 'a reference names its file or URL');
-  if (reference.target.kind === 'cad-selector') return buildCadRefToken({ cadPath: path, selectors: [...reference.target.selectors] });
+  if (reference.target.kind === 'cad-selector') {
+    const selectors = [...reference.target.selectors];
+    return isBoardRefPath(path) ? buildBoardRefToken({ path, selectors }) : buildCadRefToken({ cadPath: path, selectors });
+  }
   const quoted = /[\s#"\\]/.test(path) ? JSON.stringify(path) : path;
   if (reference.target.kind === 'text-range') {
     const { start, end } = reference.target;

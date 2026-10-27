@@ -5,8 +5,8 @@ The published distribution: CAD models written as Python, built by cadgen's engi
 3MF, DXF), and the tools that show and check them. One PyPI package carrying the Python under
 `src/cadgen/` and what it ships that is not Python under `src/cadgen/_runtime/`: the CAD
 Viewer's client and the CAD app page, which it serves, built from their JavaScript packages
-and bundled in at build time (the JS *source* never ships). Its snapshots are drawn by OCCT,
-never in a browser.
+and bundled in at build time (the JS *source* never ships). Its CAD snapshots are drawn by OCCT; native KiCad boards use a flat Pillow renderer.
+Neither starts a browser.
 
 ```python
 from cadgen import step, xbf
@@ -35,7 +35,7 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cadgen viewer [FILE]`: a
 launcher for the installation’s engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cadgen mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
-engineering drawings (`@eng_drawing`).
+engineering drawings (`@eng_drawing`); and native KiCad board viewing, snapshots and DRC.
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cadgen`) and the bundled runtime. Never app code, never JavaScript source at runtime.
@@ -418,3 +418,12 @@ The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
 uses the same host and custom-header POST gates as other mutation routes, limits
 images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
 reads the clipboard. Unsupported desktop clipboard environments return an error.
+
+## Native KiCad files
+
+A `.kicad_pcb` is source, read directly for each plot or snapshot. The parser and read-only board
+index live under `src/cadgen/engine/formats/kicad/`; the flat renderer is
+`src/cadgen/engine/render/board.py`. They never build or cache an XCAF model of a board.
+`cadgen.pcb.read_board` exposes the inspection index; `cadgen pcb drc` runs the installed
+KiCad CLI in a private settings directory. KiCad owns authoring and mechanical/fabrication
+exports; an exported STEP enters the ordinary foreign-file path. No IPC client is bundled.

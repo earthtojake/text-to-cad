@@ -33,7 +33,7 @@ export const agentInstallMessage = "Install text-to-cad from https://github.com/
 // not updated yet is never told less than it sends; the cadgen a person runs says the rest itself. The
 // README says it word for word. The command is in backticks, which the page sets as code.
 export const telemetryNote =
-  "By default, text-to-cad sends usage stats and crash reports, tagged with a random ID and never including your files, paths or prompts; turn them off with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen telemetry off`, or ask your agent to.";
+  "By default, text-to-cad sends usage stats and crash reports, tagged with a random ID and never including your files, paths or prompts; turn them off with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off`, or ask your agent to.";
 // The same message, opened in an agent app with its composer prefilled, never sent: Claude Code in
 // Claude Desktop (claude://code/new, Claude's help center, "Open Claude Desktop with a link"), the
 // Codex app (codex://threads/new, its commands reference) and Cursor (its prompt deeplink, Cursor's
@@ -159,6 +159,18 @@ export const skillGroups = [
     path: "skills/dxf",
     summary:
       "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
+  },
+  {
+    name: "PCB",
+    path: "skills/pcb",
+    summary:
+      "Edits native KiCad circuit boards, inspects parts and nets, runs DRC, and exports fabrication files or STEP for mechanical design.",
+  },
+  {
+    name: "PCB DFM",
+    path: "skills/pcb-dfm",
+    summary:
+      "Reviews a KiCad board before ordering: KiCad's DRC, decoupling, track width for current, sourcing and the fab's limits.",
   },
   {
     name: "URDF",

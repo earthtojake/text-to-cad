@@ -47,7 +47,7 @@ if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewe
 __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Placed", "ROBOTS", "assemble", "files_of",
            "read", "stale"]
 
-KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf"}
+KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf", ".kicad_pcb": "kicad_pcb"}
 MESHES = (".stl", ".3mf", ".glb")
 ROBOTS = (".urdf", ".sdf", ".srdf")
 DRAWING = ".dxf"

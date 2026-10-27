@@ -537,7 +537,7 @@ def paint(shape: Any, faces: Any, color: Any) -> Any:
     import build123d as bd
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     from cadgen.engine.colors import linear
     from cadgen.engine.kernel.memo import FACE_COLORS, FACE_MATERIALS
@@ -545,7 +545,7 @@ def paint(shape: Any, faces: Any, color: Any) -> Any:
 
     material = color if isinstance(color, Material) else None
     rgba = None if material is not None else tuple(linear(color, "paint's color"))
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape.wrapped, TopAbs_FACE, mapped)
     painted = dict(shape.__dict__.get(FACE_COLORS) or {})
     given = dict(shape.__dict__.get(FACE_MATERIALS) or {})

@@ -167,10 +167,13 @@ def exploded_amount(display: dict[str, Any]) -> float:
     return float(exploded["amount"]) if exploded and exploded.get("enabled") else 0.0
 
 
-def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
+def parse_display(value: str | None, grid: bool, *, board: bool = False) -> dict[str, Any]:
     """``--display``: a mode, ``exploded=AMOUNT``, an appearance (``light``, ``dark``: all a drawing
     takes), several by commas (``hidden-line,exploded=0.6``), or the viewer's display object (JSON,
     or a JSON file)."""
+    if board:
+        from cadgen.engine.render.board import display_options
+        return display_options(value, grid)
     display: dict[str, Any] = {}
     if value:
         text = value.strip()
@@ -515,7 +518,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -626,12 +629,12 @@ def write_png(out: Path, data: bytes) -> None:
 
 
 def options(display: Any = None, camera: Any = None, grid: bool = False, width: int | None = None,
-            height: int | None = None, size_profile: str | None = None) -> tuple[dict[str, Any], Any, tuple[int, int]]:
+            height: int | None = None, size_profile: str | None = None, *, board: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
     """A snapshot's options as a function gives them -- ``display`` a mode, a
     JSON text or the display object -- checked as the verb checks its flags."""
     if isinstance(display, dict):
         display = json.dumps(display)
-    return (parse_display(display, bool(grid)), parse_camera(camera if camera is None or isinstance(camera, str)
+    return (parse_display(display, bool(grid), board=board), parse_camera(camera if camera is None or isinstance(camera, str)
                                                               else json.dumps(camera)),
             parse_size(width, height, size_profile))
 
@@ -903,7 +906,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                               "outputs, ...}) or a list of jobs")
     if not jobs:
         raise SnapshotRefused("--job names no job")
-    shown_flags = parse_display(display, grid) if display is not None else None
+    shown_flags = None  # parsed per file: each file family owns its Display vocabulary
     camera_flag = parse_camera(camera if camera is None or isinstance(camera, str) else json.dumps(camera))
     pose_flag = parse_pose(pose) if isinstance(pose, str) else pose
     ink_flag = parse_annotation(annotation)
@@ -926,7 +929,9 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         document = Path(os.fspath(named))
         if not _by_id(document):
             document = document.expanduser().resolve()
-        drawing = document.suffix.lower() == ".dxf"
+        board = document.suffix.lower() == ".kicad_pcb"
+        drawing = board or document.suffix.lower() == ".dxf"
+        shown_flags = parse_display(display, grid, board=board) if display is not None else None
         settings = _settings(view.get("output"), f"{where}.output", drawing)
         tight, padding = settings.get("tightFrame", True), float(settings.get("padding", PADDING))
         scale = float(settings.get("renderScale", 1.0))
@@ -935,7 +940,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         else:
             if view.get("display") is not None and not isinstance(view["display"], dict):
                 raise SnapshotRefused(f"{where}.display is the view's display object")
-            shown = parse_display(json.dumps(view["display"]), grid) if view.get("display") else (
+            shown = parse_display(json.dumps(view["display"]), grid, board=board) if view.get("display") else (
                 {"grid": True} if grid else {})
         selection = view.get("selection")
         if selection is not None:
@@ -988,6 +993,9 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
     if twice:
         raise SnapshotRefused(f"--job writes {', '.join(twice)} twice: give each output a path of its own")
     for document, _out, still in pictures:
+        if document.suffix.lower() == ".kicad_pcb":
+            from cadgen.engine.render.board import refusals as board_refusals
+            board_refusals(still, document.name)
         if document.suffix.lower() == ".dxf":
             from cadgen.engine.render.drawing import refusals as drawing_refusals
 

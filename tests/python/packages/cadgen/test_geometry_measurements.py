@@ -6,6 +6,18 @@ from build123d import Compound, Pos, Rot, Solid, Vector, Vertex
 from cadgen.geometry import GeometryError, closest_points, mass_properties
 
 
+def _unbounded_plane():
+    """An unlimited XY plane face: a surface with no vertices at all.
+
+    build123d 0.11's ``Face.make_plane`` made one; 0.12 removed it, so this is
+    its one line, kept because the measurement contract it exercises -- a
+    non-empty surface with nothing to enumerate -- has no other spelling."""
+    from build123d import Face, Plane
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+
+    return Face(BRepBuilderAPI_MakeFace(Plane.XY.wrapped).Face())
+
+
 class ClosestPointsTests(unittest.TestCase):
     def test_vertices_and_separated_solids_have_witnesses_in_world_frame(self):
         a, b = Vertex(1, 2, 3), Vertex(4, 6, 3)
@@ -28,7 +40,7 @@ class ClosestPointsTests(unittest.TestCase):
 
     def test_nonempty_surface_without_vertices_is_measurable(self):
         from build123d import Face
-        self.assertAlmostEqual(closest_points(Face.make_plane(), Vertex(0, 0, 5)).distance, 5)
+        self.assertAlmostEqual(closest_points(_unbounded_plane(), Vertex(0, 0, 5)).distance, 5)
 
     def test_compound_containment_counts_solid_interiors_in_both_orders(self):
         outer = Solid.make_box(10, 10, 10)
@@ -58,7 +70,7 @@ class ClosestPointsTests(unittest.TestCase):
         from build123d import Edge, Face
 
         far = Pos(100, 100, 100) * Solid.make_box(1, 1, 1)
-        for loose in (Vertex(0, 0, 0), Edge.make_line((-2, 0, 0), (2, 0, 0)), Face.make_plane()):
+        for loose in (Vertex(0, 0, 0), Edge.make_line((-2, 0, 0), (2, 0, 0)), _unbounded_plane()):
             for a, b in ((Compound([far, loose]), Vertex(0, 0, 5)),
                          (Vertex(0, 0, 5), Compound([far, loose]))):
                 self.assertAlmostEqual(closest_points(a, b).distance, 5)

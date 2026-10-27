@@ -1,0 +1,12 @@
+(version 2)
+# [track_width] VIN's bus carries every servo: IPC-2221, 1 oz outer copper, 10 C rise, 5 A
+(rule "VIN bus"
+  (constraint track_width (min 1.5mm))
+  (condition "A.NetName == 'VIN'"))
+# [clearance] signals at 0.15 mm from everything else on the board
+(rule "signal clearance"
+  (constraint clearance (min 0.15mm)))
+# [track_angle] bends at 45 or 90 degrees, none acute
+(rule "no acute bends"
+  (constraint track_angle (min 90))
+  (condition "A.Type == 'Track'"))

@@ -1326,6 +1326,14 @@ output and moved into place only when all are drawn, and a failed snapshot leave
 of the file's warm render process; `daemon=False` serves each file once for all its pictures.
 `--json` prints `{"ok": true, "pictures": [what each drew]}`.
 
+**Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
+`formats/kicad/plot.py` rereads the board and its sibling project on each request, discarding
+the index after creating the plot payload. `render/board.py` paints the same layer primitives
+with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
+plan cameras, annotation and measurements. Its render-service handle holds only a path; no
+board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
+No KiCad installation is required to view a board; KiCad's own CLI performs DRC and exports.
+
 **The OCCT stills.** A document is drawn by OCCT's own OpenGL renderer from the engine's meshes
 (`render/`): one presentation per part and look, each
 instance a connected object of it; the modes, the camera fit, clip, grid and Preview are the
@@ -1963,6 +1971,12 @@ each entry's `source` names which. The looks are the engine's own: metals metall
 roughness by finish (polished 0.2, machined 0.35-0.45, cast 0.6), brushed aluminium and
 stainless anisotropic, plastics dielectric, glass and the clear plastics transmissive, rubber
 rough.
+
+build123d 0.13's `Shape.material` property accepts native materials and sets their colour.
+The engine's [material integration](kernel/material.py), installed when build123d loads,
+keeps a cadgen `Material` as an authored value instead: explicit colour and document
+inheritance retain their existing precedence. Native assignments still use build123d's
+property, and `None` clears either kind.
 
 In the file a material is XCAF's own `XCAFDoc_Material` (name, description, density) and
 `XCAFDoc_VisMaterial` (PBR: colour and alpha, metallic, roughness, emissive, IOR), and every
@@ -2645,7 +2659,7 @@ no git. It names what the document was built from and what built it, the toolcha
 schema    "cadgen.engine closure/2"
 engine    {"release": "cadgen 0.8.0", "format": "xbf/8", "digest": ...}   the format (keyed); the release and
                                                                      the engine's code digest (information only)
-libs      {"build123d": "0.11.1", "OCP": "7.9.3.1.1"}                 what decides the geometry (keyed): OCP's
+libs      {"build123d": "0.13.0", "OCP": "8.0.1.1"}                 what decides the geometry (keyed): OCP's
                                                                      version leads with the OCCT it wraps
 platform  {"python": "3.12.10", "system": "Darwin", "arch": "arm64"}  the system and architecture (keyed),
                                                                      Python (information only):

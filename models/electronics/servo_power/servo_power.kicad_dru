@@ -1,0 +1,24 @@
+(version 2)
+# [track_width] VBUS and +5V carry the servos' 2 A: IPC-2221, 1 oz outer copper, 10 C rise, 0.78 mm
+(rule "power carries 2 A"
+  (constraint track_width (min 0.78mm))
+  (condition "A.NetName == 'VBUS' || A.NetName == '+5V'"))
+# the receptacle's VBUS pads are 0.6 mm wide between 0.2 mm gaps: inside its courtyard VBUS keeps that width
+(rule "J1 fanout"
+  (constraint track_width (min 0.6mm))
+  (condition "A.NetName == 'VBUS' && A.intersectsCourtyard('J1')"))
+# [hole_clearance] holes to copper; the board's own floor, 0.15 mm, is the receptacle's alone
+(rule "hole clearance"
+  (constraint hole_clearance (min 0.25mm)))
+# GCT's land pattern puts the receptacle's pads 0.17 mm from its own locating pegs
+(rule "J1 land pattern"
+  (constraint hole_clearance (min 0.15mm))
+  (condition "A.memberOfFootprint('J1') && B.memberOfFootprint('J1')"))
+# the receptacle's ground pads and shell tabs sit too close together for spokes: solid to the pours
+(rule "J1 solid to pour"
+  (constraint zone_connection solid)
+  (condition "A.memberOfFootprint('J1') && A.NetName == 'GND'"))
+# [track_angle] bends at 45 or 90 degrees, none acute
+(rule "no acute bends"
+  (constraint track_angle (min 90))
+  (condition "A.Type == 'Track'"))

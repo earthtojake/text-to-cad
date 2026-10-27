@@ -43,6 +43,7 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
+    "pcb drc": ("cadgen.pcb", "drc"),
     "sdf validate": ("cadgen.sdf", "validate"),
     "srdf validate": ("cadgen.srdf", "validate"),
 }
@@ -61,6 +62,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
     # Each format's snapshot is the engine's, for that format's files alone.
     "dxf snapshot": SNAPSHOT,
+    "pcb snapshot": SNAPSHOT,
     "urdf snapshot": SNAPSHOT,
     "sdf snapshot": SNAPSHOT,
     # A host starts it and speaks MCP on its standard streams; it takes no options. Where the

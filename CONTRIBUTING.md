@@ -59,7 +59,8 @@ scripts/bundle/bundle.sh
 ./.venv/bin/python -m cadgen.cli urdf validate --help
 ```
 
-The engine draws every snapshot with OCCT in an OpenGL context. On Linux with no
+The engine draws CAD snapshots with OCCT in an OpenGL context. Native KiCad board
+snapshots use Pillow and need no display. On Linux with no
 screen (a server, a container, CI) that context is an X server's: install Xvfb,
 Mesa's software GL and the font the stills set their text in, and run the cadgen
 suite or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a

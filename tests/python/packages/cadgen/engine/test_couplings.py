@@ -161,14 +161,14 @@ def _vertices(loaded: document.Loaded, name: str, pose: Any = None) -> np.ndarra
     from OCP.TopAbs import TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     index, instance = next((at, i) for at, i in enumerate(loaded.instances) if i.path[-1] == name)
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(loaded.prototypes[instance.prototype].shape, TopAbs_VERTEX, mapped)
     matrix = np.array(instance.matrix if pose is None else
                       mechanism.posed_structure(loaded.structure(), pose)["instances"][index]["matrix"]).reshape(4, 4).T
-    points = [BRep_Tool.Pnt_s(TopoDS.Vertex_s(mapped.FindKey(at))) for at in range(1, mapped.Extent() + 1)]
+    points = [BRep_Tool.Pnt_s(TopoDS.Vertex(mapped.FindKey(at))) for at in range(1, mapped.Extent() + 1)]
     return np.array(sorted((matrix @ np.array([p.X(), p.Y(), p.Z(), 1.0]))[:3].tolist() for p in points))
 
 

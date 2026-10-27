@@ -77,7 +77,7 @@ import numpy as np
 from OCP.BRep import BRep_Tool
 from OCP.GeomAbs import GeomAbs_G1
 from OCP.TopoDS import TopoDS
-from OCP.TopTools import TopTools_ListOfShape
+from OCP.collections import List_TopoDS_Shape
 
 __all__ = ["ANGULAR", "BOUNDARY", "DEVIATION", "FEATURE", "HEADER", "MAGIC", "Mesh", "NONMANIFOLD", "SEAM",
            "TANGENT", "TESSELLATION", "Topology", "check", "deflection", "measured", "mesh_shape"]
@@ -85,6 +85,8 @@ __all__ = ["ANGULAR", "BOUNDARY", "DEVIATION", "FEATURE", "HEADER", "MAGIC", "Me
 
 
 _G1 = int(GeomAbs_G1)
+from cadgen.engine.kernel.bounds import box_limits
+
 # BRepMesh_Status bits, as the mesher's GetStatusFlags reports them.
 _MESH_FLAGS = ((1, "Failure"), (2, "ReMesh"), (4, "SelfIntersectingWire"), (8, "UserBreak"))
 
@@ -103,7 +105,7 @@ def deflection(shape: Any) -> float:
     if box.IsVoid():
         return 0.1
     box.SetGap(0.0)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = box_limits(box)
     return max(((xmax - xmin) + (ymax - ymin) + (zmax - zmin)) / 300.0 * DEVIATION, 1e-4)
 
 
@@ -127,9 +129,9 @@ _BOOKKEEPING = (True, True, False, False)
 def _settled(shape: Any) -> Iterator[None]:
     """``shape`` with every sub-shape's bookkeeping flags at ``_BOOKKEEPING``, set back after."""
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, mapped)
     free, modified, checked, locked = _BOOKKEEPING
     changed = []
@@ -218,7 +220,7 @@ def _unique_faces(owners: Any) -> list[Any]:
     elif size <= 2:
         listed = [owners.First(), owners.Last()][:size]
     else:
-        rest = TopTools_ListOfShape()
+        rest = List_TopoDS_Shape()
         rest.Assign(owners)
         listed = []
         while not rest.IsEmpty():
@@ -228,7 +230,7 @@ def _unique_faces(owners: Any) -> list[Any]:
     for owner in listed:
         if not any(owner.IsSame(held) for held in found):
             found.append(owner)
-    return [TopoDS.Face_s(face) for face in found]
+    return [TopoDS.Face(face) for face in found]
 
 
 def edge_class(edge: Any, faces: list[Any]) -> int:
@@ -253,7 +255,11 @@ def check(face: Any) -> str:
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_WIRE
     from OCP.TopExp import TopExp_Explorer
 
+    from cadgen.engine.kernel.checks import probed_statuses
+
     analyzer = BRepCheck_Analyzer(face)
+    if analyzer.IsValid():
+        return "valid"
 
     def faults(statuses: Any) -> list[str]:
         return [str(status).rsplit(".", 1)[-1].removeprefix("BRepCheck_") for status in statuses
@@ -270,15 +276,23 @@ def check(face: Any) -> str:
                 # A seam is met twice, once per orientation, and the analyzer keeps a
                 # status in the face's context for one of them only: asked for the other,
                 # StatusOnShape raises.
-                on_face = faults(result.StatusOnShape(face)) if result.IsStatusOnShape(face) else []
-                for text in dict.fromkeys(faults(result.Status()) + on_face):
+                try:
+                    on_face = faults(result.StatusOnShape(face)) if result.IsStatusOnShape(face) else []
+                    statuses = faults(result.Status()) + on_face
+                except TypeError:  # OCP 8's status list is unbound; scalar checkers still name faults.
+                    statuses = faults(probed_statuses(explorer.Current(), face))
+                for text in dict.fromkeys(statuses):
                     found.append(f"{label} {at}: {text}")
             explorer.Next()
     result = analyzer.Result(face)
     if result is not None:
-        found += [f"face: {text}" for text in dict.fromkeys(faults(result.Status()))]
+        try:
+            statuses = faults(result.Status())
+        except TypeError:
+            statuses = faults(probed_statuses(face))
+        found += [f"face: {text}" for text in dict.fromkeys(statuses)]
     if not found:
-        return "valid"
+        return "invalid (kernel diagnostic unavailable)"
     shown = list(dict.fromkeys(found))
     return "; ".join(shown[:6]) + (f"; and {len(shown) - 6} more" if len(shown) > 6 else "")
 
@@ -311,12 +325,12 @@ class Topology:
     def __init__(self, shape: Any) -> None:
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
         self.shape = read_shape(shape if isinstance(shape, (bytes, bytearray, memoryview)) else shape_bytes(shape))
         self.maps = {}
         for name, kind in (("face", TopAbs_FACE), ("edge", TopAbs_EDGE), ("vertex", TopAbs_VERTEX)):
-            found = TopTools_IndexedMapOfShape()
+            found = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(self.shape, kind, found)
             self.maps[name] = found
         self._ancestors: Any = None
@@ -328,7 +342,7 @@ class Topology:
         if not 1 <= ordinal <= found.Extent():
             raise KeyError(f"the part has no {kind} {ordinal} (it has {found.Extent()})")
         shape = found.FindKey(ordinal)
-        return {"face": TopoDS.Face_s, "edge": TopoDS.Edge_s, "vertex": TopoDS.Vertex_s}[kind](shape)
+        return {"face": TopoDS.Face, "edge": TopoDS.Edge, "vertex": TopoDS.Vertex}[kind](shape)
 
     def face(self, ordinal: int) -> dict[str, Any]:
         from OCP.Bnd import Bnd_Box
@@ -342,7 +356,7 @@ class Topology:
         BRepGProp.SurfaceProperties_s(face, props)
         box = Bnd_Box()
         BRepBndLib.AddOptimal_s(face, box, False, False)
-        bounds = list(box.Get()) if not box.IsVoid() else None
+        bounds = list(box_limits(box)) if not box.IsVoid() else None
         surface = BRepAdaptor_Surface(face, False)
         kind = _kind(surface.GetType())
         found = {"kind": "face", "ordinal": ordinal, "area": props.Mass(), "centroid": _point(props.CentreOfMass()),
@@ -365,12 +379,12 @@ class Topology:
         from OCP.GProp import GProp_GProps
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+        from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher
 
         edge = self._get("edge", ordinal)
         if self._ancestors is None:
             BRepLib.EncodeRegularity_s(self.shape, 1e-3)  # as the mesher classes edges
-            self._ancestors = TopTools_IndexedDataMapOfShapeListOfShape()
+            self._ancestors = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapesAndAncestors_s(self.shape, TopAbs_EDGE, TopAbs_FACE, self._ancestors)
         degenerate = BRep_Tool.Degenerated_s(edge)
         at = self._ancestors.FindIndex(edge)
@@ -405,18 +419,18 @@ class Topology:
         from OCP.gp import gp_Pnt, gp_Vec
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_IndexedMapOfShape
+        from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher, IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
         faces_map, edges_map, vertices_map = self.maps["face"], self.maps["edge"], self.maps["vertex"]
         BRepLib.EncodeRegularity_s(self.shape, 1e-3)
-        ancestors = TopTools_IndexedDataMapOfShapeListOfShape()
+        ancestors = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapesAndAncestors_s(self.shape, TopAbs_EDGE, TopAbs_FACE, ancestors)
         # Each face's solid (the first that holds it): neither grouping crosses solids.
         solid_of: dict[int, int] = {}
-        solids = TopTools_IndexedMapOfShape()
+        solids = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(self.shape, TopAbs_SOLID, solids)
         for at in range(1, solids.Extent() + 1):
-            held = TopTools_IndexedMapOfShape()
+            held = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(solids.FindKey(at), TopAbs_FACE, held)
             for index in range(1, held.Extent() + 1):
                 solid_of.setdefault(faces_map.FindIndex(held.FindKey(index)), at)
@@ -433,7 +447,7 @@ class Topology:
         tangents: dict[int, tuple[Any, Any]] = {}
         ends: dict[int, tuple[int, int]] = {}
         for ordinal in range(1, edges_map.Extent() + 1):
-            edge = TopoDS.Edge_s(edges_map.FindKey(ordinal))
+            edge = TopoDS.Edge(edges_map.FindKey(ordinal))
             at = ancestors.FindIndex(edge)
             faces = _unique_faces(ancestors.FindFromIndex(at)) if at else []
             owners = {faces_map.FindIndex(face) for face in faces}
@@ -514,9 +528,9 @@ def _whole(shape: Any) -> dict[str, Any]:
     from OCP.GProp import GProp_GProps
     from OCP.TopAbs import TopAbs_SOLID
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    solids = TopTools_IndexedMapOfShape()
+    solids = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_SOLID, solids)
     total = 0.0
     for at in range(1, solids.Extent() + 1):
@@ -525,7 +539,7 @@ def _whole(shape: Any) -> dict[str, Any]:
         total += abs(props.Mass())
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape, box, True, False)
-    bounds = list(box.Get()) if not box.IsVoid() else None
+    bounds = list(box_limits(box)) if not box.IsVoid() else None
     return {"volume": total, "solids": solids.Extent(),
             "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}}
 
@@ -556,9 +570,9 @@ def _extract(shape: Any, mesher_status: str = "no status") -> Mesh:
     from OCP.TopExp import TopExp
     from OCP.TopLoc import TopLoc_Location
     from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Edge, TopoDS_Face
-    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher, IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    faces = TopTools_IndexedMapOfShape()
+    faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
     builder = BRep_Builder()
     holder = TopoDS_Compound()
@@ -569,7 +583,7 @@ def _extract(shape: Any, mesher_status: str = "no status") -> Mesh:
     by_face: dict[Any, int] = {}
     unmeshed: dict[int, str] = {}
     for ordinal in range(1, faces.Extent() + 1):
-        face = TopoDS.Face_s(faces.FindKey(ordinal))
+        face = TopoDS.Face(faces.FindKey(ordinal))
         location = TopLoc_Location()
         triangulation = BRep_Tool.Triangulation_s(face, location)
         if triangulation is None or triangulation.NbTriangles() == 0:
@@ -589,16 +603,16 @@ def _extract(shape: Any, mesher_status: str = "no status") -> Mesh:
         by_face[tshape] = index
 
     BRepLib.EncodeRegularity_s(shape, 1e-3)  # the copy's own edges: continuity for the classes
-    edges = TopTools_IndexedMapOfShape()
+    edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_EDGE, edges)
-    ancestors = TopTools_IndexedDataMapOfShapeListOfShape()
+    ancestors = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapesAndAncestors_s(shape, TopAbs_EDGE, TopAbs_FACE, ancestors)
     polygons: dict[tuple, int] = {}
     polygon_list: list[Any] = []
     # ordinal, class, polygon (-1 for none), its face's transform
     edge_rows: list[tuple[int, int, int, np.ndarray | None]] = []
     for ordinal in range(1, edges.Extent() + 1):
-        edge = TopoDS.Edge_s(edges.FindKey(ordinal))
+        edge = TopoDS.Edge(edges.FindKey(ordinal))
         if BRep_Tool.Degenerated_s(edge):
             continue
         at = ancestors.FindIndex(edge)
@@ -632,11 +646,11 @@ def _extract(shape: Any, mesher_status: str = "no status") -> Mesh:
             builder.Add(holder, bare)
         edge_rows.append((ordinal, kind, index, _transform(location)))
 
-    vertex_map = TopTools_IndexedMapOfShape()
+    vertex_map = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_VERTEX, vertex_map)
     vertices = np.zeros((vertex_map.Extent(), 4), dtype=np.float32)
     for ordinal in range(1, vertex_map.Extent() + 1):
-        point = BRep_Tool.Pnt_s(TopoDS.Vertex_s(vertex_map.FindKey(ordinal)))
+        point = BRep_Tool.Pnt_s(TopoDS.Vertex(vertex_map.FindKey(ordinal)))
         vertices[ordinal - 1] = (ordinal, point.X(), point.Y(), point.Z())
 
     stream = io.BytesIO()

@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const KIT_ROOT = 'packages/ui/src/renderers/kit';
 
 // Core modules that belong to one file family, or to the STEP assembly pipeline.
-const FAMILY_CORE_IMPORT = /^@text-to-cad\/core\/(?:glb\/|lib\/(?:dxf|glb|parts|render|selectors|step|urdf|xbf)\/|lib\/(?:cadRefs|entryAssets|fileFormats|renderCapabilities|renderAssetClient)\.js|common\/(?:renderMeshScene|articulation|topology\w*)\.js)/;
+const FAMILY_CORE_IMPORT = /^@text-to-cad\/core\/(?:glb\/|lib\/(?:board2d|plot2d|dxf|glb|parts|render|selectors|step|urdf|xbf)\/|lib\/(?:boardRefs|cadRefs|entryAssets|fileFormats|renderCapabilities|renderAssetClient)\.js|common\/(?:renderMeshScene|articulation|topology\w*)\.js)/;
 
 const FORBIDDEN_WORDS = [
   ['a file format', /urdf|srdf|(?<![a-z])sdf(?![a-z])|glb|gltf|dxf|(?<![a-z])stl(?![a-z])|3mf|b-?rep(?![a-z])/i],
@@ -96,7 +96,7 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
 // lazy-loaded and deleted alone. Every file family is on this list; `workspace`
 // is held to the same rule.
 export const RENDERERS_ROOT = 'packages/ui/src/renderers';
-export const RENDERER_SLICES = ['dxf', 'glb', 'mesh', 'robot', 'workspace', 'xbf'];
+export const RENDERER_SLICES = ['board', 'dxf', 'glb', 'mesh', 'robot', 'workspace', 'xbf'];
 const SLICE_SHARED = ['kit', 'workspace'];
 
 export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {

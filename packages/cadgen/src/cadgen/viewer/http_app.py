@@ -196,7 +196,7 @@ def _working_folder() -> str:
 
 # Routes one method reaches: the other one answers 405 naming it, never a 404 that reads as no route.
 _GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder", "/__cad/search",
-                              "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
+                              "/__cad/thumbnail", "/__cad/drawing", "/__cad/plot", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
                               "/__cad/version"})
 _POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
                                "/__cad/analytics/activity"})
@@ -478,6 +478,8 @@ class CadApp:
                     response.send_json(200, self._recents_payload())
                 elif pathname == "/__cad/thumbnail":
                     self._handle_thumbnail(response, query)
+                elif pathname == "/__cad/plot":
+                    self._handle_plot(request, response, query)
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
                 elif pathname == "/__cad/robot":
@@ -790,6 +792,21 @@ class CadApp:
         status, body, content_type = robot_response(query.get("file") or "", query.get("mesh"))
         if isinstance(body, bytes):
             response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
+            return
+        response.send_json(status, body)
+
+    def _handle_plot(self, request, response, query):
+        """A KiCad board drawn from its file, as geometry per layer (``plots.py`` owns both rules).
+
+        Like the drawing route it does real work -- the board is read and laid out, about a
+        second on a cold board -- so it is counted, and its payload goes out as the
+        store's JSON bytes unchanged.
+        """
+        from .plots import plot_payload_response
+
+        status, body = plot_payload_response(query.get("file") or "")
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "application/json; charset=utf-8")
             return
         response.send_json(status, body)
 

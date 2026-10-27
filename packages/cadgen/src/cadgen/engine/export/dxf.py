@@ -158,7 +158,7 @@ def _edges(view: Any, placements: list[Any], shapes: dict[int, Any], named: str)
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     from cadgen.engine.export.tree import _located
 
@@ -167,10 +167,10 @@ def _edges(view: Any, placements: list[Any], shapes: dict[int, Any], named: str)
         shape = shapes[placed.prototype]
         if not np.array_equal(placed.matrix, np.eye(4)):
             shape = shape.Moved(_located(placed.matrix))
-        mapped = TopTools_IndexedMapOfShape()
+        mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_EDGE, mapped)
         for ordinal in range(1, mapped.Extent() + 1):
-            topods = TopoDS.Edge_s(mapped.FindKey(ordinal))
+            topods = TopoDS.Edge(mapped.FindKey(ordinal))
             if BRep_Tool.Degenerated_s(topods):
                 continue
             edge = Edge(topods)

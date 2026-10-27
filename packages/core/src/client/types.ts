@@ -209,6 +209,7 @@ export interface CadWorkspaceService {
    */
   reportActivity(activity: CadActivity): void;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
+  plotPayload(file: string, options?: CadRequestOptions): Promise<CadPlotPayload>;
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
   robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
@@ -278,4 +279,17 @@ export interface ExportService {
   status(id: string, sequence?: number, signal?: AbortSignal): Promise<ExportJob>;
   /** Where the browser downloads a ready job's file: the session's own origin, never a token. */
   fileUrl(id: string): string;
+}
+
+export interface CadPlotPayload {
+  schemaVersion: number;
+  kind: string;
+  /** What wrote the file (`"pcbnew 10.99"`), for wording only. */
+  generator?: string;
+  /** The board's connections still to make, each drawn as a ratsnest line. */
+  unrouted: number | null;
+  sheets: { name: string; width: number; height: number; background: string; layers: { id: string; kind: string; side: string; items: Record<string, unknown>[] }[] }[];
+  /** The board's index, in sheet millimetres: what the board view's tools point with. */
+  board?: Record<string, unknown>;
+  [key: string]: unknown;
 }

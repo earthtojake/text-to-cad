@@ -151,7 +151,7 @@ def _vertex_hash(self: Any) -> int:
         from OCP.TopAbs import TopAbs_ShapeEnum
         from OCP.TopoDS import TopoDS
 
-        x, y, z = BRep_Tool.Pnt_s(TopoDS.Vertex_s(self.wrapped)).Coord()
+        x, y, z = BRep_Tool.Pnt_s(TopoDS.Vertex(self.wrapped)).Coord()
         return hash((int(TopAbs_ShapeEnum.TopAbs_VERTEX), ((round(x, 6), round(y, 6), round(z, 6)),)))
     except Exception:
         return hash(self.wrapped)

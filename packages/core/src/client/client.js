@@ -298,6 +298,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl('/__cad/analytics/activity', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },
+    plotPayload(file, { signal } = {}) {
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/plot', { file, signal, timeoutMs: 180_000, operation: 'plotting' });
+    },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
       // reading, the client only paints. A plain GET, derived data cached by

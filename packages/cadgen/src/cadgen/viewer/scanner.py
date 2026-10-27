@@ -55,7 +55,7 @@ CAD_CATALOG_SCHEMA_VERSION = 5
 
 # The CAD files whose bytes the asset route sends.
 SOURCE_EXTENSIONS = frozenset(
-    {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf"}
+    {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf", ".kicad_pcb"}
 )
 # What every CAD view lists and opens: every CAD source, and a cadgen engine document (`.xbf`),
 # which the engine serves to the page as it serves a STEP (`documents.py`).

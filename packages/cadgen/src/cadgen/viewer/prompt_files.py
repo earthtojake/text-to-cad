@@ -36,7 +36,7 @@ _REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline
 _VIEW_KEYS = frozenset({"label", "camera", "display", "kinematics", "jointValues", "animation", "selection", "width", "height"})
 _ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 # What ``cadgen snapshot`` draws, by suffix (``cadgen.engine.snapshot``): the files a packet's input may be.
-SNAPSHOT_SUFFIXES = (".xbf", ".step", ".stp", ".stl", ".3mf", ".glb", ".urdf", ".srdf", ".sdf", ".dxf")
+SNAPSHOT_SUFFIXES = (".xbf", ".step", ".stp", ".stl", ".3mf", ".glb", ".urdf", ".srdf", ".sdf", ".dxf", ".kicad_pcb")
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 _FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.json")
 
@@ -92,7 +92,7 @@ class PromptFiles:
         jobs = []
         # A drawing's view is its plan view, framed as the pane framed it (its camera): it has no 3D
         # framing to pin. Every view carries its label, by which a mark names the view it was drawn in.
-        drawing = str(input_path).lower().endswith(".dxf")
+        drawing = str(input_path).lower().endswith((".dxf", ".kicad_pcb"))
         for index, view in enumerate(views):
             slug = _slug(view["label"].lower(), f"view-{index + 1}")
             while slug in labels:
@@ -234,7 +234,7 @@ def _accepted(packet: dict) -> None:
             if job.get("display") is not None:
                 if not isinstance(job["display"], dict):
                     raise SnapshotRefused(f"jobs[{index}].display is the view's display object")
-                parse_display(json.dumps(job["display"]), False)
+                parse_display(json.dumps(job["display"]), False, board=suffix == ".kicad_pcb")
         parse_annotation(packet.get("annotation"))
         packet_visibility(packet)
     except SnapshotRefused as error:

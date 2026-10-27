@@ -261,3 +261,7 @@ range as a CAD fragment. Apps own clipboard/draft delivery, MIME/size limits and
 acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destination
 (`added`, `copied`) and `send`, where a host has a chat to post to, posts it as the
 person's message (`sent`); this package never submits a prompt or knows a session.
+
+Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
+`lib/plot2d` draws its layers; `lib/board2d` handles picking and nets. File loading rereads
+`/__cad/plot`; no browser snapshot bundle is shipped.

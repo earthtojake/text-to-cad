@@ -6,7 +6,7 @@ Binding for viewer work that touches more than one file format. The rule it exis
 
 Every `renderFormat === RENDER_FORMAT.X` check is a place a new format must be hand-added and a
 place an improvement to one format fails to reach the others. What a format does lives in its
-renderer slice (`src/renderers/dxf`, `glb`, `mesh`, `robot` and `xbf`, one per file family) and is
+renderer slice (`src/renderers/board`, `dxf`, `glb`, `mesh`, `robot` and `xbf`, one per file family) and is
 described in [CAD renderer](cad-renderer.md#kit); the one thing the table below is read for is a
 file's icon.
 
@@ -25,6 +25,7 @@ for every other kind.
 | `3mf` | `3mf-mesh` |
 | `glb` (`gltf`) | `glb-mesh` |
 | `dxf` | `dxf` |
+| `kicad_pcb` | `kicad_pcb` |
 | `urdf`, `srdf`, `sdf` | `robot` |
 | anything else | `step`, the table's default row |
 

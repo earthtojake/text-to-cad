@@ -139,6 +139,9 @@ class _Session(unittest.TestCase):
         reply = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cadgen-app": self.server._app_token, **(headers or {})},
                                        "body": base64.b64encode(body).decode("ascii")})["structuredContent"]
         data = base64.b64decode(reply.get("body") or "")
+        if reply.get("encoding") == "gzip":
+            import gzip
+            data = gzip.decompress(data)
         return reply["status"], json.loads(data) if reply["headers"].get("content-type", "").startswith("application/json") else data
 
     def poll_as(self, view: str, surface: str, answers: int, model: str | None = None, png: str = "iVBORw0KGgo=") -> threading.Thread:
@@ -322,6 +325,25 @@ class TabServerTest(_Session):
         for tool in ("cad_open", "cad_show"):
             self.assertIn("is not one", self.call(tool, {"source": str(script)})["content"][0]["text"], tool)
             self.assertIn("No file at", self.call(tool, {"source": f"{script}::cube"})["content"][0]["text"], tool)
+
+    def test_native_board_is_shown_and_reread_through_the_file_service(self) -> None:
+        from tests.python.support.kicad_board import write_board, BOARD
+        from urllib.parse import urlencode
+        board = write_board(self.workspace)
+        self.call("cad_sync", {"view": "v1", "surface": "tab"})
+        shown = self.call("cad_show", {"source": str(board)})
+        self.assertEqual(shown["structuredContent"], {"delivered": 1, "view": "v1"})
+        event, = self.call("cad_sync", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
+        self.assertEqual(event["launch"]["model"], str(board))
+        route = "/__cad/plot?" + urlencode({"file": str(board)})
+        status, first = self.http("GET", route)
+        self.assertEqual(status, 200)
+        board.write_text(BOARD.replace('(width 1) (layer "F.Cu") (net "VBUS")',
+                                       '(width 0.5) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
+        status, changed = self.http("GET", route)
+        self.assertEqual(status, 200)
+        self.assertNotEqual(first, changed)
+        self.assertEqual(self.opened, [])
 
     def test_cad_show_reaches_the_polling_view_without_opening_one(self) -> None:
         self.assertEqual(self.call("cad_show", {"source": self.bracket})["structuredContent"], {"delivered": 0})
@@ -731,8 +753,8 @@ class InlineServerTest(_Session):
     def test_a_step_and_an_engine_document_are_shown_and_the_agent_is_told_so(self) -> None:
         # The page draws both from what the cadgen engine serves of them (``cadgen.viewer.xbf``).
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF)", tools["cad_show"]["description"])
-        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF)", self.initialized["instructions"])
+        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF, KiCad PCB)", tools["cad_show"]["description"])
+        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF, KiCad PCB)", self.initialized["instructions"])
         for name in ("arm.xbf", "arm.step", "ARM.STP"):
             model = self.workspace / "parts" / name
             model.write_bytes(b"\0")

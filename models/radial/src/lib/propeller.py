@@ -227,11 +227,11 @@ STATIONS = [82, 110, 140, 165, 190, 210, 230, 250, 270, 290, 310, 332, 356, 382,
 
 def _interp(points, params):
     from OCP.GeomAPI import GeomAPI_Interpolate
-    from OCP.TColgp import TColgp_HArray1OfPnt
-    from OCP.TColStd import TColStd_HArray1OfReal
+    from OCP.collections import HArray1_gp_Pnt
+    from OCP.collections import HArray1_double
     from OCP.gp import gp_Pnt
-    hp = TColgp_HArray1OfPnt(1, len(points))
-    hk = TColStd_HArray1OfReal(1, len(points))
+    hp = HArray1_gp_Pnt(1, len(points))
+    hk = HArray1_double(1, len(points))
     for i, (p, t) in enumerate(zip(points, params)):
         hp.SetValue(i + 1, gp_Pnt(*map(float, p)))
         hk.SetValue(i + 1, float(t))
@@ -246,8 +246,8 @@ def _blade_surface():
     knot vector), then each pole row is interpolated across the stations with
     the station radius as parameter. Exact through every grid point."""
     from OCP.Geom import Geom_BSplineSurface
-    from OCP.TColgp import TColgp_Array2OfPnt
-    from OCP.TColStd import TColStd_Array1OfInteger, TColStd_Array1OfReal
+    from OCP.collections import Array2_gp_Pnt
+    from OCP.collections import Array1_int, Array1_double
     nu = 2 * N_HALF + 1
     upar = [i / (nu - 1) for i in range(nu)]
     secs = [_interp(_section_pts(s), upar) for s in STATIONS]
@@ -262,14 +262,14 @@ def _blade_surface():
         rows.append(_interp(pts, vpar))
     r0 = rows[0]
     npv = r0.NbPoles()
-    poles = TColgp_Array2OfPnt(1, npu, 1, npv)
+    poles = Array2_gp_Pnt(1, npu, 1, npv)
     for i, r in enumerate(rows):
         for j in range(1, npv + 1):
             poles.SetValue(i + 1, j, r.Pole(j))
 
     def kv(c):
-        kn = TColStd_Array1OfReal(1, c.NbKnots())
-        ml = TColStd_Array1OfInteger(1, c.NbKnots())
+        kn = Array1_double(1, c.NbKnots())
+        ml = Array1_int(1, c.NbKnots())
         for i in range(1, c.NbKnots() + 1):
             kn.SetValue(i, c.Knot(i))
             ml.SetValue(i, c.Multiplicity(i))
@@ -292,7 +292,7 @@ def blade_proto():
     from OCP.GeomAbs import GeomAbs_C2
     from OCP.GeomAPI import GeomAPI_PointsToBSplineSurface
     from OCP.ShapeFix import ShapeFix_Solid
-    from OCP.TColgp import TColgp_Array2OfPnt
+    from OCP.collections import Array2_gp_Pnt
     from OCP.TopoDS import TopoDS
     from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 
@@ -316,7 +316,7 @@ def blade_proto():
     for f in faces:
         sew.Add(f)
     sew.Perform()
-    shell = TopoDS.Shell_s(sew.SewedShape())
+    shell = TopoDS.Shell(sew.SewedShape())
     solid = BRepBuilderAPI_MakeSolid(shell).Solid()
     fix = ShapeFix_Solid(solid)
     fix.Perform()

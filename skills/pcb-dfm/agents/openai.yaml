@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCB DFM Review"
+  short_description: "Review a KiCad board for fabrication, assembly and sourcing."
+  default_prompt: "Use $pcb-dfm to review this KiCad board for manufacturability with the fab I name: KiCad's DRC first, then measured decoupling, track width for current and sourcing, then the fab and assembly checklist, with the evidence and the rule behind every finding."

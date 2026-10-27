@@ -641,10 +641,11 @@ a separator, then **Grid**, a `DropdownMenuCheckboxItem`. On a phone the strip's
 menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`), with no
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
-pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
-2D view has no Display or Preview control.
+pressing Escape closes it. Opening it leaves the active tool and its controls in place. A DXF view has no Display or Preview control. A native KiCad board has Display for its
+layer presets (Board, Copper, Assembly, Placement), copper pours and top/bottom view. Its
+Layers sidebar can override a preset, shown as Custom. It has no 3D Projection or Preview.
 
-Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
+A 3D view’s Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
 the model's CAD edges, the default), **Shaded** (no edges), **Parts** (Solid with each part
 its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the view's

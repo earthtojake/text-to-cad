@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "instructions": "CAD shows local CAD models (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF, KiCad PCB) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -293,6 +293,7 @@
         ".3mf",
         ".dxf",
         ".glb",
+        ".kicad_pcb",
         ".sdf",
         ".srdf",
         ".step",
@@ -369,7 +370,7 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Open a NEW CAD viewer tab beside the chat showing a local model (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF). Every call opens another tab, so call it only when cad_show reports that no viewer is open, and never again after a rebuild: open viewers refresh by themselves.",
+   "description": "Open a NEW CAD viewer tab beside the chat showing a local model (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF, KiCad PCB). Every call opens another tab, so call it only when cad_show reports that no viewer is open, and never again after a rebuild: open viewers refresh by themselves.",
    "icons": [
     {
      "mimeType": "image/svg+xml",

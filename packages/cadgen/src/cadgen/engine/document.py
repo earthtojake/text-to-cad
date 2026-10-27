@@ -223,12 +223,12 @@ def mesh_faces(shape: Any) -> tuple[int, ...]:
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    faces = TopTools_IndexedMapOfShape()
+    faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
     found = _MESH_FACES[key] = tuple(ordinal for ordinal in range(1, faces.Extent() + 1)
-                                     if not BRep_Tool.IsGeometric_s(TopoDS.Face_s(faces.FindKey(ordinal))))
+                                     if not BRep_Tool.IsGeometric_s(TopoDS.Face(faces.FindKey(ordinal))))
     while len(_MESH_FACES) > _MESH_FACES_HELD:
         _MESH_FACES.popitem(last=False)
     return found
@@ -399,7 +399,7 @@ def unchecked(shapes: Iterable[Any]) -> Iterator[None]:
     the same part placed in an assembly -- a child model's document, written by a build
     of it and by its parent's -- wrote other bytes. Each part is written free."""
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     cleared = []
     held = []
@@ -408,7 +408,7 @@ def unchecked(shapes: Iterable[Any]) -> Iterator[None]:
         if not root.Free():
             root.Free(True)
             held.append(root)
-        mapped = TopTools_IndexedMapOfShape()
+        mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, mapped)
         find = mapped.FindKey
         for ordinal in range(1, mapped.Extent() + 1):
@@ -613,21 +613,26 @@ class _Materials:
         it is drawn in, made at its first use."""
         found = self.visual_labels.get(look)
         if found is None:
-            from OCP.gp import gp_Vec3f
+            from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
             from OCP.Graphic3d import Graphic3d_AlphaMode_Blend, Graphic3d_AlphaMode_Opaque
             from OCP.TCollection import TCollection_AsciiString
-            from OCP.XCAFDoc import XCAFDoc_VisMaterial, XCAFDoc_VisMaterialPBR
+            from OCP.XCAFDoc import XCAFDoc_VisMaterial, XCAFDoc_VisMaterialCommon
 
             material, rgba = look
-            pbr = XCAFDoc_VisMaterialPBR()
+            # OCP 8 leaves PBR.EmissiveFactor unbound. OCCT's native conversion
+            # copies common emission into that field; set the other PBR fields after.
+            made = XCAFDoc_VisMaterial()
+            common = XCAFDoc_VisMaterialCommon()
+            common.EmissiveColor = Quantity_Color(*(material.emissive or (0.0, 0.0, 0.0)), Quantity_TOC_RGB)
+            made.SetCommonMaterial(common)
+            pbr = made.ConvertToPbrMaterial()
             pbr.BaseColor = _quantity(rgba)
             pbr.Metallic = material.metallic
             pbr.Roughness = material.roughness
-            pbr.EmissiveFactor = gp_Vec3f(*(material.emissive or (0.0, 0.0, 0.0)))
             pbr.RefractionIndex = material.ior
             pbr.IsDefined = True
-            made = XCAFDoc_VisMaterial()
             made.SetPbrMaterial(pbr)
+            made.UnsetCommonMaterial()
             made.SetAlphaMode(Graphic3d_AlphaMode_Blend if rgba[3] < 1.0 else Graphic3d_AlphaMode_Opaque, 0.5)
             found = self.visual_labels[look] = self.visual.AddMaterial(made, TCollection_AsciiString(material.name))
         return found
@@ -802,7 +807,7 @@ class _Converter:
         from OCP.TDF import TDF_Label
         from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
         from OCP.XCAFDoc import XCAFDoc_ColorSurf
 
         shapes, colors, materials = self.shapes, self.colors, self.materials
@@ -819,7 +824,7 @@ class _Converter:
             materials.set(label, prototype.material, prototype.color or DEFAULT_COLOR)
         if prototype.key:
             TDataStd_AsciiString.Set_s(label, self.key_guid, TCollection_AsciiString(prototype.key))
-        faces = TopTools_IndexedMapOfShape()
+        faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
         face_names = (prototype.names or {}).get("faces") or []
         painted = prototype.face_colors
@@ -842,7 +847,7 @@ class _Converter:
             edge_names = (prototype.names or {}).get(kind) or []
             if not any(text is not None for text in edge_names):
                 continue
-            edges = TopTools_IndexedMapOfShape()
+            edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(shape, topabs, edges)
             for ordinal in range(1, min(edges.Extent(), len(edge_names)) + 1):
                 text = edge_names[ordinal - 1]
@@ -1132,10 +1137,10 @@ def _apart(shape: Any) -> Any:
     document's alone."""
     from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     made = BRepBuilderAPI_Copy(shape, False, False).Shape()
-    mapped = TopTools_IndexedMapOfShape()
+    mapped = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(made, mapped)
     for ordinal in range(1, mapped.Extent() + 1):
         mapped.FindKey(ordinal).TShape().Checked(False)
@@ -1320,10 +1325,10 @@ def _attribute_types(data: bytes, start: int, end: int) -> dict[int, str]:
 
 
 def _free_shapes(doc: Any) -> list[Any]:
-    from OCP.TDF import TDF_LabelSequence
+    from OCP.collections import Sequence_TDF_Label
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
-    free = TDF_LabelSequence()
+    free = Sequence_TDF_Label()
     XCAFDoc_DocumentTool.ShapeTool_s(doc.Main()).GetFreeShapes(free)
     return [XCAFDoc_ShapeTool.GetShape_s(free.Value(at)) for at in range(1, free.Length() + 1)]
 
@@ -1411,7 +1416,8 @@ class Loaded:
             self.mechanism = mechanism.read(self.doc, self.occurrences)
 
     def _walk(self) -> None:
-        from OCP.TDF import TDF_Label, TDF_LabelSequence, TDF_Tool
+        from OCP.TDF import TDF_Label, TDF_Tool
+        from OCP.collections import Sequence_TDF_Label
         from OCP.TCollection import TCollection_AsciiString
         from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
@@ -1447,7 +1453,7 @@ class Loaded:
                     raise ValueError(f"cannot read {self.path.name}: an assembly contains itself")
                 inner = ancestors | {own}
                 node: dict[str, Any] = {"name": name, "children": []}
-                components = TDF_LabelSequence()
+                components = Sequence_TDF_Label()
                 XCAFDoc_ShapeTool.GetComponents_s(label, components, False)
                 for at in range(1, components.Length() + 1):
                     component = components.Value(at)
@@ -1479,7 +1485,7 @@ class Loaded:
             self.instance_paths.append(occurrence)
             return {"name": name, "prototype": index, "instance": len(self.instances) - 1}
 
-        free = TDF_LabelSequence()
+        free = Sequence_TDF_Label()
         shapes.GetFreeShapes(free)
         roots = []
         for at in range(1, free.Length() + 1):
@@ -1559,7 +1565,7 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
     prototype's, then to its parent's with the component's place."""
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     # A document no file holds yet (code built with no --xbf) has the version "0-0".
     path = Path(path).resolve() if path is not None else None
@@ -1585,20 +1591,20 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
         return found
 
     def entry(part: Part, index: int) -> dict[str, Any]:
-        faces = TopTools_IndexedMapOfShape()
+        faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(part.shape, TopAbs_FACE, faces)
         names = part.names or {}
         face_names = {ordinal: text for ordinal, text in enumerate(names.get("faces") or [], 1)
                       if text and ordinal <= faces.Extent()}
         edge_names: dict[int, str] = {}
         if any(names.get("edges") or []):
-            edges = TopTools_IndexedMapOfShape()
+            edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(part.shape, TopAbs_EDGE, edges)
             edge_names = {ordinal: text for ordinal, text in enumerate(names.get("edges") or [], 1)
                           if text and ordinal <= edges.Extent()}
         vertex_names: dict[int, str] = {}
         if any(names.get("vertices") or []):
-            vertices = TopTools_IndexedMapOfShape()
+            vertices = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
             TopExp.MapShapes_s(part.shape, TopAbs_VERTEX, vertices)
             vertex_names = {ordinal: text for ordinal, text in enumerate(names.get("vertices") or [], 1)
                             if text and ordinal <= vertices.Extent()}
@@ -1722,7 +1728,7 @@ def refuse_external_files(reader: Any, path: Any) -> None:
 
 def read_bytes(data: bytes) -> Any:
     """An xbf's bytes read into a document, in memory: the application's stream read, overwriting
-    into a document made here (``PCDM_ReaderFilter.AppendMode_Overwrite``), since the document a
+    into a document made here (``PCDM_ReaderFilter.AppendMode_e.AppendMode_Overwrite``), since the document a
     plain stream read makes is one OCP cannot hand back (``_new_document``)."""
     import io
 
@@ -1730,7 +1736,7 @@ def read_bytes(data: bytes) -> Any:
 
     with _XCAF_LOCK:
         doc = _new_document()
-        status = _application().Open(io.BytesIO(data), doc, PCDM_ReaderFilter(PCDM_ReaderFilter.AppendMode_Overwrite))
+        status = _application().Open(io.BytesIO(data), doc, PCDM_ReaderFilter(PCDM_ReaderFilter.AppendMode_e.AppendMode_Overwrite))
     if status != PCDM_ReaderStatus.PCDM_RS_OK:
         raise ValueError(f"cannot read the document's bytes: {status.name}")
     return doc
@@ -1946,8 +1952,8 @@ def _label_material(label: Any) -> Any:
         base = pbr.BaseColor
         rgb = base.GetRGB()
         rgba = (round(rgb.Red(), 6), round(rgb.Green(), 6), round(rgb.Blue(), 6), round(base.Alpha(), 6))
-        glow = pbr.EmissiveFactor
-        emissive = (_f32(glow.x()), _f32(glow.y()), _f32(glow.z()))
+        glow = visual.ConvertToCommonMaterial().EmissiveColor
+        emissive = (_f32(glow.Red()), _f32(glow.Green()), _f32(glow.Blue()))
         metallic, roughness, ior = _f32(pbr.Metallic), _f32(pbr.Roughness), _f32(pbr.RefractionIndex)
     elif name:
         rgba, emissive, metallic, roughness = _label_color(label), (0.0, 0.0, 0.0), 0.0, 0.5
@@ -1959,10 +1965,10 @@ def _label_material(label: Any) -> Any:
 
 
 def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -> Prototype:
-    from OCP.TDF import TDF_LabelSequence
+    from OCP.collections import Sequence_TDF_Label
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
     local = shape.Located(_identity())
@@ -1974,12 +1980,12 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
     face_colors: dict[int, tuple] = {}
     face_materials: dict[int, Any] = {}
     part_color = _label_color(label)
-    subs = TDF_LabelSequence()
+    subs = Sequence_TDF_Label()
     XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
     if subs.Length():
-        faces = TopTools_IndexedMapOfShape()
+        faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
-        edges = TopTools_IndexedMapOfShape()
+        edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_EDGE, edges)
         holding: list[tuple[Any, tuple]] = []  # coloured sub-shapes that hold faces: solids, shells
         for at in range(1, subs.Length() + 1):
@@ -2011,7 +2017,7 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
                     edge_names[ordinal] = name
             elif kind == TopAbs_VERTEX:
                 if vertices is None:
-                    vertices = TopTools_IndexedMapOfShape()
+                    vertices = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
                     TopExp.MapShapes_s(shape, TopAbs_VERTEX, vertices)
                 ordinal = vertices.FindIndex(held)
                 name = _label_name(sub) if ordinal else ""
@@ -2035,11 +2041,11 @@ def _held_colors(faces: Any, holding: list[tuple[Any, tuple]], color: tuple | No
     else each face so coloured, and not the part's colour, is a painted face."""
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
     held = []
     for shape, rgba in holding:
-        inner = TopTools_IndexedMapOfShape()
+        inner = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_FACE, inner)
         held.append((inner, int(shape.ShapeType()), rgba))
     given: dict[int, tuple] = {}

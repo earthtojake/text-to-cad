@@ -15,7 +15,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from cadgen.engine.snapshot import _view_of, packet_visibility, parse_annotation
+from cadgen.engine.snapshot import job_pictures, _view_of, packet_visibility, parse_annotation
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
 from cadgen.viewer.prompt_files import PromptFiles
@@ -119,6 +119,25 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertNotIn("output", packet["jobs"][0])
         self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "panel-1-view-1.png"), "label": "view 1",
                                                          "width": 1600, "height": 900}])
+
+    def test_a_boards_view_is_its_plan_view_with_its_display_and_its_job_carries_the_ink(self) -> None:
+        """A board's Quick Edit, as a drawing's: the window as a plan-view camera, the board's Display,
+        the ink on the sheet, in a job `cadgen pcb snapshot` takes."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        display = {"mode": "copper", "side": "bottom", "poured": False, "layers": ["B.Cu", "Edge.Cuts"]}
+        status, body, _ = self.call("POST", "/__cad/prompt-files", {
+            "name": "blinky.kicad_pcb", "input": str(board), "annotation": ANNOTATION,
+            "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]})
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, out, prepared] = job_pictures(packet)[0]
+        self.assertEqual((source, prepared.camera), (board, plan))
+        self.assertEqual({key: prepared.display[key] for key in display}, display)
+        self.assertEqual(prepared.annotation, ANNOTATION)
+        self.assertNotIn("output", packet["jobs"][0])
+        self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "blinky-1-current-view.png"), "label": "current view", "width": 1600, "height": 1200}])
 
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
         _, first, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))

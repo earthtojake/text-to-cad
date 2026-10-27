@@ -13,8 +13,8 @@ Give your agent CAD superpowers.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![cadgen](https://img.shields.io/pypi/v/cadgen?style=for-the-badge&logo=pypi&logoColor=white&label=cadgen)](https://pypi.org/project/cadgen/)
-[![build123d](https://img.shields.io/badge/build123d-0.11-2F6FB0?style=for-the-badge)](https://github.com/gumyr/build123d)
-[![Open CASCADE](https://img.shields.io/badge/Open%20CASCADE-7.9-E2001A?style=for-the-badge)](https://dev.opencascade.org)
+[![build123d](https://img.shields.io/badge/build123d-0.13-2F6FB0?style=for-the-badge)](https://github.com/gumyr/build123d)
+[![Open CASCADE](https://img.shields.io/badge/Open%20CASCADE-8.0-E2001A?style=for-the-badge)](https://dev.opencascade.org)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](packages/cadgen/pyproject.toml)
 
 </div>
@@ -52,7 +52,7 @@ Install text-to-cad from https://github.com/earthtojake/text-to-cad
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts; turn them off with
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
+`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
 the rest.
 
 Or install it yourself:
@@ -119,7 +119,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.8.0", "cadgen", "mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.8.2", "cadgen", "mcp"],
       "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -312,7 +312,7 @@ code fails, they also send a crash report: the error's type and where in cadgen 
 dependencies) it failed, never its message, and with any of your own code a bare placeholder. Our server adds the country each request
 comes from (worked out from its IP address, which it doesn't keep) and stores it all with PostHog. Never file names,
 paths, contents or prompts. The first `cadgen` command says so once, and sending starts then. Turn it off, which
-also deletes what was sent, with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.0 cadgen telemetry off`, **Telemetry** in either app's menu (the logo at
+also deletes what was sent, with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off`, **Telemetry** in either app's menu (the logo at
 the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` turns it off for
 one process, and `CADGEN_TELEMETRY=1` on, without changing your setting; nothing is sent by default in CI or from a
 development install. Nothing waits to send: a command or a model script sends nothing itself, and what it counted,
@@ -351,6 +351,8 @@ robot description files, simulation, and local review.
 | step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
 | Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
+| PCB          | Edits native KiCad circuit boards, inspects parts and nets, runs DRC, and exports fabrication files or STEP for mechanical design. | [skills/pcb](skills/pcb/SKILL.md)                   |
+| PCB DFM      | Reviews a KiCad board before ordering: KiCad's DRC, decoupling, track width for current, sourcing and the fab's limits. | [skills/pcb-dfm](skills/pcb-dfm/SKILL.md)           |
 | URDF         | Writes robot structure files with links, joints, limits, inertials, and meshes.                                                                    | [skills/urdf](skills/urdf/SKILL.md)                 |
 | SRDF         | Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.                                                                  | [skills/srdf](skills/srdf/SKILL.md)                 |
 | SDF          | Creates simulator models and worlds with frames, physics, sensors, and lights.                                                                     | [skills/sdf](skills/sdf/SKILL.md)                   |
