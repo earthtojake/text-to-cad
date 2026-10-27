@@ -2132,6 +2132,12 @@ Every edge has a class read from the B-rep: 1 feature (two faces at an angle),
 5 boundary (one face), 6 non-manifold (more than two). Degenerate edges are left
 out.
 
+Inspection and the build delta measure bounds without tessellation or changing the shape.
+For free-form faces, `kernel.bounds.optimal_box` measures native distances to six finite
+support planes outside the kernel's conservative box. This avoids OCCT 8's spline-grid
+refinement missing symmetric extrema (`BRepBndLib.AddOptimal`); analytic surfaces and
+shapes without faces still use `AddOptimal`. A failed distance measurement is an error.
+
 What the kernel measures of an element is asked for, never extracted ahead:
 `GET /api/doc/<id>/part/<key>/face/<ordinal>` is its area, centroid, surface
 type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and

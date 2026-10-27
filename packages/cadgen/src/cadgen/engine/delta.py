@@ -40,7 +40,7 @@ import math
 from collections import OrderedDict
 from typing import Any
 
-from cadgen.engine.kernel.bounds import box_limits
+from cadgen.engine.kernel.bounds import box_limits, optimal_box
 
 # Per part geometry key, what is known of its box in its own frame (``_Box``), or None for no geometry.
 _BOXES: "OrderedDict[str, _Box | None]" = OrderedDict()
@@ -158,11 +158,7 @@ class _Box:
             return
         if self._reaches(side, at, self.bounds[at]):
             if at not in self.measured:
-                from OCP.Bnd import Bnd_Box
-                from OCP.BRepBndLib import BRepBndLib
-
-                found = Bnd_Box()
-                BRepBndLib.AddOptimal_s(elements[at], found, False, False)
+                found = optimal_box(elements[at])
                 self.measured[at] = None if found.IsVoid() else _got(found)
             six, best = self.measured[at], self.best[side]
             if six is not None and (best is None or _outward(side) * six[side] > best):

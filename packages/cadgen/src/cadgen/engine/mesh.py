@@ -85,7 +85,7 @@ __all__ = ["ANGULAR", "BOUNDARY", "DEVIATION", "FEATURE", "HEADER", "MAGIC", "Me
 
 
 _G1 = int(GeomAbs_G1)
-from cadgen.engine.kernel.bounds import box_limits
+from cadgen.engine.kernel.bounds import box_limits, optimal_box
 
 # BRepMesh_Status bits, as the mesher's GetStatusFlags reports them.
 _MESH_FLAGS = ((1, "Failure"), (2, "ReMesh"), (4, "SelfIntersectingWire"), (8, "UserBreak"))
@@ -345,17 +345,14 @@ class Topology:
         return {"face": TopoDS.Face, "edge": TopoDS.Edge, "vertex": TopoDS.Vertex}[kind](shape)
 
     def face(self, ordinal: int) -> dict[str, Any]:
-        from OCP.Bnd import Bnd_Box
         from OCP.BRepAdaptor import BRepAdaptor_Surface
-        from OCP.BRepBndLib import BRepBndLib
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
 
         face = self._get("face", ordinal)
         props = GProp_GProps()
         BRepGProp.SurfaceProperties_s(face, props)
-        box = Bnd_Box()
-        BRepBndLib.AddOptimal_s(face, box, False, False)
+        box = optimal_box(face)
         bounds = list(box_limits(box)) if not box.IsVoid() else None
         surface = BRepAdaptor_Surface(face, False)
         kind = _kind(surface.GetType())
@@ -522,8 +519,6 @@ def measured(data: Any) -> dict[str, Any]:
 
 
 def _whole(shape: Any) -> dict[str, Any]:
-    from OCP.Bnd import Bnd_Box
-    from OCP.BRepBndLib import BRepBndLib
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
     from OCP.TopAbs import TopAbs_SOLID
@@ -537,8 +532,7 @@ def _whole(shape: Any) -> dict[str, Any]:
         props = GProp_GProps()
         BRepGProp.VolumeProperties_s(solids.FindKey(at), props)
         total += abs(props.Mass())
-    box = Bnd_Box()
-    BRepBndLib.AddOptimal_s(shape, box, True, False)
+    box = optimal_box(shape)
     bounds = list(box_limits(box)) if not box.IsVoid() else None
     return {"volume": total, "solids": solids.Extent(),
             "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}}

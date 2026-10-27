@@ -78,22 +78,30 @@ geometry is unchanged. Compare dimensions, volume, solid count and rendered
 geometry; a textual STEP diff alone does not establish a geometry change.
 This was observed in the [original migration review](https://github.com/earthtojake/text-to-cad/pull/628#issuecomment-6190559383).
 
-The 8.0.1 candidate still has two geometry regressions independently reproduced
-on macOS arm64:
+Two OCP 8.0.1 geometry regressions were independently reproduced on macOS arm64:
 
 - [`BRepBndLib.AddOptimal_s` can underbound a B-spline shape](https://github.com/Open-Cascade-SAS/OCCT/issues/1604).
-  cadgen's existing free-form loft test measures a 60 mm span as 59.912 mm;
-  sampling the surface still finds the full 60 mm. The test remains unchanged
-  and fails on macOS; the same dependency versions pass it in Linux CI. Tessellating the part or relaxing the expectation would hide
-  the failure of the exact-bounds contract.
+  the native operation measures a 60 mm loft span as 59.912 mm. cadgen now
+  measures free-form bounds using native distances to six exterior support
+  planes, without tessellating or changing the geometry. The original loft
+  regression passes unchanged, as do analytical bounds checks for translated
+  and rotated ellipsoids through part inspection and face picking. Direct
+  callers of OCP's `AddOptimal_s` still encounter the upstream defect.
 - [A sweep with a binormal guide can distort the profile](https://github.com/gumyr/build123d/issues/1474).
   A 6 × 6 rectangle swept 30 mm along a straight line, with a parallel guide,
   has volume 1,080 mm³ on the released 0.8.0 dependencies. On OCP 8.0.1 it has
   volume 1,072.310 mm³ and a 6.331 mm width, while still reporting valid.
   Shape validity alone does not establish dimensional correctness.
 
-These findings block the candidate release; the native API port does not fix
-them. The separate [F1 airbox loft Boolean instability](https://github.com/Open-Cascade-SAS/OCCT/issues/1643)
+The guided-sweep defect still blocks the candidate release. It reproduces with
+both published OCP 8.0.1 wheel revisions; increasing approximation degree,
+segment count or precision does not reliably recover the intended geometry.
+The native guide frame's second derivative is wrong even for the straight
+parallel-guide case, and `MakePipeShell` exposes no continuity control to avoid
+that derivative. The release retains build123d 0.13/OCP 8 and needs a corrected
+kernel; a validity check alone cannot guard this failure.
+
+The separate [F1 airbox loft Boolean instability](https://github.com/Open-Cascade-SAS/OCCT/issues/1643)
 also occurs on 7.9 and is not a newly introduced OCP 8 regression. The sample
 retains its existing guarded fuzzy union: check that the result contains at
 least approximately the larger input volume, then use the authored fallback
