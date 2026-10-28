@@ -107,7 +107,8 @@ cadgen viewer --host 127.0.0.1 --json [FILE ...]
 The launcher ensures this installation's engine and its one page, registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
-record without opening a browser; `--no-open` prints only the URL. There is no
+record without opening a browser; `--no-open` prints only the URL; `--phrase TEXT` (repeatable)
+gives Quick Edit a button that writes TEXT into its note, the latest launch's words. There is no
 foreground viewer server and no `--detach` or `viewer stop`. `cadgen stop` stops
 the installation's engine and all its clients; never stop an engine you did not start.
 

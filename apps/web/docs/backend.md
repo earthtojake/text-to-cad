@@ -172,7 +172,7 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 
 | Route | Purpose |
 |---|---|
-| `GET /__cad/server` | Server identity: `app` (`cad-viewer`), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`. |
+| `GET /__cad/server` | Server identity: `app` (`cad-viewer`), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `phrases` (the most recent launch's `--phrase` words, Quick Edit's buttons; `[]` without), `port`, `pid`. |
 | `GET /__cad/catalog?file=...` | One file's catalog row, with its document `id`, and its `revision`. |
 | `GET /__cad/catalog?id=...` | The row of the document of that id, or none and `missing`, with `missingState` (`unsaved`, `detached`) for the page's title. |
 | `GET /__cad/folder?path=...` | One folder's subfolders and CAD files. |
