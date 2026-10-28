@@ -1,6 +1,6 @@
 /**
  * A drawing job on the parity page: a `GET /__cad/drawing` payload, on a 2D
- * canvas, as a PNG (`cadgen dxf snapshot` draws by OCCT in the engine).
+ * canvas, as a PNG (`cadgen snapshot` draws by OCCT in the engine).
  *
  * This is the headless page's half of the viewer's DXF pane, and deliberately shares its
  * whole drawing path (`../lib/drawing2d`): the same fit, the same hairline rule,

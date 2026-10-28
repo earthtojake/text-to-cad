@@ -259,7 +259,6 @@ class SnapshotTest(unittest.TestCase):
         import io
 
         from cadgen.engine import cli
-        from cadgen.engine.snapshot import main as snapshot_main
 
         def run(call) -> tuple[int, str, str]:
             out, err = io.StringIO(), io.StringIO()
@@ -278,10 +277,6 @@ class SnapshotTest(unittest.TestCase):
                 code, printed, err = run(lambda: cli.main(argv))
                 self.assertEqual((code, printed), (status, ""))
                 self.assertIn(said, err)
-        # A format's own snapshot: what it does not draw, refused in the same envelope.
-        code, printed, _err = run(lambda: snapshot_main([str(self.document), out, "--json"], prog="cadgen dxf snapshot",
-                                                        suffixes=(".dxf",)))
-        self.assertEqual((code, json.loads(printed)), (1, {"ok": False, "error": f"{self.document} is not a .dxf file"}))
 
     def test_explode_an_annotation_and_measurements_are_asked_for_by_flags_and_checked(self) -> None:
         self.assertEqual(parse_display("exploded=0.6", grid=False), {"exploded": {"enabled": True, "amount": 0.6}})

@@ -18,7 +18,7 @@ URDF.
 python juno.py                                    # prints each model's id: and view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
 cadgen snapshot "$ID" juno.png --pose wave_right         # ID: the juno model's id: line
-cadgen urdf snapshot ../juno.urdf urdf.png
+cadgen snapshot ../juno.urdf urdf.png
 cadgen export "$ID" GLB/juno.glb                  # the seven motions as clips
 ```
 

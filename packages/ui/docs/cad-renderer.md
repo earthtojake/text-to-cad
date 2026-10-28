@@ -314,7 +314,7 @@ it, the file sidebar, Quick Edit at the top-right.
   colour for strokes and per primitive for fills; text kept as strings) and
   `drawDrawing(ctx, drawable, …)` (text set with `fillText`, stretched to the width the
   server measured, so the page's face keeps the drawing's layout).
-  `cadgen dxf snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
+  `cadgen snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
   this pane draws it: from above, fitted, hairlines in their pens, on the light or dark paper
   (`--display light|dark`), with the plan-view `camera` and the `annotation` on the sheet a
   Quick Edit's view carries.

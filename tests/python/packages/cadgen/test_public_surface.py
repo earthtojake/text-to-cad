@@ -47,8 +47,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "srdf validate": ("cadgen.srdf", "validate"),
 }
 
-# The engine snapshot's options (``cadgen.engine.snapshot``), which every format's snapshot
-# command takes: one parser, one picture.
+# The engine snapshot's options (``cadgen.engine.snapshot``).
 SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "width", "height",
                       "size_profile", "pose", "annotation", "measurements", "json"})
 
@@ -59,10 +58,6 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
     # repeatable key/value map is outside the derivable set.
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
-    # Each format's snapshot is the engine's, for that format's files alone.
-    "dxf snapshot": SNAPSHOT,
-    "urdf snapshot": SNAPSHOT,
-    "sdf snapshot": SNAPSHOT,
     # A host starts it and speaks MCP on its standard streams; it takes no options. Where the
     # install came from is in the server's environment, which the plugin's startup config sets.
     "mcp": frozenset(),
@@ -156,8 +151,7 @@ class Manifest(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
-        for noun, verbs in {"urdf": ("urdf validate", "urdf snapshot"), "srdf": ("srdf validate",),
-                            "dxf": ("dxf snapshot",)}.items():
+        for noun, verbs in {"urdf": ("urdf validate",), "srdf": ("srdf validate",)}.items():
             for rest in (("bogus",), ()):
                 with self.subTest(noun=noun, rest=rest):
                     code, out, err = self._dispatch(noun, *rest)
@@ -174,14 +168,13 @@ class Manifest(unittest.TestCase):
         code, out, err = self._dispatch("urdf", "--help")
         self.assertEqual((0, ""), (code, err))
         self.assertIn("urdf validate", out)
-        self.assertIn("urdf snapshot", out)
         self.assertNotIn("sdf validate", out)
 
     def test_an_unknown_noun_lists_every_command(self):
         code, out, err = self._dispatch("frobnicate", "export")
         self.assertEqual(2, code)
         self.assertIn("unknown command 'frobnicate'", err)
-        for command in ("export", "snapshot", "dxf snapshot", "urdf validate", "viewer", "inspect"):
+        for command in ("export", "snapshot", "urdf validate", "viewer", "inspect"):
             self.assertIn(command, err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):
@@ -202,8 +195,7 @@ class Manifest(unittest.TestCase):
     def test_every_verb_goes_through_the_engine(self):
         # No command runs a build or a verb in its own process: --no-daemon is an unrecognized argument like any
         # other. daemon=False is the Python functions' seam for tests and debugging alone.
-        for argv in (("export", "a.xbf", "a.stl", "--no-daemon"), ("snapshot", "a.xbf", "a.png", "--no-daemon"),
-                     ("dxf", "snapshot", "a.dxf", "a.png", "--no-daemon")):
+        for argv in (("export", "a.xbf", "a.stl", "--no-daemon"), ("snapshot", "a.xbf", "a.png", "--no-daemon")):
             with self.subTest(argv=argv):
                 err = io.StringIO()
                 with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()), \
@@ -215,13 +207,6 @@ class Manifest(unittest.TestCase):
 
         for verb in (api.export, api.snapshot):
             self.assertIn("daemon", inspect.signature(verb).parameters)
-
-    def test_a_format_snapshot_draws_its_own_files_alone(self):
-        # `cadgen dxf snapshot` is the engine's snapshot for a .dxf: any other file is refused by
-        # name before anything renders.
-        code, out, err = self._dispatch("dxf", "snapshot", "part.step", "out.png")
-        self.assertEqual((code, out), (2, ""))
-        self.assertIn("cadgen dxf snapshot: part.step is not a .dxf file", err)
 
 
 class SignatureSync(unittest.TestCase):

@@ -1,6 +1,6 @@
 /**
  * What is drawn OVER a drawing: an annotation's ink, on its 2D canvas, under the view's transform.
- * The viewer's DXF pane paints a person's ink with this as they draw it, and `cadgen dxf snapshot`
+ * The viewer's DXF pane paints a person's ink with this as they draw it, and `cadgen snapshot`
  * paints a job's `annotation` with it, so a Quick Edit's views come back as the person saw them.
  *
  * The ink is an annotation's marks (`../../common/annotation.js`) lying on the sheet: on no part, their

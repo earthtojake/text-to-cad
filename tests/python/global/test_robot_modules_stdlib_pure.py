@@ -9,7 +9,7 @@ pass, because the test environment has the kernel installed.
 
 Static check over the AST (not an import-time sys.modules probe) so an offending
 import is caught even when it is lazy, conditional, or function-local. Drawing a robot
-is the engine's (`cadgen urdf snapshot` is its snapshot), outside this family.
+is the engine's (`cadgen snapshot` draws one), outside this family.
 """
 
 from __future__ import annotations

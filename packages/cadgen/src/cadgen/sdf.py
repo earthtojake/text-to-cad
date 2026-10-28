@@ -2,7 +2,7 @@
 
 No decorator, for the reason :mod:`cadgen.urdf` gives: a world or model
 description is authored, not generated. ``cadgen sdf validate`` is a generated
-MIRROR of :func:`validate`; ``cadgen sdf snapshot`` draws one
+MIRROR of :func:`validate`; ``cadgen snapshot`` draws one
 (``cadgen.engine.snapshot``).
 """
 

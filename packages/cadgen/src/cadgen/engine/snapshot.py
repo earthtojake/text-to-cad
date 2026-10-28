@@ -1109,18 +1109,11 @@ def build_parser(prog: str = "cadgen snapshot") -> argparse.ArgumentParser:
     return _arguments(argparse.ArgumentParser(prog=prog, description=_HELP))
 
 
-def main(argv: list[str] | None = None, prog: str = "cadgen snapshot", suffixes: tuple[str, ...] = ()) -> int:
-    """``cadgen snapshot SRC OUT.png``; with ``suffixes``, a command that draws those files alone
-    (``cadgen dxf snapshot`` draws a ``.dxf``), refusing any other SRC by name before anything renders."""
-    from cadgen.engine.cli import Failed, answered
+def main(argv: list[str] | None = None, prog: str = "cadgen snapshot") -> int:
+    """``cadgen snapshot SRC OUT.png``."""
+    from cadgen.engine.cli import answered
 
-    def drawn(args: argparse.Namespace, prog: str) -> int:
-        named = args.document if args.job is None or args.document is not None else job_input(args.job)
-        if suffixes and named is not None and Path(named).suffix.lower() not in suffixes:
-            raise Failed(f"{named} is not a {' or '.join(suffixes)} file", 2)
-        return run(args, prog)
-
-    return answered(drawn, build_parser(prog).parse_args(argv), prog)
+    return answered(run, build_parser(prog).parse_args(argv), prog)
 
 
 def run(args: argparse.Namespace, prog: str = "cadgen snapshot") -> int:

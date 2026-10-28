@@ -403,8 +403,8 @@ src/cadgen/
 ```
 
 Commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and
-`server` are the engine's verbs; `cadgen dxf snapshot`, `urdf snapshot` and `sdf snapshot` its
-snapshot for those files alone; `cadgen urdf|sdf|srdf validate` the validators; `cadgen
+`server` are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
+robot among them); `cadgen urdf|sdf|srdf validate` the validators; `cadgen
 doctor` the setup (the installation registered, the `cadgen` command written, the engine started),
 a skill's pin and what cadgen left behind that nothing needs, which `cadgen doctor --prune` removes
 (`_internal/leftovers.py`: engine records of an older format, the bytecode of installations no longer

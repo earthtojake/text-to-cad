@@ -223,7 +223,7 @@ drawing add-on over the `.dxf`'s modelspace and returns what every entity
 flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
-`cadgen dxf snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
+`cadgen snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
 hairlines in their pens, on the light or dark paper. This route is the pane's alone.
 

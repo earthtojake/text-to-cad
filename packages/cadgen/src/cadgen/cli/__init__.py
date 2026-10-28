@@ -40,13 +40,9 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "stop": ("cadgen.cli.stop", "stop the engine server"),
     "delete": ("cadgen.cli.delete", "delete documents: record, cached document, the engine's copy"),
     "server": ("cadgen.cli.server", "run the engine server in this process"),
-    # DXF and robot descriptions: each format's snapshot draws its own files alone (the engine's
-    # snapshot), and the robot validators check a description.
-    "dxf snapshot": ("cadgen.cli.dxf_snapshot", "render a DXF to an image"),
+    # Robot descriptions: the validators check a description (the engine's snapshot draws one).
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
-    "urdf snapshot": ("cadgen.cli.urdf_snapshot", "render a URDF to an image"),
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
-    "sdf snapshot": ("cadgen.cli.sdf_snapshot", "render an SDF to an image"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
@@ -195,7 +191,7 @@ def _main(argv: list[str] | None) -> int:
         sys.stdout.write(f"cadgen {own_version() or __version__}\n")
         return 0
 
-    # Longest match first, so `dxf snapshot` is dispatched as one command.
+    # Longest match first, so `urdf validate` is dispatched as one command.
     command, rest = " ".join(argv[:2]), argv[2:]
     entry = _COMMANDS.get(command)
     if entry is None:
