@@ -71,6 +71,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   /** The view's page in the person's browser, where a launch carried one: last in the navbar. Never in the file handler. */
   openInBrowser?: ReactNode;
 }) {
+  const observation = launch.surface === 'observation';
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
   // has neither the home nor the explorer (a source that cannot list or search offers none).
   const homed = !alone;
@@ -100,9 +101,9 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // What the chat's port says to the person, in the view's language as it is when it speaks.
   const sayRef = useRef(translator(locale));
   sayRef.current = translator(locale);
-  const chatContext = useMemo(() => chat.queue || chat.send
+  const chatContext = useMemo(() => !observation && (chat.queue || chat.send)
     ? createChatPromptContext(bridge, { reach: chat, t: (key, params) => sayRef.current(key, params) }) : null,
-    [chat.queue, chat.send, bridge]);
+    [chat.queue, chat.send, bridge, observation]);
   useEffect(() => () => chatContext?.dispose(), [chatContext]);
   const promptContext = chatContext ?? unavailablePromptContext;
   // The file menu: its path, and Reveal in the desktop's file manager (the server is on this machine).
@@ -110,10 +111,10 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);
-  useEffect(() => sync.watch({
+  useEffect(() => observation ? undefined : sync.watch({
     file: () => showing.current || null, revision: () => client.getSnapshot().catalogRevision,
     refresh: next => client.refresh({ ...(next ? { file: next } : {}), markRefreshing: false }),
-  }), [sync, client]);
+  }), [sync, client, observation]);
   useEffect(() => { reporter.showing(file || null); }, [reporter, file]);
 
   // Every other view has the home: the models opened before, from every view and the web viewer.
@@ -149,8 +150,8 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // host's notice at the viewport's top-right, Quick Edit under it.
   // The file on screen joins the library every CAD view shares, with its picture.
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
-    onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
+    onShown={path => { if (path && !observation) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory}
     {...homed ? { update, fullSize, openInBrowser } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
-    onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
+    onThumbnail={observation ? undefined : (png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

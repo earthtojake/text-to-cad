@@ -14,13 +14,16 @@ history, never by a day.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 
 FORMATS = {"step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dxf": ".dxf", "xbf": ".xbf", "original": ".xbf"}
@@ -28,6 +31,8 @@ from cadgen.jobs import Jobs, JobError as ExportError, STATUS_SECONDS, TERMINAL
 
 ARTIFACT_SECONDS = 600
 MAX_RETAINED_BYTES = 4 * 1024**3
+MAX_OBSERVATION_BYTES = 1024**3
+_OBSERVATION_EXTENSIONS = frozenset({".xbf", ".step", ".stp", ".glb", ".stl", ".3mf", ".dxf"})
 def specification(payload):
     # The document as its code built it: no part, no pose (the law of options).
     if not isinstance(payload, dict) or set(payload) != {"doc", "revision"}:
@@ -66,7 +71,8 @@ class ExportJobs(Jobs):
                             pass
                 active = any(j["state"] not in TERMINAL for j in self.jobs.values())
             if active:
-                self.server.touch()
+                if self.server is not None:
+                    self.server.touch()
             else:
                 # Only run a janitor while this session owns anything.
                 with self.changed:
@@ -139,7 +145,7 @@ class ExportJobs(Jobs):
             raise ExportError((answer or {}).get("failed", "The export worker disconnected."))
         return answer["done"]
 
-    def create(self, payload):
+    def create(self, payload, *, _capture_file=False):
         if not isinstance(payload, dict) or set(payload) != {"requestId", "epoch", "source", "format"}:
             raise ExportError("Export requires requestId, epoch, source and format.")
         spec = specification(payload["source"])
@@ -148,7 +154,7 @@ class ExportJobs(Jobs):
             raise ExportError("Invalid export format or request identity.")
         if payload["epoch"] != self.epoch:
             raise ExportError("The export session restarted. Open Export again.", 409)
-        normalized = json.dumps(payload, sort_keys=True)
+        normalized = json.dumps({**payload, **({"captureFile": True} if _capture_file else {})}, sort_keys=True)
         with self.changed:
             self._prune()
             if request_id in self.requests:
@@ -163,13 +169,17 @@ class ExportJobs(Jobs):
                 self.jobs.pop(ident)
             self._start()
             spec["format"] = kind
+            if _capture_file:
+                spec["captureFile"] = True
             return self._submit(request_id, normalized, spec=spec, expiresAt=0, readers=0,
                                 directory=None, filename="export" + FORMATS[kind])
 
     def _perform(self, job, progress):
-        _source, _expected, name = self._source(job["spec"])
+        spec = job["spec"]
+        name = Path(spec["doc"]).stem if spec.get("captureFile") else self._source(spec)[2]
         stem = (re.sub(r"[^\w .-]", "_", name)[:100].strip(" .") or "export")
-        filename = stem + FORMATS[job["spec"]["format"]]
+        extension = Path(spec["doc"]).suffix.lower() if spec.get("captureFile") else FORMATS[spec["format"]]
+        filename = stem + extension
         directory = Path(tempfile.mkdtemp(prefix="cadgen-download-", dir=self.root))
         with self.changed:
             job["directory"] = directory
@@ -177,7 +187,10 @@ class ExportJobs(Jobs):
             if job["cancel"]:
                 return {}
         target = directory / filename
-        self.run(job["spec"], target, progress)
+        if spec.get("captureFile"):
+            self._copy_observation(spec, target)
+        else:
+            self.run(spec, target, progress)
         with self.changed:
             if job["cancel"]:
                 return {}
@@ -231,6 +244,83 @@ class ExportJobs(Jobs):
             if job is not None and job["state"] == "ready":
                 job["fetched"] = True
                 self._prune()
+
+    @staticmethod
+    def _copy_observation(spec, target):
+        source = Path(spec["doc"])
+        if not source.is_absolute() or source.suffix.lower() not in _OBSERVATION_EXTENSIONS:
+            raise ExportError("This CAD format cannot be preserved as a standalone observation.")
+        digest = hashlib.sha256()
+        with source.open("rb") as incoming, target.open("xb") as output:
+            before = os.fstat(incoming.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_OBSERVATION_BYTES:
+                raise ExportError("The CAD observation is too large to preserve.")
+            size = 0
+            while chunk := incoming.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_OBSERVATION_BYTES:
+                    raise ExportError("The CAD observation is too large to preserve.")
+                digest.update(chunk)
+                output.write(chunk)
+            after = os.fstat(incoming.fileno())
+        if ((before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                (after.st_size, after.st_mtime_ns, after.st_ctime_ns) or digest.hexdigest() != spec["revision"]):
+            raise ExportError("The selected CAD revision changed before it could be preserved.", 409)
+        if source.suffix.lower() == ".glb":
+            from cadgen._internal.primitive_mesh import GLB_MAGIC, GLB_JSON_CHUNK
+            with target.open("rb") as incoming:
+                header = incoming.read(20)
+                if (len(header) != 20 or int.from_bytes(header[:4], "little") != GLB_MAGIC
+                        or int.from_bytes(header[16:20], "little") != GLB_JSON_CHUNK):
+                    raise ExportError("The GLB document has no readable scene.")
+                length = int.from_bytes(header[12:16], "little")
+                if length > 16 * 1024**2 or length + 20 > size:
+                    raise ExportError("The GLB scene is too large to preserve.")
+                scene = json.loads(incoming.read(length))
+            from cadgen.engine.formats.glb import require_self_contained
+            from cadgen.engine.formats import FormatError
+            try:
+                require_self_contained(target, scene)
+            except FormatError as error:
+                raise ExportError("This GLB references external files. Export a self-contained GLB to preserve it in history.") from error
+        elif source.suffix.lower() == ".dxf":
+            import ezdxf
+            drawing = ezdxf.readfile(target)
+            if any(block.block.dxf.flags & 12 for block in drawing.blocks) or drawing.objects.query("IMAGEDEF"):
+                raise ExportError("This DXF references external files. Export a standalone document to preserve it in history.")
+
+    def capture(self, source, *, copy_file=False):
+        """Freeze a selected revision before handing its temporary artifact to a history-owning host."""
+        job = self.create({"requestId": uuid.uuid4().hex, "epoch": self.epoch,
+                           "source": source, "format": "xbf"}, _capture_file=copy_file)
+        try:
+            deadline = time.monotonic() + 180
+            while job["state"] in ("queued", "running"):
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise ExportError("The saved observation export did not finish in time.")
+                job = self.get(job["id"], after=job["sequence"], wait=min(25, left))
+            if job["state"] != "ready":
+                raise ExportError(job.get("error") or "The saved observation export failed.")
+            with self.artifact(job["id"]) as artifact:
+                size = artifact.stat().st_size
+                if size > MAX_OBSERVATION_BYTES:
+                    raise ExportError("The CAD observation is too large to preserve.")
+                with artifact.open("rb") as incoming:
+                    digest = hashlib.file_digest(incoming, "sha256").hexdigest()
+                return {"version": 1, "file": str(artifact), "format": artifact.suffix[1:].lower(),
+                        "sha256": digest, "sizeBytes": size, "source": source["doc"], "revision": source["revision"]}
+        except BaseException:
+            with self.changed:
+                owned = self.jobs[job["id"]]
+                if owned["state"] in TERMINAL:
+                    self._remove(owned)
+                    if owned["state"] == "ready":
+                        self._change(owned, state="expired", stage="Observation discarded")
+                else:
+                    owned["cancel"] = True
+                self.changed.notify_all()
+            raise
 
     @contextlib.contextmanager
     def artifact(self, ident):

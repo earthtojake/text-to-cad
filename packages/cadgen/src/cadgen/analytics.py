@@ -309,7 +309,7 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 # library every couple of seconds among them) and its capture replies say nothing about use and would
 # drown what does. A view's own activity is noted from its sync (``viewed``) and as it adds the model
 # on screen to the library (``opened``).
-UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
+UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_http_read", "cad_capture_reply"})
 # The tool a call naming none of cadgen's tools is counted as (``cadgen.mcp.server``): the name a host sent is its
 # own string, never sent.
 UNKNOWN_TOOL = "cad_unknown"

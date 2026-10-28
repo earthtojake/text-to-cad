@@ -546,16 +546,16 @@ class GlbWholeFromItselfTest(unittest.TestCase):
 
     def test_an_embedded_buffer_passes_and_an_external_uri_is_refused(self) -> None:
         from cadgen.engine.formats import FormatError
-        from cadgen.engine.formats.glb import _whole_from_itself
+        from cadgen.engine.formats.glb import require_self_contained
 
-        _whole_from_itself(Path("m.glb"), {"buffers": [{"byteLength": 36}]})  # embedded BIN chunk: no uri
-        _whole_from_itself(Path("m.glb"), {"buffers": [{"uri": "data:application/octet-stream;base64,AAAA"}]})
+        require_self_contained(Path("m.glb"), {"buffers": [{"byteLength": 36}]})  # embedded BIN chunk: no uri
+        require_self_contained(Path("m.glb"), {"buffers": [{"uri": "data:application/octet-stream;base64,AAAA"}]})
         for item in ({"buffers": [{"uri": "../outside.bin"}]},
                      {"buffers": [{"uri": "side.bin"}]},
                      {"images": [{"uri": "/etc/hosts"}]},
                      {"buffers": [{"uri": "data:text/plain,not-base64"}]}):
             with self.assertRaisesRegex(FormatError, "outside the GLB"):
-                _whole_from_itself(Path("m.glb"), item)
+                require_self_contained(Path("m.glb"), item)
 
 
 class MeshFileTest(FixtureTest):

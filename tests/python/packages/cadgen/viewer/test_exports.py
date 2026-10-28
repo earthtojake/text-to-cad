@@ -1,5 +1,6 @@
 """Export jobs: identity, retention and streaming leases, without a kernel."""
 import json
+import hashlib
 import tempfile
 import threading
 import unittest
@@ -47,6 +48,44 @@ class ExportsTest(unittest.TestCase):
             self.assertTrue(self.jobs.changed.wait_for(
                 lambda: self.jobs.jobs[ident]["state"] in ("ready", "failed", "cancelled") and not self.jobs.executing, 10))
         return self.jobs.get(ident)
+
+    def test_runtime_capture_returns_complete_managed_bytes_and_expires_with_existing_jobs(self):
+        self.finish.set()
+        captured = self.jobs.capture({"doc": "d", "revision": "v"})
+        artifact = Path(captured["file"])
+        self.assertEqual(artifact.read_bytes(), b"model")
+        self.assertEqual(captured, {"version": 1, "file": str(artifact), "format": "xbf", "sha256": hashlib.sha256(b"model").hexdigest(),
+                                    "sizeBytes": 5, "source": "d", "revision": "v"})
+        self.assertEqual(len(self.calls), 1)
+        self.now += 601
+        self.assertFalse(self.jobs.keeps_alive())
+        self.assertFalse(artifact.exists())
+
+    def test_a_file_changed_after_pinning_fails_without_retaining_a_newer_artifact(self):
+        source = Path(self.tmp.name) / "part.stl"
+        source.write_bytes(b"selected revision")
+        revision = hashlib.sha256(source.read_bytes()).hexdigest()
+        source.write_bytes(b"new revision")
+        with self.assertRaisesRegex(ExportError, "changed"):
+            self.jobs.capture({"doc": str(source), "revision": revision}, copy_file=True)
+        self.assertFalse(self.jobs.keeps_alive())
+        self.assertEqual(list(Path(self.tmp.name).glob("cadgen-download-*")), [])
+
+    def test_native_revision_changed_between_selection_and_worker_never_substitutes_a_new_model(self):
+        document = SimpleNamespace(version="selected", path=Path("/selected.xbf"), structure={})
+        server = SimpleNamespace(touch=lambda: None, load_lock=threading.RLock(), served={"doc": document})
+        jobs = ExportJobs(server, root=self.tmp.name)
+        self.addCleanup(jobs.close)
+        def mutate_before_worker(spec, target, progress):
+            document.version = "new revision"
+            return jobs._worker(spec, target, progress)
+        jobs.run = mutate_before_worker
+        with patch("cadgen.engine.client.request", side_effect=AssertionError("must not export the new revision")) as request:
+            with self.assertRaisesRegex(ExportError, "source changed"):
+                jobs.capture({"doc": "doc", "revision": "selected"})
+            request.assert_not_called()
+        self.assertFalse(jobs.keeps_alive())
+        self.assertEqual(list(Path(self.tmp.name).glob("cadgen-download-*")), [])
 
     def test_idempotency_is_not_a_second_export_and_changed_request_conflicts(self):
         original = self.request()

@@ -70,10 +70,12 @@ a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
-`cad_capture_reply`) and its full `cad_http` access need a per-session
+`cad_capture_reply`, `cad_http_read`) and its full `cad_http` access need a per-session
 capability. The server delivers it in tool-result metadata, which MCP Apps
 hosts keep out of the model's context. Without it, an agent's `cad_http`
-reaches only the telemetry status and opt-out. The page answers only messages
+reaches only the telemetry status and opt-out. `cad_http_read` accepts only GET/HEAD
+with no body and requires the app capability even for telemetry. Writes retain
+the separate `cad_http` tool and its mutation annotation. The page answers only messages
 from its host's window.
 
 **Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF or SRDF

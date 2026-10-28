@@ -43,7 +43,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 9,
+     "protocol": 10,
      "surface": "file",
      "version": "<version>"
     }
@@ -66,7 +66,7 @@
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 9,
+     "protocol": 10,
      "recents": [],
      "surface": "sidebar",
      "version": "<version>"
@@ -90,7 +90,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 9,
+     "protocol": 10,
      "surface": "agent",
      "version": "<version>"
     }
@@ -134,7 +134,7 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 9,
+     "protocol": 10,
      "surface": "tab",
      "version": "<version>"
     }
@@ -285,6 +285,7 @@
   },
   {
    "_meta": {
+    "dev.texttocad/observation": 1,
     "openai/iconStyle": "monochrome",
     "openai/ui": {
      "entrypoints": [
@@ -344,6 +345,9 @@
        "resourceUri"
       ],
       "type": "object"
+     },
+     "observation": {
+      "type": "boolean"
      }
     },
     "required": [
@@ -529,6 +533,53 @@
    },
    "name": "cad_http",
    "title": "CAD HTTP request"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Read a viewer route with GET or HEAD. Requires this view's session capability in x-cadgen-app; no request body.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "maxLength": 0,
+      "type": "string"
+     },
+     "headers": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "method": {
+      "enum": [
+       "GET",
+       "HEAD"
+      ],
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "method",
+     "url"
+    ],
+    "type": "object"
+   },
+   "name": "cad_http_read",
+   "title": "Read CAD HTTP"
   },
   {
    "_meta": {

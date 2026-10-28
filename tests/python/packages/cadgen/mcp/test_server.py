@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import errno
 import json
 import ntpath
@@ -247,6 +248,33 @@ class TabServerTest(_Session):
             for method, expected in (("GET", 404), ("POST", 404)):
                 self.assertEqual(request("/__cad/features", {"x-cadgen-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
 
+    def test_read_only_http_requires_the_app_and_refuses_methods_and_bodies_before_routing(self) -> None:
+        token = self.call("cad_tab")["_meta"]["dev.texttocad/httpToken"]
+        other = Server(page=self.server.page)
+        other.handle("initialize", initialize_params({"clientInfo": CODEX}), None)
+        def request(method="GET", body="", capability=token):
+            return self.call("cad_http_read", {"method": method, "url": "/__cad/server", "body": body,
+                                               "headers": {"x-cadgen-app": capability}})
+        for method in ("GET", "HEAD"):
+            reply = request(method)["structuredContent"]
+            self.assertEqual(reply["status"], 200)
+            if method == "HEAD":
+                self.assertEqual(reply["body"], "")
+        with mock.patch.object(self.server.tunnel, "serve") as serve:
+            for capability in ("", "guessed", other._app_token):
+                self.assertTrue(request(capability=capability)["isError"])
+            for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT"):
+                self.assertTrue(request(method)["isError"])
+            for body in (base64.b64encode(b'{"share":true}').decode(), " ", False, {}, 0):
+                self.assertTrue(request(body=body)["isError"])
+            serve.assert_not_called()
+        # The router already records unexpected failures: the HTTP tool must not record them twice.
+        with mock.patch.object(self.server.tunnel, "serve", side_effect=RuntimeError("route failed")), \
+                mock.patch.object(self.server.analytics, "crashed") as crashed:
+            with self.assertRaisesRegex(RuntimeError, "route failed"):
+                request()
+            crashed.assert_not_called()
+
     def test_the_page_tools_answer_only_the_page_that_holds_the_session_s_capability(self) -> None:
         # The host is asked to keep app-only tools from the model; the server does not rely on it.
         other = Server(page=self.server.page)
@@ -274,7 +302,7 @@ class TabServerTest(_Session):
         self.assertEqual(agent, {"cad_open", "cad_show", "cad_view", "cad_screenshot", "cad_http"} | START.keys())
         # The page's own: its sync, its answer to a capture, and the viewer's routes, which carry the rest.
         page = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") == ["app"]} - set(entrypoints)
-        self.assertEqual(page, {"cad_sync", "cad_capture_reply"})
+        self.assertEqual(page, {"cad_sync", "cad_capture_reply", "cad_http_read"})
         # All but one read: cad_http turns the person's telemetry off when they ask.
         self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_http", "cad_export", "cad_snapshot"])
         uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
@@ -294,7 +322,7 @@ class TabServerTest(_Session):
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
-                         {"protocol": 9, "page": "viewer", "model": self.bracket, "surface": "agent"})
+                         {"protocol": 10, "page": "viewer", "model": self.bracket, "surface": "agent"})
         # No tolerance: the page reads each part's one display mesh by its key.
         self.assertEqual(sorted(opened), ["model", "notice", "page", "pick", "platform", "protocol", "surface",
                                           "version"])
@@ -310,6 +338,61 @@ class TabServerTest(_Session):
         # A launch adds nothing to the library: the view does, once the model is on screen.
         self.assertEqual(self.server.recents.list(), [])
 
+    def test_a_host_can_open_a_saved_observation_without_replacing_the_live_document(self) -> None:
+        self.launch("cad_open", {"source": self.bracket})
+        tools = {tool["name"]: tool for tool in self.server.tools()}
+        self.assertEqual(tools["cad_file"]["_meta"].get("dev.texttocad/observation"), 1)
+        launch = self.launch("cad_file", {"file": {"resourceUri": Path(self.loose).as_uri()}, "observation": True})
+        self.assertEqual((launch["surface"], launch["model"]), ("observation", self.loose))
+        self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
+        self.assertEqual(self.server.recents.list(), [])
+        with self.assertRaisesRegex(RpcError, "do not register"):
+            self.call("cad_sync", {"view": "saved", "surface": "observation", "model": self.loose})
+        self.assertNotIn("saved", self.server.views)
+
+    def test_an_observation_host_receives_frozen_bytes_before_open_and_show_return(self) -> None:
+        capabilities = {"extensions": {**DECLARES_TABS["extensions"], "dev.texttocad/observations": {"version": 1}}}
+        self.server.handle("initialize", {"clientInfo": OTHER_HOST, "capabilities": capabilities}, None)
+        self.addCleanup(lambda: self.server.tunnel.app.exports.close())
+        opened = self.call("cad_open", {"source": self.bracket})
+        observed = opened["_meta"]["dev.texttocad/observation"]
+        self.assertEqual({key: value for key, value in observed.items() if key != "file"}, {
+            "version": 1, "format": "stl", "source": self.bracket,
+            "sha256": hashlib.sha256(STL).hexdigest(), "revision": hashlib.sha256(STL).hexdigest(), "sizeBytes": len(STL),
+        })
+        frozen = Path(observed["file"])
+        self.assertNotEqual(str(frozen), self.bracket)
+        Path(self.bracket).write_bytes(b"new geometry")
+        self.assertEqual(frozen.read_bytes(), STL)
+        self.call("cad_sync", {"view": "live", "surface": "tab", "model": self.bracket})
+        shown = self.call("cad_show", {"source": self.loose})
+        shown_file = Path(shown["_meta"]["dev.texttocad/observation"]["file"])
+        Path(self.loose).unlink()
+        self.assertEqual(shown_file.read_bytes(), STL)
+        self.assertNotIn("cad_observation", {tool["name"] for tool in self.server.tools()})
+        self.server.tunnel.app.exports.close()
+        self.assertFalse(frozen.exists())
+        self.assertFalse(shown_file.exists())
+
+    def test_observation_validates_frozen_glb_dependencies_in_the_runtime(self) -> None:
+        capabilities = {"extensions": {**DECLARES_TABS["extensions"], "dev.texttocad/observations": {"version": 1}}}
+        self.server.handle("initialize", {"clientInfo": OTHER_HOST, "capabilities": capabilities}, None)
+        self.addCleanup(lambda: self.server.tunnel.app.exports.close())
+        source = self.tmp / "model.glb"
+        for dependency in (None, "data:image/png;base64,AA==", "external.png"):
+            scene = {"asset": {"version": "2.0"}, "buffers": [{"byteLength": 0}]}
+            if dependency:
+                scene["images"] = [{"uri": dependency}]
+            body = json.dumps(scene).encode()
+            body += b" " * (-len(body) % 4)
+            source.write_bytes(b"glTF" + (2).to_bytes(4, "little") + (20 + len(body)).to_bytes(4, "little") +
+                               len(body).to_bytes(4, "little") + b"JSON" + body)
+            observed = self.call("cad_open", {"source": str(source)})["_meta"]["dev.texttocad/observation"]
+            if dependency == "external.png":
+                self.assertIn("external files", observed["error"])
+            else:
+                self.assertEqual(Path(observed["file"]).read_bytes(), source.read_bytes())
+
     def test_a_bad_path_is_the_tools_answer_not_a_protocol_error(self) -> None:
         missing = self.call("cad_open", {"source": str(self.workspace / "parts" / "nope.step")})
         self.assertTrue(missing["isError"])
@@ -322,6 +405,23 @@ class TabServerTest(_Session):
         for tool in ("cad_open", "cad_show"):
             self.assertIn("is not one", self.call(tool, {"source": str(script)})["content"][0]["text"], tool)
             self.assertIn("No file at", self.call(tool, {"source": f"{script}::cube"})["content"][0]["text"], tool)
+
+    def test_observation_refuses_dxf_external_references_without_following_them(self) -> None:
+        import ezdxf
+        capabilities = {"extensions": {**DECLARES_TABS["extensions"], "dev.texttocad/observations": {"version": 1}}}
+        self.server.handle("initialize", {"clientInfo": OTHER_HOST, "capabilities": capabilities}, None)
+        self.addCleanup(lambda: self.server.tunnel.app.exports.close())
+        path = self.tmp / "drawing.dxf"
+        drawing = ezdxf.new()
+        drawing.modelspace().add_line((0, 0), (1, 1))
+        drawing.saveas(path)
+        result = self.call("cad_open", {"source": str(path)})
+        self.assertEqual(result["_meta"]["dev.texttocad/observation"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        drawing.blocks.new("external", dxfattribs={"flags": 4})
+        drawing.saveas(path)
+        result = self.call("cad_open", {"source": str(path)})
+        self.assertIn("external files", result["_meta"]["dev.texttocad/observation"]["error"])
+        self.assertNotIn("isError", result, "live viewing remains available when history cannot capture the document")
 
     def test_cad_show_reaches_the_polling_view_without_opening_one(self) -> None:
         self.assertEqual(self.call("cad_show", {"source": self.bracket})["structuredContent"], {"delivered": 0})

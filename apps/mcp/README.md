@@ -88,18 +88,40 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
 
 ## The rules
 
+- **Saved observations belong to their host.** A host that keeps immutable generated documents
+  alongside a conversation declares `dev.texttocad/observations: {version: 1}` in initialize's
+  extensions. Successful `cad_open` and delivered `cad_show` results then include
+  `_meta["dev.texttocad/observation"]`: a complete frozen temporary artifact described by
+  `{version: 1, file, format, sha256, sizeBytes, source, revision}`, or `{error}` when capture
+  is unavailable. `file` is an absolute runtime-host path, `format` its extension without a
+  dot, and `source`/`revision` identify the document selected by that operation. The runtime
+  finishes capture before returning, using the viewer's existing export jobs and revision
+  guards. A changed source, failed export or timeout never substitutes newer geometry.
+  XBF retains native materials, mechanisms, configurations and motion. Self-contained files
+  are copied byte for byte; external GLB resources and DXF xrefs or image dependencies are
+  refused rather than copying an arbitrary dependency tree. The host ingests opaque bytes
+  and verifies their size and SHA-256 before storing them in its existing attachment store.
+  Runtime artifacts remain session-owned and expire after ten minutes, as viewer exports do;
+  the host must adopt them before expiry. They are not permanent runtime history.
+  Once storage succeeds, the host calls `cad_file` with `observation: true`. Its metadata advertises
+  `dev.texttocad/observation: 1`; the returned protocol-10 launch has `surface: observation`.
+  This view renders only that saved file, without joining live views, following agent shows,
+  retiring earlier cards, browsing other files, editing source, or adding history files to Recents.
+  Camera, measurement, authored materials and native motion use the normal shared renderer.
+  The host owns durable storage and deletion; a live side tab keeps its original launch.
+
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
   CAD viewer showing that document, or the home. Agents name a file by its absolute path and a
   model by the id its script printed (a script is never a document), and
-  nothing here branches on a surface's name but one: `surface: file` (below).
+  file handlers and saved observations are the isolated surfaces (below).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents`,
   so the page asks nothing before it draws. A launch from another build (a tab
   the host restored after an update, a past chat's card) says so: the page
   reads only its own protocol's.
-- **Every view but a file handler's has a home**: the library (the documents opened or built
+- **Every live view but a file handler's has a home**: the library (the documents opened or built
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
@@ -215,7 +237,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy
   test enforces it: `tests/python/global/test_host_neutral_packages.py`.
 - **The web client's data path, unchanged.** `createCadClient` gets a `fetch`
-  that sends each request as a `cad_http` tool call against the placeholder
+  that sends GET/HEAD as read-only `cad_http_read` tool calls and writes as
+  `cad_http` calls against the placeholder
   origin `http://cad.invalid`; the server hands it to the viewer's own router,
   over its own model library and analytics. Everything the page asks of the
   server travels this way, as the web page asks its own: the models -- a STEP's
@@ -225,7 +248,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   answer and language, the update check. One route is the server's own, not the
   viewer's: `/__cad/browser/open`, which opens the web viewer's page of what the view shows
   in the person's browser, for Open in browser. Only the clipboard stays the host's: a
-  view copies through its frame. `cad_sync` and `cad_capture_reply` remain app-only
+  view copies through its frame. `cad_sync`, `cad_capture_reply` and the GET/HEAD-only,
+  body-free `cad_http_read` remain app-only
   and are absent in text-only hosts. `cad_http` is shared with agents: without
   an app capability, only telemetry status and opt-out are authorized. Every
   page launch includes a session capability in result `_meta["dev.texttocad/httpToken"]`,
@@ -354,9 +378,9 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown; a failed request's `kind` (the host refused it, it timed out, the page closed) |
 | `channel.ts` | whether the host carries the page's calls to its server: what it declared (`serverTools`, `openLinks`), then what its calls showed (`Connection.tsx` routes the card by it) |
 | `direct.ts` | the engine reached over HTTP where the host carries no call: the launch's `engine` and day link, the probe, and the `fetch` that swaps for the tunnel's |
-| `server.ts` | typed calls to the page's three tools: its sync, its answer to a capture, and `cad_http` |
+| `server.ts` | typed calls to the page's sync, capture answer and read/write HTTP tools |
 | `capture.ts` | a capture once the view shows the model asked about, loaded and drawn (`captureSettled`, within `CAPTURE_SETTLE_MS`), and the PNG shrunk to fit one reply (`fitCapture`) |
-| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
+| `tunnel.ts` | the `fetch` over `cad_http_read`/`cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |

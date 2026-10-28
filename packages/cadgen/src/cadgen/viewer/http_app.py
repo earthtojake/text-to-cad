@@ -308,6 +308,23 @@ class CadApp:
             return self.file_of(self.remember(home(self.recents.registry, record)))
         return None
 
+    def observation(self, source):
+        """Freeze the selected document before a history-owning host receives this tool result."""
+        if is_id(source):
+            selected = self.engine_documents.serve(source)
+            server = self.engine_documents.server
+            server.document(selected["doc"])  # acquire the same lazy model the page would read
+            with server.load_lock:
+                document = server.served.get(selected["doc"])
+                if document is None:
+                    raise ValueError("The selected document changed before it could be observed.")
+                selected_revision = {"doc": selected["doc"], "revision": document.version}
+            return self.exports.capture(selected_revision)
+        entry = catalog_entry(source)
+        if not entry or not entry.get("hash"):
+            raise ValueError("The selected CAD document cannot be captured.")
+        return self.exports.capture({"doc": source, "revision": entry["hash"]}, copy_file=True)
+
     def read_catalog(self, file=None, ident=None) -> dict:
         """The catalog of one document -- ``file``, an absolute path, registered by its id
         (``remember``), or ``ident``, a document's id: a file's or a model's the engine holds -- its

@@ -86,7 +86,7 @@ TITLE = "CAD"
 # path (`page: viewer`) or the home (`page: home`, its recents with it), and carries what the page
 # needs to start on it alone (the server's version and platform); a view makes one call a second
 # (`cad_sync`) and reaches the viewer's routes through `cad_http`, by absolute path.
-PROTOCOL = 9
+PROTOCOL = 10
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(VIEWER_EXTENSIONS)
@@ -299,6 +299,7 @@ class Server:
         # ``_contacted`` once a view reached this server, which only a host that draws them does.
         self.renders: bool | None = None
         self._declared = False
+        self._observations = False
         self._contacted = False
         self._viewer_url = viewer_url
         self._browser_opener = browser_opener  # what opens a page's redirect file: ``webbrowser.open``
@@ -377,9 +378,9 @@ class Server:
         except Exception as error:
             # A request that failed for no reason its client gave: this server's crash, answered as the
             # protocol answers one (an internal error), and counted (``cadgen/analytics.py``) -- a page's
-            # request (``cad_http``) by the viewer's routes, which counted it already (``tunnel.py``).
+            # HTTP request by the viewer's routes, which counted it already (``tunnel.py``).
             calling = method == "tools/call"
-            if not (calling and params.get("name") == "cad_http"):
+            if not (calling and params.get("name") in ("cad_http", "cad_http_read")):
                 self.analytics.crashed(error, "tool" if calling else "request", tool=params.get("name") if calling else None)
             raise
 
@@ -444,6 +445,7 @@ class Server:
         if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
+        self._observations = isinstance(offered.get("extensions"), dict) and offered["extensions"].get("dev.texttocad/observations") == {"version": 1}
         extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
         LOG.info("client %s %s: %s views, %s (extensions: %s)", client.get("name"), client.get("version"), presentation,
                  why, ", ".join(extensions) or "none")
@@ -485,9 +487,10 @@ class Server:
              "inputSchema": _object(), "icons": [ICON], "annotations": _READ_ONLY,
              "_meta": surface({"type": "thread"})},
             {"name": "cad_file", "title": TITLE, "description": "Open a CAD file in CAD.",
-             "inputSchema": _object({"file": _object({"name": {"type": "string"}, "resourceUri": {"type": "string"}}, ["resourceUri"])}, ["file"]),
+             "inputSchema": _object({"file": _object({"name": {"type": "string"}, "resourceUri": {"type": "string"}}, ["resourceUri"]),
+                                     "observation": {"type": "boolean"}}, ["file"]),
              "icons": [ICON], "annotations": _READ_ONLY,
-             "_meta": surface({"type": "file", "extensions": EXTENSIONS})},
+             "_meta": {**surface({"type": "file", "extensions": EXTENSIONS}), "dev.texttocad/observation": 1}},
             {"name": "cad_open", "title": TITLE, "icons": [ICON], "annotations": _READ_ONLY, "_meta": agent_open,
              "description": (f"Open a NEW CAD viewer tab beside the chat showing a local model ({FORMATS}). "
                              "Every call opens another tab, so call it only when cad_show reports that no "
@@ -541,13 +544,16 @@ class Server:
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
-        """The tools only the page calls: its sync and its answer to a capture."""
+        """The tools only the page calls: its sync, capture answer and read-only HTTP requests."""
 
         def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
             return {"name": name, "title": title, "description": description, "inputSchema": schema,
                     "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
 
-        return [
+        tools = [
+            app("cad_http_read", "Read CAD HTTP", "Read a viewer route with GET or HEAD. Requires this view's session capability in x-cadgen-app; no request body.",
+                _object({**_HTTP_TOOL["inputSchema"]["properties"], "method": {"type": "string", "enum": ["GET", "HEAD"]},
+                         "body": {"type": "string", "maxLength": 0}}, ["method", "url"])),
             app("cad_sync", "CAD sync", "This view's one call each second: what it shows and watches, and what is waiting for it.",
                 _object({"view": {"type": "string"}, "surface": {"type": "string"}, "model": {"type": ["string", "null"]},
                          "focused": {"type": "boolean"}, "closed": {"type": "boolean"}, "state": {"type": "object"},
@@ -556,6 +562,7 @@ class Server:
                 _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"},
                          _APP_TOKEN_ARGUMENT: _APP_TOKEN_SCHEMA}, ["requestId", _APP_TOKEN_ARGUMENT])),
         ]
+        return tools
 
     # -- calls -----------------------------------------------------------------
 
@@ -580,6 +587,13 @@ class Server:
             if name in _AGENT_TOOLS:
                 self._arguments(name, arguments)
             result = handler(arguments, context)
+            if self._observations and name in ("cad_open", "cad_show") and not result.get("isError") and result.get("structuredContent", {}).get("delivered") != 0:
+                try:
+                    selected = self._model_path(arguments.get("source"))
+                    observed = self.tunnel.app.observation(selected)
+                except (ValueError, OSError, ToolFailed) as error:
+                    observed = {"error": str(error)}
+                result.setdefault("_meta", {})["dev.texttocad/observation"] = observed
             if not self.text and isinstance(result.get("structuredContent", {}).get("launch"), dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
@@ -601,7 +615,7 @@ class Server:
             return _text(_unavailable(error), error=True)
         finally:
             self.analytics.called(name, ok, reason)
-            if name not in ("cad_sync", "cad_http"):
+            if name not in ("cad_sync", "cad_http", "cad_http_read"):
                 LOG.info("%s %.0fms", name, (time.monotonic() - started) * 1000)
 
     def _refused(self, name: Any, reason: str) -> None:
@@ -691,7 +705,7 @@ class Server:
         always has its channel, so its launches carry the page alone. The file handler's carry
         neither: it shows its file alone, with no Open in browser. Nor do launches where this server
         was given no engine (``viewer_url``), or the engine gives no page."""
-        if self._viewer_url is None or launch.get("surface") == "file":
+        if self._viewer_url is None or launch.get("surface") in ("file", "observation"):
             return
         from .browser import ViewerUnavailable
 
@@ -751,6 +765,10 @@ class Server:
             file = arguments.get("file")
             path = file_uri_path(file.get("resourceUri")) if isinstance(file, dict) else None
         model = self._model_path(path)
+        if arguments.get("observation") is True:
+            # The host owns these saved bytes; history never changes the session's live document.
+            launch = _stamped({"protocol": PROTOCOL, "page": "viewer", "model": model, "surface": "observation"})
+            return _text(f"Saved observation of {os.path.basename(model)}.", {"launch": launch})
         # The host's own file tree is this surface's navigation: the page shows the file alone.
         return _text(f"{os.path.basename(model)} is open in CAD.", {"launch": self._launch(model, surface="file")})
 
@@ -1088,6 +1106,8 @@ class Server:
         moves). A STEP or an ``.xbf`` the view shows tells it of a new version itself, through the
         engine's routes (``cadgen.viewer.documents``): no build feed rides here.
         """
+        if arguments.get("surface") == "observation":
+            raise RpcError(INVALID_PARAMS, "Saved observations do not register live views.")
         view_id = self._register(arguments, context)
         self._mounting.pop(view_id, None)
         sidebar = self.tabs and arguments.get("surface") == "sidebar"
@@ -1136,7 +1156,16 @@ class Server:
         accepted = self.views.reply(request_id, reply) or (self.tabs and self.sidebar_views.answer(request_id, reply))
         return _data({"accepted": bool(accepted)})
 
+    def _tool_cad_http_read(self, arguments, context):
+        # Enforce the annotation at the server boundary, not just in the advertised schema.
+        if arguments.get("method") not in ("GET", "HEAD") or arguments.get("body", "") != "":
+            raise ToolFailed("Read-only HTTP requires GET or HEAD and no request body.", "bad_request")
+        return self._http(arguments, app_only=True)
+
     def _tool_cad_http(self, arguments, context):
+        return self._http(arguments)
+
+    def _http(self, arguments, *, app_only=False):
         try:
             body = base64.b64decode(arguments.get("body") or "", validate=True)
         except (ValueError, binascii.Error) as error:
@@ -1150,6 +1179,8 @@ class Server:
         if token and not app:
             # A view opened in an earlier session (the engine restarted under its host) holds that one's.
             raise ToolFailed("This CAD view was opened before CAD restarted: close it and open CAD again.", "bad_request")
+        if app_only and not app:
+            raise ToolFailed("This HTTP tool is available only to the CAD view.", "bad_request")
         method, url = str(arguments.get("method") or "GET"), str(arguments.get("url") or "")
         from cadgen.viewer import url_norm
 

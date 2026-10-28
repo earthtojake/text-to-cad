@@ -196,6 +196,21 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(request({'op': 'status'})['pid'], info['pid'])
         self.assertFalse((self.root / 'state' / 'sidebar-views').exists())
 
+    def test_read_only_http_capability_is_checked_over_the_real_engine_transport(self):
+        first, second = self.proxy(), self.proxy()
+        tools = self.call(first, 'tools/list')['tools']
+        read = next(tool for tool in tools if tool['name'] == 'cad_http_read')
+        self.assertTrue(read['annotations']['readOnlyHint'])
+        self.assertEqual(read['_meta']['ui']['visibility'], ['app'])
+        token = self.tool(first, 'cad_tab')['_meta']['dev.texttocad/httpToken']
+        arguments = {'method': 'GET', 'url': '/__cad/server', 'headers': {'x-cadgen-app': token}}
+        self.assertEqual(self.tool(first, 'cad_http_read', arguments)['structuredContent']['status'], 200)
+        self.assertTrue(self.tool(second, 'cad_http_read', arguments)['isError'])
+        self.assertTrue(self.tool(first, 'cad_http_read', {**arguments, 'headers': {}})['isError'])
+        self.assertTrue(self.tool(first, 'cad_http_read', {**arguments, 'method': 'POST', 'url': '/__cad/analytics',
+                            'body': base64.b64encode(b'{"share":true}').decode()})['isError'])
+        self.assertTrue(self.tool(first, 'cad_http_read', {**arguments, 'body': 'YQ=='})['isError'])
+
     def test_inspect_export_tools_run_without_a_view(self):
         proxy = self.proxy()
         def finished(name, arguments):

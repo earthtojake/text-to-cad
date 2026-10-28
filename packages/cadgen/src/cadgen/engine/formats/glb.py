@@ -42,7 +42,7 @@ from cadgen.engine.formats import Foreign, FormatError, Part, Placed, assemble, 
 from cadgen.engine.formats.buffer import buffer
 from cadgen.engine.formats.gltf import look_extensions
 
-__all__ = ["glb_file", "read_glb"]
+__all__ = ["glb_file", "read_glb", "require_self_contained"]
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -81,7 +81,7 @@ def _loud(kept: Any) -> None:
         printer.SetTraceLevel(level)
 
 
-def _whole_from_itself(path: Path, gltf: dict[str, Any]) -> None:
+def require_self_contained(path: Path, gltf: dict[str, Any]) -> None:
     """Refuse a GLB that names a buffer or image outside itself. OCCT's reader would resolve
     such a ``uri`` against the file's folder and read that file as the model's bytes; a GLB is
     read whole from itself, as the numpy reader (``gltf._buffers``) already requires."""
@@ -273,7 +273,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
 
     path = Path(path)
     gltf = _json(path)
-    _whole_from_itself(path, gltf)
+    require_self_contained(path, gltf)
     z_up = any(str(((node or {}).get("extras") or {}).get("cadUpAxis") or "").lower() == "z"
                for node in gltf.get("nodes") or [] if isinstance(node, dict))
     document = _document(path, z_up)

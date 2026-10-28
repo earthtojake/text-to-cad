@@ -183,9 +183,10 @@ function Superseded({ still, label }: { still: string | null; label: string }) {
  */
 export default function App({ bridge, server, launch: initial, presentation = 'tabs', direct }: { bridge: Bridge; server: Server; launch: Launch; presentation?: Presentation; direct?: typeof fetch }) {
   const surface = initial.surface || initial.page;
+  const observation = surface === 'observation';
   // The host's file handler shows the file it opened, and only that: what the agent shows goes to
   // its thread's tab, never here (the server refuses it too).
-  const alone = surface === 'file';
+  const alone = surface === 'file' || observation;
   // Inline, the server named this view (the agent reads it by that name); a tab names itself.
   const view = useMemo(() => initial.view ?? newViewId(), [initial.view]);
   const live = useMemo(createLiveRegistry, []);
@@ -203,13 +204,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     document.documentElement.style.colorScheme = colorScheme;
   }, [colorScheme, context]);
   const theme = useMemo(() => ({ preference, onPreferenceChange: (value: typeof preference) => tabStore.settings.update({ appearance: value }) }), [preference, tabStore]);
-  const inline = presentation === 'inline' && context.displayMode !== 'fullscreen';
+  const inline = (presentation === 'inline' || observation) && context.displayMode !== 'fullscreen';
   // A tab runs the page's full height, its host's composer floating over its bottom; nothing of the
   // viewer sits at the bottom centre under it. A host that mounts views inline draws its composer
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
   const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation), [bridge, presentation]);
-  const floatingComposer = presentation === 'tabs';
+  const floatingComposer = presentation === 'tabs' && !observation;
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
@@ -242,19 +243,19 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       shown.current = model;
       asked.current = null;
       setShowingModel(model);
-      sync.focus();
+      if (!observation) sync.focus();
     },
-  }), [sync]);
+  }), [sync, observation]);
   // Everything else the view asks of the server travels as viewer requests over `cad_http`: its
   // model, the library, Open, Reveal, the person's settings and the update check. The client polls
   // nothing: the sync says when the file's catalog entry moved.
   const tunnel = useMemo(() => direct ?? createTunnelFetch(server), [server, direct]);
-  const client = useMemo(() => createTunnelClient(tunnel, direct ? {} : { pollIntervalMs: 0 }), [tunnel, direct]);
+  const client = useMemo(() => createTunnelClient(tunnel, direct && !observation ? {} : { pollIntervalMs: 0 }), [tunnel, direct, observation]);
   useEffect(() => () => client.dispose(), [client]);
 
   useEffect(() => {
     const order = initial.order;
-    if (!order || !initial.view) return;
+    if (observation || !order || !initial.view) return;
     let active = true;
     const stop = watchSupersession('cad-views', { view: initial.view, order }, () => void (async () => {
       let image: string | null = null;
@@ -264,10 +265,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       void sync.close();
     })());
     return () => { active = false; stop(); };
-  }, [initial.order, initial.view, live, sync]);
+  }, [initial.order, initial.view, live, sync, observation]);
 
   useEffect(() => {
-    if (superseded || direct) return;
+    if (superseded || direct || observation) return;
     const lifetime = new AbortController();
     sync.run(lifetime.signal);
     const stop = bridge.onTeardown(() => lifetime.abort());
@@ -281,7 +282,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     window.addEventListener('pointerdown', touched, true);
     window.addEventListener('focus', touched);
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
-  }, [bridge, sync, superseded, direct]);
+  }, [bridge, sync, superseded, direct, observation]);
 
   // The usage stats cadgen sends (its telemetry), the same as the browser viewer's: nothing asks here (a
   // cadgen command says it once), and the app menu's switch changes it.

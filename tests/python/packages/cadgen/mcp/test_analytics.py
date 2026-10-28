@@ -83,7 +83,7 @@ class _Tmp(unittest.TestCase):
         headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if body is not None else {}
         if not agent:
             headers["x-cadgen-app"] = server._app_token
-        reply = self.call(server, "cad_http", {"method": method, "url": url, "headers": headers,
+        reply = self.call(server, "cad_http_read" if not agent and method in ("GET", "HEAD") else "cad_http", {"method": method, "url": url, "headers": headers,
                                                "body": base64.b64encode(json.dumps(body).encode() if body is not None else b"").decode("ascii")})
         data = base64.b64decode(reply["structuredContent"].get("body") or "")
         return reply["structuredContent"]["status"], json.loads(data) if data else None
