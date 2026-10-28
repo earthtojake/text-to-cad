@@ -393,3 +393,26 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(files).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
 });
+
+it('offers the destination\'s phrases as buttons that write into the note and send nothing', () => {
+  const deliver = vi.fn(async () => ({ status: 'added' as const, partIds: [] }));
+  const suggesting = { ...composer, phrases: ['Repair', 'This is a feature'] } as const;
+  const { update } = mount(testHost({ promptContext: { getSnapshot: () => suggesting, subscribe: () => () => {}, deliver } }), { references: [face] });
+  const row = () => within(box()!).queryByRole('group', { name: 'Phrases' });
+  expect(within(row()!).getAllByRole('button').map(button => button.textContent)).toEqual(['Repair', 'This is a feature']);
+  // A press writes the phrase, a space after it, and puts the keyboard in the note; a second goes on from there.
+  fireEvent.click(within(row()!).getByRole('button', { name: 'Repair' }));
+  expect([note(), document.activeElement]).toEqual(['Repair ', field()]);
+  fireEvent.click(within(row()!).getByRole('button', { name: 'This is a feature' }));
+  expect(note()).toBe('Repair This is a feature ');
+  expect(deliver).not.toHaveBeenCalled();
+  // The note is the person's to finish: what they write after stays with it.
+  write('Repair This is a feature on the left.');
+  expect(note()).toBe('Repair This is a feature on the left.');
+  // Disabled with the box (the view is loading), and gone with the suggestions.
+  update({ references: [face], disabled: true });
+  expect(within(row()!).getByRole('button', { name: 'Repair' }).hasAttribute('disabled')).toBe(true);
+  cleanup();
+  mount(testHost(), { references: [face] });
+  expect(row()).toBeNull();
+});

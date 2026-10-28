@@ -21,6 +21,12 @@ export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';
   available: boolean;
   reason?: string;
+  /**
+   * The words the destination suggests for a note: an agent's vocabulary for the file on screen
+   * ("Repair", "This is a feature"). Quick Edit offers each as a button that writes it into the
+   * note; none of them sends anything. Absent or empty: no suggestions.
+   */
+  phrases?: readonly string[];
   capabilities?: {
     attachments: 'none' | 'png' | 'images-and-text';
     maxParts: number;

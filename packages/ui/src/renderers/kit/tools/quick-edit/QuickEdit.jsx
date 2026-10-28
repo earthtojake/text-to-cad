@@ -56,7 +56,10 @@ export function quickEditReferenceIds(selection) {
  * grammar, is what goes either way). The note is plain text, and a reference pasted into it (a
  * line that is one and nothing else, as Copy References writes it, into this file or any other) is
  * a chip in it, where it was pasted: one piece a Backspace takes whole, which the note carries as
- * that reference's text, in its place (`noteEditor.js`). The file always goes and is not named. The buttons, bottom-right, are the ones this
+ * that reference's text, in its place (`noteEditor.js`). Where the destination suggests phrases
+ * (`phrases` in its state: the words its agent knows for the file on screen), they are a row of small
+ * buttons between the chips and the note, each writing its words into the note at the caret and
+ * handing it the keyboard; they send nothing. The file always goes and is not named. The buttons, bottom-right, are the ones this
  * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
  * Prompt always — the note as text to paste into an agent's prompt box, its references by their
  * files' absolute paths, and the files the host makes for it (`prompt`, `host.promptFiles`) by
@@ -92,6 +95,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const host = useViewerHost();
   const controls = useControlUsage();
   const destination = usePromptDestination();
+  const phrases = destination.phrases ?? EMPTY;
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
@@ -305,6 +309,26 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     readNote(note);
   };
 
+  // A phrase goes into the note at the caret (at its end, while the caret is elsewhere), a space after
+  // it to go on from, and the keyboard goes with it: the note is the person's to finish.
+  const writePhrase = phrase => {
+    const note = field.current;
+    if (!note) return;
+    const document = note.ownerDocument;
+    const words = document.createTextNode(`${phrase} `);
+    insertAtCaret(note, [words]);
+    readNote(note);
+    note.focus({ preventScroll: true });
+    // The caret stays after the phrase: a focus that moved it (to the note's start) is put back.
+    const selection = document.getSelection?.();
+    if (!selection) return;
+    const after = document.createRange();
+    after.setStartAfter(words);
+    after.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(after);
+  };
+
   // A click on a pill selects it whole, as a double-click does a word: a Backspace takes it.
   const onNoteMouseDown = event => {
     if (event.button !== 0 || event.shiftKey) return;
@@ -437,6 +461,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           the corner gives it a height, and scrolls in the chrome's own ScrollArea past that; its
           placeholder shows while it is empty. */}
       <div ref={compose} className="flex flex-col gap-2" data-quick-edit-compose="" aria-hidden={folded || undefined} inert={folded || undefined}>
+      {/* The destination's phrases, a small outline button each: a press writes it into the note. */}
+      {phrases.length ? <div role="group" aria-label={t("quickEdit.phrases")} className="flex flex-wrap gap-1" data-quick-edit-phrases="">
+        {phrases.map(phrase => <Button key={phrase} type="button" variant="outline" size="sm" disabled={disabled} onClick={() => writePhrase(phrase)}
+          className={cn("rounded-sm px-2 text-tiny font-normal", docked ? "h-8" : "h-6")} data-quick-edit-phrase="">{phrase}</Button>)}
+      </div> : null}
       <ScrollArea ref={noteBox} data-quick-edit-note-box="" data-vaul-no-drag=""
         className={cn(docked ? "min-h-14 flex-1 [&_[data-slot=scroll-area-viewport]>div]:h-full" : "max-h-40 min-h-14", "w-full rounded-md border border-input bg-background/80 transition-[border-color,box-shadow] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:border-blue-400 dark:focus-within:ring-blue-400/20")}>
         <div ref={field} role="textbox" aria-multiline="true" aria-label={t("quickEdit.describeLabel")} tabIndex={0}

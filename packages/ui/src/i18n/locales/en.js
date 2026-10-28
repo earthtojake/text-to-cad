@@ -415,6 +415,7 @@ export default {
   "quickEdit.promptCopied": "Prompt copied",
   "quickEdit.notSent": "The prompt did not go.",
   "quickEdit.annotation": "Annotation",
+  "quickEdit.phrases": "Phrases",
   "quickEdit.ref": "{count} ref",
   "quickEdit.refs": "{count} refs",
   "chip.remove": "Remove {name}",

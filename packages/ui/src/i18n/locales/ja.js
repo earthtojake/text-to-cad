@@ -391,6 +391,7 @@ export default {
   "quickEdit.promptCopied": "プロンプトをコピーしました",
   "quickEdit.notSent": "プロンプトを送信できませんでした。",
   "quickEdit.annotation": "注釈",
+  "quickEdit.phrases": "定型句",
   "quickEdit.ref": "参照 {count} 件",
   "quickEdit.refs": "参照 {count} 件",
   "chip.remove": "{name}を削除",
