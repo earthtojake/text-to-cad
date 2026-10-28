@@ -215,8 +215,10 @@ _DRAWS: list[str | None] = []
 
 def available() -> str | None:
     """None when a canvas can be made in this process and draws a picture that leaves it; else why
-    not (asked once, remembered). A context that is made but draws nothing -- Windows' GDI Generic
-    OpenGL 1.1, on a machine with no GPU driver -- is no canvas either."""
+    not (asked once, remembered). A context older than OpenGL 2.1 -- Windows' GDI Generic 1.1, on a
+    machine with no GPU driver -- is no canvas either: OCCT calls its driver too old, and it hands a
+    picture over but draws nothing in it. Its version is asked, not its picture, which a canvas
+    hands over on Windows too (#709)."""
     try:
         canvas = Canvas(16, 16)
     except Unavailable as error:
@@ -225,8 +227,11 @@ def available() -> str | None:
         if not _DRAWS:
             try:
                 pixels(canvas.pixmap())
+                gl = canvas.driver.GetSharedContext()
+                if not gl.IsGlGreaterEqual(2, 1):
+                    raise RuntimeError(f"OpenGL {gl.VersionMajor()}.{gl.VersionMinor()} is older than 2.1")
                 _DRAWS.append(None)
-            except RuntimeError as error:
+            except (RuntimeError, OSError) as error:
                 _DRAWS.append(f"OpenGL on {platform()} draws no picture here ({error}): a software 1.1 context, "
                               "no GPU driver")
         return _DRAWS[0]
