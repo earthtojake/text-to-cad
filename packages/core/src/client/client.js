@@ -284,6 +284,12 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         throw new Error(detail?.error || 'Could not reveal this file in the file manager.');
       }
     },
+    async send(text) {
+      const response = await fetchImpl(cadApiUrl('/__cad/send', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ text }) });
+      const answer = await response.json().catch(() => null);
+      if (!answer?.ok) throw new Error(answer?.error || `The prompt could not be sent (${response.status}).`);
+      return String(answer.reply ?? '');
+    },
     consent(share) {
       return share === undefined ? request('/__cad/analytics', { operation: 'consent' })
         : request('/__cad/analytics', { method: 'POST', headers: JSON_POST, body: { share }, operation: 'consent' });

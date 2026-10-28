@@ -36,7 +36,9 @@ export interface PromptDestinationState {
   };
 }
 export type PromptDeliveryResult =
-  | { status: 'added' | 'copied' | 'sent'; partIds: string[] }
+  | { status: 'added' | 'copied'; partIds: string[] }
+  /** `message`: what the destination answered, where it answers (a command's output), for the person to read. */
+  | { status: 'sent'; partIds: string[]; message?: string }
   | { status: 'partial'; partIds: string[]; message: string }
   | { status: 'deferred' | 'cancelled' | 'failed'; message?: string };
 /**

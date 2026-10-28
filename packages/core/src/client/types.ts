@@ -26,6 +26,8 @@ export interface CadServerInfo {
   pick?: boolean;
   /** The phrases the most recent launch gave Quick Edit (`cadgen viewer --phrase`), a button each; none without. */
   phrases?: readonly string[];
+  /** Whether Quick Edit can Send: the most recent launch named a command to send to (`cadgen viewer --send-command`). */
+  send?: boolean;
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
   /** The person's home folder, `/`-separated: where the explorer starts with nowhere else to. */
@@ -199,6 +201,8 @@ export interface CadWorkspaceService {
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
+  /** Quick Edit's Send: the prompt to the launch's command (`cadgen viewer --send-command`), and what it printed. */
+  send?(text: string): Promise<string>;
   /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */

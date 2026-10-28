@@ -1,4 +1,4 @@
-import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
+import { createPromptDeliveryLedger, formatPromptContextText, resolvePromptMessage, validatePromptContext } from '@text-to-cad/core/prompt';
 import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@text-to-cad/core/prompt';
 import type { WebClipboard } from './clipboard';
 import { english } from '@text-to-cad/ui/i18n';
@@ -7,10 +7,13 @@ import { english } from '@text-to-cad/ui/i18n';
  * Prepare portable clipboard content without claiming an external composer pasted it. What it says
  * to the person (busy, a partial copy) is in `t`'s language, read as it speaks. `phrases` are the
  * words the launch suggested for a note (`cadgen viewer --phrase`, read from the server), which
- * Quick Edit offers as buttons; none, no buttons.
+ * Quick Edit offers as buttons; none, no buttons. `send`, where the launch named a command to send to
+ * (`cadgen viewer --send-command`), posts the prompt as Copy Prompt writes it and answers with what the
+ * command printed (`sent`, its `message`); without it, nothing can send.
  */
 export function createWebPromptContext(clipboard: WebClipboard, supportsImages = typeof clipboard.writeImage === 'function',
-  t: (key: string, params?: Record<string, unknown>) => string = english, phrases: readonly string[] = []): PromptContextPort {
+  t: (key: string, params?: Record<string, unknown>) => string = english, phrases: readonly string[] = [],
+  send: ((text: string) => Promise<string>) | null = null): PromptContextPort {
   const capabilities: NonNullable<PromptDestinationState['capabilities']> = {
     attachments: supportsImages ? 'png' : 'none', maxParts: 128, maxAttachmentBytes: 20 * 1024 * 1024,
     mixedTextAndImage: supportsImages && clipboard.writeContent ? 'representations' : 'unsupported',
@@ -23,7 +26,16 @@ export function createWebPromptContext(clipboard: WebClipboard, supportsImages =
   const ledger = createPromptDeliveryLedger({ busyMessage: BUSY });
   const said = (result: PromptDeliveryResult): PromptDeliveryResult =>
     (result.status === 'failed' && result.message === BUSY ? { ...result, message: t('web.prompt.busy') } : result);
+  // A send is one at a time already: Quick Edit waits for it, and the engine refuses a second while one runs.
+  const failed = (error: unknown): PromptDeliveryResult => ({ status: 'failed', message: error instanceof Error ? error.message : String(error) });
   return {
+    ...(send ? { send(context: Parameters<PromptContextPort['deliver']>[0]): Promise<PromptDeliveryResult> {
+      try { validatePromptContext(context); }
+      catch (error) { return Promise.resolve(failed(error)); }
+      const partIds = context.parts.map(part => part.id);
+      return resolvePromptMessage(context).then(send)
+        .then((reply): PromptDeliveryResult => ({ status: 'sent', partIds, ...(reply.trim() ? { message: reply.trim() } : {}) }), failed);
+    } } : {}),
     getSnapshot: () => state,
     subscribe: () => () => {},
     deliver(context) {

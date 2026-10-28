@@ -340,6 +340,19 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   ]);
 });
 
+test("Send posts the prompt to the launch's command, guarded, and answers what it printed or why it refused", async (t) => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const body = JSON.parse(options.body);
+    calls.push([new URL(url).pathname, options.method, options.headers?.['x-cadgen-viewer'] ?? null, body]);
+    return body.text === 'accept' ? Response.json({ ok: false, error: 'No feature under the stroke' }) : Response.json({ ok: true, reply: 'Recorded P4' });
+  } });
+  t.after(() => client.dispose());
+  assert.equal(await client.send('repair'), 'Recorded P4');
+  await assert.rejects(client.send('accept'), /No feature under the stroke/);
+  assert.deepEqual(calls, [['/__cad/send', 'POST', '1', { text: 'repair' }], ['/__cad/send', 'POST', '1', { text: 'accept' }]]);
+});
+
 test('rows join by their document id: a symlinked file asked for by both its paths is one row', async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const calls = [];
