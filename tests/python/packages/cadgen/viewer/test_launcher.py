@@ -83,6 +83,12 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(os.path.realpath(json.loads(data)['start']), os.path.realpath(c))
         self.assertEqual(json.loads(data)['pid'], first['pid'])
+        # Quick Edit's phrases are the most recent launch's too: given, kept trimmed; not given, none.
+        self.assertEqual(json.loads(data)['phrases'], [])
+        self.launch('--phrase', 'Repair', '--phrase', ' This is a feature ', '--phrase', ' ', cwd=c)
+        self.assertEqual(json.loads(self.get(first, '/__cad/server')[2])['phrases'], ['Repair', 'This is a feature'])
+        self.launch(cwd=c)
+        self.assertEqual(json.loads(self.get(first, '/__cad/server')[2])['phrases'], [])
         # Both launchers have exited; the shared server still serves the page.
         self.assertEqual(self.get(first, '/')[0], 200)
         self.assertIn('already serves', self.launch('--port', str(first['port']+1), ok=False))

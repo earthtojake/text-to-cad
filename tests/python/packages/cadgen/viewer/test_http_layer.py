@@ -216,8 +216,9 @@ class ServerInfo(HttpLayerTestCase):
         # Where the explorer starts with nowhere else to: the person's home folder, spelled with "/".
         self.assertEqual(info["home"], os.path.expanduser("~").replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
+        self.assertEqual(info["phrases"], [])
         self.assertEqual(list(info), ["app", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "port", "pid"])
+                                      "start", "pick", "phrases", "port", "pid"])
         self.assertEqual(headers["cache-control"], "no-store")
 
     def test_json_is_compact_and_not_ascii_escaped(self):

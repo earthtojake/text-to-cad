@@ -232,6 +232,8 @@ class CadApp:
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a file chooser for the home's Open (``POST /__cad/pick``).
         self.pick = available()
+        # The phrases the most recent launch gave Quick Edit (``cadgen viewer --phrase``): a button each in the page.
+        self.phrases: list[str] = []
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -277,6 +279,7 @@ class CadApp:
             # The folder of the most recent launch, its relative files' folder. Not a boundary.
             "start": self.start,
             "pick": self.pick,
+            "phrases": list(self.phrases),
             "port": self.port,
             "pid": os.getpid(),
         }

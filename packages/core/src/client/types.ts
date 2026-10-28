@@ -24,6 +24,8 @@ export interface CadServerInfo {
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
+  /** The phrases the most recent launch gave Quick Edit (`cadgen viewer --phrase`), a button each; none without. */
+  phrases?: readonly string[];
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
   /** The person's home folder, `/`-separated: where the explorer starts with nowhere else to. */
