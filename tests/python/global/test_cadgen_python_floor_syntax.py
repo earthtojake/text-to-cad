@@ -9,8 +9,10 @@ on 3.11 and then ``cadgen store why`` died with a SyntaxError at import.
 Nothing behavioural can catch this, because the interpreter running the suite
 is the interpreter that accepts the syntax. So it is policy-checked here:
 ``ast.parse(..., feature_version=...)`` asks the CURRENT interpreter to parse
-with an older grammar, which is exactly the question "would the floor accept
-this file?".
+with an older grammar. That answers "would the floor accept this file?" for
+everything but f-strings: their grammar is not versioned, so on 3.12+ it
+accepts PEP 701's -- the very syntax that shipped. Below a 3.12 floor the
+f-strings are checked on the tokens as well.
 
 The floor is read from the package's own ``requires-python``, so raising the
 declared minimum automatically relaxes this check -- the two can never
@@ -54,30 +56,86 @@ def _declared_floor() -> tuple[int, int]:
 
 def _quote(token_text: str) -> str:
     """The delimiter of a string or f-string token, without its prefix letters."""
-    body = token_text.lstrip("rRbBuUfFtT")
+    body = token_text.lstrip("rRbBuUfF")
     return body[:3] if body[:3] in ('"""', "'''") else body[:1]
 
 
-def _same_quote_nesting(source: str) -> list[int]:
-    """Lines where a string inside an f-string's replacement field reuses that f-string's quote.
+class _FString:
+    """An open f-string: its quote, and the brackets open in its replacement fields.
 
-    PEP 701 made this legal in 3.12; 3.11 ends the f-string at the inner quote. ``ast.parse`` with
-    ``feature_version=(3, 11)`` on 3.12+ does not reject it (the f-string grammar is not
-    versioned), so it is checked on the tokens instead. Only 3.12+ tokenizes f-strings into parts.
+    A field's own brace is a list ``[in_format_spec]``; any other bracket is its character.
+    """
+
+    def __init__(self, quote: str) -> None:
+        self.quote = quote
+        self.brackets: list[str | list[bool]] = []
+
+    def reuses_quote(self, token_text: str) -> bool:
+        inner = _quote(token_text)
+        return inner == self.quote if len(self.quote) == 3 else inner.startswith(self.quote)
+
+
+def _pep701_fstrings(source: str) -> dict[int, str]:
+    """Lines whose f-strings need PEP 701 (3.12), each mapped to the first reason found.
+
+    3.11 lexed an f-string as one string literal and parsed its fields afterwards, so a field
+    could not reuse the f-string's quote, hold a backslash or a comment, break the line of a
+    single-quoted f-string, or nest fields more than two deep. ``ast.parse`` with an older
+    ``feature_version`` on 3.12+ accepts all of these (the f-string grammar is not versioned),
+    so they are checked on the tokens; only 3.12+ tokenizes f-strings into parts.
     """
     if not hasattr(tokenize, "FSTRING_START"):
-        return []
-    lines, open_quotes = [], []
+        return {}
+    line_ends = (tokenize.NL, tokenize.NEWLINE)
+    found: dict[int, str] = {}
+    fstrings: list[_FString] = []
+    previous = None
     for tok in tokenize.generate_tokens(io.StringIO(source).readline):
-        if tok.type in (tokenize.STRING, tokenize.FSTRING_START) and open_quotes:
-            inner = _quote(tok.string)
-            if any(inner == outer if len(outer) == 3 else inner.startswith(outer) for outer in open_quotes):
-                lines.append(tok.start[0])
+        top = fstrings[-1] if fstrings else None
+        # In a field's expression: every token of a nested f-string, and every token of the
+        # innermost one but its own literal text (format specs included) and its closing quote.
+        in_expression = len(fstrings) > 1 or (
+            top is not None and tok.type not in (tokenize.FSTRING_MIDDLE, tokenize.FSTRING_END)
+        )
+        # A backslash line continuation is no token: the next one just starts on a later line.
+        continued = (
+            previous is not None and tok.start[0] > previous.end[0] and previous.type not in line_ends
+        )
+        problem = None
+        if tok.type in (tokenize.STRING, tokenize.FSTRING_START) and any(
+            fstring.reuses_quote(tok.string) for fstring in fstrings
+        ):
+            problem = "a string in an f-string field reuses the f-string's quote"
+        elif tok.type == tokenize.COMMENT and fstrings:
+            problem = "a comment in an f-string field"
+        elif in_expression and ("\\" in tok.string or continued):
+            problem = "a backslash in an f-string field"
+        elif (tok.type in line_ends or tok.start[0] != tok.end[0]) and any(
+            len(fstring.quote) == 1 and (fstring.brackets or fstring is not top) for fstring in fstrings
+        ):
+            problem = "a line break in a field of a single-quoted f-string"
+
         if tok.type == tokenize.FSTRING_START:
-            open_quotes.append(_quote(tok.string))
+            fstrings.append(_FString(_quote(tok.string)))
         elif tok.type == tokenize.FSTRING_END:
-            open_quotes.pop()
-    return lines
+            fstrings.pop()
+        elif tok.type == tokenize.OP and top is not None:
+            brackets = top.brackets
+            field = brackets[-1] if brackets and isinstance(brackets[-1], list) else None
+            if tok.string == "{" and (not brackets or (field and field[0])):
+                brackets.append([False])
+                if sum(isinstance(bracket, list) for bracket in brackets) > 2:
+                    problem = problem or "f-string fields nested more than two deep"
+            elif tok.string in ("(", "[", "{"):
+                brackets.append(tok.string)
+            elif tok.string in (")", "]", "}"):
+                brackets.pop()
+            elif tok.string == ":" and field is not None:
+                field[0] = True
+        if problem:
+            found.setdefault(tok.start[0], problem)
+        previous = tok
+    return found
 
 
 def _sources() -> list[Path]:
@@ -111,9 +169,8 @@ class CadgenParsesOnItsDeclaredFloor(unittest.TestCase):
                 continue
             if floor < (3, 12):
                 offenders.extend(
-                    f"{path.relative_to(CADGEN_SRC)}:{line}: f-string nests its own quote "
-                    "(PEP 701, 3.12+)"
-                    for line in _same_quote_nesting(source)
+                    f"{path.relative_to(CADGEN_SRC)}:{line}: {problem} (PEP 701, 3.12+)"
+                    for line, problem in sorted(_pep701_fstrings(source).items())
                 )
 
         self.assertEqual(
@@ -123,17 +180,31 @@ class CadgenParsesOnItsDeclaredFloor(unittest.TestCase):
             f"must parse under that grammar; these do not:\n  " + "\n  ".join(offenders),
         )
 
-    def test_same_quote_nesting_is_caught(self) -> None:
-        # The line that shipped in cadgen/cli/store.py: 3.11 cannot parse it, and
-        # ast.parse(feature_version=(3, 11)) on 3.12+ accepts it anyway.
-        shipped = "x = f\"{c.get('why') or f'{c.get('files', 0)} files unchanged'}\"\n"
-        fixed = "n = c.get('files', 0)\nx = f\"{c.get('why') or f'{n} files unchanged'}\"\n"
+    def test_pep701_fstrings_are_caught(self) -> None:
+        # Each is a SyntaxError on 3.11 that ast.parse(feature_version=(3, 11)) on 3.12+
+        # accepts. The first is the line that shipped in cadgen/cli/store.py.
         if not hasattr(tokenize, "FSTRING_START"):
             self.skipTest("this interpreter (< 3.12) rejects the syntax in ast.parse already")
-        self.assertEqual([1], _same_quote_nesting(shipped))
-        self.assertEqual([], _same_quote_nesting(fixed))
-        self.assertEqual([], _same_quote_nesting('x = f"{a}" + f\'{b["k"]}\'\n'))
-        self.assertEqual([], _same_quote_nesting('x = f"""{d["k"]}"""\n'))
+        for illegal in (
+            "x = f\"{c.get('why') or f'{c.get('files', 0)} files unchanged'}\"\n",
+            "x = f\"{'\\n'.join(a)}\"\n",
+            'x = f"""{a # why\n}"""\n',
+            'x = f"{a +\n b}"\n',
+            'x = f"{a:{b:{c}}}"\n',
+            'x = f"{d["k"] + d["j"]}"\n',
+        ):
+            with self.subTest(illegal):
+                self.assertEqual([1], list(_pep701_fstrings(illegal)))
+        # Their legal neighbours on 3.11: the other quote, a backslash or '#' outside the
+        # expression, a line break inside a triple-quoted f-string, and the field syntax.
+        for legal in (
+            'x = f"{a}" + f\'{b["k"]}\' + f"""{d["k"]}"""\n',
+            'x = f"\\n{a:\\n}" + f"#{a:#x}" + f"{\'#\'}"\n',
+            'x = f"""{a +\n b}"""\n',
+            'x = f"{{a}} {a!r} {a=} {a:>{b}} {a[1:2]}"\n',
+        ):
+            with self.subTest(legal):
+                self.assertEqual({}, _pep701_fstrings(legal))
 
 
 if __name__ == "__main__":
