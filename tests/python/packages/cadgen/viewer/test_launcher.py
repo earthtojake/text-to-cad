@@ -89,6 +89,12 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(json.loads(self.get(first, '/__cad/server')[2])['phrases'], ['Repair', 'This is a feature'])
         self.launch(cwd=c)
         self.assertEqual(json.loads(self.get(first, '/__cad/server')[2])['phrases'], [])
+        # So is Send's command: a launch that names one can send, the next without it cannot.
+        self.assertIs(json.loads(data)['send'], False)
+        self.launch('--send-command', 'agent --reply', cwd=c)
+        self.assertIs(json.loads(self.get(first, '/__cad/server')[2])['send'], True)
+        self.launch(cwd=c)
+        self.assertIs(json.loads(self.get(first, '/__cad/server')[2])['send'], False)
         # Both launchers have exited; the shared server still serves the page.
         self.assertEqual(self.get(first, '/')[0], 200)
         self.assertIn('already serves', self.launch('--port', str(first['port']+1), ok=False))

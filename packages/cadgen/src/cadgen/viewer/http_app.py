@@ -199,7 +199,7 @@ _GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder"
                               "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
                               "/__cad/version"})
 _POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
-                               "/__cad/analytics/activity"})
+                               "/__cad/analytics/activity", "/__cad/send"})
 
 
 class CadApp:
@@ -221,6 +221,7 @@ class CadApp:
 
         from .drawings import DrawingRenders
         from .prompt_files import PromptFiles
+        from .send_command import SendCommand
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -234,6 +235,8 @@ class CadApp:
         self.pick = available()
         # The phrases the most recent launch gave Quick Edit (``cadgen viewer --phrase``): a button each in the page.
         self.phrases: list[str] = []
+        # Where Quick Edit's Send goes: the most recent launch's command (``cadgen viewer --send-command``), none without.
+        self.send_command = SendCommand()
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -280,6 +283,8 @@ class CadApp:
             "start": self.start,
             "pick": self.pick,
             "phrases": list(self.phrases),
+            # Whether Quick Edit can Send: the launch named a command to send to.
+            "send": self.send_command.available,
             "port": self.port,
             "pid": os.getpid(),
         }
@@ -584,6 +589,13 @@ class CadApp:
                         response.send_empty(413, [("connection", "close")])
                         return
                     status, body = self.prompt_files.create(request.body())
+                    response.send_json(status, body)
+                elif pathname == "/__cad/send":
+                    from .send_command import MAX_SEND_BYTES
+                    if int(request.headers.get("content-length") or 0) > MAX_SEND_BYTES:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    status, body = self.send_command.send(request.body())
                     response.send_json(status, body)
                 elif pathname in _GET_ONLY_ROUTES:
                     response.send_bytes(405, b'{"ok":false,"error":"Method not allowed"}',

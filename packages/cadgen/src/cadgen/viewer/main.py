@@ -33,6 +33,9 @@ def parse_args(argv=None, *, prog=DEFAULT_PROG):
     parser.add_argument('--no-open', action='store_true', help='Print the URL without opening a browser.')
     parser.add_argument('--phrase', action='append', default=[], dest='phrases', metavar='TEXT',
                         help='A phrase Quick Edit offers as a button that writes it into the note (repeatable).')
+    parser.add_argument('--send-command', default='', metavar='COMMAND',
+                        help="A program and its arguments that Quick Edit's Send runs, the prompt on its standard input; "
+                             'what it prints is shown in the box.')
     parser.add_argument('--dist', default='', help='Built viewer client directory.')
     parser.add_argument('--api-only', action='store_true', help='Announce the engine for a Vite frontend, without its client build.')
     options = vars(parser.parse_args(argv))
