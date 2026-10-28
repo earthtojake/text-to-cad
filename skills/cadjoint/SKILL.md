@@ -20,7 +20,7 @@ this skill for the first kind of part and `$cad` for the second.
 cadjoint needs Python 3.11 or newer, and macOS's `python3` is 3.9, where
 the install is refused. Create the environment with uv, which fetches a
 managed interpreter, and install the skill's `requirements.txt` into it
-once. The file pins cadjoint to a commit because
+once. The file pins an exact cadjoint release because
 cadjoint's API is not yet stable:
 
 ```bash
@@ -72,11 +72,14 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
    `field_range` gives the deepest point inside: twice that is the
    thickness of the thickest wall the slice cuts. Use it to confirm a wall
    or a blend's reach before exporting at high resolution.
-5. **Review an image** with `$cad`'s snapshot workflow on the exported STL,
-   and compare it with the request before showing anything. Fix the scene
-   and export again rather than describing a defect.
-6. **Show the model** with `$cad`'s viewer workflow, given the absolute path
-   from the report's `path`.
+5. **Review an image** of the exported STL and compare it with the request
+   before showing anything. `$cad`'s snapshot draws it: `cadgen snapshot <path> tmp/review.png`,
+   with `$cad`'s `--camera top` or `--display hidden-line` when one view
+   leaves the question open. Fix the scene and export again rather than
+   describing a defect.
+6. **Show the model** as `$cad`'s Show the model says, given the absolute path
+   from the report's `path`: `cad_show` with that path when your tools include it,
+   otherwise `$cad`'s `cadgen viewer --json <path>`, whose `url` you give the user.
 
 ## Outputs
 
@@ -86,9 +89,9 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
 | OBJ | rendering, other mesh tools | coplanar triangles merged into polygons |
 | STEP (`.step`) | handing a solid to B-rep tools | faceted: one planar face per triangle, 500-900 bytes each, so about 140 MB at 160,000 triangles; no cylinder or plane can be selected as such, and radius measurements read chords. Export STEP at a lower `--resolution` than STL |
 
-A 3MF or GLB comes from the STL through `$cad`. Never hand a faceted STEP to
-a check that needs exact radii (`$dfm`, `$sendcutsend`) without saying it is
-faceted.
+A 3MF or GLB comes from the STL through `$cad`: `cadgen export part.stl part.3mf`.
+Never hand a faceted STEP to a check that needs exact radii (`$dfm`,
+`$sendcutsend`) without saying it is faceted.
 
 ## Rules
 

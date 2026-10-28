@@ -99,7 +99,8 @@ def bad_edges(faces) -> int:
 
 
 # A faceted STEP writes every triangle as its own planar face, 500-900 bytes
-# each. $cad's viewer opened a 143 MB file and failed on a 225 MB one.
+# each, which OCCT reads slowly: $cad's snapshot (cadgen 0.8) took about three
+# minutes to draw a 225 MB one.
 STEP_WARN_BYTES = 150_000_000
 
 
@@ -111,8 +112,9 @@ def review_warnings(
     notes = []
     if fmt == "step" and nbytes > STEP_WARN_BYTES:
         notes.append(
-            f"the faceted STEP is {nbytes / 1e6:.0f} MB, one face per triangle; viewers fail "
-            "around 200 MB: export STEP at a lower --resolution, or hand over the STL"
+            f"the faceted STEP is {nbytes / 1e6:.0f} MB, one face per triangle; a STEP reader "
+            "takes minutes on a file this size: export STEP at a lower --resolution, or "
+            "hand over the STL"
         )
     if open_edges:
         notes.append(

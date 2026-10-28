@@ -244,7 +244,7 @@ class EdgeCheckTest(unittest.TestCase):
 
 class StepSizeTest(unittest.TestCase):
     def test_an_oversized_faceted_step_is_flagged_and_an_stl_is_not(self) -> None:
-        big = 225_000_000  # the size $cad's viewer failed on
+        big = 225_000_000  # cadgen 0.8 took about three minutes to draw this size
         step = cadjoint_export.review_warnings([60, 60, 60], 1, 0.3, 0, "step", big)
         stl = cadjoint_export.review_warnings([60, 60, 60], 1, 0.3, 0, "stl", big)
         self.assertEqual(len(step), 1)
