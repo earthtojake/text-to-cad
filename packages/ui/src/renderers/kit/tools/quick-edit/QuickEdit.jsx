@@ -67,7 +67,9 @@ export function quickEditReferenceIds(selection) {
  * it goes carries the same. A displayed unsaved or retained revision instead carries explicit
  * context that the saved file may differ, preserving text and references without replay jobs; Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
- * clear and close the box once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
+ * clear and close the box once the note has gone, except that a Send its destination answered
+ * (`message` in its receipt: a command's output) keeps the box open on that answer, as a status line,
+ * until the next send or the close; Copy Prompt keeps it all (nothing has gone yet),
  * its button showing a tick for a moment. A failure keeps the note and says why. Its corner resizes it for
  * as long as it is open: the size is the box's own, written to it a frame at a time, so a drag
  * renders nothing, and it goes with the box — the next one opens at the default size.
@@ -99,6 +101,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+  // What the destination answered the last Send, where it answers: shown until the next send or the close.
+  const [reply, setReply] = useState("");
   const field = useRef(null);
   const noteBox = useRef(null);
   const box = useRef(null);
@@ -109,7 +113,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const attached = referenceIds.length > 0 || annotated;
   const written = Boolean(text.trim());
   const replayUnavailable = prompt?.unavailable?.() || "";
-  const open = written || attached;
+  const open = written || attached || Boolean(reply);
   // Docked (a phone's) it is a bottom sheet, opening at a peek of its header and chips; a swipe up,
   // or a tap on its title, brings up the note and its buttons, and a swipe down puts them away again,
   // what is written kept.
@@ -226,7 +230,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const ready = written && !pending && !disabled;
 
   // The note, and everything it would carry: the box goes with them.
-  const clearAll = () => { setText(""); field.current?.replaceChildren(); setError(""); onClear?.(); };
+  const clearAll = () => { setText(""); field.current?.replaceChildren(); setError(""); setReply(""); onClear?.(); };
   // A copied prompt has gone nowhere yet: the box keeps it, and its button says it was copied.
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef(0);
@@ -241,6 +245,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const run = action => {
     if (!actionReady(action)) return;
     setError("");
+    setReply("");
     let outcome;
     try {
       const unavailable = prompt?.unavailable?.() || "";
@@ -259,7 +264,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       try { host.usage?.used("quickEdit"); } catch { /* counting a use never fails it */ }
       controls.used(`quick_edit_${action}`);
       if (action === "copy") showCopied();
-      else clearAll();
+      else {
+        clearAll();
+        if (action === "send" && typeof result?.message === "string" && result.message.trim()) setReply(result.message.trim());
+      }
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setPending(""));
   };
@@ -474,6 +482,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           onInput={event => readNote(event.currentTarget)} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
       </ScrollArea>
       {error ? <p role="alert" className="text-tiny text-destructive">{error}</p> : null}
+      {/* The destination's answer to the last Send, its lines as it wrote them. */}
+      {reply ? <p role="status" className="whitespace-pre-line text-tiny text-muted-foreground" data-quick-edit-reply="">{reply}</p> : null}
       {/* Buttons of the ordinary shape, all solid: the primary in its colour, the others secondary.
           Copy Prompt alone (a host that takes no message) says so in words, its icon first. */}
       <div className="flex items-center justify-end gap-1.5">{ctas()}</div>

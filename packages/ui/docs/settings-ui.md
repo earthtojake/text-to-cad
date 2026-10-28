@@ -900,7 +900,10 @@ first. While there is no note they are disabled, dimmed but still drawn:
 - **Queue** (list-plus icon), where the destination is a composer: the note goes
   into the context of the person's next message.
 - **Send** (up arrow), where the host can post a message: the note goes now, as the
-  person's message.
+  person's message. A destination that answers (the web viewer's `cadgen viewer --send-command`:
+  what the command printed) keeps the box open on its answer, one `muted-foreground` status line
+  in the note's text size under the note, its lines as written, until the next send or the close;
+  a refusal is the ordinary error line and keeps the note.
 
 Where the destination suggests phrases (`phrases` in its state: the web viewer's are the launch's,
 `cadgen viewer --phrase TEXT`), they are one row between the chips and the note, a small `outline`
