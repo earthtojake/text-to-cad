@@ -218,13 +218,13 @@ export default function PrivacyPolicyPage() {
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.1 cadgen telemetry off</code>, use{" "}
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off</code>, use{" "}
             <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.1 cadgen telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.1 cadgen telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
             Setting <code>DO_NOT_TRACK=1</code> or <code>CADGEN_TELEMETRY=0</code> where cadgen runs

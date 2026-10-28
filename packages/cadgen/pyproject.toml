@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.8.1"
+version = "0.8.2"
 description = "CAD models as Python, built by a warm engine into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD Viewer and the tools that show and check them."
 readme = "README.md"
 license = "MIT"
