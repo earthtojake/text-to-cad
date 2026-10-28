@@ -27,7 +27,6 @@ script is never a source. Nothing is written but OUT.
 ```bash
 cadgen snapshot "$ID" tmp/review.png
 cadgen snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
-cadgen snapshot "$ID" tmp/review.png --preview
 ```
 
 A face the mesher left without triangles is drawn without it and named in a
@@ -78,7 +77,7 @@ inline or as a JSON file: `mode`, `grid`, `appearance` (`light` or `dark`), `cam
 document of one part. Unknown keys and out-of-range values are refused.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
-`--preview` draws Preview's photographic look instead of a mode.
+Snapshot draws technical OCCT images. Photographic Preview is available in the browser viewer.
 
 `--camera` is a preset (`iso`, `front`, `back`, `left`, `right`, `top`, `bottom`),
 an `azimuth:elevation` pair in degrees, a camera object (`position`, `target`, `up`,
@@ -201,7 +200,7 @@ still on it.
 ## Mesh files, robots and drawings
 
 - **A mesh** (`.stl`, `.3mf`, `.glb`) takes every display mode, the grid, clip,
-  Explode (a file of several parts), Preview and annotations; `--pose` is refused: a
+  Explode (a file of several parts) and annotations; `--pose` is refused: a
   mesh has no mechanism. A GLB is drawn at rest, its clips not played; its materials
   and base colour textures are drawn.
 - **A robot** (`.urdf`, `.sdf`, `.srdf`) is its links' visuals, each link one colour

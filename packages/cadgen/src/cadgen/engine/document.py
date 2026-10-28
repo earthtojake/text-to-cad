@@ -1686,6 +1686,9 @@ def _read(path: Path) -> Any:
             refuse_external_files(reader, path)
             if not reader.Transfer(doc):
                 raise ValueError(f"cannot read {path}")
+            from cadgen.engine.step_style import read_visual_styles
+
+            read_visual_styles(reader, doc)
         else:
             raise ValueError(f"not a document the engine reads: {path.name}")
     return doc
@@ -1961,6 +1964,7 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
     face_colors: dict[int, tuple] = {}
     face_materials: dict[int, Any] = {}
     part_color = _label_color(label)
+    part_material = _label_material(label)
     subs = Sequence_TDF_Label()
     XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)
     if subs.Length():
@@ -1969,6 +1973,7 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
         edges = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_EDGE, edges)
         holding: list[tuple[Any, tuple]] = []  # coloured sub-shapes that hold faces: solids, shells
+        held_materials: list[tuple[Any, Any]] = []
         for at in range(1, subs.Length() + 1):
             sub = subs.Value(at)
             held = XCAFDoc_ShapeTool.GetShape_s(sub)
@@ -1979,6 +1984,9 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
                 rgba = _label_color(sub)
                 if rgba is not None:
                     holding.append((held, rgba))
+                material = _label_material(sub)
+                if material is not None:
+                    held_materials.append((held, material))
             elif kind == TopAbs_FACE:
                 ordinal = faces.FindIndex(held)
                 if ordinal:
@@ -2006,11 +2014,44 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
                     vertex_names[ordinal] = name
         if holding:
             part_color = _held_colors(faces, holding, part_color, face_colors)
+        if held_materials:
+            part_material = _held_materials(faces, held_materials, part_material, face_materials)
     name = step_name(_label_name(label)) if loaded.step else _label_name(label)
     return Prototype(index, local, name or f"part{index + 1}", part_color, found_key,
-                     face_names, edge_names, face_colors, entry, _label_material(label), face_materials,
+                     face_names, edge_names, face_colors, entry, part_material, face_materials,
                      vertex_names=vertex_names)
 
+
+
+def _held_materials(faces: Any, holding: list[tuple[Any, Any]], material: Any,
+                    face_materials: dict[int, Any]) -> Any:
+    """Apply solid/shell material styles to faces; explicit face styles take precedence."""
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
+
+    held = []
+    for shape, given in holding:
+        inner = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
+        TopExp.MapShapes_s(shape, TopAbs_FACE, inner)
+        held.append((inner, int(shape.ShapeType()), given))
+    by_face: dict[int, Any] = {}
+    for inner, _kind, given in sorted(held, key=lambda item: (-item[0].Extent(), item[1])):
+        for at in range(1, inner.Extent() + 1):
+            ordinal = faces.FindIndex(inner.FindKey(at))
+            if ordinal:
+                by_face[ordinal] = given
+    if len(by_face) == faces.Extent() and len({material_key(value) for value in by_face.values()}) == 1:
+        appearance = next(iter(by_face.values()))
+        if material is not None:
+            from bd_materials import FinishedMaterial
+            return FinishedMaterial(material.material, pbr=appearance.pbr)
+        return appearance
+    key = material_key(material)
+    for ordinal, given in by_face.items():
+        if ordinal not in face_materials and material_key(given) != key:
+            face_materials[ordinal] = given
+    return material
 
 def _held_colors(faces: Any, holding: list[tuple[Any, tuple]], color: tuple | None,
                  face_colors: dict[int, tuple]) -> tuple | None:

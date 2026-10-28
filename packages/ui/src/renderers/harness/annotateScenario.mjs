@@ -199,6 +199,16 @@ export async function runAnnotateScenario({ page, pane, errors, update }) {
   await page.keyboard.press('ControlOrMeta+KeyZ');
   await until('Undo brings them back', seen => seen.green > 100);
 
+  // Back in Select, an ordinary left drag still presents new 3D frames with ink.
+  const selectedCamera = await position();
+  const selectedFrame = await viewport.screenshot({ style: HIDDEN });
+  await drag(at(150, 150), at(250, 190));
+  await page.waitForFunction(before => {
+    const now = window.cadHarness.a.controller.readState().camera.position;
+    return Math.hypot(...now.map((value, index) => value - before[index])) > 1e-3;
+  }, selectedCamera);
+  assert.notDeepEqual(await viewport.screenshot({ style: HIDDEN }), selectedFrame, 'Select orbit presents a new frame after drawing');
+
   // An update of the model discards ink drawn over the revision before it, and the panel with it.
   if (update) {
     await update();

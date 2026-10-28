@@ -230,7 +230,7 @@ function colorFromMaterial(material) {
   }
   const hex = `#${material.color.getHexString()}`.toLowerCase();
   const materialName = String(material.name || "").trim().toLowerCase();
-  const generatedDefault = GENERATED_DEFAULT_MATERIAL_NAMES.has(materialName) &&
+  const generatedDefault = !material.isMeshStandardMaterial && GENERATED_DEFAULT_MATERIAL_NAMES.has(materialName) &&
     GENERATED_DEFAULT_MATERIAL_COLORS.has(hex);
   if (generatedDefault) {
     return {
@@ -327,6 +327,8 @@ function appendMeshPrimitive(THREE, accumulator, mesh, group, material, path) {
     nodeType: "part",
     path,
     color: color && !color.generatedDefault ? color.hex : "",
+    opacity: Number.isFinite(material?.opacity) ? material.opacity : 1,
+    ...(material?.isMeshStandardMaterial ? { finish: { metalness: material.metalness, roughness: material.roughness } } : {}),
     bounds: buildBoundsFromVertices(partVertices),
     vertexOffset,
     vertexCount,
@@ -629,17 +631,172 @@ export async function declared3MfUnit(buffer) {
   return /\sunit\s*=\s*["']([^"']*)["']/.exec(tag || "")?.[1] || "millimeter";
 }
 
+const xmlSpace = byte => byte === 32 || (byte >= 9 && byte <= 13);
+function xmlMatches(bytes, at, text) {
+  for (let i = 0; i < text.length; i++) if (bytes[at + i] !== text.charCodeAt(i)) return false;
+  return true;
+}
+function xmlAfter(bytes, from, ending) {
+  for (let at = bytes.indexOf(ending.charCodeAt(0), from); at >= 0; at = bytes.indexOf(ending.charCodeAt(0), at + 1)) {
+    if (xmlMatches(bytes, at, ending)) return at + ending.length;
+  }
+  throw new Error('Invalid 3MF XML: unterminated markup');
+}
+
+// Read only XML markup. Comments, CDATA, processing instructions and quoted
+// attributes cannot masquerade as a resource or an element's closing tag.
+function xmlTag(bytes, from) {
+  let at = bytes.indexOf(60, from);
+  while (at >= 0) {
+    let skip = null;
+    if (xmlMatches(bytes, at, '<!--')) skip = xmlAfter(bytes, at + 4, '-->');
+    else if (xmlMatches(bytes, at, '<![CDATA[')) skip = xmlAfter(bytes, at + 9, ']]>');
+    else if (xmlMatches(bytes, at, '<?')) skip = xmlAfter(bytes, at + 2, '?>');
+    if (skip !== null) { at = bytes.indexOf(60, skip); continue; }
+    const declaration = bytes[at + 1] === 33;
+    const closing = bytes[at + 1] === 47;
+    const nameStart = at + (closing ? 2 : 1);
+    let nameEnd = nameStart;
+    while (nameEnd < bytes.length && !xmlSpace(bytes[nameEnd]) && ![47, 62].includes(bytes[nameEnd])) nameEnd++;
+    let quote = 0, brackets = 0, end = nameEnd;
+    for (; end < bytes.length; end++) {
+      const byte = bytes[end];
+      if (quote) { if (byte === quote) quote = 0; continue; }
+      if (byte === 34 || byte === 39) quote = byte;
+      else if (declaration && xmlMatches(bytes, end, '<!--')) end = xmlAfter(bytes, end + 4, '-->') - 1;
+      else if (declaration && byte === 91) brackets++;
+      else if (declaration && byte === 93) brackets--;
+      else if (byte === 62 && brackets === 0) break;
+    }
+    if (end >= bytes.length) throw new Error('Invalid 3MF XML: unterminated tag');
+    if (declaration) { at = bytes.indexOf(60, end + 1); continue; }
+    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameEnd));
+    let tail = end - 1; while (xmlSpace(bytes[tail])) tail--;
+    return { start: at, end: end + 1, name, localName: name.split(':').pop(), closing, selfClosing: bytes[tail] === 47 };
+  }
+  return null;
+}
+
+// Skip a whole object/mesh using byte searches, without constructing its DOM or
+// decoding its geometry text. Only same-name tags and XML escape sections matter.
+function xmlElementEnd(bytes, tag) {
+  if (tag.selfClosing) return tag.end;
+  let depth = 1, at = tag.end;
+  const open = new TextEncoder().encode(`<${tag.name}`), close = new TextEncoder().encode(`</${tag.name}`);
+  while ((at = bytes.indexOf(60, at)) >= 0) {
+    if (xmlMatches(bytes, at, '<!--')) { at = xmlAfter(bytes, at + 4, '-->'); continue; }
+    if (xmlMatches(bytes, at, '<![CDATA[')) { at = xmlAfter(bytes, at + 9, ']]>'); continue; }
+    if (xmlMatches(bytes, at, '<?')) { at = xmlAfter(bytes, at + 2, '?>'); continue; }
+    const marker = bytes[at + 1] === 47 ? close : open;
+    if (!marker.every((value, index) => bytes[at + index] === value)
+      || (!xmlSpace(bytes[at + marker.length]) && ![47, 62].includes(bytes[at + marker.length]))) { at++; continue; }
+    const next = xmlTag(bytes, at);
+    depth += next.closing ? -1 : next.selfClosing ? 0 : 1;
+    if (!depth) return next.end;
+    at = next.end;
+  }
+  throw new Error(`Invalid 3MF XML: missing closing ${tag.name}`);
+}
+
+// 3MF Materials 1.2.1 attaches display properties to a base-material GROUP;
+// Three r186 reads an unqualified reference on each base. Bridge only those
+// table bytes. Geometry is never part of the adapter DOM or XML serialization.
+export function bridgeThreeMfMaterialModel(bytes, path = '3MF model') {
+  const keyword = 'pbmetallicdisplayproperties';
+  let candidate = bytes.indexOf(112);
+  while (candidate >= 0 && !xmlMatches(bytes, candidate, keyword)) candidate = bytes.indexOf(112, candidate + 1);
+  if (candidate < 0) return { bytes, adapted: false, materialBearing: false, unit: null };
+  const model = xmlTag(bytes, 0), ranges = [];
+  let resources = null;
+  for (let child = xmlTag(bytes, model.end); child && !child.closing;) {
+    const end = xmlElementEnd(bytes, child);
+    if (child.localName === 'resources') {
+      resources = child;
+      for (let resource = xmlTag(bytes, child.end); resource && !resource.closing;) {
+        const resourceEnd = xmlElementEnd(bytes, resource);
+        if (['basematerials', 'pbmetallicdisplayproperties'].includes(resource.localName)) ranges.push({ start: resource.start, end: resourceEnd });
+        resource = xmlTag(bytes, resourceEnd);
+      }
+      break;
+    }
+    child = xmlTag(bytes, end);
+  }
+  if (!ranges.length) return { bytes, adapted: false, materialBearing: false, unit: null };
+  const decoder = new TextDecoder(), decode = (start, end) => decoder.decode(bytes.subarray(start, end));
+  const document = parse3MfXml(decode(0, model.end) + decode(resources.start, resources.end)
+    + ranges.map(range => decode(range.start, range.end)).join('') + `</${resources.name}></${model.name}>`, path);
+  const ownResources = firstElementChild(document.documentElement, 'resources');
+  const nodes = Array.from(ownResources?.children || []).filter(node => ['basematerials', 'pbmetallicdisplayproperties'].includes(node.localName));
+  const metallic = new Map(elementChildren(ownResources, 'pbmetallicdisplayproperties').map(node => [node.getAttribute('id'), node]));
+  const changed = new Set(), validated = new Set();
+  let materialBearing = false;
+  for (const group of elementChildren(ownResources, 'basematerials')) {
+    const bases = elementChildren(group, 'base');
+    const ids = bases.map(base => attributeByLocalName(base, 'displaypropertiesid') || attributeByLocalName(group, 'displaypropertiesid'));
+    for (const id of new Set(ids)) {
+      if (!id || !metallic.has(id)) continue;
+      materialBearing = true;
+      const values = elementChildren(metallic.get(id), 'pbmetallic');
+      if (values.length !== bases.length) throw new Error(`Invalid 3MF metallic display properties: ${id}`);
+      if (validated.has(id)) continue;
+      for (const value of values) for (const [key, fallback] of [['metallicness', 0], ['roughness', 1]]) {
+        const raw = value.getAttribute(key), number = raw === null ? fallback : Number(raw);
+        if (raw?.trim() === '' || !Number.isFinite(number) || number < 0 || number > 1) throw new Error(`Invalid 3MF metallic display properties: ${id}`);
+        if (raw === null) { value.setAttribute(key, String(fallback)); changed.add(metallic.get(id)); }
+      }
+      validated.add(id);
+    }
+    bases.forEach((base, index) => {
+      if (metallic.has(ids[index]) && base.getAttribute('displaypropertiesid') !== ids[index]) {
+        base.setAttribute('displaypropertiesid', ids[index]); changed.add(group);
+      }
+    });
+  }
+  const patches = nodes.flatMap((node, index) => changed.has(node)
+    ? [{ ...ranges[index], bytes: new TextEncoder().encode(new XMLSerializer().serializeToString(node)) }] : []);
+  if (!patches.length) return { bytes, adapted: false, materialBearing, unit: document.documentElement.getAttribute('unit') || 'millimeter' };
+  const output = new Uint8Array(bytes.length + patches.reduce((sum, patch) => sum + patch.bytes.length - (patch.end - patch.start), 0));
+  let read = 0, write = 0;
+  for (const patch of patches) {
+    output.set(bytes.subarray(read, patch.start), write); write += patch.start - read;
+    output.set(patch.bytes, write); write += patch.bytes.length; read = patch.end;
+  }
+  output.set(bytes.subarray(read), write);
+  return { bytes: output, adapted: true, materialBearing, unit: document.documentElement.getAttribute('unit') || 'millimeter' };
+}
+
+async function threeMfLoaderPackage(buffer) {
+  const { unzipSync, zipSync } = await import('three/examples/jsm/libs/fflate.module.js');
+  const entries = unzipSync(new Uint8Array(buffer));
+  let adapted = false, materialBearing = false, unit = null;
+  for (const [path, bytes] of Object.entries(entries)) {
+    if (!/\.model$/i.test(path)) continue;
+    const result = bridgeThreeMfMaterialModel(bytes, path);
+    entries[path] = result.bytes; adapted ||= result.adapted; materialBearing ||= result.materialBearing;
+    if (unit === null && /^3D\/[^/]+\.model$/i.test(path)) unit = result.unit;
+  }
+  // Store rather than recompress: this temporary package exists only for the loader.
+  const bytes = adapted ? zipSync(entries, { level: 0 }) : null;
+  return { buffer: bytes ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : buffer,
+    materialBearing, unit: unit || await declared3MfUnit(buffer) };
+}
+
 export async function buildMeshDataFrom3MfBuffer(buffer) {
-  const [THREE, { ThreeMFLoader }, { toCreasedNormals }, unit] = await Promise.all([
+  const [THREE, { ThreeMFLoader }, { toCreasedNormals }] = await Promise.all([
     import("three"),
     import("three/examples/jsm/loaders/3MFLoader.js"),
     import("three/examples/jsm/utils/BufferGeometryUtils.js"),
-    declared3MfUnit(buffer),
   ]);
   const loader = new ThreeMFLoader();
+  const compatible = await threeMfLoaderPackage(buffer);
+  const { unit } = compatible;
   try {
-    return { ...buildMeshDataFromThreeMfGroup(THREE, loader.parse(buffer), { toCreasedNormals }), unit };
+    return { ...buildMeshDataFromThreeMfGroup(THREE, loader.parse(compatible.buffer), { toCreasedNormals }), unit };
   } catch (error) {
+    // The geometry-only package fallback cannot retain a metallic material table.
+    // Keep its existing compatibility role for ordinary packages, never hide a
+    // material-bearing loader failure behind a plausible generic surface.
+    if (compatible.materialBearing) throw new Error(`3MF material-bearing package could not be decoded without losing its display properties: ${error.message}`, { cause: error });
     try {
       return { ...await buildMeshDataFrom3MfPackageFallback(THREE, buffer), unit };
     } catch {

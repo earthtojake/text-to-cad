@@ -841,7 +841,7 @@
     "openWorldHint": true,
     "readOnlyHint": false
    },
-   "description": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged. To start: {requestId, source, output} or {requestId, packet}, optionally with display, camera, grid, preview, pose, width, height, size_profile, annotation, measurements, waitMs. To follow one: {action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs. A start returns an asynchronous operation (waitMs waits for its result): call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
+   "description": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged. To start: {requestId, source, output} or {requestId, packet}, optionally with display, camera, grid, pose, width, height, size_profile, annotation, measurements, waitMs. To follow one: {action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs. A start returns an asynchronous operation (waitMs waits for its result): call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
    "inputSchema": {
     "additionalProperties": false,
     "anyOf": [
@@ -907,9 +907,6 @@
          "object",
          "string"
         ]
-       },
-       "preview": {
-        "type": "boolean"
        },
        "requestId": {
         "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
@@ -1054,9 +1051,6 @@
        "object",
        "string"
       ]
-     },
-     "preview": {
-      "type": "boolean"
      },
      "requestId": {
       "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",

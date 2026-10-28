@@ -48,7 +48,7 @@ import numpy as np
 from cadgen.engine.mesh import Mesh
 from cadgen.engine.render.context import Canvas
 from cadgen.engine.render.look import LOOK
-from cadgen.engine.render.shapes import LINES, part_shapes
+from cadgen.engine.render.shapes import LINES, FaceGroup, prototype_shapes
 
 MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
 PRESETS = {
@@ -159,11 +159,6 @@ def camera_in_millimetres(camera: dict[str, Any], factor: float) -> dict[str, An
         scaled["orthographicHalfHeight"] = float(camera["orthographicHalfHeight"]) * factor
     return scaled
 
-
-def prototype_shapes(prototype: dict[str, Any], mesh: Mesh) -> Any:
-    """A prototype's faces by its paints and its edges by class (``shapes.part_shapes``)."""
-    groups = {int(k): tuple(v) for k, v in (prototype.get("faceColors") or {}).items()}
-    return part_shapes(mesh, groups, None)
 
 
 class Scene:
@@ -333,6 +328,8 @@ class Scene:
         prototype = self.prototypes[index]
         if group is None:
             return prototype.get("material")
+        if isinstance(group, FaceGroup):
+            return self.parts[index].materials.get(group)
         paints = prototype.get("faceMaterials") or {}
         ordinal = next((key for key, value in (prototype.get("faceColors") or {}).items() if tuple(value) == group), None)
         return paints.get(ordinal)  # a paint without a material of its own is its colour alone, as the viewer's
@@ -391,7 +388,9 @@ class Scene:
                 rgba = PARTS[instance.get("palette", index) % len(PARTS)]
             if faces:
                 for group in part.faces:
-                    color = rgba if group is None or mode == "parts" else group
+                    color = rgba if group is None or mode == "parts" else (
+                        (group.color if group.color is not None else rgba)
+                        if isinstance(group, FaceGroup) else group)
                     connected = AIS_ConnectedInteractive()
                     connected.Connect(self._faces(p, group, color, look), trsf)
                     context.Display(connected, 1, -1, False)

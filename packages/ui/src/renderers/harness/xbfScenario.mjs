@@ -33,7 +33,7 @@ export const VIEWPORT = Object.freeze({ width: 800, height: 600 });
  * @param {{ after: (cleanup: () => unknown) => void }} lifetime — a test context, or any object
  *   with its `after`, so one server and one browser can span a whole file.
  */
-export async function serveXbfHarness(t) {
+export async function serveXbfHarness(t, { transmission = false } = {}) {
   let server, browser;
   t.after(async () => {
     await browser?.close();
@@ -41,7 +41,10 @@ export async function serveXbfHarness(t) {
   });
   const { bundle, css: bundledCss } = await harnessBundle();
   // The document as it is served now: its version moves with each `update` of an open page.
-  let served = { version: VERSION, structure: STRUCTURE };
+  const structure = JSON.parse(STRUCTURE);
+  if (transmission) structure.prototypes[0].material = { pbr: { values: { transmission: 0.9, roughness: 0.1, ior: 1.5 }, textures: {} } };
+  const initial = Buffer.from(JSON.stringify(structure));
+  let served = { version: VERSION, structure: initial };
   let updates = 0;
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const json = (response, body) => { response.setHeader('Content-Type', 'application/json'); response.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
@@ -104,7 +107,7 @@ export async function serveXbfHarness(t) {
     await page.addInitScript(() => { window.Worker = undefined; });
     await page.goto(`http://127.0.0.1:${server.address().port}/?file=${FILE}`);
     const update = async () => {
-      const next = JSON.parse(STRUCTURE);
+      const next = JSON.parse(initial);
       next.version = `${VERSION}-${(updates += 1)}`;
       served = { version: next.version, structure: Buffer.from(JSON.stringify(next)) };
       // The page hears it on its next wait (about a second), reads it and puts it on screen.

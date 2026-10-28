@@ -788,6 +788,7 @@ test('an alert the model survives is drawn over the tools, where it meets the pa
   await pane.getByRole('region', { name: 'Harness tree', exact: true }).waitFor();
   const tree = pane.locator('[data-cad-file-sidebar]');
   await pane.getByRole('separator', { name: 'Resize file sidebar', exact: true }).press('End');
+  await tree.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   // A failed update keeps the model, and with it the tools: the card stands over both.
   await pane.locator('[data-harness-stage="failed"]').click();
   const card = pane.getByRole('alert');

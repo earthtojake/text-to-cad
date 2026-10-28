@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildMeshDataFromGlbBuffer } from "./glbMeshData.js";
+import { buildMeshDataFromGlbBuffer, buildGlbDocumentFromBuffer } from "./glbMeshData.js";
+import { createGlbScene } from "./glbScene.js";
+import * as THREE from "three";
 
 function pad4(buffer, padByte = 0) {
   const padding = (4 - (buffer.length % 4)) % 4;
@@ -26,6 +28,9 @@ function makeOccurrenceGlb({
   upAxis = null,
   materialBaseColor = null,
   materialExtras = null,
+  materialPbr = null,
+  materialExtensions = null,
+  duplicateMesh = false,
   vertexColors = null
 } = {}) {
   const positions = floatBuffer([
@@ -49,6 +54,7 @@ function makeOccurrenceGlb({
     asset: {
       version: "2.0"
     },
+    ...(materialExtensions ? { extensionsUsed: Object.keys(materialExtensions) } : {}),
     scenes: [
       {
         nodes: [0]
@@ -78,8 +84,10 @@ function makeOccurrenceGlb({
           materials: [
             {
               pbrMetallicRoughness: {
-                baseColorFactor: materialBaseColor
+                baseColorFactor: materialBaseColor,
+                ...materialPbr
               },
+              ...(materialExtensions ? { extensions: materialExtensions } : {}),
               ...(materialExtras ? { extras: materialExtras } : {})
             }
           ]
@@ -146,6 +154,10 @@ function makeOccurrenceGlb({
         : [])
     ]
   };
+  if (duplicateMesh) {
+    gltf.nodes.push({ ...gltf.nodes[0], name: "shared-material-copy" });
+    gltf.scenes[0].nodes.push(1);
+  }
   const json = pad4(Buffer.from(JSON.stringify(gltf), "utf8"), 0x20);
   const header = Buffer.alloc(12);
   header.writeUInt32LE(0x46546c67, 0);
@@ -631,4 +643,51 @@ test("a GLB primitive without normals is shaded flat, each triangle its own, mir
     }
     assert.deepEqual(normals, expected, `scale ${scale}`);
   }
+});
+
+
+test("native GLB materials keep authored Standard and Physical finishes in edit and sibling views", async () => {
+  for (const physical of [false, true]) {
+    const buffer = makeOccurrenceGlb({ duplicateMesh: true, materialBaseColor: [0.2, 0.3, 0.4, 1],
+      materialPbr: { metallicFactor: 1, roughnessFactor: 0.3 },
+      materialExtensions: physical ? {
+        KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.15 },
+        KHR_materials_transmission: { transmissionFactor: 0.8 },
+        KHR_materials_volume: { thicknessFactor: 0.006, attenuationDistance: 0.05, attenuationColor: [0.8, 0.9, 0.85] }
+      } : null });
+    const original = new Uint8Array(buffer).slice();
+    const document = await buildGlbDocumentFromBuffer(buffer);
+    const loadedMeshes = []; document.scene.traverse(object => { if (object.isMesh) loadedMeshes.push(object); });
+    assert.equal(loadedMeshes.length, 2);
+    assert.equal(loadedMeshes[0].material, loadedMeshes[1].material, "the loader shares the source material");
+    const mesh = loadedMeshes[0], authored = mesh.material;
+    if (physical) assert.equal(authored.attenuationDistance, 50, "a shared material is converted once, not once per mesh");
+    assert.equal(authored.userData.cadAuthoredFinish, true);
+    assert.equal(Boolean(authored.isMeshPhysicalMaterial), physical);
+    const scene = createGlbScene(THREE, document);
+    const look = { authored: false, surface: { style: "shaded", opacity: 1 },
+      materialSettings: { defaultColor: "#b6c4ce", roughness: 0.58, metalness: 0.02, clearcoat: 0.12, envMapIntensity: 0 } };
+    scene.setSurfaceLook(look);
+    assert.equal(scene.keepsAuthoredFinish, true, "regular edit requests the existing neutral reflection environment");
+    assert.deepEqual([mesh.material.metalness, mesh.material.roughness], [1, 0.3]);
+    if (physical) assert.deepEqual([mesh.material.clearcoat, mesh.material.transmission, mesh.material.thickness, mesh.material.attenuationDistance], [1, 0.8, 0.006, 50]);
+    for (let entry = 0; entry < 2; entry++) {
+      const sibling = scene.createSibling();
+      sibling.setSurfaceLook({ ...look, authored: true });
+      let copy; sibling.object3D.traverse(object => { if (object.isMesh) copy = object; });
+      assert.notEqual(copy.material, authored);
+      assert.deepEqual([copy.material.metalness, copy.material.roughness], [1, 0.3]);
+      if (physical) assert.deepEqual([copy.material.thickness, copy.material.attenuationDistance], [0.006, 50], "sibling creation never repeats the loader's world-unit conversion");
+      sibling.dispose();
+    }
+    assert.deepEqual(new Uint8Array(buffer), original, "loading never rewrites the file bytes");
+    if (physical) assert.equal(authored.attenuationDistance, 50);
+    scene.dispose();
+  }
+  const document = await buildGlbDocumentFromBuffer(makeOccurrenceGlb());
+  const scene = createGlbScene(THREE, document);
+  assert.equal(scene.keepsAuthoredFinish, false, "GLTFLoader's implicit material retains the viewer fallback");
+  scene.setSurfaceLook({ authored: false, surface: { style: "shaded", opacity: 1 }, materialSettings: { roughness: 0.58, metalness: 0.02 } });
+  scene.object3D.traverse(object => { if (object.isMesh) assert.deepEqual([object.material.roughness, object.material.metalness], [0.58, 0.02]); });
+  scene.dispose();
 });

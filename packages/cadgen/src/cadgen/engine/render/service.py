@@ -68,7 +68,8 @@ def _matrix(values: list[float]) -> np.ndarray:
 
 
 def _paints(prototype: dict[str, Any]) -> str:
-    return json.dumps(prototype.get("faceColors") or {}, sort_keys=True)
+    return json.dumps({"faces": prototype.get("faceColors") or {},
+                       "materials": prototype.get("faceMaterials") or {}}, sort_keys=True)
 
 
 # --- the camera --------------------------------------------------------------------------------

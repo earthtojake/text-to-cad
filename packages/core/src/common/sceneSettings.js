@@ -289,7 +289,7 @@ function applyPartColor(settings, partColor) {
 /**
  * Public grouped preset policy; historical display modes are draw details. `preview` asks for
  * Preview's photographic look (Render) over the same display, with Preview's own settings
- * (`previewSettings`): Preview's scene, a snapshot's `--preview`. No file is in Render.
+ * (`previewSettings`). No file is in Render.
  */
 export function resolveViewSceneSettings({
   display = {}, appearance = "light", prefersDark = false, camera = null, quality = null,

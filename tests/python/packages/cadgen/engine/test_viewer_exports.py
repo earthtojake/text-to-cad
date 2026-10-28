@@ -136,7 +136,13 @@ class ViewerExportHttpTest(unittest.TestCase):
             self.assertEqual(len(data), job['bytes'])
             self.assertGreater(len(data), 84)
             self.assertIn('attachment;', headers['content-disposition'])
-            # Fetched whole, the file is gone: the page offers to export it again.
+            # Reading the final bytes can beat the serving thread's completion cleanup.
+            # Await its observable transition before checking that the artifact is gone.
+            code, _, data = http(f"/__cad/exports/{job['id']}?after={job['sequence']}&wait=25")
+            self.assertEqual(code, 200, data)
+            completed = json.loads(data)
+            self.assertEqual(completed['state'], 'expired', completed)
+            self.assertTrue(completed['fetched'], completed)
             self.assertEqual(http(f"/__cad/exports/{job['id']}/file")[0], 410)
             def export(request_id):
                 payload['requestId'] = request_id

@@ -620,7 +620,7 @@ function inkBounds(runtime, items) {
  * annotation's ink as it is now, making objects only for items it has not drawn yet and dropping those
  * it no longer has (an item is never changed in place: a changed one is a new item), and halos the
  * ink Select has picked (`selected`, ids) and, fainter, what the pointer rests on (`hovered`). Every
- * frame, before anything is drawn, each mark takes the clip planes the model has; the marks stay
+ * draw, before the ink is drawn, each mark takes the clip planes the model has; the marks stay
  * where they were drawn.
  *
  * @param {object} runtime
@@ -642,22 +642,15 @@ export function mountAnnotations(runtime) {
     const planes = Array.isArray(runtime.activeClipPlanes) ? runtime.activeClipPlanes : [];
     for (const object of [...entries.values(), ...halos.values()]) clipAnnotationObject(object, planes);
   };
-  let previous = scene.onBeforeRender;
-  let ran = false;
-  const hook = function inkBeforeRender(...args) { ran = true; follow(); return previous?.apply(this, args); };
-  const install = () => { previous = scene.onBeforeRender; scene.onBeforeRender = hook; };
-  install();
-  // Another owner of the scene's hook (the photographic studio) puts back whatever it found when it
-  // leaves, which can drop this one. A sentinel drawn every frame (writing nothing) checks that the
-  // hook ran for this frame — whoever wraps whom — and, if it did not, puts it back for the next.
+  // Three can draw an opaque object more than once within a scene render (for example,
+  // the transmission buffer before the main view). Update clipping before the ink draws
+  // without wrapping a scene hook: counting object callbacks as frames could make that
+  // hook wrap itself and recurse forever on glass models.
   const sentinel = new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3)),
     new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false }));
   sentinel.frustumCulled = false;
   sentinel.renderOrder = -1e9;
-  sentinel.onBeforeRender = () => {
-    if (!ran) { install(); redraw(); }
-    ran = false;
-  };
+  sentinel.onBeforeRender = follow;
   group.add(sentinel);
   const release = disposeAnnotationObject;
   return {
@@ -698,7 +691,6 @@ export function mountAnnotations(runtime) {
     },
     dispose() {
       runtime.annotationBounds = null;
-      if (scene.onBeforeRender === hook) scene.onBeforeRender = previous;
       group.removeFromParent();
       sentinel.geometry.dispose();
       sentinel.material.dispose();

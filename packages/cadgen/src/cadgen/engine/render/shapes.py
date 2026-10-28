@@ -7,16 +7,17 @@ So OCCT draws the very triangles and polylines the engine meshed (the engine's d
 viewer's buffer), and never meshes anything itself: a face with a triangulation and no surface
 is drawn as it is, an edge with a 3D polygon likewise.
 
-A part becomes one face per colour group (its faces of one colour merged into one
+A part becomes one face per colour and material group (matching faces merged into one
 triangulation) and one compound of edges per edge class (``feature``: feature, boundary and
 non-manifold edges, as the viewer groups them; ``tangent``; ``seam``), each edge one polyline.
 A mesh file's part may bring texture coordinates (a GLB's, ``formats/glb.py``): its faces' nodes
-carry them, and ``textures`` holds the texture each colour group is drawn with.
+carry them, and ``textures`` holds the texture each face group is drawn with.
 """
 
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,15 +41,24 @@ _POLY = np.dtype([("n", "<i4"), ("params", "u1"), ("deflection", "<f8")])
 assert _EDGE.itemsize == 30 and _FACE.itemsize == 31 and _CHILD.itemsize == 9 and _POLY.itemsize == 13
 
 
+@dataclass(frozen=True)
+class FaceGroup:
+    """A painted colour and material identity, independent of face order."""
+
+    color: tuple | None
+    material_key: str | None
+
+
 @dataclass
 class PartShapes:
-    """A part's faces by colour group and its edges by class, in the part's own frame."""
+    """A part's faces by colour and material group and its edges by class, in the part's own frame."""
 
     faces: dict[Any, Any] = field(default_factory=dict)  # group: TopoDS_Face (triangulation only)
     edges: dict[str, Any] = field(default_factory=dict)  # line class: TopoDS_Compound of polygon edges
     triangles: int = 0
     edge_count: int = 0
     textures: dict[Any, Any] = field(default_factory=dict)  # group: its texture set (a GLB's)
+    materials: dict[Any, Any] = field(default_factory=dict)  # group: its face material
 
 
 def _compound(children: np.ndarray) -> bytes:
@@ -143,9 +153,40 @@ def read(data: bytes) -> Any:
     return shape
 
 
+
+def prototype_shapes(prototype: dict[str, Any], mesh: Mesh, *, uvs: np.ndarray | None = None,
+                     textures: dict[Any, Any] | None = None) -> PartShapes:
+    """Keep each distinct face colour and finish apart, including material-only faces."""
+    colors = prototype.get("faceColors") or {}
+    materials = prototype.get("faceMaterials") or {}
+    groups = {}
+    group_materials = {}
+    group_textures = {}
+    encoded: dict[int, str] = {}
+    for ordinal in set(colors) | set(materials):
+        material = materials.get(ordinal)
+        raw_color = colors.get(ordinal)
+        color = tuple(raw_color) if raw_color is not None else None
+        material_key = None
+        if material is not None:
+            identity = id(material)
+            if identity not in encoded:
+                encoded[identity] = json.dumps(material, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            material_key = encoded[identity]
+        group = FaceGroup(color, material_key)
+        groups[int(ordinal)] = group
+        if material is not None:
+            group_materials[group] = material
+        if textures and raw_color is not None and tuple(raw_color) in textures:
+            group_textures[group] = textures[tuple(raw_color)]
+    result = part_shapes(mesh, groups, None, uvs=uvs)
+    result.materials = group_materials
+    result.textures = group_textures
+    return result
+
 def part_shapes(mesh: Mesh, group_of: dict[int, Any] | None = None, default: Any = None,
                 uvs: np.ndarray | None = None) -> PartShapes:
-    """The part's faces, one per colour group (``group_of``: face ordinal -> group; every
+    """The part's faces, one per group (``group_of``: face ordinal -> group; every
     other face is ``default``'s), and its edges by class, as triangulation-only and polygon
     shapes read from one crafted BinTools buffer; ``uvs`` (each vertex's texture coordinates)
     on its faces' nodes."""

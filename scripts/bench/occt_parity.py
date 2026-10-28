@@ -21,8 +21,8 @@ points the camera sees (no triangle in front of them), sampled in Solid and Shad
 point's hue against its material's colour (CIELab hue angle, degrees) and its chroma over the
 colour's, per renderer -- a metal washed out to cream or white keeps neither.
 
-``--preview`` adds Preview at each camera (``preview-iso``, ...): OCCT's drawn as ``cadgen
-snapshot --preview`` draws it (``render/service.py``'s ``Held``), the page's with the job's
+The bench's ``--preview`` adds its internal photographic comparison at each camera
+(``preview-iso``, ...): OCCT's ``render/service.py`` ``Held`` rig, the page's with the job's
 ``"preview": true``. Its studio is no flat backdrop, so the model's pixels are those where OCCT's
 picture differs from its own studio drawn without the model (``preview-<camera>-studio.png``), and
 ΔE is measured there alone: a difference of studio or shadow is not the model's, and IoU is n/a.

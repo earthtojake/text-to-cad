@@ -262,15 +262,14 @@ class ExportTest(unittest.TestCase):
         # A painted colour is a face's colour in the STEP as in the xbf.
         red = [rgba for rgba in plate.face_colors.values() if rgba == (1.0, 0.0, 0.0, 1.0)]
         self.assertEqual(red, [rgba for rgba in read_plate.face_colors.values() if rgba == (1.0, 0.0, 0.0, 1.0)])
-        # What OCCT's STEP writer drops: the PBR look (metallic, roughness), a face's material
-        # (its colour stays), and the mechanism.
-        self.assertEqual(plate.material.pbr.values.metalness, 1.0)
-        self.assertEqual(read_plate.material.pbr.values.metalness, 0.0)
-        self.assertEqual(len(plate.face_materials), 1)
-        self.assertEqual(read_plate.face_materials, {})
+        # The standard STEP rendering style retains an approximate metallic/roughness look
+        # on each styled part and face; advanced PBR and mechanism data stay outside this mapping.
+        self.assertAlmostEqual(read_plate.material.pbr.values.metalness, plate.material.pbr.values.metalness, places=4)
+        self.assertAlmostEqual(read_plate.material.pbr.values.roughness, plate.material.pbr.values.roughness, places=4)
+        self.assertEqual(set(read_plate.face_materials), set(plate.face_materials))
         [ordinal] = plate.face_materials
-        self.assertEqual(read_plate.face_colors[ordinal][:3], plate.face_colors.get(ordinal, plate.face_materials[
-            ordinal].color)[:3])
+        self.assertAlmostEqual(read_plate.face_materials[ordinal].pbr.values.metalness,
+                               plate.face_materials[ordinal].pbr.values.metalness, places=4)
         self.assertIn("kinematics", built)
         self.assertNotIn("kinematics", read)
 
@@ -574,6 +573,125 @@ class StepTest(unittest.TestCase):
         found = read if read.label == "grey" else next(node for node in read.children if node.label == "grey")
         for got, want in zip(tuple(found.color), (0.58, 0.62, 0.66, 1.0)):
             self.assertAlmostEqual(got, want, delta=1e-6)
+
+    def test_standard_material_styles_are_bound_to_parts_and_faces(self) -> None:
+        from dataclasses import replace
+        import build123d as bd
+        from bd_materials import FinishedMaterial
+        from cadgen.engine import paint
+
+        physical = replace(metals.aluminum().material, name="identical name")
+        smooth = FinishedMaterial(physical, pbr=metals.aluminum().pbr.override(roughness=0.1))
+        rough = FinishedMaterial(physical, pbr=metals.aluminum().pbr.override(roughness=0.7))
+        red = bd.Box(8, 8, 8)
+        red.color, red.material, red.label = bd.Color(0.8, 0.1, 0.2), smooth, "same"
+        red = paint(red, red.faces()[0], rough)
+        blue = bd.Pos(12, 0, 0) * bd.Box(8, 8, 8)
+        blue.color, blue.material, blue.label = bd.Color(0.1, 0.2, 0.8), rough, "same"
+        path = self.write(bd.Compound(children=[red, blue], label="kit"), "kit")
+        text = path.read_text(encoding="utf-8")
+        self.assertIn("SURFACE_STYLE_REFLECTANCE_AMBIENT_DIFFUSE_SPECULAR", text)
+        self.assertNotIn("= ?();", text)
+        loaded = document.Loaded(path)
+        parts = [p for p in loaded.prototypes if p.material is not None]
+        self.assertEqual(len(parts), 2)
+        self.assertEqual(sorted(round(p.material.pbr.values.roughness, 4) for p in parts), [0.1, 0.7])
+        self.assertTrue(all(p.material.pbr.values.metalness > .98 for p in parts))
+        painted = next(p for p in parts if p.face_materials)
+        self.assertEqual(len(painted.face_materials), 1)
+        self.assertAlmostEqual(next(iter(painted.face_materials.values())).pbr.values.roughness, 0.7, places=4)
+
+    def test_detached_step_styles_are_pruned_without_removing_shared_records(self) -> None:
+        from cadgen.engine.export.step import _prune_unused_styles
+
+        source = (b"DATA;\n#1 = ADVANCED_FACE('',(),#2,.T.);\n"
+                  b"#10 = MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION('',(#11),#2);\n"
+                  b"#11 = STYLED_ITEM('',(#12),#1);\n"
+                  b"#12 = PRESENTATION_STYLE_ASSIGNMENT((#13));\n"
+                  b"#13 = SURFACE_STYLE_USAGE(.BOTH.,#14);\n"
+                  b"#14 = SURFACE_SIDE_STYLE('',(#15));\n"
+                  b"#15 = SURFACE_STYLE_FILL_AREA(#16);\n"
+                  b"#16 = COLOUR_RGB('',.2,.3,.4);\n"
+                  b"#20 = PRESENTATION_STYLE_ASSIGNMENT((#21));\n"
+                  b"#21 = SURFACE_STYLE_USAGE(.BOTH.,#22);\n"
+                  b"#22 = SURFACE_SIDE_STYLE('',(#15));\nENDSEC;")
+        result = _prune_unused_styles(source)
+        self.assertIn(b"#1 = ADVANCED_FACE", result)
+        self.assertIn(b"#12 = PRESENTATION_STYLE_ASSIGNMENT", result)
+        self.assertIn(b"#15 = SURFACE_STYLE_FILL_AREA", result)
+        self.assertIn(b"#16 = COLOUR_RGB", result)
+        self.assertNotIn(b"#20 =", result)
+        self.assertNotIn(b"#21 =", result)
+        self.assertNotIn(b"#22 =", result)
+
+    def test_invalid_standard_reflectance_keeps_foreign_colour(self) -> None:
+        import re
+        import build123d as bd
+
+        part = bd.Box(3, 3, 3)
+        part.material = metals.aluminum()
+        part.color = bd.Color(.2, .4, .6)
+        path = self.write(part, "foreign")
+        text = path.read_text(encoding="utf-8")
+        edited, count = re.subn(
+            r"(SURFACE_STYLE_REFLECTANCE_AMBIENT_DIFFUSE_SPECULAR\(\s*)[^,]+",
+            r"\g<1>-1.0", text)
+        self.assertGreater(count, 0)
+        path.write_text(edited, encoding="utf-8")
+        prototype = document.Loaded(path).prototypes[0]
+        self.assertAlmostEqual(prototype.color[0], part.color.wrapped.GetRGB().Red(), places=5)
+        self.assertEqual(prototype.material.pbr.values.metalness, 0.0)
+
+    def test_compound_solids_keep_distinct_standard_appearances(self) -> None:
+        from dataclasses import replace
+        import build123d as bd
+        from bd_materials import FinishedMaterial
+        from OCP.XCAFDoc import XCAFDoc_DocumentTool
+        from cadgen.engine.export.step import write_document
+
+        physical = replace(metals.aluminum().material, name="compound metal")
+        smooth = FinishedMaterial(physical, pbr=metals.aluminum().pbr.override(roughness=.1))
+        rough = FinishedMaterial(physical, pbr=metals.aluminum().pbr.override(roughness=.7))
+        first, second = bd.Box(2, 2, 2), bd.Pos(5, 0, 0) * bd.Box(2, 2, 2)
+        source = document._new_document()
+        tool = XCAFDoc_DocumentTool.ShapeTool_s(source.Main())
+        product = tool.AddShape(bd.Compound(children=[first, second]).wrapped, False)
+        materials = document._Materials(source)
+        materials.set(product, smooth, (.2, .3, .4, 1.))
+        for shape, look in ((first, smooth), (second, rough)):
+            materials.set(tool.AddSubShape(product, shape.wrapped), look, (.2, .3, .4, 1.))
+        path = self.folder / "compound.step"
+        write_document(source, path)
+        prototype = document.Loaded(path).prototypes[0]
+        roughness = [round(prototype.face_materials.get(i, prototype.material).pbr.values.roughness, 4)
+                     for i in range(1, 13)]
+        self.assertEqual(sorted(roughness), [.1] * 6 + [.7] * 6)
+
+    def test_solid_appearance_promotion_keeps_product_physics(self) -> None:
+        import build123d as bd
+        from bd_materials import FinishedMaterial
+        from OCP.TopAbs import TopAbs_FACE
+        from OCP.TopExp import TopExp
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
+
+        source = metals.aluminum()
+        appearance = FinishedMaterial(source.material, pbr=source.pbr.override(roughness=.7))
+        first, second = bd.Box(2, 2, 2), bd.Pos(5, 0, 0) * bd.Box(2, 2, 2)
+        compound = bd.Compound(children=[first, second])
+        faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
+        TopExp.MapShapes_s(compound.wrapped, TopAbs_FACE, faces)
+        face_materials = {}
+        held = [(first.wrapped, appearance), (second.wrapped, appearance)]
+        promoted = document._held_materials(faces, held, source, face_materials)
+        self.assertEqual(promoted.material, source.material)
+        self.assertAlmostEqual(promoted.pbr.values.roughness, .7)
+        self.assertEqual(face_materials, {})
+        face_materials = {}
+        held[1] = (second.wrapped, source)
+        promoted = document._held_materials(faces, held, source, face_materials)
+        self.assertEqual(promoted.material, source.material)
+        self.assertEqual(len(face_materials), 6)
+        self.assertTrue(all(value.pbr.values.roughness == .7 for value in face_materials.values()))
 
     def test_a_placeholder_occurrence_name_is_its_product_s_and_escapes_read_as_text(self) -> None:
         import build123d as bd

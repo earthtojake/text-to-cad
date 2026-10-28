@@ -157,6 +157,7 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
   return {
     document,
     meshCount: look.meshCount,
+    keepsAuthoredFinish: [...authored.values()].some(list => list.some(material => material?.userData?.cadAuthoredFinish === true)),
     object3D: root,
     get bounds() { return explodedBounds || bounds; },
     restBounds: bounds,

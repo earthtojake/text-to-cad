@@ -1233,7 +1233,7 @@ class ToolArgumentsTest(unittest.TestCase):
     def test_a_refusal_names_every_argument_missing_and_unknown_and_what_the_tool_takes(self) -> None:
         server = self.served("text")
         shape = ("To start: {requestId, source, output} or {requestId, packet}, optionally with display, camera, grid, "
-                 "preview, pose, width, height, size_profile, annotation, measurements, waitMs. To follow one: "
+                 "pose, width, height, size_profile, annotation, measurements, waitMs. To follow one: "
                  "{action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs.")
         for arguments, said in (({"path": str(self.model)}, "missing requestId, source, output; unknown path"),
                                 ({"id": DOCUMENT_ID, "out": str(self.tmp / "a.png")}, "missing requestId, source, output; unknown id, out"),

@@ -99,18 +99,17 @@ test("a family scene on the headless stage wears exactly the look the viewer's v
   }
 });
 
-test("the look is really worn: Inspect's finish in Solid, a GLB's authored finish in Render, shadows only under the lights", async () => {
+test("the look is really worn: a GLB keeps its authored finish in Solid and Render, shadows only under the lights", async () => {
   const solid = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes("pair.slide.glb"))),
     headlessSceneDress(settingsFor(DISPLAYS["solid light"], "glb")));
   const render = headlessSceneModel(THREE, headlessSceneFamily(job("glb")).build(THREE, await buildGlbDocumentFromBuffer(glbBytes("pair.slide.glb"))),
     headlessSceneDress(settingsFor(DISPLAYS.preview, "glb")));
   const base = model => model.displayRecords.find(({ mesh }) => mesh.parent?.name === "base" || mesh.name === "base").mesh;
-  const inspect = settingsFor(DISPLAYS["solid light"], "glb").theme.materials;
-  assert.deepEqual([base(solid).material.roughness, base(solid).material.metalness], [inspect.roughness, inspect.metalness],
-    "Inspect wears the viewer's surface over the file's colour");
+  assert.deepEqual([base(solid).material.roughness, base(solid).material.metalness], [0.05, 1],
+    "Inspect keeps the file's authored PBR finish");
   assert.deepEqual([base(render).material.roughness, base(render).material.metalness], [0.05, 1], "Render keeps the finish the file authored");
   assert.deepEqual([base(solid).receiveShadow, base(render).receiveShadow], [false, true]);
-  assert.equal(solid.keepsAuthoredFinish, false, "a GLB asks Inspect for no reflection environment, as it does of the viewport");
+  assert.equal(solid.keepsAuthoredFinish, true, "authored GLB finishes request the same neutral reflection fill as the viewport");
   solid.dispose();
   render.dispose();
 });

@@ -38,7 +38,7 @@ SNAPSHOT = {"source": STRING,
             "output": {**STRING, "description": "The PNG's absolute path; required with source unless a packet names the outputs."},
             "packet": {**JSON_VALUE, "description": "A Quick Edit packet (its absolute path or object), which declares its outputs: "
                                                     "give it in place of output; a source with it replaces its input."},
-            "display": JSON_VALUE, "camera": JSON_VALUE, "grid": BOOL, "preview": BOOL,
+            "display": JSON_VALUE, "camera": JSON_VALUE, "grid": BOOL,
             "pose": {"type": ["object", "string"]}, "width": {"type": "integer", "minimum": 1},
             "height": {"type": "integer", "minimum": 1}, "size_profile": STRING,
             "annotation": JSON_VALUE, "measurements": JSON_VALUE}
@@ -176,7 +176,7 @@ def checked(value, schema, label="arguments"):
 # The snapshot's words name its command's flags (``--pose '{"hinge": 90}'``); a cad_snapshot's caller
 # gave arguments: the same words with each flag named as the argument it is.
 _FLAG_VALUE = re.compile(r"--(pose|display|camera) '([^']*)'")
-_FLAG = re.compile(r"--(pose|display|camera|annotation|measurements|width|height|grid|preview|size-profile)\b")
+_FLAG = re.compile(r"--(pose|display|camera|annotation|measurements|width|height|grid|size-profile)\b")
 
 
 def arguments_named(text):

@@ -83,12 +83,12 @@ anything else (a per-mode tree, a style group) fails validation.
 ```
 
 Preview's photographic look (Render) is no mode: it is asked for on its own, by the
-viewer's Preview and a snapshot's `preview`, over the same display. Its own settings
+viewer's Preview and the parity page, over the same display. Its own settings
 (`PreviewSettings`: `parts`, `lighting`, `background`, `floor`) are the viewer's,
 kept beside the display, never in it (`normalizePreviewSettings`,
-`resolvePreviewSettings`, `previewSettingsChanged`); a snapshot draws Preview at its
-defaults. `readViewSettings` and `readPreviewSettings` read a stored record setting
-by setting, leaving out what this build cannot read, without rewriting it.
+`resolvePreviewSettings`, `previewSettingsChanged`). `readViewSettings` and
+`readPreviewSettings` read a stored record setting by setting, leaving out what this
+build cannot read, without rewriting it.
 
 `resolveViewSettings` returns the established renderer groups. Solid is shaded with
 the model's visible CAD edges where the view offers them (`edges`); Shaded is the same
@@ -120,7 +120,7 @@ and normal effect colors. A mesh with several materials uses its first material
 as its cap color; texture and vertex-color variation are not sampled.
 
 `resolveViewSceneSettings({display, preview, previewSettings, camera, appearance, quality})` is the public
-Viewer/snapshot scene-policy boundary (`preview`: Render over the display, as above). Its `view` is the full grouped state;
+Viewer/parity-page scene-policy boundary (`preview`: Render over the display, as above). Its `view` is the full grouped state;
 `display` is the historical internal draw policy, including `surfaces` and
 edge color/visibility. `camera` combines the top-level pose with the grouped
 lens. Public top-level and per-output cameras contain pose/framing only;
@@ -156,10 +156,8 @@ the origin visible. Depth fitting includes the actual floor elevation;
 orthographic views can use a signed near plane when the floor crosses the eye.
 
 Lighting quality is `preview` or `final`, mapping to standard/high scene policy.
-The viewer passes `lightingQuality: "preview"`; the CLI baseline is `final`.
-That environment default also feeds Preview's default comparison and does not pin a saved
-override. An explicit Preview `lighting.quality` wins in the viewer; a snapshot's `preview`
-is always `final`.
+The viewer defaults to `lightingQuality: "preview"`; an explicit Preview
+`lighting.quality` selects `final`.
 Final is the High scene preset: 4096px spotlight shadows, a 512px procedural environment
 and 2x snapshot capture, and a still view in the viewer converges over 64 samples of the
 studio's frame (Preview: 32). `output.renderScale` is an explicit raster override; every
@@ -334,9 +332,30 @@ colour the structure gives them (`lib/xbf/xbfLook.js`); a part with none wears t
 surface (`PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS`).
 A GLB, a mesh file and a robot reach the studio as the scene their viewer renderer
 builds. A GLB is its native glTF hierarchy, so its textures and PBR channels stay
-attached and Render wears them exactly as authored; an STL, a 3MF and a robot author no
-finish, so they wear the studio's surface over their colours (a 3MF's object colours, a
-robot description's colour, else its link mesh's own).
+attached. Regular Solid and Shaded views retain explicit glTF Standard and Physical
+finishes, using the fixed neutral Inspect reflection fill; Parts, X-ray and Flat keep
+their intentional overrides, and a primitive with no material uses the viewer's fallback.
+Render also wears the file's materials as authored. The native GLB loader converts
+world-space attenuation distance from glTF metres into CAD millimetres once per shared
+material, before any view or sibling is made. Mesh-local thickness is not scaled, sibling
+creation does not repeat the conversion, and the file bytes are unchanged. The native XBF
+renderer currently uses the part's bounding-box extent for transmission thickness;
+this can overestimate attenuation and refraction for a hollow shell. Three's raster
+transmission buffer includes opaque geometry, not other transmissive layers, so a
+transmissive liquid inside glass cannot be composed correctly through the outer shell.
+A 3MF base-material group may author scalar metallicness and roughness through
+`pbmetallicdisplayproperties`, indexed alongside its base entries
+([Materials extension 1.2.1](https://github.com/3MFConsortium/spec_materials/blob/master/3MF%20Materials%20Extension.md)).
+The loader bridges Three's base-entry reference expectation without changing the input archive,
+then retains finish and display-colour alpha per material subset in mesh data. Solid/Shaded and
+Preview keep those finishes; Inspect supplies the existing fixed neutral reflection fill.
+Parts, X-ray and Flat remain reversible overrides, and display opacity multiplies source alpha.
+Sibling scenes own their materials and share geometry; mode changes never modify decoded metadata.
+This covers scalar base-material display properties, not textured PBR or translucent extension
+transport. A material-bearing package the loader cannot decode fails instead of taking the
+geometry-only compatibility fallback and silently losing its finish. Ordinary fallback packages
+remain supported. An STL, a colour-only 3MF and a robot use the viewer/studio fallback finish over
+their source colours (a 3MF's object colours, a robot description's colour, else its link mesh's own).
 
 Snapshots use the same grouped display contract. Photographic lighting supports
 only the `view` capture mode. Camera,

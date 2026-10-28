@@ -105,8 +105,8 @@ metal faces that face up (normal within 25 degrees of +Z, metallic 0.5 or more, 
 authored colour's chroma 10 or more) in each Solid iso picture and prints, per
 renderer, how far their CIELab hue turns from the authored colour's and the share of
 its chroma they keep: a washed-out top face is a hue near 0 at a chroma ratio well
-under 1. `--preview` adds Preview at each camera, OCCT's as `cadgen snapshot
---preview` draws it and the viewer's with its job's `"preview": true`; its studio is
+under 1. The bench's `--preview` adds its internal OCCT photographic rig at each camera
+and the viewer's with its job's `"preview": true`; its studio is
 no flat backdrop, so its colour difference is measured where OCCT's picture leaves
 its own studio drawn without the model, and its IoU is n/a. `--only chromium` keeps
 the OCCT pictures already there while the viewer's side is tuned (`--only occt`, the

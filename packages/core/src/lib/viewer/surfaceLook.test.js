@@ -157,3 +157,67 @@ test("a look's surface model: its stand-ins compile OCCT's lighting after three'
   assert.equal(standIn.onBeforeCompile, THREE.Material.prototype.onBeforeCompile, "no model named: three's own");
   assert.equal(standIn.customProgramCacheKey, THREE.Material.prototype.customProgramCacheKey);
 });
+
+
+test("authored Standard and Physical finishes survive shaded modes, with reversible Parts and X-ray overrides", () => {
+  for (const physical of [false, true]) {
+    const texture = new THREE.Texture();
+    const material = physical ? new THREE.MeshPhysicalMaterial({ color: "#336699", map: texture,
+      metalness: 1, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.15, transmission: 0.8,
+      thickness: 0.006, attenuationDistance: 50, opacity: 0.7, transparent: true })
+      : new THREE.MeshStandardMaterial({ color: "#336699", map: texture, metalness: 1, roughness: 0.3, opacity: 0.7, transparent: true });
+    material.userData.cadAuthoredFinish = true;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), material), root = new THREE.Group(); root.add(mesh);
+    const surface = createSurfaceLook(THREE, root);
+    const original = { materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 } };
+    const check = () => {
+      assert.deepEqual([mesh.material.metalness, mesh.material.roughness, mesh.material.clearcoat], [1, 0.3, physical ? 1 : 0]);
+      assert.equal(mesh.material.map, texture);
+      assert.deepEqual([mesh.material.color.getHexString(), mesh.material.opacity, mesh.material.transparent], ["336699", 0.7, true]);
+      assert.deepEqual([mesh.material.emissive.getHexString(), mesh.material.emissiveIntensity], ["336699", 0.02], "non-emitting authored finishes retain the existing small Inspect lift");
+      assert.equal(mesh.material.transmission, physical ? 0.8 : 0);
+      assert.equal(mesh.material.attenuationDistance, physical ? 50 : Infinity);
+    };
+    surface.apply(original); check();
+    surface.apply({ ...original, materialSettings: { ...INSPECT, overrideSourceColors: true, defaultColor: "#ff8800", fillColors: ["#ff8800"] } });
+    assert.deepEqual([mesh.material.color.getHexString(), mesh.material.metalness, mesh.material.roughness, mesh.material.transmission], ["ff8800", 0.03, 0.92, 0]);
+    assert.equal(mesh.material.map, null);
+    surface.apply({ ...original, finishes: false, surface: { style: "shaded", opacity: 0.22 } });
+    assert.equal(mesh.material.opacity, 0.7 * 0.22);
+    assert.equal(mesh.material.transmission, 0);
+    surface.apply(original); check();
+    assert.deepEqual([material.metalness, material.roughness, material.opacity], [1, 0.3, 0.7], "authored material stays unchanged");
+    surface.dispose(); mesh.geometry.dispose(); material.dispose(); texture.dispose();
+  }
+});
+
+
+test("an emitting authored finish restores its own glow after X-ray without changing the non-emitting Inspect lift", () => {
+  const root = new THREE.Group();
+  const emitting = new THREE.MeshPhysicalMaterial({ color: "#336699", metalness: 1, roughness: 0.3,
+    emissive: "#ff8800", emissiveIntensity: 2 });
+  const neutral = new THREE.MeshPhysicalMaterial({ color: "#336699", metalness: 1, roughness: 0.3 });
+  for (const material of [emitting, neutral]) material.userData.cadAuthoredFinish = true;
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(), emitting), plate = new THREE.Mesh(new THREE.BoxGeometry(), neutral);
+  root.add(lamp, plate);
+  const surface = createSurfaceLook(THREE, root);
+  const original = { authored: false, materialSettings: INSPECT, surface: { style: "shaded", opacity: 1 } };
+  const check = () => {
+    assert.deepEqual([lamp.material.emissive.getHexString(), lamp.material.emissiveIntensity], ["ff8800", 2]);
+    assert.deepEqual([plate.material.emissive.getHexString(), plate.material.emissiveIntensity], ["336699", 0.02]);
+  };
+  surface.apply(original); check();
+  const single = { ...original, materialSettings: { ...INSPECT, overrideSourceColors: true, defaultColor: "#ff0000", fillColors: ["#ff0000"] } };
+  surface.apply(single);
+  const direct = [lamp.material.color.getHexString(), lamp.material.emissive.getHexString(), lamp.material.emissiveIntensity];
+  assert.deepEqual(direct, ["ff0000", "ff8800", 2], "Single color keeps the authored glow");
+  surface.apply({ ...original, finishes: false, surface: { style: "shaded", opacity: 0.22 } });
+  assert.deepEqual([lamp.material.emissive.getHexString(), lamp.material.emissiveIntensity], ["336699", 0.02]);
+  surface.apply(single);
+  assert.deepEqual([lamp.material.color.getHexString(), lamp.material.emissive.getHexString(), lamp.material.emissiveIntensity], direct,
+    "X-ray → Single color matches direct Single color, independent of the previous mode");
+  surface.apply(original); check();
+  assert.deepEqual([emitting.emissive.getHexString(), emitting.emissiveIntensity], ["ff8800", 2]);
+  assert.deepEqual([neutral.emissive.getHexString(), neutral.emissiveIntensity], ["000000", 1]);
+  surface.dispose(); lamp.geometry.dispose(); plate.geometry.dispose(); emitting.dispose(); neutral.dispose();
+});

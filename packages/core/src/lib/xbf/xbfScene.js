@@ -406,20 +406,19 @@ export function createXbfScene(THREE, document) {
         return true;
       });
     }
-    const painted = Object.entries(prototype.faceColors || {});
-    if (!painted.length) return { part, held, geometry: held.surface, paints: [], thickness };
+    const painted = new Map(Object.entries(prototype.faceColors || {}));
+    if (!painted.size && !Object.keys(faceMaterials).length) return { part, held, geometry: held.surface, paints: [], thickness };
     const geometry = shareGeometry(THREE, held.surface);
     ownedGeometries.push(geometry);
-    const byOrdinal = new Map(painted);
     const paints = [];
     const slot = new Map();
     const faces = part.mesh.faces;
     for (let row = 0; row < faces.length; row += 3) {
       const ordinal = String(faces[row]);
-      const paint = byOrdinal.get(ordinal);
+      const paint = painted.get(ordinal) || null;
+      const look = faceMaterials[ordinal] || null;
       let index = 0;
-      if (paint) {
-        const look = faceMaterials[ordinal] || null;
+      if (paint || look) {
         const name = lookKey(paint, look, thickness);
         if (!slot.has(name)) { slot.set(name, paints.length + 1); paints.push({ rgba: paint, look }); }
         index = slot.get(name);
@@ -453,7 +452,7 @@ export function createXbfScene(THREE, document) {
     group.userData.xbfInstance = index;
     const own = material(rgba, prototype.material || null, surface.thickness);
     const mesh = new THREE.Mesh(surface.geometry, surface.paints.length
-      ? [own, ...surface.paints.map(paint => material(paint.rgba, paint.look, surface.thickness))] : own);
+      ? [own, ...surface.paints.map(paint => material(paint.rgba ?? rgba, paint.look, surface.thickness))] : own);
     mesh.name = prototype.name || instance.path;
     mesh.castShadow = true;
     // What Parts colours it by, and what a highlight and an annotation name it by.

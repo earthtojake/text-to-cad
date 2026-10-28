@@ -168,10 +168,13 @@ export function createSurfaceLook(THREE, root) {
       } else if (!authoredLook) {
         target = entry.inspect ||= inspectStandIn(THREE, lit);
         const finish = lit.userData?.cadAuthoredFinish === true;
-        if (finish && finishes && !forceFill && opacityScale >= 0.999) {
-          // A finish the file authored, kept, reflecting the scene's environment.
-          for (const key of FINISH_KEYS) target[key] = lit[key];
-          target.attenuationColor.copy(lit.attenuationColor);
+        const preserveFinish = finish && finishes && !forceFill && opacityScale >= 0.999;
+        if (preserveFinish) {
+          // Standard materials have no Physical-only channels. Keep their authored
+          // fields and use neutral Physical defaults for the stand-in's other fields.
+          plain ||= plainFinish(THREE);
+          for (const key of FINISH_KEYS) target[key] = lit[key] ?? plain[key];
+          target.attenuationColor.copy(lit.attenuationColor || plain.attenuationColor);
           target.specularIntensity = authoredSpecular(lit);
           target.envMapIntensity = 1;
         } else {
@@ -186,7 +189,10 @@ export function createSurfaceLook(THREE, root) {
         }
         // The viewer lifts its surfaces by a trace of their own colour. A part that
         // authored a glow of its own keeps it, where the look keeps finishes.
-        if (!authored.glows || !finishes) {
+        if (authored.glows && finishes) {
+          target.emissive.copy(lit.emissive);
+          target.emissiveIntensity = lit.emissiveIntensity;
+        } else if (!authored.glows || !finishes) {
           target.emissive.copy(color);
           target.emissiveIntensity = clamp01(settings.emissiveIntensity);
         }

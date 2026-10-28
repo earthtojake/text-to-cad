@@ -644,10 +644,11 @@ function sampledAnimatedBounds(scene, clips, cadRootMatrix) {
  * Say, on each native material, whether its colour is a SOURCE colour. A file with
  * no materials and a material its writer flagged (`cadSourceColor: false`) are not:
  * a viewer paints those with its own surface colour, exactly as the flattened mesh
- * path drops them. The answer is `material.userData.cadSourceColor` (true/false),
- * one rule for both.
+ * path drops them. `cadSourceColor` records that shared rule. An explicit lit
+ * glTF material also marks `cadAuthoredFinish`, so regular shaded views keep its
+ * PBR channels; the loader's implicit material remains the viewer's fallback.
  */
-function markGlbSourceColors(gltf) {
+function markGlbMaterials(gltf) {
   const json = gltf?.parser?.json;
   const rawMaterials = Array.isArray(json?.materials) ? json.materials : [];
   gltf?.scene?.traverse?.((object) => {
@@ -656,6 +657,23 @@ function markGlbSourceColors(gltf) {
       const rawMaterial = rawMaterials[gltf.parser?.associations?.get(material)?.materials] || null;
       material.userData.cadSourceColor = Boolean(rawMaterials.length > 0 &&
         colorFromMaterial(material, true, { rawMaterial }));
+      // An explicit glTF material owns its PBR finish, including Standard materials.
+      // GLTFLoader's implicit no-material default still takes the viewer's finish.
+      material.userData.cadAuthoredFinish = Boolean(rawMaterial && material.isMeshStandardMaterial);
+    }
+  });
+}
+
+// Thickness is mesh-local and Three scales its transmission ray by modelMatrix.
+// Attenuation distance is world-space: convert it once alongside the native scene's
+// metre-to-CAD placement, deduplicating materials shared by several meshes.
+function convertGlbWorldDistances(scene, cadRootMatrix) {
+  const scale = cadRootMatrix.getMaxScaleOnAxis(), seen = new Set();
+  scene.traverse(object => {
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      if (!material || seen.has(material)) continue;
+      seen.add(material);
+      if (Number.isFinite(material.attenuationDistance)) material.attenuationDistance *= scale;
     }
   });
 }
@@ -711,10 +729,11 @@ export async function buildGlbDocumentFromBuffer(buffer, options) {
   ]);
   const gltf = await parseGlb(GLTFLoader, decoder, buffer, options);
   try {
-    markGlbSourceColors(gltf);
+    markGlbMaterials(gltf);
     markGlbNodes(gltf);
     const clips = playableGlbAnimationClips(gltf);
     const cadRootMatrix = nativeCadRootMatrix(gltf);
+    convertGlbWorldDistances(gltf.scene, cadRootMatrix);
     const restBounds = nativeRestBounds(gltf.scene, cadRootMatrix);
     const animatedBounds = clips.length ? sampledAnimatedBounds(gltf.scene, clips, cadRootMatrix) : null;
     return {

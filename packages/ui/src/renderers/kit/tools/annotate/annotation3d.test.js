@@ -256,19 +256,47 @@ test('drawn, ink stays where it was drawn whatever the parts do and is cut where
   // The part moves (an explode, a pose): the ink stays.
   slab.position.set(30, 0, -1);
   runtime.scene.updateMatrixWorld(true);
-  runtime.scene.onBeforeRender({}, runtime.scene, runtime.camera, null);
+  ink.group.children[0].onBeforeRender();
   assert.deepEqual(drawn.matrixWorld.elements, new THREE.Matrix4().elements);
   // Clip: the model's planes are the ink's.
   runtime.activeClipPlanes = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)];
-  runtime.scene.onBeforeRender({}, runtime.scene, runtime.camera, null);
+  ink.group.children[0].onBeforeRender();
   assert.equal(drawn.material.clippingPlanes, runtime.activeClipPlanes);
   // The part hidden: the ink is not.
   slab.visible = false;
-  runtime.scene.onBeforeRender({}, runtime.scene, runtime.camera, null);
+  ink.group.children[0].onBeforeRender();
   assert.equal(drawn.visible, true);
   ink.dispose();
   assert.equal(ink.group.parent, null);
   assert.equal(runtime.scene.onBeforeRender, before);
+});
+
+test('transmission and nested draws update ink without replacing another owner’s scene hook', () => {
+  const { runtime } = rig();
+  let scenes = 0;
+  const before = runtime.scene.onBeforeRender = () => { scenes += 1; };
+  const ink = mountAnnotations(runtime);
+  const [item] = projectAnnotations(runtime, [stroke('glass', [[42, 55], [45, 55]])], size);
+  ink.update([item]);
+  const sentinel = ink.group.children[0];
+  const line = ink.group.children.find(child => child.isLine2);
+  const draw = () => {
+    runtime.scene.onBeforeRender();
+    sentinel.onBeforeRender(); // transmission buffer
+    sentinel.onBeforeRender(); // main opaque pass, with no second scene callback
+  };
+  draw();
+  runtime.activeClipPlanes = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)];
+  draw();
+  assert.equal(line.material.clippingPlanes, runtime.activeClipPlanes);
+  assert.equal(runtime.scene.onBeforeRender, before);
+  assert.equal(scenes, 2);
+  // Another owner may wrap and later restore its own hook; ink never changes that chain.
+  runtime.scene.onBeforeRender = () => { before(); sentinel.onBeforeRender(); };
+  const wrapper = runtime.scene.onBeforeRender;
+  draw();
+  ink.dispose();
+  assert.equal(runtime.scene.onBeforeRender, wrapper);
 });
 
 test("each mark keeps its group and the view it was drawn in; the annotation writes as an annotation file, in model coordinates", () => {

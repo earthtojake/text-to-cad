@@ -138,7 +138,7 @@ def assemble(kind: str, path: Path, name: str, parts: list[Part], placed: list[P
     is the millimetres one of the viewer's scene coordinates is (``millimetresPerSceneUnit``), what a
     packet's camera, Measure's points and the ink are in: the file's unit unless given (a GLB's 1, the
     viewer drawing glTF's metres as millimetres)."""
-    from cadgen.engine.render.shapes import part_shapes
+    from cadgen.engine.render.shapes import prototype_shapes
 
     buffers: dict[str, bytes] = {}
     prototypes = []
@@ -155,9 +155,7 @@ def assemble(kind: str, path: Path, name: str, parts: list[Part], placed: list[P
             "faceMaterials": {str(ordinal): value for ordinal, value in sorted(part.face_materials.items())},
         })
         if part.uvs is not None:
-            groups = {int(ordinal): tuple(rgba) for ordinal, rgba in part.face_colors.items()}
-            made = part_shapes(part.mesh, groups, None, uvs=part.uvs)
-            made.textures = dict(part.textures)
+            made = prototype_shapes(prototypes[-1], part.mesh, uvs=part.uvs, textures=part.textures)
             shapes[key] = made
     instances = [{"prototype": item.part, "path": item.path, "matrix": _column_major(item.matrix),
                   "color": None if item.color is None else list(item.color),

@@ -648,6 +648,54 @@ class PoolQueueTest(unittest.TestCase):
 
 
 class MeshCacheTest(unittest.TestCase):
+    def test_mesh_all_publishes_buffers_and_unmeshed_notes_before_done_callbacks_finish(self) -> None:
+        from types import SimpleNamespace
+
+        # A Future wakes result() waiters before its callbacks finish. Hold the
+        # worker's cache callback there while mesh_all consumes the completed job.
+        completed = concurrent.futures.Future()
+        server = Server.__new__(Server)
+        server.cache = serve.MeshCache()
+        server.isolated = False
+        server.mesher = SimpleNamespace(submit=mock.Mock(return_value=completed), mode="inline", workers=1)
+        server.shape_of = lambda doc, key: doc.shapes[key]
+        doc = SimpleNamespace(shapes={"part": b"shape"}, names={"part": "peg"})
+        server._submit("part", b"shape", None)
+        entered, release = threading.Event(), threading.Event()
+        put = server.cache.put
+        failures = []
+
+        def delayed_put(key, data, unmeshed):
+            if not entered.is_set():
+                entered.set()
+                if not release.wait(30):
+                    raise RuntimeError("test did not release the worker callback")
+            put(key, data, unmeshed)
+
+        def complete():
+            try:
+                completed.set_result((b"mesh bytes", {2: "degenerate"}, 0.1))
+            except BaseException as error:
+                failures.append(error)
+
+        with mock.patch.object(server.cache, "put", side_effect=delayed_put), \
+                mock.patch.object(serve, "_triangles", return_value=4):
+            worker = threading.Thread(target=complete)
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(30), "the worker reached cache publication")
+                report = server.mesh_all(doc, None)
+                self.assertEqual(server.cache.get("part"), b"mesh bytes")
+                self.assertEqual(server.cache.unmeshed("part"), {2: "degenerate"})
+                self.assertEqual((report["meshed"], report["triangles"], report["unmeshed"]), (1, 4, 1))
+            finally:
+                release.set()
+                worker.join(30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(server.cache.pending, {})
+        server.mesher.submit.assert_called_once_with(b"shape", None)
+
     def test_the_least_recently_used_buffer_goes_past_the_cap(self) -> None:
         from cadgen.engine.serve import MeshCache
 

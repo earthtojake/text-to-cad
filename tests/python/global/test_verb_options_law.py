@@ -13,6 +13,8 @@ its id; the document a call returns is what a verb reads. Nothing here needs the
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import inspect
 import unittest
 
@@ -60,8 +62,21 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
 
 
 class SnapshotTakesThePictureAlone(unittest.TestCase):
-    PICTURE = ("display", "camera", "grid", "preview", "pose", "width", "height", "size_profile", "daemon",
+    PICTURE = ("display", "camera", "grid", "pose", "width", "height", "size_profile", "daemon",
                "annotation", "measurements")
+
+    def test_snapshot_refuses_browser_options_before_opening_a_source(self) -> None:
+        from cadgen.engine.snapshot import SnapshotRefused, build_parser as snapshot_parser, job_pictures
+
+        for option, value in (("preview", True), ("animation", "swing"), ("fps", 30)):
+            with self.subTest(option=option):
+                with self.assertRaisesRegex(TypeError, "unexpected keyword argument"):
+                    cadgen.snapshot("missing.xbf", "picture.png", **{option: value})
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
+                    snapshot_parser().parse_args(["missing.xbf", "picture.png", f"--{option}"])
+                self.assertEqual(refused.exception.code, 2)
+                with self.assertRaisesRegex(SnapshotRefused, f"has no {option}"):
+                    job_pictures({"input": "missing.xbf", option: value, "outputs": ["picture.png"]})
 
     def test_a_handle_s_snapshot_takes_the_verb_s_picture_options_by_name(self) -> None:
         verb = inspect.signature(cadgen.snapshot).parameters

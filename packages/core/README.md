@@ -34,6 +34,8 @@ protocol relationship never imports Python or discovers an interpreter.
   the regular modes (Inspect) and Render honor
   authored color, finish and opacity, with scene settings supplying fallbacks.
   There are no session material overlays.
+  Face finishes are independent of face colours: a material-only face assignment
+  keeps its inherited instance/part colour while using its own finish.
   Authored finishes use a small fixed reflection fill in Inspect so metals
   remain legible. [inspectEnvironment.js](src/common/inspectEnvironment.js) owns
   its procedural texture; it loads no studio or external HDR asset.
@@ -98,9 +100,20 @@ protocol relationship never imports Python or discovers an interpreter.
 - **Direct GLB stays native**: a direct GLB is its glTF scene graph (nodes, skins,
   morph targets, authored materials) with its translation, rotation, scale, skin and
   morph-weight tracks for a Three `AnimationMixer`, in the viewer and in a snapshot.
+  Explicit glTF Standard and Physical materials keep their PBR finish in regular
+  shaded views and Preview, with the fixed Inspect reflection fill; a primitive
+  without a material keeps the viewer's fallback. Parts and X-ray remain intentional
+  overrides. World attenuation distance is converted once from metres to CAD world
+  units on load; thickness stays mesh-local and the file bytes stay untouched.
   Its documents are mutable, uncached, and explicitly disposed by their one owner; a
   bounded load-time pose sample supplies a stable framing estimate rather than
   resizing the stage during playback.
+- **3MF display materials stay authored**: scalar base-material metallicness,
+  roughness and display-colour alpha survive decoding per material subset. Regular
+  shaded views and Preview retain explicit finishes, with the fixed Inspect reflection
+  fill; STL, unmaterialed and colour-only 3MF surfaces retain their fallback finish.
+  Parts/X-ray/Flat overrides are reversible. Mechanism and supported extension scope:
+  [docs/render-pipeline.md](docs/render-pipeline.md).
 - **No shipped bytes**: core neither meshes nor writes an export. cadgen's engine
   meshes every part with OCCT in its warm worker and writes STL, 3MF and GLB itself;
   core reads those meshes and draws them. The GLBs its tests and the UI's open

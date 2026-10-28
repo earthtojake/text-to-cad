@@ -4,7 +4,7 @@ ordinary Python scripts call decorated models explicitly.
     python SCRIPT.py                                 the models the script explicitly calls
     cadgen export SRC DST [DST ...] [--json]
     cadgen snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--preview] [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
+        [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cadgen serve DOC [--port N] [--three DIR]
     cadgen status [--json] | stop [--json] | server [--port N] [--rotate-token]

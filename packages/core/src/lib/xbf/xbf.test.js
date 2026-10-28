@@ -284,6 +284,39 @@ test("a document's materials: a physical material per look, kept in the shaded l
   plain.release();
 });
 
+test("material-only faces keep distinct finishes and inherit each instance's colour", async () => {
+  const structure = structuredClone(STRUCTURE);
+  const faces = readXbmPart(partBytes(PEG.key)).faces;
+  const rough = { pbr: { values: { metalness: 0, roughness: 0.8 } } };
+  structure.prototypes[1].faceColors = {};
+  structure.prototypes[1].faceMaterials = { [faces[0]]: BRUSHED, [faces[3]]: rough };
+  structure.instances[1].color = [0.2, 0.3, 0.4, 0.6];
+  structure.instances[2].color = [0.8, 0.1, 0.2, 1];
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
+  const scene = createXbfScene(THREE, document);
+  scene.setSurfaceLook(LOOK);
+  const meshes = scene.object3D.children.slice(1).map(carrier => carrier.children[0].children.find(child => child.isMesh));
+  for (const [index, mesh] of meshes.entries()) {
+    const colour = structure.instances[index + 1].color;
+    assert.equal(mesh.material.length, 3, 'both material-only faces have their own surface');
+    for (const [ordinal, metalness, roughness] of [[faces[0], 1, 0.35], [faces[3], 0, 0.8]]) {
+      const row = Array.from(faces).findIndex((value, at) => at % 3 === 0 && value === ordinal);
+      const group = mesh.geometry.groups.find(group => group.start === faces[row + 1]);
+      const worn = mesh.material[group.materialIndex];
+      assert.deepEqual([worn.metalness, worn.roughness, worn.opacity], [metalness, roughness, colour[3]]);
+      worn.color.toArray().forEach((value, axis) => assert.ok(Math.abs(value - colour[axis]) < 1e-12,
+        'a finish without paint keeps its instance colour'));
+    }
+  }
+  const sibling = scene.createSibling();
+  sibling.setSurfaceLook({ ...LOOK, authored: true });
+  const paint = sibling.object3D.children[1].children[0].children.find(child => child.isMesh).material[1];
+  assert.deepEqual([paint.metalness, paint.roughness, paint.opacity], [1, 0.35, 0.6]);
+  sibling.dispose();
+  scene.dispose();
+  document.release();
+});
+
 test("a face the mesher left without triangles is reported, not drawn", async () => {
   const bytes = partBytes(PEG.key).slice(0);
   const part = readXbmPart(bytes);

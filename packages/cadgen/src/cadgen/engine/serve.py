@@ -1834,6 +1834,9 @@ class Server:
         total_bytes = triangles = unmeshed_faces = 0
         for key, future in futures.items():
             data, unmeshed, seconds = future.result()
+            # result() can wake before _submit's callback publishes the buffer.
+            # mesh_all promises its callers every mesh is already in the cache.
+            self.cache.put(key, data, unmeshed)
             total_bytes += len(data)
             triangles += _triangles(data)
             unmeshed_faces += len(unmeshed)

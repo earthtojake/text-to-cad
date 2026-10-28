@@ -87,6 +87,36 @@ test("a GLB scene's sibling wears the file's authored materials, whatever the so
   scene.dispose();
 });
 
+test("GLB siblings preserve already converted world distances without changing local thickness", () => {
+  const root = new THREE.Group();
+  const glass = new THREE.MeshPhysicalMaterial({ transmission: 1, thickness: 0.006,
+    attenuationDistance: 50, attenuationColor: new THREE.Color(0.8, 0.9, 0.85) });
+  const unbounded = new THREE.MeshPhysicalMaterial({ transmission: 1, attenuationDistance: Infinity });
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  const first = new THREE.Mesh(box, [glass, unbounded]), second = new THREE.Mesh(box, glass);
+  root.add(first, second);
+  const scene = createGlbScene(THREE, { scene: root, clips: [],
+    cadRootMatrix: new THREE.Matrix4().makeScale(1000, 1000, 1000).toArray(),
+    restBounds: { min: [0, 0, 0], max: [1, 1, 1] }, animatedBounds: null });
+  const normal = scene.createSibling(), preview = scene.createSibling();
+  const normalMeshes = meshes(normal.object3D), previewMeshes = meshes(preview.object3D);
+  assert.equal(normalMeshes[0].material[0].attenuationDistance, 50);
+  assert.equal(previewMeshes[0].material[0].attenuationDistance, 50);
+  assert.equal(previewMeshes[0].material[1].attenuationDistance, Infinity);
+  assert.equal(previewMeshes[1].material.attenuationDistance, 50, "shared source material is converted once per owned copy");
+  assert.equal(previewMeshes[0].material[0].thickness, 0.006, "mesh-local thickness stays authored");
+  assert.equal(previewMeshes[0].material[0].transmission, 1);
+  assert.deepEqual(previewMeshes[0].material[0].attenuationColor.toArray(), glass.attenuationColor.toArray());
+  preview.setSurfaceLook({ ...look(), authored: true });
+  assert.equal(previewMeshes[0].material[0].attenuationDistance, 50, "Preview look changes keep the converted value");
+  assert.equal(glass.attenuationDistance, 50, "the editor's material is untouched");
+  assert.equal(first.material[0], glass);
+  assert.equal(previewMeshes[0].geometry.attributes.position, first.geometry.attributes.position);
+  preview.dispose(); normal.dispose();
+  assert.equal(glass.attenuationDistance, 50);
+  scene.dispose();
+});
+
 test("a GLB sibling starts at its authored pose, with its own bones and morph weights, while the editor holds a routine frame", () => {
   const root = new THREE.Group();
   const geometry = new THREE.BoxGeometry(1, 1, 1);

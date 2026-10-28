@@ -17,9 +17,10 @@ function boundsOf(THREE, objects) {
 
 /**
  * A mesh file's scene (`../viewer/sceneContract.js`): one `Mesh` per object of the
- * file, and nothing else. A triangle mesh authors no finish, so it wears the viewer's
- * surface in Solid and the studio's in Render; all a file can say is an object's
- * colour, which "Original" keeps. An object without one is marked
+ * file, and nothing else. STL and colour-only 3MF objects wear the viewer's surface
+ * in Solid and the studio's in Render. A 3MF can also author metallicness/roughness
+ * display properties, kept in both, and base-colour alpha, kept under every look.
+ * An object without a source colour is marked
  * `userData.cadSourceColor = false` and takes the viewer's surface colour.
  *
  * @param {typeof import("three")} THREE
@@ -34,8 +35,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
   const root = new THREE.Group();
   root.name = "mesh-document";
   const materials = objects.map((object) => {
-    const material = new THREE.MeshPhysicalMaterial({ color: object.color || 0xffffff, side: THREE.DoubleSide });
+    const opacity = Number.isFinite(object.opacity) ? object.opacity : 1;
+    const material = new THREE.MeshPhysicalMaterial({ color: object.color || 0xffffff, side: THREE.DoubleSide,
+      ...object.finish, opacity, transparent: opacity < 1, depthWrite: opacity >= 1 });
     material.userData.cadSourceColor = Boolean(object.color);
+    if (object.finish) material.userData.cadAuthoredFinish = true;
     const mesh = new THREE.Mesh(object.geometry, material);
     mesh.name = object.name;
     mesh.castShadow = true;
@@ -73,12 +77,13 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
   let disposed = false;
   return {
     meshCount: objects.length,
+    ...(objects.some(object => object.finish) ? { keepsAuthoredFinish: true } : {}),
     object3D: root,
     bounds,
     restBounds: bounds,
     units,
-    // Nothing here was authored, so Render is a look like any other: the studio's
-    // surface over the same colours, never a finish "kept".
+    // Use the studio's fallback for ordinary mesh objects; marked 3MF finishes
+    // retain their own PBR channels through surfaceLook's authored-finish branch.
     setSurfaceLook(next) {
       if (disposed) return;
       lastLook = next ? { ...next, authored: false } : null;

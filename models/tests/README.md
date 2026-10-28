@@ -1,6 +1,6 @@
 # Manual validation models
 
-`models/tests` on cadgen 0.8: the three cases its README listed. **CI
+`models/tests` holds the manual cases below. **CI
 tests must never read, import, build, or depend on anything here**: automated tests
 make their own small fixtures in fresh temporary directories.
 
@@ -15,6 +15,7 @@ Each case is a `@model`; a run writes nothing, and prints the document's id and 
 | `render_floor/` | `floor_positions` | Three coloured blocks above, across and below Z=0. Render's floor stands under the model's lowest point; Model origin (Z=0) is the explicit option. |
 | `viewer_concurrency/` | `assembly` | A 32-part drilled-plate assembly. Change `REVISION` and rebuild while the viewer is loading to check update handoffs, progress and replacement geometry. |
 | `unified_annotations/` | `annotation_fixture` | An 11-part assembly: brushed steel on the base and shaft (each keeping its own colour), a blue paint on the arm (its own colour green at alpha 0.6; the paint's blue at opacity 0.5 is what shows), the arm's `swing` joint and the shaft's `lift`, a configuration (`open`: swing 45) and a motion (`demo`: the shaft 8 mm up, 8 mm down and home over 4 s, ending where it starts, so a player repeats it as the old looping clip ran). Check materials, Position, motion in both view modes, a motion-only edit (the mechanism rewritten, no prototype converted), snapshots and the GLB clip. |
+| [`preview_studio/`](preview_studio/README.md) | Four models in `source.py` | Matched production Preview material review: machined metal with recesses, a coated regulator and gauge, thick glass with liquid and contents, and an open mixed-material instrument cavity. Explicit exports and renderer comparisons go to ignored `tmp/`. |
 
 ## Run manually
 

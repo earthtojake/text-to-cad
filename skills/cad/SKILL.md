@@ -239,7 +239,7 @@ cadgen snapshot "$ID" tmp/open.png --pose open
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing
 but the PNG. Its options say how the picture is drawn: camera (`--camera top`), display,
-grid, Preview, pose (`--pose open`) and size. It shows arrangement and appearance, not dimensions
+grid, pose (`--pose open`) and size. It shows arrangement and appearance, not dimensions
 ([snapshots](references/snapshot-review.md)).
 
 ## Prompt references and inspection
