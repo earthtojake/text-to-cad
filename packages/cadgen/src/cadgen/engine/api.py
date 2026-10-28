@@ -381,17 +381,28 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 print(text, file=sys.stderr)
 
             waiting = bar.around(told) if bar is not None else told
+            streamed = False  # the worker's stderr, shown as it came
 
             def relay(message: dict[str, Any]) -> None:
+                nonlocal streamed
                 if message.get("stream") in ("waiting", "notice"):  # said whoever logs: behind a build of
                     # this script, or the worker's first load of the kernel (``worker.kernel``)
                     waiting(message["log"])
                     return
+                streamed = streamed or (log is not None and message.get("stream") == "model")
                 shown(message["log"] if message.get("stream") == "model" else f"  {message['log']}")
 
             order = {"op": "build", "script": str(script), "functions": functions,
                      "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program()}
-            answer = _ask(order, relay, frames)
+            try:
+                answer = _ask(order, relay, frames)
+            except EngineError as error:
+                from cadgen.engine.daemon import WORKER_STDERR
+
+                if not streamed or WORKER_STDERR not in str(error):
+                    raise
+                # A dead worker's stderr tail is what this log just showed: said once.
+                raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
     finally:
         if bar is not None:

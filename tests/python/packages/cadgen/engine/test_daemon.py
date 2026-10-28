@@ -360,6 +360,35 @@ class WorkerFailureTest(unittest.TestCase):
                 original = _error(EngineError(message), [], {})
                 self.assertEqual(_error(EngineError(message + WORKER_STDERR + diagnostic), [], {}), original)
 
+    def test_where_a_build_was_is_said_before_the_stderr_tail(self) -> None:
+        from types import SimpleNamespace
+
+        from cadgen.engine.daemon import WORKER_STDERR, Daemon, WorkerGone
+
+        error = WorkerGone(f"the worker for m.py exited (-11) during the build{WORKER_STDERR}Fatal Python error")
+        said = Daemon._where(error, SimpleNamespace(progress={"job": "m.py::m", "stage": "body"}))
+        head, _, tail = said.partition(WORKER_STDERR)
+        self.assertTrue(head.startswith("the worker for m.py exited (-11) during the build, at m.py::m: "), said)
+        self.assertEqual(tail, "Fatal Python error")
+
+    def test_a_build_whose_log_showed_the_stderr_says_it_once(self) -> None:
+        from cadgen.engine import api
+        from cadgen.engine.daemon import WORKER_STDERR
+
+        failed = f"the worker for m.py exited (-11) during the build{WORKER_STDERR}Fatal Python error"
+
+        def ask(_order, relay, _frames):
+            relay({"log": "Fatal Python error", "stream": "model"})
+            raise api.EngineError(failed)
+
+        script = self.folder / "m.py"
+        for log, kept in ((print, False), (None, True)):  # shown on the caller's log, or nowhere
+            with self.subTest(log=log), mock.patch.object(api, "_ask", side_effect=ask), \
+                    self.assertRaises(api.EngineError) as caught:
+                api._built(script, None, log=log and (lambda _text: None), progress=False)
+            self.assertEqual(WORKER_STDERR in str(caught.exception), kept)
+            self.assertIn("exited (-11) during the build", str(caught.exception))
+
     def test_failed_worker_keeps_a_bounded_fault_stack_and_releases_its_slot(self) -> None:
         from cadgen.engine import daemon
 

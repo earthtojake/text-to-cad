@@ -672,8 +672,9 @@ meshing and reading pools) shares their windowless console.
 Workers start with Python's fault handler enabled, so a native fault writes its Python stack
 to stderr. A worker that fails to start or exits during a request includes its last 16,384
 stderr characters in the local error, including startup diagnostics before a client can receive
-logs. This tail is held only in memory and reset for each request; telemetry still reports the
-worker's exit status alone, never its stderr.
+logs, after the line saying where its build was. This tail is held only in memory and reset for
+each request; a build whose log showed the model's stderr as it came says the error without it, as
+its log said it already. Telemetry still reports the worker's exit status alone, never its stderr.
 
 A worker runs each request in that request's folder (its script's, or the caller's), so a model's
 relative reads resolve as they would under `python SCRIPT`, and stands in the temporary folder

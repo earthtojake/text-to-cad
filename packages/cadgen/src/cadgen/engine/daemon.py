@@ -1807,11 +1807,15 @@ class Daemon:
 
     @staticmethod
     def _where(error: Exception, worker: Worker | None) -> str:
-        """A worker's failure, and where its build was when it failed."""
+        """A worker's failure, and where its build was when it failed: said on its first line, before
+        any stderr tail (``Worker._failure``)."""
         from cadgen.engine.progress import describe
 
         frame = worker.progress if worker is not None else None
-        return f"{error}, at {frame.get('job')}: {describe(frame)}" if frame else str(error)
+        if not frame:
+            return str(error)
+        head, tail, detail = str(error).partition(WORKER_STDERR)
+        return f"{head}, at {frame.get('job')}: {describe(frame)}{tail}{detail}"
 
     def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
               loading: Callable[[str], None] | None = None) -> Worker:
