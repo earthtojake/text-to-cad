@@ -1010,7 +1010,7 @@ class NoticeTest(_Tmp):
     def test_every_command_says_it_but_the_servers_and_telemetry_itself(self) -> None:
         with mock.patch("cadgen.analytics.notify") as told, mock.patch.object(cli, "_run", return_value=0), \
                 mock.patch("sys.stdout", io.StringIO()):
-            for argv in (["doctor"], ["dxf", "snapshot", "a.dxf"], ["viewer"], ["mcp"], ["server"], ["telemetry", "off"]):
+            for argv in (["doctor"], ["snapshot", "a.dxf"], ["viewer"], ["mcp"], ["server"], ["telemetry", "off"]):
                 cli.main(argv)
             cli.main(["--help"])
         self.assertEqual(told.call_count, 3)
