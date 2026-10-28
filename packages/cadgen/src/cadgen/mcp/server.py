@@ -239,6 +239,16 @@ def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = 
     return result
 
 
+def _unavailable(error: BaseException) -> str:
+    """The text for a call that failed because the engine could not start its kernel processes: the
+    engine's words, then, on Windows when the loader refused a native module, the hint naming it
+    (``native_load_hint``)."""
+    from cadgen._internal.kernel_load_hint import native_load_hint
+
+    hint = native_load_hint(error.__cause__ or str(error))
+    return f"{error}\n{' '.join(hint)}" if hint else str(error)
+
+
 def _data(structured: dict[str, Any]) -> dict[str, Any]:
     """A result only the page reads."""
     return {"content": [], "structuredContent": structured}
@@ -579,6 +589,16 @@ class Server:
         except ToolFailed as failure:
             reason = failure.reason
             return _text(str(failure), error=True)
+        except Exception as error:
+            from cadgen.engine.serve import KernelProcessesUnavailable
+
+            if not isinstance(error, KernelProcessesUnavailable):
+                raise  # cadgen's own bug: ``handle`` reports it, and the host gets an internal error
+            # The machine refused the engine's kernel processes. The agent reads that and its cause as
+            # the tool's result; the crash is still counted (its type and frames, as ``handle`` would).
+            reason = "other"
+            self.analytics.crashed(error, "tool", tool=name)
+            return _text(_unavailable(error), error=True)
         finally:
             self.analytics.called(name, ok, reason)
             if name not in ("cad_sync", "cad_http"):

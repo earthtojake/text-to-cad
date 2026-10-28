@@ -719,6 +719,41 @@ class InlineServerTest(_Session):
         self.launch("cad_show", {"source": self.bracket})
         self.assertEqual(warmed, [True])
 
+    def test_a_refused_kernel_pool_is_the_tool_s_error_with_its_cause_and_is_tried_again(self) -> None:
+        # Seen on Windows (0.8.0): the loader refused _multiprocessing.pyd, the pool could not be built
+        # and cad_show was an opaque internal error. Now it is the call's error, in the loader's words.
+        from cadgen import analytics
+        from cadgen._internal import kernel_load_hint
+        from cadgen.engine import serve
+
+        refused = "DLL load failed while importing _multiprocessing: An Application Control policy has blocked this file."
+        built = []
+
+        def pool(*_args, **_kwargs):
+            built.append(True)
+            raise ImportError(refused, name="_multiprocessing")
+
+        mesher = serve.Mesher("processes", workers=1)
+        self.addCleanup(mesher.stop)
+        self.server.warm = mesher.processes
+        with mock.patch.object(serve.concurrent.futures, "ProcessPoolExecutor", pool), \
+                mock.patch.object(self.server.analytics, "crashed") as crashed, \
+                mock.patch.object(kernel_load_hint, "sys", mock.Mock(platform="win32")):
+            first = self.call("cad_show", {"source": self.bracket})
+            second = self.call("cad_show", {"source": self.bracket})
+        self.assertTrue(first["isError"])
+        text = first["content"][0]["text"]
+        self.assertIn(f"ImportError: {refused}", text)
+        self.assertIn("Windows refused to load _multiprocessing", text)
+        self.assertIn("3077", text)
+        self.assertTrue(second["isError"])
+        self.assertEqual(len(built), 2, "the second call builds the pool again, never replays the first failure")
+        # Telemetry counts it as before, by type and frames alone: never the loader's words.
+        error = crashed.call_args.args[0]
+        sent = analytics.signature(error, "tool", tool="cad_show")
+        self.assertEqual(sent["type"], "cadgen.engine.serve.KernelProcessesUnavailable")
+        self.assertNotIn("Application Control", json.dumps(sent))
+
     def test_each_show_mounts_a_new_view_named_and_ordered(self) -> None:
         first = self.launch("cad_show", {"source": self.bracket})
         second = self.launch("cad_show", {"source": self.loose})

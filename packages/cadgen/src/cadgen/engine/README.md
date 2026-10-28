@@ -151,6 +151,9 @@ checks a drawing with), and a test holds that list (law 3). The application serv
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
 process, with no network relay. Kernel reads, topology, poses and meshes run in
 reader/mesh subprocesses; even an inline-mesh request stays outside the daemon.
+If Python cannot start those processes (on Windows, a loader refusing `_multiprocessing.pyd`),
+the request fails with `serve.KernelProcessesUnavailable`, which carries the loader's words. The engine
+has no fallback and remembers nothing, so the next request tries again.
 
 Every document has one id (law 6), a lower-case UUID string ([ids.py](ids.py)), by one formula
 (`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a model's scope is its script

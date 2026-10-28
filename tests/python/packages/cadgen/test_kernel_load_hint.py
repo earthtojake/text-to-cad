@@ -20,7 +20,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.cli_errors import report_cli_error  # noqa: E402
-from cadgen._internal.kernel_load_hint import kernel_load_hint  # noqa: E402
+from cadgen._internal.kernel_load_hint import SMART_APP_CONTROL_HINT, kernel_load_hint, native_load_hint  # noqa: E402
 
 REFUSED = "DLL load failed while importing OCP: Access is denied."
 
@@ -69,6 +69,18 @@ class KernelLoadHintTest(unittest.TestCase):
             self.assertIsNotNone(kernel_load_hint(_import_error(REFUSED)))
         with mock.patch.object(sys, "platform", "linux"):
             self.assertIsNone(kernel_load_hint(_import_error(REFUSED)))
+
+    def test_the_wider_hint_names_any_refused_native_module_and_keeps_ocp_s(self) -> None:
+        # For a native module cadgen itself needed (the engine's pool needs _multiprocessing.pyd).
+        refused = _import_error("DLL load failed while importing _multiprocessing: Access is denied.", "_multiprocessing")
+        text = "\n".join(native_load_hint(refused, platform="win32") or ())
+        self.assertIn("_multiprocessing", text)
+        self.assertIn("3077", text)
+        self.assertIn("WSL", text)
+        self.assertEqual(native_load_hint(_import_error(REFUSED), platform="win32"), SMART_APP_CONTROL_HINT)
+        self.assertIsNone(native_load_hint(refused, platform="linux"))
+        self.assertIsNone(native_load_hint(ModuleNotFoundError("No module named '_multiprocessing'"), platform="win32"))
+        self.assertIsNone(native_load_hint(_import_error("cannot import name 'x'"), platform="win32"))
 
 
 class ReportCarriesTheHintTest(unittest.TestCase):

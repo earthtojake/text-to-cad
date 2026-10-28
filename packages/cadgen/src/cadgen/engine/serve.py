@@ -470,6 +470,29 @@ class NotHeld(ValueError):
 # document, so a large document costs its parts' bytes, not one read per process.
 
 
+class KernelProcessesUnavailable(RuntimeError):
+    """The engine could not start the processes its kernel work runs in. Python refused what a
+    process pool needs: on Windows, most often the loader refusing ``_multiprocessing.pyd``
+    (``DLL load failed while importing ...``). It is a ``RuntimeError``, as ``api.EngineError`` is,
+    and not the ``ImportError`` it wraps: no model is missing a module. Its message carries the
+    original error's type and words, and ``__cause__`` the error itself. There is no in-process
+    fallback, because kernel work never runs in the engine's threads (law 20). Nothing remembers
+    the failure: the next request tries again."""
+
+
+def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
+    """A spawn pool of ``workers`` kernel processes, or ``KernelProcessesUnavailable``. On Windows
+    the attribute read below is what imports ``multiprocessing.connection`` (and so
+    ``_multiprocessing``), which is why it sits inside the ``try``."""
+    try:
+        import multiprocessing
+
+        return concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn"), **options)
+    except (ImportError, OSError, NotImplementedError) as error:
+        raise KernelProcessesUnavailable(
+            f"The CAD engine could not start its kernel processes ({type(error).__name__}: {error})") from error
+
+
 def _timed(shape: Any, parallel: bool) -> tuple[bytes, dict[int, str], float]:
     """One part meshed (a shape, or its ``mesh.shape_bytes``): its buffer, its unmeshed
     faces, and the seconds it took. A pool process's job."""
@@ -548,10 +571,7 @@ class Mesher:
                 self._processes.shutdown(wait=False, cancel_futures=True)  # a child died; rebuild on next use
                 self._processes = None
             if self._processes is None:
-                import multiprocessing
-
-                self._processes = concurrent.futures.ProcessPoolExecutor(
-                    self.workers, mp_context=multiprocessing.get_context("spawn"), initializer=exit_with_parent)
+                self._processes = _process_pool(self.workers, initializer=exit_with_parent)
                 self._warm = False
             if warm and not self._warm:
                 self._warm = True
@@ -1283,10 +1303,7 @@ class Server:
                 self.reader.shutdown(wait=False, cancel_futures=True)  # a child died; it serves no one now
                 self.reader = None
             if self.reader is None:
-                import multiprocessing
-
-                self.reader = concurrent.futures.ProcessPoolExecutor(
-                    1, mp_context=multiprocessing.get_context("spawn"), initializer=_reader_ready, max_tasks_per_child=1)
+                self.reader = _process_pool(1, initializer=_reader_ready, max_tasks_per_child=1)
             return self.reader
 
     def _foreign(self, path: Path, ident: str | None = None) -> tuple[dict[str, Any], tuple]:
