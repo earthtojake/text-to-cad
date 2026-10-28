@@ -836,6 +836,22 @@ class RobotTest(FixtureTest):
             with self.subTest(uri=uri), self.assertRaisesRegex(RobotError, said):
                 formats.read(described(lone if "gripper" in uri else workspace / "arm_description", uri))
 
+    def test_a_mesh_named_by_its_absolute_path_or_a_file_uri_is_that_file(self) -> None:
+        """On Windows these spell the mesh ``C:\\...``, ``C:/...`` and ``file:///C:/...``: a drive letter is not
+        a URI scheme, and a file URI's path loses the slash before its drive (``cadgen.engine.mesh_uri``)."""
+        (self.folder / "absolute").mkdir()
+        mesh = write_stl(self.folder / "absolute" / "base.stl", box_soup((40, 20, 10))).resolve()
+        spellings = (str(mesh), mesh.as_posix(), mesh.as_uri(), mesh.as_uri().replace("file://", "file://localhost", 1))
+        for index, uri in enumerate(spellings):
+            for kind, text in (("urdf", f'<robot name="arm"><link name="base"><visual><geometry><mesh filename="{uri}"/>'
+                                        "</geometry></visual></link></robot>"),
+                               ("sdf", f'<sdf version="1.9"><model name="arm"><link name="base"><visual name="shell">'
+                                       f"<geometry><mesh><uri>{uri}</uri></mesh></geometry></visual></link></model></sdf>")):
+                with self.subTest(uri=uri, kind=kind):
+                    path = self.folder / "absolute" / f"arm{index}.{kind}"
+                    path.write_text(text, encoding="utf-8")
+                    self.assertIn(str(mesh), formats.read(path).files)
+
 
 # --- DXF -------------------------------------------------------------------------------------------
 

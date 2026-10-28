@@ -103,9 +103,10 @@ import threading
 from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
+from cadgen.engine import mesh_uri
 from cadgen.findings import format_findings
 from cadgen.xml_common import children, display_path, local_name
 
@@ -160,7 +161,6 @@ def _mesh_scale(fmt: str, scale: list[float] | None = None) -> list[list[float]]
 _IDENTITY = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 _SDF_MODEL_FRAME = "__model__"
 _SDF_WORLD_FRAME = "world"
-_SDF_EXTERNAL_SCHEMES = {"model", "package", "http", "https", "fuel"}
 _MOVING = ("revolute", "continuous", "prismatic")
 _ANGULAR = ("revolute", "continuous")
 
@@ -840,20 +840,20 @@ def _sdf_metadata(root: ET.Element) -> dict:
 
 
 def _resolve_sdf_mesh(uri: str, *, base_dir: Path, where: str) -> dict:
-    parsed = urlparse(uri)
-    if parsed.scheme == "package":
+    if mesh_uri.scheme(uri) == "package":
         fmt = _drawable_format(uri, where=where)
         path = _package_mesh(uri, base_dir, where)
         if not path.is_file():
             raise RobotReadError(f"{where} names {uri!r}, and no file is at {path}")
         return {"format": fmt, "path": str(path)}
-    if parsed.scheme in _SDF_EXTERNAL_SCHEMES or (parsed.scheme and parsed.scheme != "file"):
+    local = mesh_uri.local_path(uri)  # a drive path is a path; file:///C:/x is C:\x on Windows
+    if local is None:
         raise RobotReadError(
             f"{where} names {uri!r}, which is not a local file: the viewer draws the meshes beside the "
             "description; copy the file next to it and name it by a relative path"
         )
     fmt = _drawable_format(uri, where=where)
-    path = Path(unquote(parsed.path)).resolve() if parsed.scheme == "file" else (base_dir / uri).resolve()
+    path = (base_dir / local).resolve()
     if not path.is_file():
         raise RobotReadError(f"{where} names {uri!r}, and no file is at {path}")
     return {"format": fmt, "path": str(path)}

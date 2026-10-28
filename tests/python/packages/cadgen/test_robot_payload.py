@@ -581,6 +581,18 @@ class Refusals(_Workspace):
         self.assertEqual(visual["placement"][0], 0.001, "the mesh scale is in the placement")
         self.assertEqual(payload["links"][0]["visuals"][0]["path"], visual["mesh"]["path"])
 
+    def test_an_sdf_mesh_named_by_its_absolute_path_or_a_file_uri_is_that_file(self) -> None:
+        # On Windows these are C:\...\a.stl, C:/.../a.stl and file:///C:/.../a.stl (cadgen.engine.mesh_uri).
+        mesh = (self.root / "meshes" / "a.stl").resolve()
+        mesh.parent.mkdir()
+        mesh.write_bytes(b"solid a\nendsolid a\n")
+        for uri in (str(mesh), mesh.as_posix(), mesh.as_uri(), mesh.as_uri().replace("file://", "file://localhost", 1)):
+            with self.subTest(uri=uri):
+                path = self.write("robot.sdf", f'<sdf version="1.9"><model name="arm"><link name="base"><visual name="v">'
+                                               f"<geometry><mesh><uri>{uri}</uri></mesh></geometry></visual></link></model></sdf>")
+                [visual] = read_robot_description(path)["visuals"]
+                self.assertEqual(visual["mesh"]["path"], str(mesh))
+
     def test_a_package_mesh_is_the_file_in_the_package_the_description_is_in(self) -> None:
         """#611: ``package://NAME/...`` is found where the stills find it (``cadgen.engine.formats.robot``):
         in the nearest folder above the description named NAME, or holding a package.xml that names it."""

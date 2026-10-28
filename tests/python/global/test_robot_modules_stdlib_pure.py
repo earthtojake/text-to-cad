@@ -41,6 +41,7 @@ FAMILY = [
     "srdf.py",
     "sdf.py",
     "_internal/validation_door.py",
+    "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
 ]
 
 # Heavy roots that would break extraction-readiness. `cadgen` itself is allowed only
@@ -59,6 +60,9 @@ ALLOWED_CADGEN = {
     "cadgen.results",  # the typed line protocol: dataclasses and pathlib only
     "cadgen._internal.validation_door",  # findings -> ValidationResult, stdlib only
     "cadgen._internal.cli_from_function",  # argparse over a signature, stdlib only
+    # A mesh reference's scheme and local file, read the same way by the engine's stills
+    # (which may import nothing of cadgen outside the engine): stdlib only.
+    "cadgen.engine.mesh_uri",
 }
 
 # What importing the family must not drag in. `cadgen urdf validate` runs on machines with
@@ -73,7 +77,9 @@ def _imports(path: Path) -> set[str]:
         if isinstance(node, ast.Import):
             found.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            found.add(node.module)
+            # `from cadgen.engine import mesh_uri` imports the submodule, not the package's surface.
+            submodules = {f"{node.module}.{alias.name}" for alias in node.names}
+            found.update(submodules if submodules <= ALLOWED_CADGEN else {node.module})
     return found
 
 

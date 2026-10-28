@@ -6,9 +6,9 @@ from enum import Enum
 from math import isfinite
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
-from urllib.request import url2pathname
 import xml.etree.ElementTree as ET
 
+from cadgen.engine import mesh_uri
 from cadgen.findings import FindingsReport
 from cadgen.xml_common import duplicate_values, display_path
 
@@ -1389,11 +1389,9 @@ def _is_rooted(path: Path) -> bool:
 def classify_mesh_uri(uri: str) -> MeshReference:
     value = str(uri or "").strip()
     parsed = urlparse(value)
-    # A Windows drive letter ("C:/meshes/base.stl") parses as a one-letter scheme.
-    if len(parsed.scheme) == 1:
-        parsed = parsed._replace(scheme="")
+    scheme = mesh_uri.scheme(value)  # "C:/meshes/base.stl" is a drive path, not scheme "c"
 
-    if parsed.scheme == "package":
+    if scheme == "package":
         package_name = unquote(parsed.netloc).strip()
         package_path = PurePosixPath(unquote(parsed.path).lstrip("/"))
         if not package_name or package_path.as_posix() == "." or ".." in package_path.parts:
@@ -1405,17 +1403,11 @@ def classify_mesh_uri(uri: str) -> MeshReference:
             package_path=package_path,
         )
 
-    if parsed.scheme == "file":
-        # url2pathname turns "/C:/meshes/base.stl" into "C:\\meshes\\base.stl" on Windows.
-        file_path = Path(url2pathname(parsed.path))
-        if _is_rooted(file_path):
-            return MeshReference(uri=value, kind=MeshUriKind.LOCAL_ABSOLUTE, path=file_path.resolve())
-        return MeshReference(uri=value, kind=MeshUriKind.LOCAL_RELATIVE, path=file_path)
-
-    if parsed.scheme:
+    local = mesh_uri.local_path(value)  # file:///C:/x is C:\x on Windows; file://host/... a share there
+    if local is None:
         return MeshReference(uri=value, kind=MeshUriKind.REMOTE)
 
-    local_path = Path(value)
+    local_path = Path(local)
     if _is_rooted(local_path):
         return MeshReference(uri=value, kind=MeshUriKind.LOCAL_ABSOLUTE, path=local_path.resolve())
     return MeshReference(uri=value, kind=MeshUriKind.LOCAL_RELATIVE, path=local_path)

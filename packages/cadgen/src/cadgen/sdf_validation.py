@@ -4,10 +4,9 @@ from collections.abc import Mapping
 import math
 from pathlib import Path
 import re
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 import xml.etree.ElementTree as ET
 
+from cadgen.engine import mesh_uri
 from cadgen.findings import FindingsReport, format_findings
 # The inertia tensor is the same physics in both formats, and this was a verbatim copy
 # of URDF's routine. Imported rather than duplicated -- a divergent eigenvalue check
@@ -740,11 +739,19 @@ def _validate_frame_cycles(
 
 
 def _validate_mesh_uri(uri: str, result: FindingsReport, base_dir: Path, uri_path: str) -> None:
-    parsed = urlparse(uri)
-    scheme = parsed.scheme if len(parsed.scheme) > 1 else ""  # "C:" is a drive, not a scheme
+    scheme = mesh_uri.scheme(uri)  # "C:/meshes/base.stl" is a drive path, not scheme "c"
     if scheme in EXTERNAL_URI_SCHEMES:
         return
-    if scheme and scheme != "file":
+    local = mesh_uri.local_path(uri)
+    if local is None and scheme == "file":
+        result.add(
+            "warning",
+            "unresolved_mesh_uri",
+            f"mesh URI {uri!r} names a file on another host, which bundled validation does not resolve",
+            path=uri_path,
+        )
+        return
+    if local is None:
         result.add(
             "warning",
             "unresolved_mesh_uri_scheme",
@@ -752,7 +759,7 @@ def _validate_mesh_uri(uri: str, result: FindingsReport, base_dir: Path, uri_pat
             path=uri_path,
         )
         return
-    mesh_path = Path(url2pathname(parsed.path)).resolve() if scheme == "file" else (base_dir / uri).resolve()
+    mesh_path = (base_dir / local).resolve()
     if not mesh_path.is_file():
         result.add(
             "error",

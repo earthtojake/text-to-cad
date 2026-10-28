@@ -47,6 +47,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
+from cadgen.engine import mesh_uri
 from cadgen.engine.formats import Foreign, FormatError, Part, Placed, assemble, files_of
 
 __all__ = ["Robot", "RobotError", "package_file", "package_root", "read_robot", "robot_file"]
@@ -379,8 +380,7 @@ def package_file(reference: str, base: Path, where: str) -> Path:
 def _mesh_file(reference: str, base: Path, where: str) -> Path:
     """A visual's mesh file: a path relative to the description, an absolute one, file://, or a
     file of the ROS package the description is in (``package://``, ``package_file``)."""
-    parsed = urlparse(reference)
-    if parsed.scheme == "package":
+    if mesh_uri.scheme(reference) == "package":
         found = package_file(reference, base, where)
         if found.suffix.lower() not in DRAWABLE:
             raise RobotError(f"{where} names {found.name}: the stills draw STL, 3MF and GLB link meshes, not "
@@ -388,11 +388,11 @@ def _mesh_file(reference: str, base: Path, where: str) -> Path:
         if not found.is_file():
             raise RobotError(f"{where} names {reference!r}, and no file is at {found}")
         return found
-    if parsed.scheme not in ("", "file") and not (len(parsed.scheme) == 1 and os.name == "nt"):
+    local = mesh_uri.local_path(reference)  # a drive path is a path; file:///C:/x is C:\x on Windows
+    if local is None:
         raise RobotError(f"{where} names {reference!r}, which is not a local file: copy it beside the description "
                          "and name it by a relative path")
-    found = Path(unquote(parsed.path)) if parsed.scheme == "file" else Path(reference)
-    found = (found if found.is_absolute() else base / found).resolve()
+    found = (base / local).resolve()
     if found.suffix.lower() not in DRAWABLE:
         raise RobotError(f"{where} names {found.name}: the stills draw STL, 3MF and GLB link meshes, not "
                          f"{found.suffix or 'this'} files")
