@@ -329,12 +329,7 @@ def pixels(image: Any) -> np.ndarray:
     """An OCCT picture (``Image_PixMap``) as sRGB bytes (height, width, 3), top row first. OCP hands
     no pointer to a picture's buffer, so the picture is handed over as an uncompressed TGA in memory
     (a few milliseconds) and read with numpy: its 18-byte header, then its BGR(A) rows."""
-    from OCP.TCollection import TCollection_AsciiString
-
-    stream = io.BytesIO()
-    if not image.Save(stream, TCollection_AsciiString("tga")):
-        raise RuntimeError("OCCT could not hand its picture over")
-    data = stream.getvalue()
+    data = _tga(image)
     kind = data[2]
     width, height, depth, descriptor = struct.unpack_from("<HHBB", data, 12)
     if kind != 2 or depth not in (24, 32):
@@ -342,6 +337,28 @@ def pixels(image: Any) -> np.ndarray:
     found = np.frombuffer(data, np.uint8, width * height * (depth // 8), 18 + data[0])
     found = found.reshape(height, width, depth // 8)[:, :, [2, 1, 0]]
     return np.ascontiguousarray(found if descriptor & 0x20 else found[::-1])  # bit 5: the top row first
+
+
+def _tga(image: Any) -> bytes:
+    """``image`` as an uncompressed TGA's bytes: saved to a stream in memory, else to a temporary
+    file (Windows' OCP saves every format to a file and none to a stream, #709)."""
+    import tempfile
+
+    from OCP.TCollection import TCollection_AsciiString
+
+    stream = io.BytesIO()
+    if image.Save(stream, TCollection_AsciiString("tga")):
+        return stream.getvalue()
+    handle, path = tempfile.mkstemp(prefix="cadgen-picture-", suffix=".tga")
+    os.close(handle)
+    try:
+        if not image.Save(TCollection_AsciiString(path)):
+            raise RuntimeError("OCCT could not hand its picture over")
+        with open(path, "rb") as saved:
+            return saved.read()
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
 
 
 def encode(frame: np.ndarray) -> bytes:

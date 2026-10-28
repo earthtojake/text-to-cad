@@ -219,6 +219,28 @@ class ContextTest(unittest.TestCase):
         found = pixels(canvas.png())
         self.assertEqual(found.shape, (120, 200, 3))
 
+    def test_a_picture_no_stream_takes_is_handed_over_through_a_file(self) -> None:
+        # Windows' OCP saves a picture to a file but to no stream (#709): the same pixels either way,
+        # and the file gone after.
+        from OCP.Image import Image_AlienPixMap, Image_Format
+        from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TOC_RGB
+
+        image = Image_AlienPixMap()
+        image.InitZero(Image_Format.Image_Format_RGB, 5, 3, 0, 0)
+        image.SetPixelColor(1, 2, Quantity_ColorRGBA(Quantity_Color(1, 0, 0, Quantity_TOC_RGB), 1.0), False)
+
+        class NoStream:
+            def Save(self, *args):  # noqa: N802 - OCCT's name
+                return False if isinstance(args[0], io.BytesIO) else image.Save(*args)
+
+        folder = tempfile.mkdtemp(prefix="picture-")
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        with mock.patch.object(tempfile, "tempdir", folder):
+            found = context.pixels(NoStream())
+        np.testing.assert_array_equal(found, context.pixels(image))
+        self.assertEqual(found[2, 1].tolist(), [255, 0, 0])
+        self.assertEqual(os.listdir(folder), [])
+
 
 class StillTest(unittest.TestCase):
     def test_a_still_travels_as_json(self) -> None:
