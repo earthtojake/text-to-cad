@@ -21,6 +21,7 @@ import {
   resolveInteractionPixelRatioCap
 } from "@text-to-cad/core/lib/viewer/renderQuality.js";
 import { updateOrbitControls } from "../camera/orbitControls.js";
+import { guardedOrbitControls } from "../camera/orbitControlsPointers.js";
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@text-to-cad/core/lib/viewer/perfMarks.js";
 import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepthPolicy.js";
 import { createZoomPivotReanchor } from "../camera/zoomPivotReanchor.js";
@@ -252,7 +253,8 @@ export function useViewerRuntime({
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
-      const controls = new OrbitControls(camera, renderer.domElement);
+      // Its pointerup is guarded against a mouse or pen left among touches (`orbitControlsPointers.js`).
+      const controls = new (guardedOrbitControls(OrbitControls))(camera, renderer.domElement);
       // three's controls write `cursor: auto` inline on the canvas when they (re)connect, and
       // `auto` does not inherit: it would pin the arrow over every tool's cursor (Select's
       // pointer, Pose's grab, Measure's crosshair), which the tools set on the viewport host.
