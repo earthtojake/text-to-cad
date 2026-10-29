@@ -34,7 +34,7 @@ export const installCommands = [
 // What the command does, and that running it again is the update, under the commands. The command
 // name is in backticks, which the page sets as code.
 export const installSummary =
-  "It installs uv if it is missing, then cadgen (CAD's engine, the `cadgen` command and its MCP server), sets up text-to-cad in every agent app on your computer, replaces an older engine, and keeps it all up to date from then on. Run it again to update everything, then restart your agent apps.";
+  "It installs uv if it is missing, then cadgen (CAD's engine, the `cadgen` command and its MCP server), sets up text-to-cad in every agent app on your computer, replaces an older engine, and keeps it all up to date from then on. Run it again to update everything; the next session in each agent app runs the new release.";
 // Installing by hand, each app's own commands, and updates: a page in the repository (the README's
 // Quickstart links it too), which the site does not repeat.
 export const manualInstall = { label: "Installing by hand, app by app, and updates", path: "docs/install.md" };

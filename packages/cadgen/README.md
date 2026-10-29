@@ -76,7 +76,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    state in the user's state folder: settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, each engine's connection metadata (keyed by its selected port; this user's alone), and each registered installation's record
-   (`installations/<version>.json`: its python, its console script, its environment).
+   (`installations/<version>.json`: its python, its console script, its environment), and the
+   release the device runs (`current`).
    Document records, Recents, thumbnails and cached document bytes are shared across
    ports, as are preferences, the page token and installation registry. State stores
    neither geometry nor source. In the platform's cache folder (`~/.cache/cadgen`, by
@@ -244,8 +245,15 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     different Python environments attach to that port's private authenticated
     transport. `cadgen server` starts the engine explicitly, and MCP bootstrap and
     `cadgen run` start or attach to it; a start first retires an older cadgen release's engine on
-    the port once it is idle, so the device runs the newest engine installed. An engine in
-    use is never displaced, and no release retires a newer one's. Ordinary model calls,
+    the port once it is idle, and brings up the engine of the release the device runs
+    (`<state>/current`) where that is newer than its own. An engine of an older release than the
+    current one is superseded and steps aside by itself once nothing holds it, nothing runs and
+    nothing has been asked of it for a while, first starting its successor when pages watch it, so
+    they reload on it; nothing asks it to. An engine in
+    use is never displaced, and no release retires a newer one's. Every `cadgen` command defers
+    to the current release as it starts (an older process runs that installation's command with
+    its arguments), so an agent app's pinned server line is a floor, written once at install and
+    never rewritten for a release. Ordinary model calls,
     `serve`, `viewer` and document operations only attach: a missing engine, a conflicting
     listener or an engine they do not meet fails, with no automatic start, local fallback,
     rollover or retirement. A client, a project's worker and the engine meet by protocol,
@@ -412,7 +420,9 @@ src/cadgen/
   assets.py              # where the bundled runtime is
   check_fonts.py         # `python -m cadgen.check_fonts`: the font that breaks
                          #   `import build123d`
-  _internal/             # the launch command, the installations' registry and the proxy
+  _internal/             # the launch command, the installations' registry, the release
+                         #   the device runs (<state>/current, which every command
+                         #   defers to) and the proxy
                          #   it writes (installations: ~/.local/bin/cadgen, which the
                          #   skills run as `cadgen +<version>`; written as `cadgen mcp`
                          #   or `cadgen server` starts and by `cadgen doctor`, never by
@@ -455,16 +465,23 @@ selected engine when none runs; `cadgen export`, `snapshot`, `serve`, `inspect`,
 opens, a DXF or a robot among them); `cadgen urdf|sdf|srdf validate` validates robot descriptions;
 `cadgen viewer` launches the selected engine's page; `cadgen mcp` is the stdio peer
 an agent host starts; and `cadgen telemetry` records the person's answer.
-`cadgen doctor` checks setup, registers the installation and writes the global
+`cadgen doctor` checks setup, registers the installation (the release the device runs from then
+on, when it is one past the current one) and writes the global
 `cadgen` command without starting an engine. Its `--prune` removes records and
 caches nothing needs, as reported by `_internal/leftovers.py`. `cadgen setup`
 (also `cadgen update`), which the install command `curl -fsSL https://texttocad.dev/install.sh | sh`
 runs, sets up or updates text-to-cad in every agent app it finds, each by its own
-command (Claude Desktop's config merged, a `.bak` beside it), gives the agents without a
+command (Claude Desktop's config merged where it has no CAD server, a `.bak` beside it; one it has
+is kept, whatever release it names), gives the agents without a
 plugin the skills alone through the Skills CLI (`npx skills add`), removes second copies,
 retires an older engine on the selected port once it is idle, then does what `doctor`
-does and keeps a receipt that `cadgen uninstall` takes back (with `--purge`, cadgen's
-state and cache folders too); `--dry-run` prints either one's plan alone. From then on the
+does, makes its release the one the device runs (`<state>/current`, when it is past the current
+one; `--version`, the install command's for a release asked for by name, whatever the current one
+is), and keeps a receipt that `cadgen uninstall` takes back (with `--purge`, cadgen's
+state and cache folders too); `--dry-run` prints either one's plan alone. An app's server line
+is written once and is a floor: every command defers to the current release
+(`_internal/installations.py`), so the next session an app starts runs it, with nothing to
+restart. From then on the
 engine on that port runs a newer release's `cadgen setup` itself, within the hour of the
 release (`_internal/auto_update.py`), or at once when the update card asks; `CADGEN_UPDATE_CHECK=0`
 turns that and the version check off.

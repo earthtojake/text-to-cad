@@ -57,7 +57,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It installs uv if it is missing, then cadgen (CAD's engine, the `cadgen` command
 and its MCP server), sets up text-to-cad in every agent app on your computer,
 replaces an older engine, and keeps it all up to date from then on. Run it again to
-update everything, then restart your agent apps.
+update everything; the next session in each agent app runs the new release.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, builds it with `cadgen run` and shows it in the CAD viewer.

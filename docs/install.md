@@ -35,17 +35,23 @@ checksum. It:
 5. Installs or updates text-to-cad in each app with the app's own commands, the
    ones below, and removes duplicate copies. A copy that a plugin store manages is
    reported, never removed. The agents without a plugin get the skills alone, through
-   the Skills CLI ([Other Agents](#other-agents)).
-6. Registers the `cadgen` command (`~/.local/bin/cadgen`; on Windows
+   the Skills CLI ([Other Agents](#other-agents)). Each app's line that starts CAD's
+   server names the release it was installed with, written once: from then on that
+   release is a floor, not what runs.
+6. Registers the release and makes it the one your computer runs: a small file in
+   cadgen's state folder, `current`, names it, and every copy of cadgen, whatever
+   release its app's line names, hands over to the release `current` names as it
+   starts. Then it registers the `cadgen` command (`~/.local/bin/cadgen`; on Windows
    `%USERPROFILE%\.local\bin\cadgen.cmd`), writes a receipt of everything it
    changed in cadgen's state folder, checks the result with `cadgen doctor`, and
-   lists the apps to restart.
+   lists the apps to restart to load what it added for the first time.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
 to see the plan before anything changes. Run it again to update: an app that is up
 to date is left as it is. From then on it updates itself: within the hour of each
-release, CAD's engine runs that release's `cadgen setup` for the same apps
-([Updates](#updates)). Options go after `sh -s --`:
+release, CAD's engine runs that release's `cadgen setup` for the same apps, and the
+next thread or session an app starts runs it ([Updates](#updates)). Options go
+after `sh -s --`:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh -s -- --dry-run            # print the plan, change nothing
@@ -60,7 +66,8 @@ the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsur
 `--uninstall` runs `cadgen uninstall` in place of `cadgen setup`: it takes back what
 the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
 store's; `--purge` with it also removes cadgen's state and cache folders.
-`--version <release>` installs that release instead of the latest. To read the
+`--version <release>` installs that release instead of the latest, and makes it the
+one your computer runs even when a newer one is installed. To read the
 script before it runs, download it first, then run it:
 
 ```bash
@@ -156,9 +163,11 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
 }
 ```
 
-The config pins a cadgen release in `args`, and uvx keeps the version it first
-downloads. To update, change that version to the
-[latest release](https://pypi.org/project/cadgen/), then restart Claude Desktop.
+The release in `args` is a floor: once your computer runs a newer one (the install
+command, or its updates, `current` in cadgen's state folder), the server runs that
+one instead, from its next start. Nothing in this config needs changing for an
+update; to set up a computer the install command never did, name the
+[latest release](https://pypi.org/project/cadgen/) there.
 
 ### Codex
 
@@ -314,33 +323,39 @@ No plugin for your agent yet?
 
 ## Updates
 
-Once the install command has set your computer up, text-to-cad updates itself.
+Once the install command has set your computer up, text-to-cad updates itself, and
+there is nothing to restart or click.
+
 CAD's engine checks for a newer release once an hour, starting a minute or two after
 it starts. When there is one, it first downloads that release whole, CAD kernel
 and all, which can take minutes on a slow connection; nothing changes until the
 download is complete. Then it runs that release's `cadgen setup` for the same apps
-the install command set up (the apps `--only` named, if it named any), the way the
-install command does, and retires the older engine once nothing is using it. A
-release that fails to install is tried again the next day, or whenever you ask.
+the install command set up (the apps `--only` named, if it named any): that
+refreshes the skills through each app's own plugin command, registers the release,
+and makes it the one `current` names. No app's config is rewritten for it: the
+release each app's server line names is the floor it was installed with, and every
+copy of cadgen runs the release `current` names. So the next thread or session an
+app starts runs the new release; one already running keeps the release it started
+with, and is never changed under you. The engine of the release before steps aside
+by itself once nothing is using it: no app holding it and nothing asked of it for
+half a minute. With a CAD Viewer page open, it first starts the new release's
+engine, and the page reloads on it. A release that fails to install is tried again
+the next day, or whenever you ask.
 
-An agent app keeps the release it started with until you restart it: a running
-session is never changed under you. A copy from a plugin directory or the Cursor
-Marketplace is updated by its store, and Gemini's extension by Gemini; the update
-leaves those as they are.
+A host can bring a newer release too: when an app updates its plugin by itself, its
+server's floor moves past `current`, and that release becomes current the first
+time it starts. A copy from a plugin directory or the Cursor Marketplace is updated
+by its store, and Gemini's extension by Gemini; the update leaves those as they are.
 
-CAD's blue update button, first in its navbar and on its home, shows once there
-is something for you to do; while the update is on its way, it stays out of
-sight. Installed: its card names the app to restart, and how (Codex: restart the
-app; Claude Code: start a new session; and so on). In the CAD Viewer in your
-browser, **Restart** has the engine hand itself over to the new release's, and
-the page reloads on it; while an agent app is using the engine, the card says so,
-and restarting that app updates both. Could not
-install: what went wrong, and **Try again**, which starts the update at once and
-shows it downloading and installing until it is done. The card's **Manual
-installation** leads to the [install instructions](https://www.texttocad.dev/install):
-the install command still updates everything at once, whenever you run it. In an
-app that shows CAD's replies as text, a line with its reply says when an update is
-installed and what to restart, or that it could not install, with the command.
+CAD's blue update button, first in its navbar and on its home, shows only when there
+is something for you to do: while the update is on its way, and once it is
+installed, it stays out of sight. Could not install: what went wrong, and **Try
+again**, which starts the update at once and shows it downloading and installing
+until it is done. The card's **Manual installation** leads to the
+[install instructions](https://www.texttocad.dev/install): the install command still
+updates everything at once, whenever you run it. In an app that shows CAD's replies
+as text, a line with its reply says when an update could not install, with the
+command.
 Where you installed text-to-cad another way, the button says a newer release is
 out, its card shows the install command to copy, and its **Send to agent** posts
 "Run `curl -fsSL https://texttocad.dev/install.sh | sh` to update text-to-cad to
@@ -348,7 +363,8 @@ out, its card shows the install command to copy, and its **Send to agent** posts
 chat: the command is the update; copies from a plugin directory or the Cursor
 Marketplace never show it, since their store updates them, and neither does
 Gemini's extension, which Gemini updates. `cadgen doctor` says where the update
-stands too, on its `update` line.
+stands, on its `update` line (`installed v0.9.0; new sessions run it` once it is in),
+and which release your computer runs, on its `current` line.
 
 To update one app by hand, run the update commands under its heading, then
 restart it.

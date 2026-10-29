@@ -347,7 +347,7 @@ only, and a file's id is derived again from its path after a restart.
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
-| `daemon.py`, `worker.py`, `client.py` | one daemon per selected port, project-interpreter workers, at most one per core alive (`Pool`), attach-only clients and explicit bootstrap, a hold; a worker's memory cap; the hello and its control connection (`client.hello`); an older release's engine retired by a start once it is idle (`client.converge`, `client.retire_older`) |
+| `daemon.py`, `worker.py`, `client.py` | one daemon per selected port, project-interpreter workers, at most one per core alive (`Pool`), attach-only clients and explicit bootstrap, a hold; a worker's memory cap; the hello and its control connection (`client.hello`); an older release's engine retired by a start once it is idle (`client.converge`, `client.retire_older`); a superseded engine stepping aside (`Daemon.supersede`) and a start bringing up the current release (`client.CURRENT`) |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: cadgen's bounded Windows retry, kept in the engine |
@@ -664,19 +664,35 @@ unused bytecode folders, and what the enclosing distribution hands it to start a
 (`cadgen._internal.auto_update`, the thread `cadgen-auto-update`): a minute and a half after the
 start, then once an hour, it reads the version feed, and where the install command's receipt names
 this engine's port it downloads a newer release whole, then runs that release's `cadgen setup`,
-which retires this engine once nothing uses it. The engine imports none of it (law 3), and
-`CADGEN_UPDATE_CHECK=0` turns it off. Beside `STARTED`, the distribution hands it `daemon.SUCCESSOR`,
-what starts its successor (cadgen's: `auto_update.successor`, the installed release's `cadgen
-server` on the port), for **a hand-over**: `{"op": "handover"}`, which the CAD Viewer page's Restart
-sends once a newer release is installed. Refused while an app server holds the engine or a build,
-draw or serving request runs, in a retirement's words (`` in use by 1 app server: quit that app or run
-`cadgen stop` ``); else the engine marks itself handing over and calls `SUCCESSOR(port)`, answering
-`{"ok": true}`, or `{"failed": <why>}` when no successor can start (`None` from the hook is a start;
-no hook, the distribution has none). For a minute (`daemon.HANDOVER_SECONDS`) its pages and their HTTP
-work no longer count among its uses (`Daemon.uses`, so its status and its idle stop): a page's watch
-outlives its tab by a minute or more, and a page reloads itself on an engine that answers on its port
-with its token. The successor's start retires it as any newer release's does, binds the port and
-serves the pages as they come back; one that never comes leaves the engine serving as before.
+which makes it the release the device runs (`<state>/current`). The engine imports none of it
+(law 3), and `CADGEN_UPDATE_CHECK=0` turns it off.
+
+**Supersession.** The distribution also tells the engine whether the device runs a newer release
+than its own, `daemon.SUPERSEDED` (cadgen's: `installations.newer`, the pointer against
+`cadgen.__version__`; a development install never is), and hands it `daemon.SUCCESSOR`, what starts
+the current release's engine on its port (cadgen's: `auto_update.successor`, that release's `cadgen
+server --port <port>`, else through uvx). Each `TEND_SECONDS`, a superseded engine steps aside once
+nothing holds it (no app server's hold), nothing runs (no build, draw or serving request) and nothing
+has been asked of it for `daemon.QUIET_SECONDS` (30 s): no door request but a status, a pid read, a
+stop or a hold, and no HTTP request but a page's watch, its version read (`serve.Server.clients_quiet`,
+the application's `EngineApp.quiet`, which counts an export kept alive too) (`Daemon.supersede`).
+With no page watching, it stops as `stop` does, saving what it holds; the next client's start brings
+up the current release's engine (`client._start`, below). With pages watching, it calls
+`SUCCESSOR(port)` (`None` from the hook is a start, words its failure, said on stderr and tried again
+later) and for a minute (`daemon.HANDOVER_SECONDS`) its pages and their HTTP work no longer count
+among its uses (`Daemon.uses`, so its status and its idle stop): a page's watch outlives its tab by a
+minute or more, and a page reloads itself on an engine that answers on its port with its token. The
+successor's start retires it as any newer release's does, binds the port and serves the pages as they
+come back; one that never comes leaves the engine serving as before, until it tries again. There is
+no request that asks an engine to hand over, and nothing for a person to click or restart.
+
+**A start brings up the current release.** `client._start` asks the distribution's
+`client.CURRENT` for the console script of the release the device runs when that is newer than the
+calling process's (cadgen's: `installations.newer`). Given one, the start runs its `cadgen server
+--port <port>`, detached, in the caller's environment without the caller's installation on
+`PYTHONPATH` or a development name, and with `CADGEN_NO_DEFER=1`, so that release's command runs as it
+is; the caller attaches to it by protocol, as to any engine. Else it starts its own installation's
+daemon module, as ever.
 
 - **A cap.** At most `CADGEN_ENGINE_WORKERS` workers are alive (default: the machine's
   cores). A build for a script whose worker in the same project interpreter is alive goes to it, waiting while it builds
