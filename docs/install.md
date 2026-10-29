@@ -39,9 +39,9 @@ checksum. It:
    server names the release it was installed with, written once: from then on that
    release is a floor, not what runs.
 6. Registers the release and makes it the one your computer runs: a small file in
-   cadgen's state folder, `current`, names it, and every copy of cadgen, whatever
-   release its app's line names, hands over to the release `current` names as it
-   starts. Then it registers the `cadgen` command (`~/.local/bin/cadgen`; on Windows
+   cadgen's state folder, `current`, names it, and each app's server, whatever
+   release its line names, starts or attaches to the engine of the release `current`
+   names. Then it registers the `cadgen` command (`~/.local/bin/cadgen`; on Windows
    `%USERPROFILE%\.local\bin\cadgen.cmd`), writes a receipt of everything it
    changed in cadgen's state folder, checks the result with `cadgen doctor`, and
    lists the apps to restart to load what it added for the first time.
@@ -333,10 +333,10 @@ download is complete. Then it runs that release's `cadgen setup` for the same ap
 the install command set up (the apps `--only` named, if it named any): that
 refreshes the skills through each app's own plugin command, registers the release,
 and makes it the one `current` names. No app's config is rewritten for it: the
-release each app's server line names is the floor it was installed with, and every
-copy of cadgen runs the release `current` names. So the next thread or session an
-app starts runs the new release; one already running keeps the release it started
-with, and is never changed under you. The engine of the release before steps aside
+release each app's server line names is the floor it was installed with, and each
+app's server starts or attaches to the engine of the release `current` names. So the
+next thread or session an app starts runs on the new release's engine; one already
+running keeps the engine it started with, and is never changed under you. The engine of the release before steps aside
 by itself once nothing is using it: no app holding it and nothing asked of it for
 half a minute. With a CAD Viewer page open, it first starts the new release's
 engine, and the page reloads on it. A release that fails to install is tried again

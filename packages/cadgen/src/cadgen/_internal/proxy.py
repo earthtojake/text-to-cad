@@ -1,7 +1,6 @@
 """Select an installed cadgen CLI by +VERSION, otherwise the release the device runs
 (``installations.current``: the pointer, else the newest live registered release), else the newest
-live registration. One selected by version runs as it is (``CADGEN_NO_DEFER=1``): the command
-never defers it to the current release (``installations.defer``).
+live registration.
 
 Server selection is independent: CADGEN_PORT (or --port) chooses its address, and client and
 engine meet by protocol, never by release. The launcher never searches running engines or
@@ -107,14 +106,12 @@ def main(argv: list[str] | None = None) -> int:
         print(refusal, file=sys.stderr)
         return 1
     run = command(record, args)
-    from cadgen._internal.installations import NAME_ENV, NO_DEFER_ENV, named as told
+    from cadgen._internal.installations import NAME_ENV, named as told
 
     if told(record):  # an installation that cannot know its own name: told it
         os.environ[NAME_ENV] = told(record)
     else:  # a release knows its own, whatever another installation's process that ran this was told
         os.environ.pop(NAME_ENV, None)
-    if version is not None:  # asked for by version: it runs as it is, whatever the device runs
-        os.environ[NO_DEFER_ENV] = "1"
     if run[0] == record["cadgen"] and _same(sys.prefix, record["prefix"]):
         # The installation this interpreter is: its console script's work, here, without a second start.
         sys.argv = run

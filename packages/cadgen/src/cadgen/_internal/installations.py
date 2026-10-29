@@ -19,22 +19,21 @@ caller names:
   the one it names (``setup``): ``cadgen setup``, as the install command or the self-update runs it,
   ``cadgen doctor``, and the first start of a newer release a host brought in as its plugin's
   floor (``startup``). Never a
-  development install, and never back to an older release unless the install command was asked for
-  that one by name (``cadgen setup --version``).
+  development install, and never back to an older release: the newest registered release is the one
+  the device runs.
 - ``~/.local/bin/cadgen`` (``CADGEN_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
   script that runs the pointer's installation, else the installation registered last, with ``-m
   cadgen._internal.proxy``, which picks the installation the command names (``cadgen +0.8.0 ...``)
   or the current one, and runs its ``cadgen`` console command. Every version writes the same file
   (``REVISION``), so the proxy is no installation's. On Windows it is ``cadgen.cmd``, the same logic.
 
-Every command defers to the current release (``defer``, at the top of the CLI's ``main``): a process
-whose release is older than the one the pointer names runs that installation's console script with
-its arguments and environment instead, ``exec`` on POSIX and a child it waits for on Windows. So an
-agent app's server line, written once at install with the release it installed (``uvx ... --from
-cadgen==0.8.3 cadgen mcp``), is a floor: the next session the app starts runs whatever the device
-runs, with nothing rewritten and nothing restarted. ``cadgen +<version>`` (the proxy says so with
-``CADGEN_NO_DEFER=1``), ``CADGEN_NO_DEFER=1`` itself, a development install, and ``cadgen setup
---version`` run as they are.
+A command runs as its own release and meets the engine by protocol (``cadgen.engine.runtime``). What
+follows the pointer is the engine: a start brings up the current release's engine
+(``cadgen.engine.client.CURRENT``), the CAD app's server (``cadgen mcp``) is a proxy that owns no tools,
+and a superseded engine steps aside once idle (``cadgen.engine.daemon``). So an agent app's server
+line, written once at install with the release it installed (``uvx ... --from cadgen==0.8.3 cadgen
+mcp``), is a floor: the next session the app starts meets the engine the device runs, with nothing
+rewritten and nothing restarted.
 
 The records, the pointer and the proxy are written at explicit setup moments: ``cadgen server``,
 the CAD app's server (``cadgen mcp``) as it starts (:func:`startup`), which the host does outside any
@@ -74,10 +73,8 @@ VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
 # installation cannot know by itself: the ``cadgen`` command gives it (``named``).
 RELEASE = re.compile(r"[0-9]+(\.[0-9]+)*((a|b|rc)[0-9]+)?(\.post[0-9]+)?")
-# The release the device runs (``current``), in the state folder; a command run with this set to 1
-# runs as it is (``defer``), and the variable goes with that process.
+# The release the device runs (``current``), in the state folder.
 CURRENT = "current"
-NO_DEFER_ENV = "CADGEN_NO_DEFER"
 _POINTABLE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # What ``point`` did: the pointer written (``POINTED``), already naming this installation (``OK``),
 # left naming a newer release (``BEHIND``), or not a release it ever names (``NOT_RELEASE``: a
@@ -364,7 +361,7 @@ def release_key(version: object) -> tuple[int, ...] | None:
 
 
 def development() -> bool:
-    """Whether this process is a development install, which neither defers nor points nor is
+    """Whether this process is a development install, which neither points nor is
     superseded: a source tree (``cadgen._internal.channel``), a plugin that says ``dev``, or a
     version the ``cadgen`` command named that is no release (``<version>-dev.<time>``)."""
     from cadgen._internal import channel
@@ -394,7 +391,7 @@ def current(folder=None) -> dict | None:
     """The installation the device runs: ``{"release", "cadgen", "python", "set"}``, the pointer's
     (``<state>/current``) while its interpreter and console script are there (``alive``), else the
     newest live registered release's (``set`` its registration's time), else ``None``. Read by the
-    proxy, every command's ``defer``, the engine's start and its supersession. Never raises."""
+    proxy, the engine's start and its supersession. Never raises."""
     try:
         found = _pointer(_read(_pointer_path() if folder is None else folder.path(CURRENT)))
         if found is not None and alive(found):
@@ -409,11 +406,10 @@ def current(folder=None) -> dict | None:
         return None
 
 
-def point(version: str, found: tuple[str, str, str] | None = None, *, folder=None, explicit: bool = False) -> str:
+def point(version: str, found: tuple[str, str, str] | None = None, *, folder=None) -> str:
     """Make the installation ``found`` (this one by default), registered as ``version``, the one the
     device runs: the pointer written whole, under the state folder's lock, when ``version`` is a
-    release past the current one (``current``) or the same release elsewhere; with ``explicit`` (the
-    install command asked for that release by name) whatever the current one is. ``POINTED``, ``OK``
+    release past the current one (``current``) or the same release elsewhere. ``POINTED``, ``OK``
     (it names it already), ``BEHIND`` (a newer release runs; left alone) or ``NOT_RELEASE``.
     ``OSError`` when the state folder cannot be written."""
     mine = release_key(version)
@@ -433,7 +429,7 @@ def point(version: str, found: tuple[str, str, str] | None = None, *, folder=Non
         same = now is not None and (now["release"], now["cadgen"], now["python"]) == (version, console, python)
         if same and _pointer(_read(path)) is not None:
             return OK
-        if not same and now is not None and not explicit and (release_key(now["release"]) or ()) > mine:
+        if not same and now is not None and (release_key(now["release"]) or ()) > mine:
             return BEHIND
         pointer = {"release": version, "cadgen": console, "python": python,
                    "set": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
@@ -452,8 +448,8 @@ def _read(path) -> bytes | None:
 
 def newer() -> dict | None:
     """The installation the device runs (``current``) when it is a release past this process's
-    (``cadgen.__version__``), else ``None``: what a command defers to (``defer``), what the engine's
-    start brings up (``cadgen.engine.client.CURRENT``), and what supersedes a running engine
+    (``cadgen.__version__``), else ``None``: what the engine's start brings up
+    (``cadgen.engine.client.CURRENT``), and what supersedes a running engine
     (``cadgen.engine.daemon.SUPERSEDED``). A development install has none. Never raises."""
     try:
         if development():
@@ -466,43 +462,6 @@ def newer() -> dict | None:
         return found if (release_key(found["release"]) or ()) > mine else None
     except Exception:  # noqa: BLE001 - a process that cannot tell runs as it is
         return None
-
-
-def _runs_as_asked(argv: list[str]) -> bool:
-    """A command that runs as it is whatever the device runs: one the ``cadgen`` command was asked
-    for by version (``+<version>``, or ``CADGEN_NO_DEFER=1``, which the proxy sets for it), and the
-    setup of a release the install command was asked for by name (``setup --version``)."""
-    if argv[:1] and argv[0].startswith("+"):
-        return True
-    if argv[:1] and argv[0] in ("setup", "update"):
-        return any(arg == "--version" or arg.startswith("--version=") for arg in argv[1:])
-    return False
-
-
-def defer(argv: list[str]) -> int | None:
-    """At the top of the CLI's ``main``: when the device runs a release past this process's
-    (``newer``), that installation's console script run with ``argv`` and this environment (but the
-    name a development install is told, ``NAME_ENV``: a release knows its own), and its exit status;
-    ``None`` to run here: nothing newer, a pointer that is gone, a development install, or a command
-    that runs as asked (``_runs_as_asked``). ``exec`` on POSIX; on Windows a child with this process's
-    stdio, waited for, since an exec there breaks the pipes the host reads. ``NO_DEFER_ENV`` is
-    taken out of the environment: it is for this process alone."""
-    if os.environ.pop(NO_DEFER_ENV, "") == "1" or _runs_as_asked(argv):
-        return None
-    found = newer()
-    if found is None:
-        return None
-    run = [found["cadgen"], *argv]
-    env = {name: value for name, value in os.environ.items() if name != NAME_ENV}
-    try:
-        if WINDOWS:
-            import subprocess
-
-            return subprocess.call(run, env=env)
-        os.execve(run[0], run, env)
-    except OSError:
-        return None  # gone between the look and the run: this release does the work
-    return None  # not reached
 
 
 # --- the proxy --------------------------------------------------------------------------------
@@ -670,12 +629,11 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
     return path, status, None
 
 
-def setup(version: str, *, explicit: bool = False) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None],
-                                                            tuple[str, str | None]]:
+def setup(version: str) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None], tuple[str, str | None]]:
     """Register this installation as ``version``, point the device at it when it is a release past
-    the current one (``point``; ``explicit``, whatever the current one is; never for a development
-    install, ``NOT_RELEASE``) and write the proxy: the record's and the proxy's ``(path, status,
-    error)``, and the pointer's ``(status, error)``."""
+    the current one (``point``; never for a development install, ``NOT_RELEASE``) and write the
+    proxy: the record's and the proxy's ``(path, status, error)``, and the pointer's ``(status,
+    error)``."""
     try:
         path, status = register(version)
         registered: tuple[str, str, str | None] = (path, status, None)
@@ -688,7 +646,7 @@ def setup(version: str, *, explicit: bool = False) -> tuple[tuple[str, str, str 
     pointed: tuple[str, str | None] = (NOT_RELEASE, None)
     if registered[2] is None and not development():
         try:
-            pointed = (point(version, explicit=explicit), None)
+            pointed = (point(version), None)
         except OSError as failure:
             pointed = (MISSING, f"{type(failure).__name__}: {failure.strerror or failure}")
     return registered, write_proxy(), pointed

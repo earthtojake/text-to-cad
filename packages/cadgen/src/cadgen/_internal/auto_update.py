@@ -19,7 +19,7 @@ when the feed names a release past the receipt's, installs it (``run_once``):
    does: it refreshes the skills through each app's own plugin command, registers the release and
    makes it the one the device runs (``<state>/current``, ``cadgen._internal.installations``), and
    the receipt it writes says how it went. No app's server line is rewritten: each is a floor, and
-   the next session an app starts runs the new release (``installations.defer``).
+   the next session an app starts meets the new release's engine (``cadgen.engine.client.CURRENT``).
 
 One attempt per release a day (``RETRY_SECONDS``): a release that fails is tried again the next
 day, and the install command still works by hand. The person can start one at once from the update
@@ -490,15 +490,15 @@ def successor(port: int) -> str | None:
     started, else why not in one line. Its ``cadgen server`` runs detached, from the current
     installation (``installations.newer``), else -- the pointer's installation gone -- through uvx at
     the receipt's release, past this process's, on the receipt's PATH; in this process's environment
-    with the receipt's PATH first and no other cadgen (``_environment``), told to run as it is
-    (``installations.NO_DEFER_ENV``), and what it prints goes to the log. It retires this engine as it
+    with the receipt's PATH first and no other cadgen (``_environment``), and what it prints goes to
+    the log. It retires this engine as it
     starts (``cadgen.engine.client.converge``), and serves this one's pages as they reload."""
     from cadgen import __version__
     from cadgen._internal import installations, providers
     from cadgen.engine.daemon import detached
 
     found = receipt() or {}
-    env = {**_environment(found.get("path")), installations.NO_DEFER_ENV: "1"}
+    env = _environment(found.get("path"))
     current = installations.newer()
     if current is not None:
         release = current["release"]

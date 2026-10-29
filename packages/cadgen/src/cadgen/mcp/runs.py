@@ -87,12 +87,10 @@ def command(path: Path, arguments: list[str]) -> list[str]:
 
 def environment() -> dict[str, str]:
     """The run's environment: this process's, with the engine's own port selected (the run attaches to
-    this engine), Python unbuffered (its lines come as they are printed), and this release's command
-    run as it is (``installations.NO_DEFER_ENV``)."""
-    from cadgen._internal.installations import NO_DEFER_ENV
+    this engine) and Python unbuffered (its lines come as they are printed)."""
     from cadgen.engine.daemon import selected_port
 
-    return {**os.environ, "CADGEN_PORT": str(selected_port()), "PYTHONUNBUFFERED": "1", NO_DEFER_ENV: "1"}
+    return {**os.environ, "CADGEN_PORT": str(selected_port()), "PYTHONUNBUFFERED": "1"}
 
 
 def documents(path: Path) -> list[dict[str, Any]]:

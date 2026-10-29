@@ -116,7 +116,6 @@ class StartTest(unittest.TestCase):
         argv, env = self.start("/releases/0.9.0/bin/cadgen")
         self.assertEqual(argv, ["/releases/0.9.0/bin/cadgen", "server", "--port", str(daemon.selected_port())])
         self.assertEqual(env["PYTHONPATH"], "/elsewhere", "none of this installation's code")
-        self.assertEqual(env[client.NO_DEFER_ENV], "1")
         self.assertNotIn(daemon.INSTALLATION_ENV, env)
 
     def test_with_nothing_newer_it_starts_its_own_daemon(self) -> None:
@@ -125,7 +124,6 @@ class StartTest(unittest.TestCase):
         argv, env = self.start(None)
         self.assertEqual(argv, [sys.executable, "-P", "-m", client.DAEMON_MODULE])
         self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0], daemon.engine_root())
-        self.assertNotIn(client.NO_DEFER_ENV, env)
 
 
 if __name__ == "__main__":

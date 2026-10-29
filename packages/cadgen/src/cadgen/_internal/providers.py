@@ -1135,8 +1135,8 @@ def _plan_gemini(app: App, release: str, machine: Machine, **_: Any) -> List[Ste
 
 def _unpinned(entry: Any) -> Any:
     """A server entry with the release it pins left out (``cadgen==X`` as ``cadgen``): a pin is the
-    floor it was written with, and every entry runs the release the device runs
-    (``cadgen._internal.installations.defer``), so two entries that differ in it alone are the same."""
+    floor it was written with, and every entry's server starts or attaches to the engine of the release
+    the device runs (``cadgen._internal.installations``), so two entries that differ in it alone are the same."""
     if not isinstance(entry, dict) or not isinstance(entry.get("args"), list):
         return entry
     return {**entry, "args": ["cadgen" if isinstance(word, str) and word.startswith("cadgen==") else word

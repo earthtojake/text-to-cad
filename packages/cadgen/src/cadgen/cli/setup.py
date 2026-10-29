@@ -7,9 +7,10 @@ sh``; on Windows ``INSTALL_WINDOWS``, ``irm https://www.texttocad.dev/install.ps
 installing uv: the newest release's cadgen, run through ``uvx``. Running it again is the update, and
 from then on the engine runs it itself, within the hour of each release
 (``cadgen._internal.auto_update``). An app's server line is written once, with the release that
-installed it, and never rewritten for a release: it is a floor, and every entry defers to the
-release the device runs (``<state>/current``, ``cadgen._internal.installations``), which this
-command points at itself. So an update restarts nothing: the next session an app starts runs it.
+installed it, and never rewritten for a release: it is a floor, and the server it names is a proxy
+that starts or attaches to the engine of the release the device runs (``<state>/current``,
+``cadgen._internal.installations``), which this command points at itself when its release is the
+newest. So an update restarts nothing: the next session an app starts meets the new engine.
 In order, each step said as it runs:
 
 1. **Plan.** Under a lock in the state folder, every agent app is read
@@ -26,8 +27,7 @@ In order, each step said as it runs:
    one ``npx skills add`` (Node needed); an app with a plugin never does. A command that fails is
    said with its output, and the other apps go on; the exit status is then 1.
 4. **The cadgen command.** This installation registered, made the release the device runs when it is
-   one past the current one (``--version``, the install command's when it was asked for a release by
-   name: whatever the current one is), and ``~/.local/bin/cadgen`` written, as ``cadgen doctor`` does
+   one past the current one, and ``~/.local/bin/cadgen`` written, as ``cadgen doctor`` does
    it (``cadgen._internal.installations``).
 5. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take back;
    and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from which
@@ -109,9 +109,6 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> argpar
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cadgen telemetry off` does")
-        parser.add_argument("--version", metavar="X.Y.Z", dest="release",
-                            help="the release the install command was asked for by name, this one: it becomes "
-                                 "the one this device runs even when a newer one is installed")
         parser.add_argument("--port", type=int, metavar="PORT",
                             help="the engine port the apps' configs name (default: CADGEN_PORT, else 3245)")
     parser.add_argument("--json", action="store_true",
@@ -140,12 +137,6 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
         port = args.port or environment_port() or DEFAULT_PORT
     except ValueError as error:
         parser.error(str(error))
-    if not uninstall and args.release is not None:
-        from cadgen import __version__
-
-        if args.release != __version__:
-            parser.error(f"--version {args.release}: this is cadgen {__version__}; run the install command "
-                         f"with --version {args.release}")
     installer = Installer(args, only, port)
     return installer.uninstall() if uninstall else installer.install()
 
@@ -354,7 +345,7 @@ class Installer:
         pointed, point_error = installations.NOT_RELEASE, None
         if version:
             (record, recorded, record_error), (proxy, before, proxy_error), (pointed, point_error) = \
-                installations.setup(version, explicit=self.args.release is not None)
+                installations.setup(version)
         else:
             record, recorded, record_error = None, None, None
             proxy, before, proxy_error = installations.proxy_path(), installations.proxy_status(), None

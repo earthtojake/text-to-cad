@@ -26,9 +26,6 @@ DAEMON_MODULE = "cadgen.engine.daemon"  # the enclosing distribution may supply 
 # enclosing distribution's pointer, ``cadgen._internal.installations.newer``), else None: a start
 # brings up that release's engine (``_start``) rather than this one's. None: the distribution says none.
 CURRENT: Callable[[], str | None] | None = None
-# What the engine started for another release is told so that its command runs as it is, never
-# deferred again (the distribution's ``installations.NO_DEFER_ENV``; law 3: the name, not the import).
-NO_DEFER_ENV = "CADGEN_NO_DEFER"
 
 # The sandboxes known to refuse the loopback port the engine's HTTP server needs, each by a variable
 # and the value it sets in the shells it runs: a daemon started there could never serve a build. The
@@ -204,8 +201,8 @@ def _current() -> str | None:
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process. Where the device runs a newer release than this
     process's (``CURRENT``), that release's engine: its ``cadgen server --port <port>``, in this
-    environment without this installation's folder on ``PYTHONPATH`` or a development name, and told
-    to run as it is (``NO_DEFER_ENV``). This process attaches to it as to any engine, by protocol.
+    environment without this installation's folder on ``PYTHONPATH`` or a development name. This
+    process attaches to it as to any engine, by protocol.
     Else this installation's daemon module, its folder first on ``PYTHONPATH``."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root = _daemon.engine_root()
@@ -218,7 +215,6 @@ def _start() -> subprocess.Popen:
             env["PYTHONPATH"] = os.pathsep.join(rest)
         for name in ("PYTHONHOME", "PYTHONPYCACHEPREFIX", _daemon.INSTALLATION_ENV):
             env.pop(name, None)
-        env[NO_DEFER_ENV] = "1"
         argv = [script, "server", "--port", str(_daemon.selected_port())]
     else:
         if root not in path.split(os.pathsep):

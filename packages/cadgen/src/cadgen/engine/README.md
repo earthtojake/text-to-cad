@@ -690,8 +690,7 @@ no request that asks an engine to hand over, and nothing for a person to click o
 `client.CURRENT` for the console script of the release the device runs when that is newer than the
 calling process's (cadgen's: `installations.newer`). Given one, the start runs its `cadgen server
 --port <port>`, detached, in the caller's environment without the caller's installation on
-`PYTHONPATH` or a development name, and with `CADGEN_NO_DEFER=1`, so that release's command runs as it
-is; the caller attaches to it by protocol, as to any engine. Else it starts its own installation's
+`PYTHONPATH` or a development name; the caller attaches to it by protocol, as to any engine. Else it starts its own installation's
 daemon module, as ever.
 
 - **A cap.** At most `CADGEN_ENGINE_WORKERS` workers are alive (default: the machine's

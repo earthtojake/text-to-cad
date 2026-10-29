@@ -331,7 +331,6 @@ class Successor(Fixture):
         self.assertEqual(argv, [console, "server", "--port", str(PORT)])
         self.assertEqual(kwargs["env"]["PATH"].split(os.pathsep)[:2], [str(self.bin), str(self.empty)])
         self.assertNotIn("PYTHONPATH", kwargs["env"])
-        self.assertEqual(kwargs["env"]["CADGEN_NO_DEFER"], "1")
         self.assertIn("server --port", (self.state / auto_update.LOG_FILE).read_text(encoding="utf-8"))
 
     def test_with_no_installation_registered_uvx_runs_the_release(self) -> None:

@@ -250,10 +250,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     current one is superseded and steps aside by itself once nothing holds it, nothing runs and
     nothing has been asked of it for a while, first starting its successor when pages watch it, so
     they reload on it; nothing asks it to. An engine in
-    use is never displaced, and no release retires a newer one's. Every `cadgen` command defers
-    to the current release as it starts (an older process runs that installation's command with
-    its arguments), so an agent app's pinned server line is a floor, written once at install and
-    never rewritten for a release. Ordinary model calls,
+    use is never displaced, and no release retires a newer one's. An agent app's pinned server line is a floor, written once at install and never rewritten
+    for a release: the `cadgen mcp` it names is a proxy that owns no tools and starts or attaches to
+    the current release's engine, meeting it by protocol. Ordinary model calls,
     `serve`, `viewer` and document operations only attach: a missing engine, a conflicting
     listener or an engine they do not meet fails, with no automatic start, local fallback,
     rollover or retirement. A client, a project's worker and the engine meet by protocol,
@@ -424,8 +423,8 @@ src/cadgen/
   check_fonts.py         # `python -m cadgen.check_fonts`: the font that breaks
                          #   `import build123d`
   _internal/             # the launch command, the installations' registry, the release
-                         #   the device runs (<state>/current, which every command
-                         #   defers to) and the proxy
+                         #   the device runs (<state>/current, which the engine's
+                         #   start follows) and the proxy
                          #   it writes (installations: ~/.local/bin/cadgen, which the
                          #   skills run as `cadgen +<version>`; written as `cadgen mcp`
                          #   or `cadgen server` starts and by `cadgen doctor`, never by
@@ -479,12 +478,11 @@ is kept, whatever release it names), gives the agents without a
 plugin the skills alone through the Skills CLI (`npx skills add`), removes second copies,
 retires an older engine on the selected port once it is idle, then does what `doctor`
 does, makes its release the one the device runs (`<state>/current`, when it is past the current
-one; `--version`, the install command's for a release asked for by name, whatever the current one
-is), and keeps a receipt that `cadgen uninstall` takes back (with `--purge`, cadgen's
+one), and keeps a receipt that `cadgen uninstall` takes back (with `--purge`, cadgen's
 state and cache folders too); `--dry-run` prints either one's plan alone. An app's server line
-is written once and is a floor: every command defers to the current release
-(`_internal/installations.py`), so the next session an app starts runs it, with nothing to
-restart. From then on the
+is written once and is a floor: the server it names is a proxy that starts or attaches to the
+current release's engine (`_internal/installations.py`, `engine/client.py`), so the next session
+an app starts meets it, with nothing to restart. From then on the
 engine on that port runs a newer release's `cadgen setup` itself, within the hour of the
 release (`_internal/auto_update.py`), or at once when the update card asks; `CADGEN_UPDATE_CHECK=0`
 turns that and the version check off.

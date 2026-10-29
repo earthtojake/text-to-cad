@@ -337,10 +337,6 @@ class InstallUpdateAndUninstall(Fixture):
                 self.assertEqual(code, 0, out)
                 self.assertIn(f"current  cadgen 99.0.0, newer than {RELEASE}, left as it is", out)
                 self.assertEqual(installations.current()["release"], "99.0.0")
-                code, out, _err = self.run_setup("--version", RELEASE)  # the install command asked for it
-                self.assertEqual(code, 0, out)
-                self.assertEqual(installations.current()["release"], RELEASE)
-                self.assertEqual(self.run_setup("--version", "99.0.0")[0], 2, "only this release can be asked for")
 
     def test_the_verify_line_names_the_engine_on_the_port_this_run_set_up(self) -> None:
         self.serving = {"status": "compatible", "release": RELEASE}
@@ -559,10 +555,10 @@ class TheOneLineInstaller(unittest.TestCase):
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual(given, [*head, "cadgen==9.9.9", "cadgen", "setup", "--dry-run", "--only", "claude,codex"])
             self.assertIn("cadgen setup --dry-run --only claude,codex\n", done.stderr)  # the Running: line
-            # A release asked for by name is told so: it becomes the one the device runs.
+            # A release asked for by name is the one installed; the device runs its newest release.
             done, given = run("--version", "1.2.3")
-            self.assertEqual(given, [*head, "cadgen==1.2.3", "cadgen", "setup", "--version", "1.2.3"])
-            done, given = run("--version", "0.0.1")  # older than the script's own: it knows no --version
+            self.assertEqual(given, [*head, "cadgen==1.2.3", "cadgen", "setup"])
+            done, given = run("--version", "0.0.1")  # older than the script's own, taken as asked
             self.assertEqual(given, [*head, "cadgen==0.0.1", "cadgen", "setup"])
             # --uninstall picks the verb, wherever it is given; the rest goes to `cadgen uninstall`.
             done, given = run("--purge", "--uninstall", "--dry-run")
