@@ -18,40 +18,28 @@ export interface UpdateNotice {
    * Where the engine updates itself, how far it has got; absent for a copy nothing updates by
    * itself (one installed by hand, a development install), whose update is the command's.
    * `pending`: the engine installs `release` within a day. `updating`: it is downloading or
-   * installing `release` (`stage`). `updated`: `release` is installed on this computer, and what runs
-   * the older one says how it gets the new one: `restart`, the agent app to restart (its name and a
-   * note), or `handover`, a Viewer whose page may restart the engine itself. `failed`: it could not
-   * install `release` (`error`, one line, says why).
+   * installing `release` (`stage`). `failed`: it could not install `release` (`error`, one line, says
+   * why). Once it is installed there is no notice: the next thread, session or page runs it.
    */
   auto?: {
-    state: "pending" | "updating" | "updated" | "failed";
+    state: "pending" | "updating" | "failed";
     release: string;
     stage?: "downloading" | "installing";
     error?: string;
-    restart?: { app: string; note: string };
-    handover?: true;
   };
 }
 
 /**
  * Whether the notice leaves the person something to do, and so shows: a copy the engine does not
- * update (the command), or the engine's update installed (a restart) or failed (Try again). One
- * pending or under way is the engine's business, and shows only in a card that started it.
+ * update (the command), or the engine's update failed (Try again). One pending or under way is the
+ * engine's business, and shows only in a card that started it.
  */
 export function updateShows(notice: UpdateNotice): boolean {
-  return !notice.auto || notice.auto.state === "updated" || notice.auto.state === "failed";
+  return !notice.auto || notice.auto.state === "failed";
 }
 
 /** The engine's own update, started now (`POST /__cad/update`): `reason` says why it did not start. */
 export type UpdateStart = () => Promise<{ started: boolean; reason?: string }>;
-
-/**
- * The engine handing its port to the release it installed (`POST /__cad/restart`), as the host follows
- * it: `reason` names what still holds the engine; once it is `ok` the host waits for the new engine
- * (the page reloads when it answers), and `stayed`, where the host gives it, settles if the old one
- * still answers a minute on.
- */
-export type UpdateRestart = () => Promise<{ ok: boolean; reason?: string; stayed?: Promise<void> }>;
 
 /** The host's call to its server: whether a newer text-to-cad is out. */
 export type UpdateCall = () => Promise<{ notice: UpdateNotice | null }>;

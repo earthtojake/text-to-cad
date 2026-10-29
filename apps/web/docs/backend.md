@@ -196,7 +196,6 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 | `GET`/`POST /__cad/language` | The person's language for the CAD views (`cadgen/language.py`): `{locale, inferred, choice}`; `{choice}` sets it (null is Automatic). |
 | `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |
 | `POST /__cad/update` | Start the engine's own update now (`cadgen._internal.auto_update.run_now`): `{started, reason?}`; the card's Try again. |
-| `POST /__cad/restart` | Hand the engine's port to the newer release it installed (the engine's `handover` op): `{ok, reason?}`; the card's Restart, after which the page reloads on the new engine. |
 | `POST /__cad/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cadgen snapshot --job` draws the packet later. Carries `x-cadgen-viewer`, as the GET below does. |
 | `GET /__cad/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |
 

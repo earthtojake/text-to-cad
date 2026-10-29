@@ -9,7 +9,7 @@ import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, useUpdateNotice, type UpdateNotice, type UpdateRestart } from '@text-to-cad/ui/update';
+import { UpdateButton, useUpdateNotice, type UpdateNotice } from '@text-to-cad/ui/update';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
@@ -133,16 +133,9 @@ export default function App({ client, server, tabStore, notice = null, language:
   // A newer text-to-cad, as the CAD app says it (`cadgen/updates.py`): the blue update button, first
   // in the navbar while there is something to do, from the notice read with the server's description
   // (`main.tsx`). A page in a browser cannot reach the agent's chat, so its prompt is copied. Where the
-  // engine updates itself, Try again starts its update and Restart hands its port to the release it
-  // installed: the page then waits for the new engine as for one gone (`useEngineReconnect`'s
-  // hand-over), and reloads when it answers; `stayed` settles if the old one still answers a minute on.
+  // engine updates itself, Try again starts a failed update again; an installed one needs nothing here:
+  // the engine steps aside for the new release's and the page reloads on it (`useEngineReconnect`).
   const updateNotice = useUpdateNotice(client.version, notice);
-  const [handover, setHandover] = useState<{ stayed(): void } | null>(null);
-  const restart = useCallback<UpdateRestart>(async () => {
-    const reply = await client.restart();
-    if (!reply.ok) return reply;
-    return { ...reply, stayed: new Promise<void>(resolve => setHandover({ stayed: resolve })) };
-  }, [client]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -164,16 +157,13 @@ export default function App({ client, server, tabStore, notice = null, language:
       controls: counts => client.reportActivity({ controls: counts }) },
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
   }), [downloads, client, source, fileActions, promptContext, promptFiles, links, appearance.colorScheme, locale]);
-  // The engine gone under the page: said over it, which stays as it was for the engine's return. A
-  // hand-over the page asked for is gone on purpose: the update card says Restarting, not this.
-  const readGone = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) || foreign;
-  const engineGone = readGone && !handover;
+  // The engine gone under the page: said over it, which stays as it was for the engine's return.
+  const engineGone = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) || foreign;
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(readGone || handover !== null, { pid: server.pid, ask: () => client.serverInfo({ fresh: true })
-    .then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)),
-    handover: handover !== null, onStay: () => { handover?.stayed(); setHandover(null); } });
+  const askedRefused = useEngineReconnect(engineGone, { pid: server.pid, ask: () => client.serverInfo({ fresh: true })
+    .then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
   return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
@@ -182,7 +172,7 @@ export default function App({ client, server, tabStore, notice = null, language:
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab}
-        update={client.update} restart={restart} /> : null}
+        update={client.update} /> : null}
       colorScheme={colorScheme} language={language} />
   </div></div>;
 }

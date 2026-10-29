@@ -27,32 +27,6 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.
 const POLICY = 'https://www.texttocad.dev/privacy-policy';
 type Answer = (body: any, url: URL) => unknown;
 /** An answer with a status of its own (a route answers 200 otherwise). */
-it('the engine\'s own update: a failed one\'s Try again goes through the tunnel and the corner follows its run; one installed asks for the app\'s restart in words', async () => {
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
-    command: 'curl -fsSL https://texttocad.dev/install.sh | sh', prompt: 'Run it', instructions: 'https://www.texttocad.dev/install' };
-  const failed = { ...notice, auto: { state: 'failed' as const, release: '0.9.0', error: 'The download was interrupted.' } };
-  const { bridge, server } = host({ displayMode: 'fullscreen' });
-  server.answers['/__cad/update'] = () => ({ started: true });
-  server.answers['/__cad/version'] = () => ({ notice: { ...notice, auto: { state: 'updating', release: '0.9.0', stage: 'installing' } } });
-  const { findByRole, findByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'file', notice: failed }} />);
-  await findByRole('region', { name: 'Update failed' });
-  await act(async () => getByRole('button', { name: /Try again/ }).click());
-  expect(server.asked('/__cad/update')).toEqual([{}]);
-  expect(await findByText('Downloading v0.9.0…')).toBeTruthy();
-  // The run it started keeps the corner, though an update under way alone would show nothing.
-  await act(async () => { window.dispatchEvent(new Event('focus')); });
-  expect(await findByText('Installing v0.9.0…')).toBeTruthy();
-  cleanup();
-  const installed = { ...notice, auto: { state: 'updated' as const, release: '0.9.0', restart: { app: 'Codex', note: 'restart the app, and any terminal or IDE session' } } };
-  const other = host({ displayMode: 'fullscreen' });
-  other.server.answers['/__cad/version'] = () => ({ notice: installed });
-  const view = render(<App bridge={other.bridge as any} server={other.server as any} launch={{ ...home, notice: installed }} />);
-  await act(async () => (await view.findByRole('button', { name: 'Update to 0.9.0' })).click());
-  const card = await view.findByRole('dialog', { name: 'Update installed' });
-  expect(card.textContent).toContain('Restart Codex to use v0.9.0.');
-  expect(view.queryByRole('button', { name: /Restart/ })).toBeNull();
-});
-
 class Status { constructor(readonly status: number, readonly body: unknown) {} }
 
 /**
@@ -501,4 +475,21 @@ it('a newer release is the navbar\'s blue update button: its card sends the prom
   expect(queryByRole('button', { name: 'Update to 0.9.0' })).toBeNull();
   await act(async () => getByRole('button', { name: 'Close' }).click());
   expect(queryByRole('region', { name: 'Update available' })).toBeNull();
+});
+
+it('the engine\'s own update: a failed one\'s Try again goes through the tunnel and the corner follows its run', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
+    command: 'curl -fsSL https://texttocad.dev/install.sh | sh', prompt: 'Run it', instructions: 'https://www.texttocad.dev/install' };
+  const failed = { ...notice, auto: { state: 'failed' as const, release: '0.9.0', error: 'The download was interrupted.' } };
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  server.answers['/__cad/update'] = () => ({ started: true });
+  server.answers['/__cad/version'] = () => ({ notice: { ...notice, auto: { state: 'updating', release: '0.9.0', stage: 'installing' } } });
+  const { findByRole, findByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'file', notice: failed }} />);
+  await findByRole('region', { name: 'Update failed' });
+  await act(async () => getByRole('button', { name: /Try again/ }).click());
+  expect(server.asked('/__cad/update')).toEqual([{}]);
+  expect(await findByText('Downloading v0.9.0…')).toBeTruthy();
+  // The run it started keeps the corner, though an update under way alone would show nothing.
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  expect(await findByText('Installing v0.9.0…')).toBeTruthy();
 });

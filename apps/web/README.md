@@ -486,12 +486,10 @@ links open in a new tab. A newer text-to-cad is the blue update button's, at the
 hourly version check, read from `/__cad/version` with the server's description as the page
 starts (`main.tsx`), again whenever the person comes back to it and as the card opens, and its install command
 copied for the person to run in a terminal; its install instructions open in a new tab. Where the
-engine updates itself, the button shows once there is something to do: installed, **Restart**
-(`POST /__cad/restart`) hands the engine's port to the new release's, and the page waits for it as for
-an engine gone (`useEngineReconnect`'s hand-over, with the card saying Restarting rather than
-`EngineStopped`), reloading once another engine answers, or saying the new engine did not take over
-when the old one still answers a minute on; failed, **Try again** (`POST /__cad/update`) starts it
-again and the card follows the run.
+engine updates itself, the button shows only once its update failed: **Try again**
+(`POST /__cad/update`) starts it again and the card follows the run until it lands, when the notice
+and the button go. An installed update needs nothing from the person: the engine steps aside for the
+new release's, and the page reloads on it as for any engine that returns (`useEngineReconnect`).
 A Viewer the CAD app's server opens is told of a release only where its install channel allows
 it (a store's copy, which its store updates, hears nothing); one a skill opens names no channel
 — a skills-only install — and is told. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.

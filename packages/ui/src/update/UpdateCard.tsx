@@ -1,10 +1,10 @@
-import { ArrowUp, Check, Copy, RefreshCw, RotateCw, X } from "lucide-react";
+import { ArrowUp, Check, Copy, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { useI18n } from "../i18n/index.js";
-import { readUpdateNotice, type UpdateNotice, type UpdateRestart, type UpdateStart } from "./useUpdateNotice.js";
+import { readUpdateNotice, type UpdateNotice, type UpdateStart } from "./useUpdateNotice.js";
 
 /** How often a card that started the engine's update reads the notice again while it runs. */
 export const UPDATE_POLL_MS = 2000;
@@ -15,14 +15,14 @@ export const UPDATE_POLL_MS = 2000;
  * top-right corner as a code block on GitHub has, and Quick Edit's button with its icon: where the
  * host takes messages, Send to agent (the send arrow) posts the prompt that has the agent run the
  * command; elsewhere, or when sending fails, Copy command. Where the engine updates itself
- * (`notice.auto`), the card is its state: installed, the restart that uses the release (an agent
- * app's, in words, or the viewer's, Restart, through the host's `restart`); failed, the engine's
- * error and Try again (the host's `update`), whose run the card follows, reading the notice every
- * two seconds until it is installed or failed again. Manual installation links to the install
+ * (`notice.auto`), the one thing to do is after a failure: the engine's error and Try again (the
+ * host's `update`), whose run the card follows, reading the notice every two seconds until it lands
+ * (the notice goes, and the button with it) or fails again. An installed update needs nothing: the
+ * next thread, session or page runs it. Manual installation links to the install
  * instructions: a real link to a new tab, which `onLink` is how this host follows. Nothing here is
  * an answer to keep: the X closes the card, as a prompt sent does.
  */
-export function UpdateCard({ id, notice, send, copy, onLink, onClose, update, restart, onRun }: {
+export function UpdateCard({ id, notice, send, copy, onLink, onClose, update, onRun }: {
   /** The ids of its title and text (`${id}-title`, `${id}-text`), which label what holds it. */
   id: string;
   notice: UpdateNotice;
@@ -35,15 +35,13 @@ export function UpdateCard({ id, notice, send, copy, onLink, onClose, update, re
   onClose(): void;
   /** Starts the engine's update again (Try again), where the host can. */
   update?: UpdateStart;
-  /** Restarts the viewer's engine into the release it installed (Restart), where the host can. */
-  restart?: UpdateRestart;
   /** Hears whether a run this card started is under way: what keeps the card shown meanwhile. */
   onRun?(running: boolean): void;
 }) {
   const [state, setState] = useState<{ busy?: boolean; copied?: boolean; unsent?: boolean; message?: string }>({});
   // The engine's update this card started: the notice it started from, until another says it landed.
   const [run, setRun] = useState<{ from: UpdateNotice } | null>(null);
-  const [act, setAct] = useState<{ busy?: boolean; reason?: string; restarting?: boolean; stayed?: boolean }>({});
+  const [act, setAct] = useState<{ busy?: boolean; reason?: string }>({});
   const { t } = useI18n();
   const auto = notice.auto;
   const onRunRef = useRef(onRun);
@@ -54,9 +52,10 @@ export function UpdateCard({ id, notice, send, copy, onLink, onClose, update, re
     const timer = setInterval(readUpdateNotice, UPDATE_POLL_MS);
     return () => clearInterval(timer);
   }, [run]);
-  // A notice read since the run started that says it is over: installed or failed, as the card then shows.
+  // A notice read since the run started that says it failed again, as the card then shows. One that
+  // landed is no notice at all: the host drops the button, and the card with it.
   useEffect(() => {
-    if (run && notice !== run.from && (!auto || auto.state === "updated" || auto.state === "failed")) setRun(null);
+    if (run && notice !== run.from && (!auto || auto.state === "failed")) setRun(null);
   }, [run, notice, auto]);
   // What a press said belongs to the state it was pressed in.
   useEffect(() => { setAct({}); }, [auto?.state]);
@@ -80,43 +79,6 @@ export function UpdateCard({ id, notice, send, copy, onLink, onClose, update, re
       <Spinner className="size-3.5 text-muted-foreground" aria-hidden="true" role={undefined} />
       {text(t(auto.state === "updating" && auto.stage === "installing" ? "update.installing" : "update.downloading", { release }))}
     </div>);
-  }
-
-  if (auto?.state === "updated") {
-    if (auto.restart) {
-      return card(t("update.installed"), <div className="flex flex-col gap-1">
-        {text(t("update.restartApp", { app: auto.restart.app, release: auto.release }))}
-        {auto.restart.note ? <p className="text-tiny text-muted-foreground">{auto.restart.note}</p> : null}
-      </div>);
-    }
-    if (!auto.handover) return card(t("update.installed"), text(t("update.updated", { release: auto.release })));
-    if (act.restarting) {
-      return card(t("update.installed"), <div className="flex items-center gap-2">
-        <Spinner className="size-3.5 text-muted-foreground" aria-hidden="true" role={undefined} />
-        {text(t("update.restarting"))}
-      </div>);
-    }
-    if (act.stayed) return card(t("update.installed"), <>{text(t("update.stayed"))}<div>{link}</div></>);
-    const restartNow = async () => {
-      setAct({ busy: true });
-      try {
-        const reply = await restart!();
-        if (!reply.ok) { setAct({ reason: reply.reason || t("update.restartRefused") }); return; }
-        setAct({ restarting: true });
-        void reply.stayed?.then(() => setAct({ stayed: true }));
-      } catch {
-        setAct({ reason: t("update.restartRefused") });
-      }
-    };
-    return card(t("update.installed"), <>
-      {text(t("update.restartViewer", { release: auto.release }))}
-      {restart ? <div className="flex justify-end">
-        <Button size="xs" className="font-medium" disabled={act.busy} onClick={() => void restartNow()}>
-          {act.busy ? <Spinner aria-hidden="true" role={undefined} /> : <RotateCw aria-hidden="true" />}{t("update.restart")}
-        </Button>
-      </div> : null}
-      {reason}
-    </>);
   }
 
   if (auto?.state === "failed") {

@@ -20,8 +20,8 @@ export function CardCorner({ fullSize = null, update = null }: { fullSize?: Reac
 /**
  * A newer text-to-cad, as a notice in the file handler's corner rather than the navbar's blue button: the update
  * card itself (`UpdateCard`: the install command, Send to agent where the host takes messages, else Copy
- * command, and Manual installation; or, where the engine updates itself, the restart it is installed for, or
- * its failure and Try again, whose run it follows), while it leaves the person something to do or a run it
+ * command, and Manual installation; or, where the engine updates itself, its failure and Try again, whose
+ * run it follows), while it leaves the person something to do or a run it
  * started is under way (`onRun`), until the person closes it for this view. Always open, it reads the
  * notice again as the window regains focus, and every two seconds while its run is under way.
  */

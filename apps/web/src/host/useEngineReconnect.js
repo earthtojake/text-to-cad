@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from "react";
 /** The first wait before a page whose engine is gone asks again, and the longest it backs off to. */
 export const RECONNECT_FIRST_MS = 1000;
 export const RECONNECT_LONGEST_MS = 5000;
-/** How long a hand-over the page asked for (`handover`) waits for another engine to answer. */
-export const HANDOVER_MS = 60_000;
 
 /**
  * A page whose engine is gone (`gone`) asks the same address again -- with its token, the cookie its
@@ -18,19 +16,11 @@ export const HANDOVER_MS = 60_000;
  * reloaded for it (under the dev server's proxy a reload would be refused again, and again), so the
  * page's new link, opened beside it, heals it: its cookie is the tab's too.
  *
- * A hand-over the page asked for (`handover`: the Viewer's Restart, which has the engine hand its port to
- * a newer release's) starts the same asking, and the old engine answering is not a blip then but the
- * hand-over still under way: the page keeps asking until another engine answers, and reloads. Once a
- * minute (`HANDOVER_MS`) has passed with no other engine answering, the page leaves the hand-over
- * (`onStay`): the old engine answering ends the asking, as a blip; nothing answering goes on asking,
- * as for any engine gone.
- *
  * Returns what the last ask met while the engine is gone: `true` when an engine answered and refused
  * the page's token, `false` when nothing answered, `null` before the first ask.
  *
  * @param {boolean} gone
  * @param {{ pid: unknown, ask: () => Promise<{ pid?: unknown } | { refused: true } | null>, reload?: () => void,
- *   handover?: boolean, onStay?: () => void, now?: () => number,
  *   schedule?: (run: () => void, delayMs: number) => unknown, cancel?: (handle: unknown) => void }} options
  *   `ask` answers the engine's description (`/__cad/server`) when one answered this page, `{ refused:
  *   true }` when one answered and refused its token, else null.
@@ -40,14 +30,11 @@ export function useEngineReconnect(gone, {
   pid,
   ask,
   reload = defaultReload,
-  handover = false,
-  onStay = () => {},
-  now = () => Date.now(),
   schedule = (run, delayMs) => setTimeout(run, delayMs),
   cancel = (handle) => clearTimeout(handle)
 }) {
   const optionsRef = useRef(null);
-  optionsRef.current = { pid, ask, reload, handover, onStay, now, schedule, cancel };
+  optionsRef.current = { pid, ask, reload, schedule, cancel };
   const asking = useRef(null);
   const [refused, setRefused] = useState(null);
 
@@ -58,16 +45,6 @@ export function useEngineReconnect(gone, {
     const loop = { active: true, timer: null };
     asking.current = loop;
     let delayMs = RECONNECT_FIRST_MS;
-    // A hand-over's deadline: until then the old engine answering means it has not let go yet.
-    let deadline = optionsRef.current.handover ? optionsRef.current.now() + HANDOVER_MS : null;
-    const overdue = () => {
-      if (deadline === null || optionsRef.current.now() < deadline) {
-        return false;
-      }
-      deadline = null;
-      optionsRef.current.onStay();
-      return true;
-    };
     const wait = () => {
       loop.timer = optionsRef.current.schedule(attempt, delayMs);
       delayMs = Math.min(delayMs * 2, RECONNECT_LONGEST_MS);
@@ -80,11 +57,6 @@ export function useEngineReconnect(gone, {
       }
       if (!answer || answer.refused) {
         setRefused(Boolean(answer?.refused));
-        overdue();
-        wait();
-        return;
-      }
-      if (answer.pid === optionsRef.current.pid && deadline !== null && !overdue()) {
         wait();
         return;
       }

@@ -295,12 +295,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     version() {
       return request('/__cad/version', { operation: 'version' });
     },
-    // The engine's own update, now, and its hand-over to the release it installed.
+    // The engine's own update, now.
     update() {
       return request('/__cad/update', { method: 'POST', headers: JSON_POST, body: {}, operation: 'update' });
-    },
-    restart() {
-      return request('/__cad/restart', { method: 'POST', headers: JSON_POST, body: {}, operation: 'restart' });
     },
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl('/__cad/analytics/activity', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});

@@ -55,21 +55,18 @@ export interface CadRecent {
 export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the install command that
  * updates it, and the prompt that has the person's agent run it. Where the engine updates itself, `auto`
- * says how far it has got (`pending`, `updating` at its `stage`, `updated`, `failed` with its `error`); a
- * copy nothing updates by itself has none. Installed, it says what uses the release: `restart`, the agent
- * app to restart (its name and a note), or `handover`, a Viewer whose page may restart the engine itself
- * (`restart()`). */
+ * says how far it has got (`pending`, `updating` at its `stage`, `failed` with its `error`); a copy
+ * nothing updates by itself has none. Once installed there is no notice: the next thread, session or
+ * page runs the release. */
 export interface CadUpdateNotice {
   latest: string; version: string; text: string; command: string; prompt: string; instructions: string;
   auto?: CadAutoUpdate;
 }
 export interface CadAutoUpdate {
-  state: 'pending' | 'updating' | 'updated' | 'failed';
+  state: 'pending' | 'updating' | 'failed';
   release: string;
   stage?: 'downloading' | 'installing';
   error?: string;
-  restart?: { app: string; note: string };
-  handover?: true;
 }
 export interface CadCatalog {
   entries: CadEntry[];
@@ -221,12 +218,6 @@ export interface CadWorkspaceService {
   version(): Promise<{ notice: CadUpdateNotice | null }>;
   /** Starts the engine's own update now (`POST /__cad/update`); `reason` says why it did not. */
   update(): Promise<{ started: boolean; reason?: string }>;
-  /**
-   * Hands the engine's port to the newer release's engine (`POST /__cad/restart`): the old one exits once
-   * nothing holds it, and the new one answers on the same port with the same token. `reason` names what
-   * still holds it.
-   */
-  restart(): Promise<{ ok: boolean; reason?: string }>;
   /**
    * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
    * noted by the server and sent only with consent. Never fails.

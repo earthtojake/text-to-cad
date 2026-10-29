@@ -295,8 +295,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // person something to do: the navbar's blue update button, first among its controls; in the file
   // handler, which has no navbar, a notice at the view's top-right until the person closes it for this
   // view, kept while a run its Try again started is under way. Its prompt goes to the chat where the
-  // host takes messages, so the agent updates CAD; elsewhere it is copied. An installed update asks
-  // for the agent app's restart in words: nothing here restarts it.
+  // host takes messages, so the agent updates CAD; elsewhere it is copied. An installed update shows
+  // nothing: the next thread or session runs it.
   const updateNotice = useUpdateNotice(client.version, initial.notice ?? null);
   const [updateClosed, setUpdateClosed] = useState(false);
   const [updateRunning, setUpdateRunning] = useState(false);

@@ -183,10 +183,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   corner either way. **Manual installation** opens the install instructions on the docs site
   (`https://www.texttocad.dev/install`, its homepage's install box) through `ui/open-link`. Where the install
   command set text-to-cad up, the engine updates it itself (`cadgen/_internal/auto_update.py`), and the
-  button shows only once there is something to do: installed, the card names the app to restart
-  (`notice.auto.restart`, in words: nothing here restarts it); failed, it says why, and **Try again**
-  starts the engine's update over the tunnel (`POST /__cad/update`), its card showing the download and
-  the install until it lands. For a copy nothing updates by itself the person, or their agent, runs
+  button shows only once its update failed: the card says why, and **Try again** starts the engine's
+  update over the tunnel (`POST /__cad/update`), its card showing the download and the install until
+  it lands, when the notice goes. An installed update shows nothing: the next thread or session runs
+  it. For a copy nothing updates by itself the person, or their agent, runs
   the command.
   A text client gets the same line with its first `cad_show` result. Where the
   install came from is its channel, which each plugin's startup config names in

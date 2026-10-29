@@ -146,7 +146,6 @@ export default {
   "update.sendFailed": "It could not be sent to the chat. Copy the command and run it in a terminal.",
   "update.copiedHint": "Copied. Run it in a terminal.",
   "update.copyFailed": "It could not be copied. Select the command above and copy it.",
-  "update.updated": "text-to-cad v{release} is installed. Restart your agent app to use it.",
   "update.failed": "Update failed",
   "update.failedUnexplained": "text-to-cad v{release} could not install itself.",
   "update.tryAgain": "Try again",
@@ -154,13 +153,6 @@ export default {
   "update.updatingTitle": "Updating",
   "update.downloading": "Downloading v{release}…",
   "update.installing": "Installing v{release}…",
-  "update.installed": "Update installed",
-  "update.restartApp": "Restart {app} to use v{release}.",
-  "update.restartViewer": "Restart the viewer to use v{release}.",
-  "update.restart": "Restart",
-  "update.restarting": "Restarting…",
-  "update.restartRefused": "The viewer could not restart.",
-  "update.stayed": "The new engine did not take over.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
