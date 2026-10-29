@@ -76,9 +76,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "delete": frozenset({"documents", "json", "port"}),
     "server": frozenset({"port", "rotate_token"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
-    # for which apps; and `uninstall`, which takes it out again.
-    "setup": frozenset({"dry_run", "only", "no_telemetry", "port", "json"}),
-    "update": frozenset({"dry_run", "only", "no_telemetry", "port", "json"}),
+    # for which apps, and the release the install command was asked for (`--version`, which the
+    # device's pointer then follows); and `uninstall`, which takes it out again.
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "port", "json", "release"}),
+    "update": frozenset({"dry_run", "only", "no_telemetry", "port", "json", "release"}),
     "uninstall": frozenset({"dry_run", "only", "purge", "port", "json"}),
 }
 
