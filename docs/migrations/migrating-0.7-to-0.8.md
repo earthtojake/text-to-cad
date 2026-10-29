@@ -946,6 +946,20 @@ menu, the CAD Viewer's, or with `cadgen telemetry`.
 - **The viewer shows an old mechanism or none.** A sidecar is read by nothing: the
   mechanism must be in the model's body (step 4).
 
+Two things 0.8.0 had are gone in 0.8.3:
+
+- **`cadgen.toml` version selection.** A `version = "0.8.0"` in a project's `cadgen.toml` selects
+  nothing now, and the file can go. Your computer runs one release, the newest installed
+  (`<state>/current`, which `cadgen doctor` shows on its `current` line), and a project meets it by
+  protocol, document format and kernel line, never by release. To run one command with a particular
+  installed release, name it: `cadgen +0.8.0 run model.py`. A production app that must stay on a
+  release runs its own engine: a `CADGEN_STATE_DIR` and `CADGEN_CACHE_DIR` of its own, with
+  `CADGEN_PORT` set to a port of its own, and nothing shared with the plugin's installation updates
+  or supersedes it.
+- **`CADGEN_ENGINE_PORT`.** The engine is selected with `CADGEN_PORT` (or `--port`), as every command
+  and model run reads it; a `CADGEN_ENGINE_PORT` left in an environment selects nothing, and the CAD
+  app's diagnostics say so.
+
 ## Code written against an 0.8 preview
 
 Projects written against a 0.8 pre-release may use names the release renamed or removed,
