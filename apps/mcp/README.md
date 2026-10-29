@@ -96,11 +96,18 @@ settles how a client that does not say so presents CAD: `inline`, a client that 
 without advertising them, as the reference host `basic-host` does; `text`, one that renders
 nothing.
 
-The agent also has `cad_export`, `cad_snapshot` and `cad_inspect` in
+The agent also has `cad_export`, `cad_snapshot`, `cad_inspect` and `cad_run` in
 all presentations, including text-only hosts. They use the Python operations,
 not page state. Each tool starts work with a request ID and polls or cancels its
 own operation; there is no `cad_job` tool. `cad_inspect` also takes
-`query: "structure"`, the summary without bounds, volume or mass. See the
+`query: "structure"`, the summary without bounds, volume or mass. `cad_run` runs a
+model script as `cadgen run SCRIPT.py` runs it, by the engine's own command, so the
+script, its worker and the engine are one cadgen whatever release the host's server
+line names: the script's absolute path on this computer, or its text as `code` with a
+`name`, which the engine writes as `<state>/scripts/<name>/<name>.py` and runs, one
+folder per name, so a rerun of a name is the same document. The run's output lines are
+the operation's progress (`detail`) and its result carries them with the script's
+documents, whose ids `cad_show` takes (`cadgen.mcp.runs`). See the
 [operation contract](../../packages/cadgen/README.md#agent-operations) for progress,
 retry, cancellation and explicit server-host destinations. An operation's status carries where the
 engine is as the engine's own progress event -- `progress`, `{kind, stage, job, outputs, detail, done,

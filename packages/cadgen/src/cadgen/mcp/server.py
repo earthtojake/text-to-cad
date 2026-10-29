@@ -423,12 +423,15 @@ class Server:
 
         port = selected_port()
         authoring = (
-            "Run a model script with `cadgen run model.py`; `cadgen` is the command this server writes as it "
-            "starts, `~/.local/bin/cadgen` (on Windows `%USERPROFILE%\\.local\\bin\\cadgen.cmd`). It runs the script "
-            "in a Python environment it makes for the project, with the dependencies the project declares in "
-            "pyproject.toml, requirements.txt or the script's inline metadata (`# /// script`) and the engine's own "
-            "cadgen: declare the model's other dependencies there. Nothing needs installing in the project, and its "
-            ".venv is never touched. "
+            "Run a model script with the cad_run tool: the engine runs `cadgen run SCRIPT.py` itself, in a Python "
+            "environment it makes for the project, with the dependencies the project declares in pyproject.toml, "
+            "requirements.txt or the script's inline metadata (`# /// script`) and the engine's own cadgen: declare "
+            "the model's other dependencies there. Nothing needs installing in the project, and its .venv is never "
+            "touched. Give `script`, its absolute path on this computer, or its text as `code` with a `name`, which "
+            "the engine keeps so a rerun of the same name updates the same documents; the result carries the run's "
+            "output and the script's documents. In a shell, `cadgen run model.py` does the same; `cadgen` is the "
+            "command this server writes as it starts, `~/.local/bin/cadgen` (on Windows "
+            "`%USERPROFILE%\\.local\\bin\\cadgen.cmd`). "
             f"This MCP server already starts or attaches to the engine on port {port}. "
             f"Set `CADGEN_PORT={port}` where `cadgen run` runs; model calls attach to that engine. "
             "A minimal model script is:\n"

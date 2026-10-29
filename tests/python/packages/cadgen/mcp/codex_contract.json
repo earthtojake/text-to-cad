@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "Run a model script with `cadgen run model.py`; `cadgen` is the command this server writes as it starts, `~/.local/bin/cadgen` (on Windows `%USERPROFILE%\\.local\\bin\\cadgen.cmd`). It runs the script in a Python environment it makes for the project, with the dependencies the project declares in pyproject.toml, requirements.txt or the script's inline metadata (`# /// script`) and the engine's own cadgen: declare the model's other dependencies there. Nothing needs installing in the project, and its .venv is never touched. This MCP server already starts or attaches to the engine on port <port>. Set `CADGEN_PORT=<port>` where `cadgen run` runs; model calls attach to that engine. A minimal model script is:\n```python\nimport build123d as bd\nfrom cadgen import model\n\n@model\ndef part():\n    return bd.Box(10, 20, 5)\n\nif __name__ == \"__main__\":\n    part()\n```\nA model is a no-argument function returning a build123d shape. Running the script prints its live document id; pass that id to `cad_show`. A virtual environment someone made with cadgen installed runs models with `python model.py` too: an older cadgen there keeps working, and its builds say when `uv pip install -U cadgen` would update it. Run `curl -fsSL https://texttocad.dev/install.sh | sh` (on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`) to update text-to-cad for every app. CAD shows local CAD models (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "instructions": "Run a model script with the cad_run tool: the engine runs `cadgen run SCRIPT.py` itself, in a Python environment it makes for the project, with the dependencies the project declares in pyproject.toml, requirements.txt or the script's inline metadata (`# /// script`) and the engine's own cadgen: declare the model's other dependencies there. Nothing needs installing in the project, and its .venv is never touched. Give `script`, its absolute path on this computer, or its text as `code` with a `name`, which the engine keeps so a rerun of the same name updates the same documents; the result carries the run's output and the script's documents. In a shell, `cadgen run model.py` does the same; `cadgen` is the command this server writes as it starts, `~/.local/bin/cadgen` (on Windows `%USERPROFILE%\\.local\\bin\\cadgen.cmd`). This MCP server already starts or attaches to the engine on port <port>. Set `CADGEN_PORT=<port>` where `cadgen run` runs; model calls attach to that engine. A minimal model script is:\n```python\nimport build123d as bd\nfrom cadgen import model\n\n@model\ndef part():\n    return bd.Box(10, 20, 5)\n\nif __name__ == \"__main__\":\n    part()\n```\nA model is a no-argument function returning a build123d shape. Running the script prints its live document id; pass that id to `cad_show`. A virtual environment someone made with cadgen installed runs models with `python model.py` too: an older cadgen there keeps working, and its builds say when `uv pip install -U cadgen` would update it. Run `curl -fsSL https://texttocad.dev/install.sh | sh` (on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`) to update text-to-cad for every app. CAD shows local CAD models (STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -1342,6 +1342,223 @@
     "type": "object"
    },
    "title": "Inspect CAD"
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true,
+    "readOnlyHint": false
+   },
+   "description": "Run a model script in the engine, as `cadgen run SCRIPT.py` runs it: in the project's Python environment (the dependencies it declares and the engine's own cadgen), its models built in the engine's warm worker. The script is its absolute path on this computer, or its text as code with a name. The result carries the run's output and the script's documents: pass a document id to cad_show. To start: {requestId, script} or {requestId, code, name}, optionally with args, waitMs. To follow one: {action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs. A start returns an asynchronous operation (waitMs waits for its result): call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "anyOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "start"
+        ],
+        "type": "string"
+       },
+       "args": {
+        "description": "The script's own arguments, as `python SCRIPT.py ARGS` passes them.",
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 64,
+        "type": "array"
+       },
+       "code": {
+        "description": "The script's text, run in place of a file on this computer: give it with name.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "name": {
+        "description": "A name for a script given as code (letters, digits, _ and -): the engine keeps it as <name>/<name>.py in its state folder, so a rerun of the same name is the same document.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "requestId": {
+        "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "script": {
+        "description": "The model script's absolute path on this computer.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "waitMs": {
+        "description": "Milliseconds to wait before answering: for the operation to finish, or with afterSequence for its next change.",
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "requestId"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "status",
+         "cancel"
+        ],
+        "type": "string"
+       },
+       "afterSequence": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "epoch": {
+        "description": "Session epoch returned by start; required for status/cancel.",
+        "minLength": 1,
+        "type": "string"
+       },
+       "operationId": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "waitMs": {
+        "description": "Milliseconds to wait before answering: for the operation to finish, or with afterSequence for its next change.",
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "action",
+       "operationId",
+       "epoch"
+      ],
+      "type": "object"
+     }
+    ],
+    "properties": {
+     "action": {
+      "default": "start",
+      "enum": [
+       "start",
+       "status",
+       "cancel"
+      ],
+      "type": "string"
+     },
+     "afterSequence": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "args": {
+      "description": "The script's own arguments, as `python SCRIPT.py ARGS` passes them.",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "code": {
+      "description": "The script's text, run in place of a file on this computer: give it with name.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "epoch": {
+      "description": "Session epoch returned by start; required for status/cancel.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "name": {
+      "description": "A name for a script given as code (letters, digits, _ and -): the engine keeps it as <name>/<name>.py in its state folder, so a rerun of the same name is the same document.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "operationId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "requestId": {
+      "description": "Unique 16\u2013100 character request ID. Reuse only for an identical start in this session.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "script": {
+      "description": "The model script's absolute path on this computer.",
+      "minLength": 1,
+      "type": "string"
+     },
+     "waitMs": {
+      "description": "Milliseconds to wait before answering: for the operation to finish, or with afterSequence for its next change.",
+      "maximum": 25000,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "type": "object"
+   },
+   "name": "cad_run",
+   "outputSchema": {
+    "properties": {
+     "cancellable": {
+      "type": "boolean"
+     },
+     "epoch": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     },
+     "id": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "operation": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "progress": {
+      "description": "The engine's latest progress event for the operation: {kind, stage, job, outputs, detail, done, total, elapsedMs}; absent until it says one.",
+      "type": "object"
+     },
+     "requestId": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "result": {
+      "type": "object"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "stage": {
+      "minLength": 1,
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "succeeded",
+       "failed",
+       "cancelled",
+       "rejected"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "state"
+    ],
+    "type": "object"
+   },
+   "title": "Run CAD"
   }
  ]
 }

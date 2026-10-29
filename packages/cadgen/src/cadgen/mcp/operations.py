@@ -49,14 +49,21 @@ START = {
     "cad_inspect": obj({"source": STRING, "ref": STRING,
                         "query": {"type": "string", "enum": ["summary", "structure", "closure", "geometry", "build"]}},
                        ("source",)),
+    "cad_run": obj({"script": {**STRING, "description": "The model script's absolute path on this computer."},
+                    "code": {**STRING, "description": "The script's text, run in place of a file on this computer: give it with name."},
+                    "name": {**STRING, "description": "A name for a script given as code (letters, digits, _ and -): the engine keeps it "
+                                                      "as <name>/<name>.py in its state folder, so a rerun of the same name is the same document."},
+                    "args": {"type": "array", "maxItems": 64, "items": {"type": "string"},
+                             "description": "The script's own arguments, as `python SCRIPT.py ARGS` passes them."}}),
 }
 # The arguments each start requires, beside requestId: one set, or (a snapshot) one of several.
 STARTS = {"cad_export": (("source", "destinations"),), "cad_snapshot": (("source", "output"), ("packet",)),
-          "cad_inspect": (("source",),)}
+          "cad_inspect": (("source",),), "cad_run": (("script",), ("code", "name"))}
 DESCRIPTIONS = {
     "cad_export": "Export a document to explicit absolute destinations on the engine host (.xbf/.step/.glb/.stl/.3mf/.dxf). The source is an absolute CAD file path or a document id (a model's, which running its script prints); a document id is exported as the engine holds it. A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only, each holding what its format carries. Reuses the Python export operation. Viewer downloads instead choose a destination in the user's browser and use temporary artifacts.",
     "cad_snapshot": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged.",
     "cad_inspect": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cadgen inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again.",
+    "cad_run": "Run a model script in the engine, as `cadgen run SCRIPT.py` runs it: in the project's Python environment (the dependencies it declares and the engine's own cadgen), its models built in the engine's warm worker. The script is its absolute path on this computer, or its text as code with a name. The result carries the run's output and the script's documents: pass a document id to cad_show.",
 }
 
 
@@ -135,6 +142,10 @@ def check_arguments(name, values):
     # Paths are checked here too, so nothing is queued that could only fail.
     if "source" in values:
         source(values["source"])
+    if name == "cad_run":
+        from . import runs
+
+        runs.check(values)
     if "output" in values:
         absolute(values["output"])
     if name == "cad_export":
@@ -362,6 +373,11 @@ class Operations(Jobs):
             else:
                 job["writing"] = True
                 result = {"pictures": [serial(api.snapshot(**args, out=absolute(output), progress=progress))]}
+        elif name == "cad_run":
+            from . import runs
+
+            job["writing"] = True  # the script writes what its models declare
+            result = runs.perform(args, progress)
         elif name == "cad_inspect":
             if "ref" not in args and "query" not in args and "#" not in args["source"]:
                 args["query"] = "summary"  # what `cadgen inspect SOURCE` prints (``engine.cli``)

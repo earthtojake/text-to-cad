@@ -290,7 +290,8 @@ class TabServerTest(_Session):
         page = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") == ["app"]} - set(entrypoints)
         self.assertEqual(page, {"cad_sync", "cad_capture_reply", "cad_http"})
         # All but the page's requests (its library, settings and telemetry answer among them) and the files the agent writes read.
-        self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_http", "cad_export", "cad_snapshot"])
+        self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]],
+                         ["cad_http", "cad_export", "cad_snapshot", "cad_run"])
         uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
         self.assertRegex(uri, r"^ui://cad/[0-9a-f]{16}/app\.html$")
         self.assertEqual(tools["cad_open"]["_meta"]["ui"]["resourceUri"], uri)
@@ -1229,7 +1230,8 @@ class ToolArgumentsTest(unittest.TestCase):
                         reply = server.handle("initialize", initialize_params({"capabilities": offered,
                                               "clientInfo": client}, None), None)
                         instructions = reply["instructions"]
-                        self.assertTrue(instructions.startswith("Run a model script with `cadgen run model.py`"))
+                        self.assertTrue(instructions.startswith("Run a model script with the cad_run tool"))
+                        self.assertIn("In a shell, `cadgen run model.py` does the same", instructions)
                         self.assertIn("pyproject.toml, requirements.txt or the script's inline metadata", instructions)
                         self.assertIn(f"CADGEN_PORT={port}", instructions)
                         self.assertIn("already starts or attaches", instructions)
@@ -1245,8 +1247,12 @@ class ToolArgumentsTest(unittest.TestCase):
 
     def sample(self, key: str, schema: dict):
         """A value the schema takes for ``key``, as an agent would send it."""
+        script = self.tmp / "sample_model.py"  # cad_run's script: a Python file that is there
+        if not script.exists():
+            script.write_text("", encoding="utf-8")
         named = {"requestId": "agreement-request-01", "operationId": "operation", "epoch": "epoch", "view": "v",
-                 "source": str(self.model), "destinations": [str(self.tmp / "out.step")]}
+                 "source": str(self.model), "destinations": [str(self.tmp / "out.step")],
+                 "script": str(script), "code": "print(1)", "name": "sample_model", "args": ["--size", "2"]}
         if key in named:
             return named[key]
         if "enum" in schema:
@@ -1289,7 +1295,7 @@ class ToolArgumentsTest(unittest.TestCase):
             for tool in self.served(catalog).handle("tools/list", {}, None)["tools"]:
                 properties = tool["inputSchema"]["properties"]
                 self.assertNotIn("path", properties, (catalog, tool["name"]))
-                if tool["name"] in ("cad_open", "cad_show", *START):
+                if tool["name"] in ("cad_open", "cad_show", *START) and tool["name"] != "cad_run":  # a script, no model
                     self.assertIn("source", properties, (catalog, tool["name"]))
 
     def test_a_refusal_names_every_argument_missing_and_unknown_and_what_the_tool_takes(self) -> None:

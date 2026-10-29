@@ -1411,7 +1411,8 @@ measuring a volume per part, in the process that asks (`api._summary`). `cadgen 
 snapshot` and `cadgen inspect` draw them as a model's run draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
 `api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). An MCP
-operation (`cad_export`, `cad_snapshot`, `cad_inspect`) keeps the latest as its status's `progress`
+operation (`cad_export`, `cad_snapshot`, `cad_inspect`; `cad_run`'s frames are the run's output, a
+line each) keeps the latest as its status's `progress`
 and the stage's words as its `stage`, and a status asked `afterSequence` wakes with each; a
 viewer export's job hears its worker's the same way. An export's or a snapshot's frames are the
 request's, never its document's build: no page is woken by them (`Daemon.progressed`).

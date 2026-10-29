@@ -320,10 +320,13 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 
 ## Agent operations
 
-Every MCP presentation exposes `cad_export`, `cad_snapshot` and `cad_inspect`,
+Every MCP presentation exposes `cad_export`, `cad_snapshot`, `cad_inspect` and `cad_run`,
 independently of the viewer. They call the Python operations through the engine's
 workers. No tool builds or imports a script: a model is built by its script, run by Python
-(laws 11, 12). A source is an absolute CAD file path or a document id; a document id is read as
+(laws 11, 12), and `cad_run` is that run -- the engine runs `cadgen run SCRIPT.py` with its own
+command, in the project's environment, and answers with the run's output and the script's
+documents; a script given as text with a name is written first, as `<state>/scripts/<name>/<name>.py`,
+and run as any script is. A source is an absolute CAD file path or a document id; a document id is read as
 the engine holds it. Export names absolute server-host destinations; snapshot names a PNG or a
 Quick Edit packet.
 

@@ -191,6 +191,35 @@ class RunTest(unittest.TestCase):
         self.assertEqual(self.result(done)["python"], "3.14")
         self.assertIn("id: ", done.stdout)
 
+    def test_cad_run_builds_a_project_through_the_engine_from_the_cad_app(self) -> None:
+        """The CAD app's ``cad_run``: the engine runs ``cadgen run`` of the script itself, with its own
+        installation and the project's environment, and the operation's result carries the run's output
+        and the script's documents (``cadgen.mcp.runs``)."""
+        from cadgen.jobs import TERMINAL
+        from cadgen.mcp.operations import Operations
+
+        project = self.project("app", {}, six=False)
+        jobs = Operations()
+        with mock.patch.dict(os.environ, self.env):  # the counting uv first on PATH, the viewer unwarmed
+            answer = jobs.call("cad_run", {"requestId": "cad-run-request-0001", "script": str(project / "model.py"),
+                                           "args": ["--size", "3"]})
+            self.assertEqual(answer["state"], "queued", answer)
+            with jobs.changed:
+                self.assertTrue(jobs.changed.wait_for(lambda: jobs.jobs[answer["id"]]["state"] in TERMINAL, timeout=600))
+            done = jobs.get(answer["id"])
+        self.assertEqual(done["state"], "succeeded", done.get("error"))
+        result = done["result"]
+        lines = [line for line in result["output"].splitlines() if line.startswith("RESULT ")]
+        self.assertEqual(len(lines), 1, result["output"])
+        found = json.loads(lines[0][len("RESULT "):])
+        self.assertEqual(found["argv"], ["--size", "3"], "the script's own arguments")
+        self.assertEqual(Path(found["prefix"]).resolve().parent, Path(os.environ["CADGEN_CACHE_DIR"]).resolve() / "envs",
+                         "the script ran in its project's environment, as cadgen run runs it")
+        self.assertIn("id: ", result["output"])
+        self.assertEqual([document["name"] for document in result["documents"]], ["part"])
+        self.assertEqual(done["progress"]["kind"], "run")
+        self.assertIsNotNone(client.request({"op": "status"}, start=False), "the run started the engine as cadgen run does")
+
 
 if __name__ == "__main__":
     unittest.main()

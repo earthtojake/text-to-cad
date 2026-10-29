@@ -1,5 +1,7 @@
 """The operation lifecycle through tools, without requiring a viewer or kernel."""
 import json
+import os
+import sys
 import tempfile
 import threading
 import unittest
@@ -148,7 +150,7 @@ class OperationsTest(unittest.TestCase):
         self.assertTrue(result['isError'])
         self.assertEqual(result['structuredContent']['state'], 'rejected')
         tools = {t['name']: t for t in catalog()}
-        self.assertEqual(set(tools), {'cad_export', 'cad_snapshot', 'cad_inspect'})
+        self.assertEqual(set(tools), {'cad_export', 'cad_snapshot', 'cad_inspect', 'cad_run'})
         self.assertTrue(tools['cad_inspect']['annotations']['readOnlyHint'])
         self.assertFalse(tools['cad_export']['annotations']['readOnlyHint'])
         self.assertTrue(all('_meta' not in tool for tool in tools.values()))
@@ -234,3 +236,89 @@ class OperationsTest(unittest.TestCase):
         result = jobs.get(answer['id'])
         self.assertTrue(result['result']['truncated'])
         self.assertLess(len(json.dumps(result)), 10000)
+
+
+class RunOperationTest(unittest.TestCase):
+    """``cad_run``: the engine runs a script as ``cadgen run`` runs it, and the operation carries the run."""
+
+    def finish(self, jobs, answer):
+        with jobs.changed:
+            self.assertTrue(jobs.changed.wait_for(lambda: jobs.jobs[answer['id']]['state'] in TERMINAL, timeout=30))
+        return jobs.get(answer['id'])
+
+    def folder(self):
+        folder = Path(tempfile.mkdtemp(prefix='cadgen-run-op-'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(folder, ignore_errors=True))
+        return folder
+
+    def test_the_catalog_offers_cad_run_by_path_or_by_code_and_name(self):
+        tool = next(tool for tool in catalog() if tool['name'] == 'cad_run')
+        self.assertIn('cad_show', tool['description'])
+        self.assertIn('To start: {requestId, script} or {requestId, code, name}, optionally with args, waitMs.', tool['description'])
+        self.assertFalse(tool['annotations']['readOnlyHint'])
+
+    def test_a_run_is_refused_before_anything_is_queued(self):
+        jobs = Operations()
+        for arguments, said in (({'script': 'model.py'}, 'script must be an absolute path'),
+                                ({'code': 'print(1)'}, 'missing name'),
+                                ({'code': 'print(1)', 'name': '../escape'}, 'name is letters, digits, _ and -'),
+                                ({'script': str(Path('/nonexistent/arm.py').resolve())}, 'no script')):
+            with self.subTest(arguments=arguments):
+                answer = jobs.call('cad_run', {'requestId': 'run-request-00000001', **arguments})
+                self.assertEqual((answer['state'], answer['status']), ('rejected', 400))
+                self.assertIn(said, answer['error'])
+        self.assertFalse(jobs.jobs)
+
+    def test_a_run_hands_the_engine_the_script_and_reports_its_output_and_documents(self):
+        script = self.folder() / 'model.py'
+        script.write_text('', encoding='utf-8')
+        commands = []
+
+        def command(path, arguments):
+            commands.append((path, arguments))
+            return [sys.executable, '-c', "import sys; print('id: abc'); sys.stderr.write('warn\\n'); print('view: http://x/abc')"]
+
+        documents = [{'id': 'abc', 'name': 'part', 'state': 'live'}]
+        jobs = Operations()
+        with patch('cadgen.mcp.runs.command', command), patch('cadgen.mcp.runs.documents', lambda path: list(documents)):
+            done = self.finish(jobs, jobs.call('cad_run', {'requestId': 'run-request-00000002', 'script': str(script),
+                                                           'args': ['--size', '2']}))
+        self.assertEqual(done['state'], 'succeeded', done.get('error'))
+        self.assertEqual(commands, [(script.resolve(), ['--size', '2'])])
+        result = done['result']
+        self.assertEqual(result['script'], str(script.resolve()))
+        self.assertEqual(result['output'].splitlines(), ['id: abc', 'warn', 'view: http://x/abc'], 'stdout and stderr, in order')
+        self.assertEqual(result['documents'], documents)
+        self.assertEqual((done['progress']['kind'], done['progress']['detail']), ('run', 'view: http://x/abc'))
+        self.assertEqual(done['stage'], 'Complete')
+
+    def test_a_script_given_as_code_is_kept_by_name_and_a_rerun_takes_its_place(self):
+        state = self.folder()
+        jobs = Operations()
+        with patch.dict(os.environ, {'CADGEN_STATE_DIR': str(state)}), \
+                patch('cadgen.mcp.runs.command', lambda path, arguments: [sys.executable, str(path), *arguments]), \
+                patch('cadgen.mcp.runs.documents', lambda path: []):
+            first = self.finish(jobs, jobs.call('cad_run', {'requestId': 'run-request-00000003', 'name': 'arm_v2',
+                                                            'code': 'import sys\nprint("first", __file__, sys.argv[1:])\n',
+                                                            'args': ['a']}))
+            kept = state / 'scripts' / 'arm_v2' / 'arm_v2.py'
+            self.assertTrue(kept.is_file())
+            self.assertEqual(first['state'], 'succeeded', first.get('error'))
+            self.assertEqual(first['result']['output'], f"first {kept} ['a']")
+            second = self.finish(jobs, jobs.call('cad_run', {'requestId': 'run-request-00000004', 'name': 'arm_v2',
+                                                             'code': 'print("second")\n'}))
+        self.assertEqual(second['state'], 'succeeded', second.get('error'))
+        self.assertEqual((second['result']['script'], second['result']['output']), (str(kept), 'second'))
+        self.assertEqual(kept.read_text(encoding='utf-8'), 'print("second")\n', 'one folder per name: the rerun took its place')
+
+    def test_a_failing_run_is_the_operations_failure_with_its_last_lines(self):
+        script = self.folder() / 'model.py'
+        script.write_text('', encoding='utf-8')
+        jobs = Operations()
+        with patch('cadgen.mcp.runs.command', lambda path, arguments: [sys.executable, '-c', "print('starting'); raise SystemExit(3)"]), \
+                patch('cadgen.mcp.runs.documents', lambda path: []):
+            done = self.finish(jobs, jobs.call('cad_run', {'requestId': 'run-request-00000005', 'script': str(script)}))
+        self.assertEqual(done['state'], 'failed')
+        self.assertEqual(done['error'], 'cadgen run model.py exited 3\nstarting')
+        self.assertTrue(done['result']['outputsMayHaveBeenWritten'], 'a script may have written what its models declare')
+
