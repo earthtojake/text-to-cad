@@ -213,7 +213,11 @@ async function openFile(page, file) {
   // A page names its document by id, `/<id>`: the file's, which the server derives from its canonical
   // path and registers when the catalog is asked for it (as Select File and the home do).
   const base = args.url.replace(/\/$/, "");
-  const catalog = await page.request.get(`${base}/__cad/catalog?file=${encodeURIComponent(path.join(root, file))}`);
+  // These one-off Node requests can be separated by more than the server's idle timeout.
+  // Close them from first use so its connection pool cannot race an idle socket closing.
+  const catalog = await page.request.get(`${base}/__cad/catalog?file=${encodeURIComponent(path.join(root, file))}`, {
+    headers: { Connection: "close" },
+  });
   const id = (await catalog.json()).entries?.[0]?.id;
   if (!id) fail(`the catalog gave ${file} no document id`);
   await page.goto(`${base}/${id}`, {

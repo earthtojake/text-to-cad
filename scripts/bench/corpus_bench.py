@@ -31,6 +31,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -538,10 +539,13 @@ def prepare(spec: dict[str, Any], out: Path, engine_dir: Path, cadgen_src: Path)
     scripts = [str((cwd / target).resolve()) for target in spec["targets"]]
     selected_script, _, function = spec["document"].partition("::")
     path = os.pathsep.join([str(cadgen_src), *(str(work / folder) for folder in spec.get("pythonpath", []))])
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
     private = out / "runtime" / spec["name"]
     env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine_dir / spec["name"]),
            "CADGEN_STATE_DIR": str(private / "state"), "CADGEN_CACHE_DIR": str(private / "cache"),
-           "CADGEN_LAUNCHER_DIR": str(private / "launcher"), "CADGEN_ENGINE_PORT": "0",
+           "CADGEN_LAUNCHER_DIR": str(private / "launcher"), "CADGEN_PORT": str(port),
            "CADGEN_ENGINE_STANDBY": "0", "PYTHONPATH": path,
            "PYTHONPYCACHEPREFIX": str(private / "cache" / "pycache"),
            "BROWSER": str(out / "no-browser.py") + " %s", **TELEMETRY_OFF}
@@ -580,6 +584,11 @@ class Bench:
         except subprocess.TimeoutExpired:
             done = None
         return done, time.perf_counter() - started
+
+    def start(self, model: Model) -> None:
+        done, _wall = self.run(model, ["-c", "from cadgen.engine.client import connect; connect(start=True).close()"])
+        if done is None or done.returncode:
+            raise RuntimeError(f"its daemon did not start: {done.stderr[-500:] if done else 'no answer'}")
 
     def stop(self, model: Model) -> None:
         done, _wall = self.run(model, ["-m", "cadgen.cli", "stop"], timeout=300)
@@ -745,6 +754,7 @@ class Bench:
             inside(model.work, model.edit)
             inside(model.work, model.document)
             original = model.edit.read_bytes()
+            self.start(model)
             for step in BUILDS:
                 phase = step
                 if step == "edit":
@@ -755,6 +765,7 @@ class Bench:
                     self.stop(model)
                     if step == "restart-cold":
                         remove(Path(model.env["CADGEN_CACHE_DIR"]) / "documents")
+                    self.start(model)
                 if not self.build(model, step)["ok"]:
                     return
             phase = "document"

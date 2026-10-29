@@ -63,6 +63,20 @@ def offer_an_update(test: unittest.TestCase) -> None:
     (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
 
 
+def installed_by_itself(test: unittest.TestCase, receipt: str = "99.0.0") -> None:
+    """The engine on this test's port keeps the computer up to date (`cadgen/_internal/auto_update.py`): the
+    install command's receipt names that port and ``receipt``'s release, and the feed read today offers 99.0.0."""
+    from cadgen.cli.setup import RECEIPT, SCHEMA
+
+    offer_an_update(test)
+    state = Path(os.environ["CADGEN_STATE_DIR"])
+    (state / RECEIPT).write_text(json.dumps({"schema": SCHEMA, "release": receipt, "port": int(os.environ["CADGEN_PORT"]),
+                                             "actions": [], "path": ""}), encoding="utf-8")
+    patched = mock.patch("cadgen._internal.channel._source_tree", return_value=False)
+    patched.start()
+    test.addCleanup(patched.stop)
+
+
 PAGE_TOOLS = ("cad_sync", "cad_capture_reply")
 
 
@@ -101,8 +115,7 @@ class _Session(unittest.TestCase):
         # host's page is opened by the stdio peer (``call`` delivers each result as it does), the
         # card's Open in browser by the server (``browser_opener``).
         self.opened: list[str] = []
-        engine = self.tmp / "opener"
-        engine.mkdir(mode=0o700)
+        engine = Path(os.environ["CADGEN_ENGINE_DIR"])
         from cadgen.viewer import browser_open
         for patched in (mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}),
                         mock.patch.object(browser_open, "display_refusal", return_value=None)):
@@ -284,11 +297,26 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
+    def test_an_update_installed_by_itself_shows_nothing_and_the_card_can_start_one(self) -> None:
+        from cadgen._internal import auto_update
+
+        installed_by_itself(self)
+        self.assertIsNone(self.http("GET", "/__cad/version")[1]["notice"], "the next session runs it")
+        self.assertIsNone(self.launch("cad_home")["notice"])
+        with mock.patch.object(auto_update, "run_now", return_value={"started": True}) as run_now:
+            self.assertEqual(self.http("POST", "/__cad/update", {}), (200, {"started": True}))
+            # The agent reaches none of it: its cad_http is the telemetry route's alone.
+            refused = self.call("cad_http", {"method": "POST", "url": "/__cad/update",
+                                             "headers": {"x-cadgen-viewer": "1"}, "body": ""})
+        self.assertTrue(refused["isError"])
+        run_now.assert_called_once()
+
     def test_the_page_reads_whether_a_newer_release_is_out_and_nothing_is_kept(self) -> None:
         offer_an_update(self)
         for _ in range(2):  # the update button stays while this install is behind
             notice = self.http("GET", "/__cad/version")[1]["notice"]
-            self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad")
+            self.assertEqual(notice["prompt"], "Run `curl -fsSL https://texttocad.dev/install.sh | sh` to update "
+                                               "text-to-cad to 99.0.0 (on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`)")
         # A launch carries it, as the server last read it, so the button draws with the page.
         self.assertEqual(self.launch("cad_home")["notice"], notice)
 
@@ -1028,8 +1056,14 @@ class TextServerTest(_Session):
     def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
         offer_an_update(self)
         first = self.call("cad_show", {"source": self.bracket})["content"]
-        self.assertIn('Ask your agent to update to the latest version ("Update text-to-cad to 99.0.0 from '
-                      'https://github.com/earthtojake/text-to-cad"), or install manually', first[-1]["text"])
+        self.assertIn("Update with this command: `", first[-1]["text"])
+        self.assertIn("`, or install manually (https://www.texttocad.dev/install).", first[-1]["text"])
+        self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
+
+    def test_an_update_installing_itself_or_installed_says_nothing(self) -> None:
+        installed_by_itself(self, receipt="0.0.1")  # pending: the feed's 99.0.0, not attempted yet
+        self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
+        installed_by_itself(self)
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
@@ -1182,6 +1216,32 @@ class ToolArgumentsTest(unittest.TestCase):
 
     def call(self, server: Server, name: str, arguments: dict) -> dict:
         return server.handle("tools/call", {"name": name, "arguments": arguments}, RequestContext(1, {"threadId": "t"}))
+
+    def test_initialize_teaches_cadgen_run_and_the_selected_port_in_every_presentation(self) -> None:
+        from cadgen.mcp.server import INSTRUCTIONS, INLINE_INSTRUCTIONS, TEXT_INSTRUCTIONS
+
+        presentation = {"tabs": INSTRUCTIONS, "inline": INLINE_INSTRUCTIONS, "text": TEXT_INSTRUCTIONS}
+        for port in (3245, 54321):
+            with mock.patch.dict(os.environ, {"CADGEN_PORT": str(port)}):
+                for catalog, (client, offered) in CATALOGS.items():
+                    with self.subTest(port=port, presentation=catalog):
+                        server = self.served(catalog)
+                        reply = server.handle("initialize", initialize_params({"capabilities": offered,
+                                              "clientInfo": client}, None), None)
+                        instructions = reply["instructions"]
+                        self.assertTrue(instructions.startswith("Run a model script with `cadgen run model.py`"))
+                        self.assertIn("pyproject.toml, requirements.txt or the script's inline metadata", instructions)
+                        self.assertIn(f"CADGEN_PORT={port}", instructions)
+                        self.assertIn("already starts or attaches", instructions)
+                        self.assertIn("no-argument function returning a build123d shape", instructions)
+                        self.assertIn("live document id; pass that id to `cad_show`", instructions)
+                        self.assertTrue(instructions.endswith(presentation[catalog]))
+                        # Installing cadgen is never the way in; a venv someone made keeps working.
+                        self.assertNotRegex(instructions, r"pip install (--python \S+ )?cadgen==")
+                        self.assertIn("`uv pip install -U cadgen` would update it", instructions)
+                        sample = instructions.split("```python\n", 1)[1].split("```", 1)[0]
+                        compile(sample, "model.py", "exec")
+                        self.assertIn('if __name__ == "__main__":\n    part()', sample)
 
     def sample(self, key: str, schema: dict):
         """A value the schema takes for ``key``, as an agent would send it."""

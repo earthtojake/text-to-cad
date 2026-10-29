@@ -59,7 +59,7 @@ class SummaryTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, engine, True)
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
+        self.env = engine_daemon.started({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
                                           "CADGEN_STATE_DIR": str(self.folder / "state"),
                                           "CADGEN_CACHE_DIR": str(self.folder / "cache"),
                                           "CADGEN_ENGINE_MESH": "inline"}, self.addCleanup)

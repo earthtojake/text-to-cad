@@ -69,30 +69,45 @@ class UpdatesTest(unittest.TestCase):
                     mock.patch("cadgen._internal.channel._source_tree", return_value=False):
                 self.assertEqual(told(), expected)
 
-    def test_the_notice_reads_the_same_everywhere_like_the_install_message(self) -> None:
+    def test_the_notice_offers_the_install_command_the_same_everywhere(self) -> None:
+        # The update is the install command run again: the card shows this computer's to copy, and
+        # its prompt has the person's agent run it.
         self.read_today(FEED)
         found = updates.notice()
         text = "A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)"
-        prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
-        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1", "text": text, "prompt": prompt,
-                                 "instructions": "https://www.texttocad.dev/install"})
-        self.assertEqual(updates.line(found), f'{text}. Ask your agent to update to the latest version ("{prompt}"), '
-                                              'or install manually (https://www.texttocad.dev/install).')
+        command = "irm https://www.texttocad.dev/install.ps1 | iex" if os.name == "nt" else \
+            "curl -fsSL https://texttocad.dev/install.sh | sh"
+        prompt = ("Run `curl -fsSL https://texttocad.dev/install.sh | sh` to update text-to-cad to 0.9.0 "
+                  "(on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`)")
+        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1", "text": text, "command": command,
+                                 "prompt": prompt, "instructions": "https://www.texttocad.dev/install"})
+        self.assertEqual(updates.line(found), f"{text}. Update with this command: `{command}`, "
+                                              "or install manually (https://www.texttocad.dev/install).")
+        self.assertEqual([updates.command("nt"), updates.command("posix")],
+                         ["irm https://www.texttocad.dev/install.ps1 | iex", "curl -fsSL https://texttocad.dev/install.sh | sh"])
         # The same words in the CAD Viewer a skill opens, which no plugin names a channel for.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
             self.assertEqual(updates.notice()["prompt"], prompt)
 
-    def test_the_feed_is_read_at_most_once_a_day_and_kept_when_unreachable(self) -> None:
+    def test_the_engine_names_the_same_install_commands(self) -> None:
+        # The engine's remedies name the install command too, from its own copy: it is standalone and
+        # does not import this module. Its two are these two, so neither can move alone.
+        from cadgen.engine import runtime
+
+        self.assertEqual(runtime.INSTALLS, (updates.INSTALL, updates.INSTALL_WINDOWS))
+        self.assertEqual(runtime.INSTALL, updates.command())
+
+    def test_the_feed_is_read_at_most_once_an_hour_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
         answers = [FEED, None, {"latest": "0.9.1"}]
         get = lambda url: asked.append(url) or answers.pop(0)  # noqa: E731
         start = 1_000_000.0
         self.assertEqual(updates.feed(get=get, now=start)["latest"], "0.9.0")
         self.assertEqual(asked, ["https://api.texttocad.dev/v1/versions"])
-        updates.feed(get=get, now=start + 3600)
+        updates.feed(get=get, now=start + 600)
         self.assertEqual(len(asked), 1)
-        # Unreachable a day later: the feed as last read stands, and is not asked again that day.
+        # Unreachable an hour later: the feed as last read stands, and is not asked again that hour.
         self.assertEqual(updates.feed(get=get, now=start + updates.CHECK_SECONDS)["latest"], "0.9.0")
         self.assertEqual(updates.feed(get=get, now=start + updates.CHECK_SECONDS + 60)["latest"], "0.9.0")
         self.assertEqual(len(asked), 2)
@@ -123,6 +138,20 @@ class UpdatesTest(unittest.TestCase):
                 self.assertIsNone(updates.notice())
                 updates.feed(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append)
                 self.assertEqual((asked, updates.refresh()), ([], None))
+
+    def test_the_self_update_reads_the_feed_for_a_copy_that_is_not_told_but_not_when_switched_off(self) -> None:
+        # The engine's self-update keeps the install command's copies current whoever started it
+        # (`cadgen/_internal/auto_update.py`): the one switch, and CI, still stop it.
+        asked: list[str] = []
+        get = lambda url: asked.append(url) or FEED  # noqa: E731
+        with mock.patch.dict(os.environ, {"CADGEN_AUTO_UPDATED": "1"}):
+            self.assertIsNone(updates.feed(get=get))
+            self.assertEqual(updates.feed(get=get, updating=True), FEED)
+        self.assertEqual(len(asked), 1)
+        for values in ({"CADGEN_UPDATE_CHECK": "0"}, {"CI": "true"}):
+            with self.subTest(values=values), mock.patch.dict(os.environ, values):
+                updates.feed(get=get, updating=True, now=time.time() + 2 * updates.CHECK_SECONDS)
+        self.assertEqual(len(asked), 1)
 
     def test_nothing_waits_on_the_feed(self) -> None:
         # A feed that is due is read in the background, and whatever asks meanwhile -- a page, a launch,

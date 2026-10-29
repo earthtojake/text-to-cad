@@ -28,7 +28,7 @@ result, transferred into the caller and the kernel loaded on first access, never
 `.export(*paths)` and `.snapshot(out, **picture_options)`, which are `export(handle, ...)` and
 `snapshot(handle, ...)`; an export the program's own code makes says each file it wrote, a line each,
 as `cadgen export` does. The decorated function stays the function and its id (`arm.id`);
-`arm.build(verify=, profile=)` is the debug seam, a `Report`. Inside another model's body a call
+`arm.build(verify=, profile=, daemon=)` returns a `Report`; `daemon=False` explicitly builds offline. Inside another model's body a call
 builds the child document as before and returns its handle too, whose `.shape` is the result in
 that process: a body composes `peg().shape`, and a child called for its files alone stays a bare
 `peg()`. Read on either side, `.shape` is one tree: every sub-assembly at the placement its parent
@@ -49,6 +49,12 @@ if __name__ == "__main__":
     handle.export("base.step")    # export(handle, "base.step")
     handle.shape.volume           # the shape, transferred now
 ```
+
+A live `Document` handle retains the engine selection that created it. Changing
+`CADGEN_PORT` or `CADGEN_ENGINE_DIR` does not redirect its shape reads, exports or
+snapshots to another engine: those operations fail until the original selection is
+restored. Restarting the engine at that same endpoint remains valid. A raw string
+document id explicitly addresses the currently selected engine instead.
 
 A program that holds a shape -- a script with no model, a REPL, a notebook -- hands it over with
 `model(shape, name="plate")` (**Shapes handed over**): a document made of it, held and served by
@@ -137,8 +143,10 @@ describes the mechanism they constrain and cites them by that README's numbers -
 
 ## Architecture
 
-One server per installation owns the worker pool, served documents and HTTP listener.
-`cadgen serve` and `cadgen viewer` launch or reuse that server and return its URL.
+One server at the selected port owns the worker pool, served documents and HTTP listener.
+Document records, cached bytes, Recents and thumbnails are shared across ports.
+Start it explicitly with `cadgen server`, or through the MCP bootstrap or `cadgen run` (**Running a model**).
+`cadgen serve` and `cadgen viewer` attach to it and return a page URL.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
@@ -183,8 +191,8 @@ daemon keys by it the worker that built each model document (`builders`, from wh
 asks the server's watched ids; a file the build wrote is no key there) and the live models' book
 (`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
 from).
-The worker pool alone is keyed otherwise: by the canonical path of the script a worker runs, a
-process's key, not a document's.
+The worker pool also distinguishes the calling project's interpreter and import environment:
+a warm worker belongs to that environment and its script, not to the server's installation.
 
 The daemon maps each built document to its worker. HTTP watcher accounting has its
 own lock, independent of document reads and pool admission. A page watches a document (law 19)
@@ -197,7 +205,7 @@ costs one its warm worker. The workers' memory cap retires a watched worker only
 is left to retire. A retired worker's documents stay served: the daemon takes them from it first, and
 holds them under one memory budget that never evicts a watched one (**Document lifetime**).
 
-The installation's door (**The door**) supplies its HTTP token, which programmatic clients send as a
+The selected port's private door (**The door**) supplies its HTTP token, which programmatic clients send as a
 Bearer header; no URL carries it. A page URL the engine prints or opens carries a link instead, good
 for a day, which a browser exchanges for a SameSite=Strict session cookie, one name on every port of
 the host, that lasts 30 days from its last use (a page load renews it, as any request does once it
@@ -206,85 +214,63 @@ keeps a session (`viewer.engine_app`: `EngineApp.link`, `sign`, `standing`). A r
 `Authorization` Bearer is a link -- a CAD card reading the engine from its host's sandbox -- is the
 one cross-origin read answered, for the origin that sent it and with no credentials, as is its
 preflight (`EngineApp.preflight`); the cookie, a link in a URL, the token and `/mcp` never are. All routes
-retain the application's Host and cross-site mutation checks. Explicit host/port
-requests must match an existing listener. A second installed version has a different
-installation identity and therefore a different engine -- in another environment, and in the same
-one too: the door, lock and port file are named for the environment, the interpreter, the engine's
-folder, the protocol and the version the installation runs as (`daemon._tag`, `daemon.installation`:
-`CADGEN_INSTALLATION_VERSION`, else the version its environment is registered as when that record is
-of this release -- so `python model.py` run directly in a registered development environment dials
-the same engine as its CAD app's server --, else its release). So an upgrade into one environment (`pip install -U`, `uv tool upgrade`, a
-development install made again) starts its own engine, never dials the old one still running there,
-and retires that one when nothing uses it (**An upgrade converges**). What outlives an upgrade in an
-environment -- the port it rolled to -- is keyed by the environment alone.
+retain the application's Host and cross-site mutation checks. `--port` selects an
+engine for CLI operations; otherwise `CADGEN_PORT`, then 3245. The value is a fixed
+port from 1 to 65535, resolved alike by the client and server. Their private door,
+lock and connection metadata are keyed by that port in the private IPC directory,
+so project interpreters attach to the same engine. Installed versions, interpreter
+paths and internal development registration labels never choose another engine.
 
-**A link outlives its engine.** The port is the installation's and the page token the user's, not
-one engine's (`daemon.bind`). A port named -- `--port` (`cadgen server --port`, or a `serve`/`viewer`
-request's), else `CADGEN_ENGINE_PORT` (0: any free port), read from the engine's own environment --
-is taken or refused. Else the installation's own port: 3245 (`daemon.DEFAULT_PORT`, 0xCAD) when it
-can, as Vite, Jupyter and Next.js take theirs; when another program holds it, the next free port
-(`daemon.PORTS_TRIED` above it, then any), which the installation remembers in its record and takes
-at every later start, so its links stay what they were. The start that rolls says so once, on the
-stderr of the client whose request bound the port (a build's, when its page bound it; or `cadgen
-server`'s) and in `cadgen status`:
-`3245 is held by <name> (pid N); this installation serves on 3246 and keeps it`. A remembered port
-that is free is used, and one held is rolled from the same way. When 3245 is free again at a start,
-the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
-made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
-system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netstat` on Windows), or
-`another process` where it does not say; a cadgen this one cannot reach is `another cadgen (<name>,
-pid N)`.
+Client, server and project worker meet by protocol, document format and native line, never by
+release (`runtime.refusal`). Every hello -- a client's, and the engine's answer, taken or refused --
+says its `protocol` (`daemon.PROTOCOL`, bumped only for a change to the wire an older peer would
+misread: a request, an answer or a descriptor field), its `release` (information, read from the
+code's own package metadata, never an installation's registration label), the document format it
+`writes` (`previous.FORMAT`), those it `reads` (`document_migrations.readable`: `xbf/8` to its own)
+and its `native` line: the system, the architecture and the OCP distribution's major.minor
+(`ocp_line`, from `cadquery-ocp` or `cadquery-ocp-novtk`; patch levels interoperate). The engine's
+answer also says what it runs as (`daemon.runs_as`): its `installation`, its `python` line and the
+`source` its cadgen installs from when it is no release on the index, which `cadgen run` makes a
+project's environment to match (**Running a model**). A client meets
+the engine when it speaks the same protocol, writes a format the engine reads, and has the same
+system, architecture and OCP line; both sides check it (`client._greet`, `daemon._serve`). A project
+worker's execution descriptor is held to the same rule before a model body runs
+(`runtime.validate`), and a peer's native bytes are read only in a format and on a line the reader
+shares (`runtime.check_native`). What does not meet is refused in one line naming both sides and the
+remedy:
 
-**An upgrade converges.** As an engine binds its port, it first asks every other installation's
-engine in the engine folder (each door) its `status`, and tells every one to `stop` that nothing uses
--- no hold, no page watching a document, no build, draw or HTTP request underway -- and that is older
-than itself, wherever it serves, waiting until each has gone (`daemon.RETIRE_SECONDS` at most;
-`daemon.retire_older`). Older is by the installations' version ranking (`daemon.rank`, the order
-`packaging.version` gives and the `cadgen` command picks by): an installation's version is its
-`installation` in `status` (`daemon.installation`, above: a development install's
-`<version>-dev.<time>`, else its release), a release ranks above its own `-dev.*` builds, and a
-version that does not parse is older only when that engine's release (`version`) is lower. An
-engine whose `status` has no `installation` was built before engines said it, and is older than any
-that does, whatever its release. It says
-each, once, as it says a roll: `retired cadgen 0.8.0's idle engine (pid N) for this newer
-installation`. Then it binds as above. Another installation's engine still on the port is retired
-the same way when nothing uses it and it is not newer, and its port taken once it has gone, whether
-the port was named, the default or the remembered one. An older installation never retires a newer
-one's engine, nor one still in use: it rolls from it as from any other holder.
+```
+cadgen client speaks protocol 5, the engine on port 3245 protocol 4: update the older one (run `curl -fsSL https://texttocad.dev/install.sh | sh` for the engine; `uv pip install -U cadgen` in the project)
+this project's cadgen 0.9.0 writes xbf/11; the engine (cadgen 0.8.3, port 3245) reads up to xbf/10: update the engine: run `curl -fsSL https://texttocad.dev/install.sh | sh`
+the project's Python has OCP 8.1 (Darwin arm64); the engine has the older OCP 8.0: install cadquery-ocp-novtk==8.0.* in the project environment, or update the engine
+```
 
-A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
-`cadgen server` binds at its start, so the command fails at once with that line on stderr and exits
-1, no engine left. An engine a client starts binds on the first request that serves. A port that
-request names (`cadgen viewer --port`) refuses that request alone, with the line: the engine runs
-on, unbound, for its other clients' builds and the next request that serves. Its own port held
-(`CADGEN_ENGINE_PORT` in the environment it started in) fails that request with the line, and the
-engine, which can never serve, leaves its note (`daemon.failure_path`) and exits 1:
+(on Windows the install command is `irm https://www.texttocad.dev/install.ps1 | iex`, `runtime.INSTALL`).
+These are said of an environment where cadgen was installed by hand: the one `cadgen run` makes holds
+the engine's own cadgen (**Running a model**), which meets it by construction.
+A project of another release that meets the engine is served, and told once, at its worker's first
+build (`runtime.nudge`, `daemon.Worker`): `project cadgen 0.8.2 is older than the engine's 0.8.3: uv
+pip install -U cadgen in the project environment`, or for a newer one `` the engine runs cadgen 0.8.3,
+this project 0.8.4: run `curl -fsSL https://texttocad.dev/install.sh | sh` to update the engine `` --
+never a refusal, and never again in that worker's life. An upgrade converges on the newest engine
+installed (**Starting the engine**).
 
-- another program: `port 3245 is held by <name> (pid N): stop it, or start cadgen with another
-  CADGEN_ENGINE_PORT` (`…or pass another --port` for a port `--port` named);
-- another installation's engine in use: `port 3245 is held by cadgen <version>'s engine (pid N),
-  still in use by 1 app server: quit that app or run `cadgen stop` with that version` (or `N open
-  pages`, `N requests`); an engine whose `status` does not say what uses it cannot be asked, and is
-  refused by name the same way;
-- a newer installation's engine: `port 3245 is held by cadgen <version>'s engine (pid N), a newer
-  installation's, which this one never retires: use that version, or start cadgen with another
-  CADGEN_ENGINE_PORT`.
+**A link outlives its engine.** The port is selected explicitly and the page token
+belongs to the user. `cadgen server` reuses a compatible engine already at that port -- one that meets
+it, above -- once an older release's idle one is retired (**Starting the engine**); otherwise it binds
+its listener at startup, or fails if a conflicting listener holds the port. There is no port rollover or remembered alternate port. A client
+never starts a daemon, changes its listener or chooses a local fallback. MCP bootstrap and
+`cadgen run` may start the selected engine if absent; a running engine must meet them. To run independent
+engines, choose distinct ports and set `CADGEN_PORT` consistently in each server's and clients'
+environments.
 
-The token is made at the installation's first start and every start serves with it, in the
-installation's record, `engines/<installation>.json` in the state folder (`port` while the
-installation serves on a port it rolled to; `registry.Registry.engine`, its own
-`registry.ENGINE_SCHEMA`), and the token in the user's one file beside it, `engines/token`, which
-every installation's engine serves with (`registry.Registry.token`; both this user's alone, 0600),
-so a link outlives an upgrade too. So a page link
--- the `cadgen viewer` output, a model's `view:` line, the CAD app's card -- works across `cadgen
-stop`, a crash and a reboot for its day, the session it left in a browser for 30 days past that
-browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
-and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
-user's folders whenever the engine runs. `cadgen server --rotate-token` replaces the token, with no
-engine running (it refuses while this installation's or another's runs), and every link and session
-made before stops working. `cadgen status` says the
-port and where it came from: the default, `--port`, `CADGEN_ENGINE_PORT`, or `rolled from 3245
-because <name> (pid N) holds it`.
+The user's page token lives in `engines/token` in the state folder, readable only
+by that user (0600; `registry.Registry.token`). An engine restarted at the same
+port serves with it, so links remain valid for their day and browser sessions for
+30 days past their last use. A page whose engine stops keeps asking the same
+address and reloads when it answers. `cadgen server --rotate-token` replaces the
+token only with every engine stopped, invalidating earlier links and sessions.
+`cadgen status` reports the selected port and its engine's release.
 
 The injected application also serves `/mcp`, the Streamable HTTP MCP transport
 (2025-11-25 and the previously supported protocol revisions). Initialization returns
@@ -342,14 +328,14 @@ only, and a file's id is derived again from its path after a restart.
 
 | Module | What it is |
 | --- | --- |
-| `model.py` | the decorators (`out`, `name=`), `@model` or file decorators and never both; `Model` (the function, `.id`, `.build` the debug seam); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
+| `model.py` | the decorators (`out`, `name=`), `@model` or file decorators and never both; `Model` (the function, `.id`, `.build` the report and explicit offline mode); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
 | `api.py` | the verbs as functions, through the daemon: `export`, `snapshot`, `inspect` (the root's `cadgen.export`, ...), and `serve`, `status`, `stop`, `delete`, `server`, which only the CLI calls (process control and deletion are the CLI's alone), and `build_script`, a script's models built by `Model.build()`; `Document`, the handle a model call returns (`.shape` transferred by id on first access: `result`); `hand_over`, a shape made a document in the caller and handed to the daemon; `observers`, told after each build, export and snapshot what it did, as plain facts (kinds, counts, times, the worker's part, an error's type and frames): the engine counts nothing, and cadgen's telemetry is an observer cadgen appends |
 | `colors.py` | a colour as the author gives it (sRGB hex, 0-255 integers, a build123d `Color`) held linear, and the way back (**Materials**) |
 | `mechanism.py` | kinematics: build123d's joints harvested into AP242's links and pairs, couplings (`gear_pair`, `rack_and_pinion_pair`, `screw_pair`), mechanism states (`mechanism_state`), the document's subtree, the structure's `kinematics`, poses (forward kinematics from the ground; `posed`, an assembly copied at a state), and configuration sequences (`configuration_sequence`, a function's samples, `Timeline`: a sequence's pair values over time) |
 | `build.py` | one build: load the script afresh (as Python imports it: a package's module by its dotted name), one memo run, document, element names, files: every model's that ran |
 | `delta.py` | the line under the run line: a built tree's facts (`facts`: its occurrences, its world bounds -- each part's box, kept by its geometry key, measured where it decides the model's -- its parts' geometry keys and looks, and its joints, configuration sequences and warnings), worked out in the worker, and the daemon's delta of them against the build before (`delta`), kept beside each record and in the registry's |
 | `previous.py` | the model's build closure on its xbf's main label (`manifest`), the release from the version beside the code and the platform, the closure made again before the body runs (`again`) |
-| `document_migrations.py` | supported persisted `xbf/8` to `xbf/9` material conversion in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes |
+| `document_migrations.py` | supported persisted `xbf/8` material conversion in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes; the formats the engine reads (`readable`), which its hello says |
 | `document.py` | result to XCAF (prototypes, instances, names, colours, materials, element names; a mesh face refused, `mesh_faces`), a warm build's patch of the document it kept, atomic BinXCAF save, read-back of an xbf or a foreign STEP, and a saved document's main-label strings rewritten in its bytes (`relabel`) |
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
@@ -361,12 +347,14 @@ only, and a file's id is derived again from its path after a restart.
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
-| `daemon.py`, `worker.py`, `client.py` | one daemon per installation, one warm worker per model script, at most one per core alive (`Pool`), connect-or-start, a hold; a worker's memory cap |
+| `daemon.py`, `worker.py`, `client.py` | one daemon per selected port, project-interpreter workers, at most one per core alive (`Pool`), attach-only clients and explicit bootstrap, a hold; a worker's memory cap; the hello and its control connection (`client.hello`); an older release's engine retired by a start once it is idle (`client.converge`, `client.retire_older`); a superseded engine stepping aside (`Daemon.supersede`) and a start bringing up the current release (`client.CURRENT`) |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: cadgen's bounded Windows retry, kept in the engine |
-| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
-| `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), each installation's engine record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); where the folder is, the distribution's (`FACTORY`) |
+| `file_lock.py` | the shared operating-system file lock used by document transactions and application state writers |
+| `runtime.py` | the project interpreter a model asks the engine to run in: its descriptor (`describe`, `validate`: python, prefix, cadgen import root, release, import startup settings, compatibility, fingerprint), the worker slot per script and interpreter (`key`), the dependency snapshot a worker takes once at startup and that joins the build key (`dependencies`, `closure`); what a client, a project's worker and the engine meet by -- protocol, document format and native line, never the release (`compatibility`, `identity`, `refusal`) -- the one line a project of another release is told (`nudge`), and the check before native bytes are read (`check_native`) |
+| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`); saved documents are converted only when read, with runtime-less models rebuilt only on explicit calls |
+| `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), each engine's connection metadata (keyed by selected port), and the one owner of every write under that folder (`Folder`); where the folder is, the distribution's (`FACTORY`) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cadgen.engine VERB`) |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
@@ -374,7 +362,11 @@ only, and a file's id is derived again from its path after a restart.
 ## CLI
 
 ```
-python SCRIPT.py                             the models the script explicitly calls
+cadgen run [--port N] [--refresh] [--show-env] SCRIPT.py [ARGS...]
+                                             the models the script explicitly calls, run in its
+                                             project's environment, the engine started when none
+                                             runs (**Running a model**); `python SCRIPT.py` where
+                                             cadgen was installed by hand
 cadgen export SRC DST [DST ...] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
                                              (.glb, .stl, .3mf: to the other two mesh kinds)
@@ -398,20 +390,27 @@ cadgen delete DOC [DOC ...] [--json]        each document deleted: its record, i
 ```
 
 `python -m cadgen.engine VERB ...` takes the same verbs, the engine's own entry.
+Every engine verb accepts `--port N` after the verb; it overrides `CADGEN_PORT` for
+that command without changing the default or selecting a project interpreter.
 
 Every `SRC` and `DOC` is an on-disk CAD file's path or a document's id (`ids`): a model's id is
-what `python SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
+what `cadgen run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
 id is read as the engine holds it, never built: one it does not hold is refused with the command
 that builds it again, `cadgen run <the script that defines it>`. A script is never a source: `x.py`
 and `x.py::fn` are refused as any other file that is no document is.
 
-Every build and every verb goes through the engine: no command runs one in its own process. A
-verb that starts the engine to answer says so, `engine started` on stderr, once, and only when the
-engine that answers is the one it started (`client.on_started`); `status`, `stop` and `delete` never start
-one, nor does an MCP host closing its session.
-`daemon=False` on the Python functions (`Model.build`, `export`, `snapshot`) is a seam for tests
-and debugging only: it runs in this process, cold, and no document is served: no page, and
-nothing for `inspect` to read by its id.
+Ordinary model calls and CLI document operations attach to the selected engine.
+Only `cadgen server`, `cadgen run` and MCP bootstrap start an engine. A missing engine, denied
+IPC access or an engine this cadgen does not meet (another protocol, a document format
+it cannot read, another OCP line: **Architecture**) fails; none triggers automatic startup
+or local execution. `status`, `stop` and `delete` address only the selected engine.
+
+`daemon=False` on the Python functions (`Model.build`, `export`, `snapshot`) is an
+explicit offline mode. It runs cold in the calling process without a server and
+serves no live document: no page or URL, and nothing to inspect by its id in an engine.
+For example, `arm.build(daemon=False)` builds locally;
+`export(arm, "arm.step", daemon=False)` writes an offline deliverable.
+This mode is never a fallback after a failed connection.
 
 A verb's `--json` (`export`, `snapshot`, `status`, `stop`, `delete`) prints its answer as one JSON object
 on stdout, and a failure as `{"ok": false, "error": ...}` there too, exit status 1, so a caller
@@ -421,11 +420,12 @@ A refusal keeps its type across the daemon: the worker answers its kind beside i
 (`worker.refusal`) and the caller raises it as that type (`api._failed`), so a pose a document
 lacks is refused the same, exit 2, whether a worker or the caller's own process refused it.
 
-`python SCRIPT.py` executes normal Python. Decoration only registers a model;
+A script's run (`cadgen run SCRIPT.py`: `python SCRIPT.py` in its project's environment) executes
+normal Python. Decoration only registers a model;
 imports and definitions build nothing. A call such as `arm()` asks the daemon to
 build that model and the children its body calls, prints its report -- its `id:` and its
 `view:` -- when the call is the program's (made in `__main__`, wherever the model is defined:
-`python caller.py` calling `parts.cube()` reports cube), and returns the document's handle
+`cadgen run caller.py` calling `parts.cube()` reports cube), and returns the document's handle
 (`api.Document`), whose `.shape` is transferred only when it is read. The run line (`built …`,
 or `took …` for a model taken from its key) is followed by the model's delta against its build
 before, which the daemon says from the facts the worker's tree held (`delta`): `parts 21 (+2) ·
@@ -451,7 +451,7 @@ read from the program's source). Nothing builds those models for it: Python deci
 `failed plate.py::plate at Solid.make_box(0, 60, 5): the kernel refused it` -- and in its report
 (`failedAt`; `memo.refused_call`). Put executable model calls under
 `if __name__ == "__main__":` so other models can import their definitions.
-`Model.build(verify=, profile=, daemon=)`, the debug seam, explicitly requests a build and returns its report.
+`Model.build(verify=, profile=, daemon=)` explicitly requests a build and returns its report.
 No watcher selects, suppresses or introduces calls in a Python script.
 
 A script is plain Python, loaded afresh by each build as Python imports it
@@ -501,16 +501,15 @@ If a body raises, the error is reported with the model's frames and the
 previous files stay: the program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
 it, and left uncaught it ends the program with status 1 without its traceback again
-(`model._told`). A call the engine never served -- none runs and this shell's sandbox cannot
-start one, a folder refused, its port held -- raises its `ConnectionError` or `EngineError` the
+(`model._told`). A call the engine never served -- none runs, a folder is refused, or it and the engine do not meet -- raises its `ConnectionError` or `EngineError` the
 same way: left uncaught, its one line on stderr (`cadgen: <why>`, as a `cadgen` verb says it) and
 status 1, no traceback; caught, nothing said. Builds run in the daemon's warm workers, at most one per core alive
-(**The engine server and its workers**). `CADGEN_ENGINE_DIR` moves its door and lock; the client and the server resolve it alike (`daemon.state_dir`: a `..`, a symlink or a trailing slash names the same folder). On POSIX the folder must be the user's own and closed to writing by anyone else (`daemon.folder_refusal`): whoever owns or can write the folder could take the door's place, so a client refuses to connect or start there and the daemon refuses to lock there, saying why.
+(**The engine server and its workers**). `CADGEN_ENGINE_DIR` moves its door and lock; the client and the server resolve it alike (`daemon.state_dir`: a `..`, a symlink or a trailing slash names the same folder). On POSIX the folder must be the user's own and closed to writing by anyone else (`daemon.folder_refusal`): whoever owns or can write the folder could take the door's place, so a client refuses to connect there and the daemon refuses to lock there, saying why.
 `CADGEN_ENGINE_MEMORY_MB` sets the server's memory budget (**Document lifetime**); the document
 cache has no size to set, keeping every document until a person deletes it
 (`CADGEN_ENGINE_CACHE_IDLE`, its idle seconds, is the tests' seam).
-`CADGEN_ENGINE_DEFAULT_PORT` stands in for 3245 as the default port (`daemon.default_port`): the
-tests' seam, so a suite holds or frees a default of its own and never touches the machine's 3245.
+`CADGEN_PORT` selects the fixed engine port (default 3245). Tests explicitly start
+engines on ports of their own and never touch the person's default engine.
 `CADGEN_ENGINE_MEMO=0` turns memo hits off. `CADGEN_VIEWER_WARM=0` keeps `cadgen viewer`
 from warming the engine at its launch (**The viewer and the snapshot**). `CADGEN_ENGINE_MESH=processes|inline`
 picks how parts are meshed. The default, `processes`, uses a warm pool of
@@ -543,7 +542,7 @@ in. Its structure says how long the parse took and which process made it
 ## Profiling
 
 Request function timings with `arm.build(profile=True)`. The script remains plain Python,
-run as `python model.py`; it takes no engine flags, and no command profiles a build.
+run as `cadgen run model.py`; it takes no engine flags, and no command profiles a build.
 
 Profiling measures **actual execution**, preserving normal memo, body and XBF hits.
 It does not force a rebuild: a replayed body has no function timings for its earlier
@@ -573,25 +572,130 @@ reused by a later build. Failed model reports include the work observed before f
 `builtins=False`: native OCCT time belongs to the Python function that called it,
 which also avoids pybind11's unmatched profile events on Python 3.12 and later.
 
+## Running a model
+
+`cadgen run [--port N] [--refresh] [--show-env] SCRIPT.py [ARGS...]` (`cadgen.cli.run`; its options
+before the script, every argument after it the script's, as written) builds a model as a person or
+an agent runs one: it starts the selected engine when none answers (**Starting the engine**: an older release's idle
+engine retired first), asks it what it runs as -- its hello's `release`, `installation`, `python`
+line and `source` (`daemon.runs_as`: where its cadgen installs from when it is no release on the
+index, the source tree of an editable install or the wheel a development install was made from) --
+and runs `python SCRIPT.py ARGS...` with the Python of the script's project environment, in the
+caller's folder and environment with `CADGEN_PORT` set (on POSIX the command becomes that process;
+on Windows it waits for it and exits with its status). From there it is any run: the script is a
+client, and the engine starts its worker in the same environment, so the script, its worker and the
+engine run one cadgen by construction. The project environment is `cadgen._internal.projects`'s:
+
+- **The project** is the nearest folder, from the script's own up, holding `pyproject.toml`,
+  `uv.lock` or `requirements.txt`; with none, the script's folder. Its environment holds its
+  `requirements.txt`, the project itself (editable when its `pyproject.toml` has a build system or
+  says `tool.uv.package = true`; its `[project]` dependencies alone when it has none, as uv reads a
+  project it does not build, its `tool.uv.sources` with them), the script's inline metadata (PEP
+  723's `# /// script` block) and the engine's cadgen (`cadgen==<release>`, or its `source`), in one
+  resolution, so a pin that conflicts with what cadgen needs fails before anything runs. The
+  engine's cadgen also stands in place of any other requirement on cadgen (uv's `--override`): a
+  project that names its own, `cadgen==0.8.2` say, runs the engine's, and is told so once. The
+  project's own `.venv` is never read or written.
+- **Its Python** is the project's when it declares one: the version its `.python-version` names (the
+  first found from the script's folder up to the project's), else the newest line cadgen runs on
+  that its `requires-python` admits (its `pyproject.toml`'s and the inline block's, both); else the
+  engine's line. The lines cadgen runs on are the CPython minors the installed cadgen, OCP and
+  build123d all admit (`projects.supported`: 3.11 to 3.14 today); a project that asks for another is
+  refused, naming them.
+- **Where it is**: `envs/<key>` in the cache folder, which is regenerable. The key is a digest of the
+  project's folder (a folder holding one of those files only: its environment names it, installing
+  it editable and reading the paths its requirements give, so a script's folder that declares
+  nothing shares one environment with every other), the engine's installation, source and
+  architecture, the Python asked for, and the bytes of `requirements.txt`, `pyproject.toml`,
+  `uv.lock` and the inline block. A changed dependency, another Python or an upgraded engine is
+  another key: a new environment, with a worker of its own, and the old one left where it is.
+- **Made once.** uv makes it -- `uv venv --no-project --managed-python --python <version>`, then
+  `uv pip install --link-mode hardlink`, the installed files hard links to uv's cache: on macOS a
+  clone is a new file, which the system looks at again before a process first loads it (a new
+  environment's first kernel load measured 44 s cloned, against 32 s for the first linked one and
+  7.6 s for each after it) -- saying one line while it does. uv's index page for cadgen, cached ten
+  minutes, may be from before the engine's release was listed: a release it finds none of is asked
+  for once more, that page fetched anew (`--refresh-package cadgen`). The marker, `cadgen-env.json`
+  (the key, what it was made of, uv's commands), written last, makes it complete; one with no marker
+  of its key is made again. A run of an unchanged project reads its inputs and the marker and resolves
+  nothing: a warm one-box model measured 126 ms through `cadgen run`, against 71 ms for `python
+  model.py` in the same environment (medians of ten; the difference is the command's own interpreter,
+  its imports and the engine's hello). One run makes it while another of the same key waits
+  (`envs/<key>.lock`).
+- `--refresh` makes it again -- refused while the engine runs a worker in it, which read its
+  installed packages as it started: `cadgen stop` first. `--show-env` prints its folder (made first
+  when missing) and runs nothing; `cadgen status` names each worker's environment by its prefix.
+- uv is the one on `PATH`, else the one cadgen's own `uv` dependency carries.
+
+What it cannot do it says in one line, `cadgen run: <why>`, and exits 1 (2 for a script that is not
+there or not a `.py`): the engine's own line when it cannot start (a sandbox's); `this project asks
+for Python 3.10; cadgen runs on 3.11–3.14: change requires-python or .python-version`; `the
+project's dependencies conflict with cadgen 0.8.3: cadgen 0.8.3 needs build123d>=0.13.0,<0.14 and
+cadquery-ocp-novtk>=8.0,<8.1; the project pins build123d==0.12.0 (uv: <its explanation>)`; `the
+project's environment needs the network once: <uv's error>`; `cadgen 0.8.3, the engine's, is on no
+package index uv reads: <uv's explanation>`; `the system denies uv what the
+project's environment needs (<uv's error>); a sandbox that forbids it does: run this once outside
+it, or with its permission`, and the same of cadgen's own files there (`the system denies cadgen the
+environments' folder <path> (...)`: the run of a complete environment writes nothing, so a sandbox
+runs one made outside it); `uv cannot provide Python 3.12 for this project's environment: <uv's
+error>`; else `uv could not make this project's environment: <uv's error>`.
+
+An environment made by hand, with cadgen installed in it, runs `python model.py` as ever: it
+attaches, and meets the engine by protocol, document format and native line (**Architecture**).
+
 ## The engine server and its workers
 
-One engine server per installation (`daemon.py`: a daemon, which `cadgen server` runs in the
-foreground), started on demand by the first command that needs it. **No timer stops it**: a
-person may be using a page or the CAD app for hours without a build. It stops in four ways: on
-`cadgen stop` (or a terminate); when a newer installation's engine starts, or another that needs its
-port, and retires it while nothing uses it (**A link outlives its engine**); when its door is gone -- its folder removed, a
-temporary folder cleaned up, or another file put in the door's place -- so that no one can reach it
-(`Daemon.tend` sees it within a round, and it stops as `stop` does, saving what it holds to the
-cache); and with the machine. **No timer retires a worker either**: memory alone does. Idle
-documents are saved to the cache, past the memory budget what no page watches leaves memory for it
-(**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
-idle workers go (below). It holds a pool of warm workers, one per model script (and one for the
-documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
-the operating system does the rest. (What the daemon itself holds, the documents and their
-tessellations, is under one memory budget: **Document lifetime**.)
+One engine server per selected port (`daemon.py`) owns the workers.
+`cadgen server` starts it explicitly in the foreground; MCP bootstrap and `cadgen run` start
+or attach to it. **No timer stops it**: a person may use a page for hours without
+a build. It stops on `cadgen stop` or a terminate, with the machine, or when its
+private door is removed so clients can no longer reach it. A newer release's start retires it
+only once nothing uses it, and an older release's never does (**Starting the engine**). Its
+shutdown saves its documents to the cache.
+**No timer retires a worker either**: memory alone does. Workers run in the calling
+project's Python environment (the one `cadgen run` makes, **Running a model**, or one made by hand)
+and keep their memo while warm. The server owns their
+lifecycle; one project never lends a warm interpreter to another environment.
+Document memory is under a separate budget (**Document lifetime**).
+**The daemon's housekeeping** runs in threads of its own, none on a request's path: the memory
+pressure poller (`cadgen-memory-pressure`), the sweep of dead engines' files, the pruning of
+unused bytecode folders, and what the enclosing distribution hands it to start as it serves
+(`daemon.STARTED`, called with the selected port). cadgen's is its self-update
+(`cadgen._internal.auto_update`, the thread `cadgen-auto-update`): a minute and a half after the
+start, then once an hour, it reads the version feed, and where the install command's receipt names
+this engine's port it downloads a newer release whole, then runs that release's `cadgen setup`,
+which makes it the release the device runs (`<state>/current`). The engine imports none of it
+(law 3), and `CADGEN_UPDATE_CHECK=0` turns it off.
+
+**Supersession.** The distribution also tells the engine whether the device runs a newer release
+than its own, `daemon.SUPERSEDED` (cadgen's: `installations.newer`, the pointer against
+`cadgen.__version__`; a development install never is), and hands it `daemon.SUCCESSOR`, what starts
+the current release's engine on its port (cadgen's: `auto_update.successor`, that release's `cadgen
+server --port <port>`, else through uvx). Each `TEND_SECONDS`, a superseded engine steps aside once
+nothing holds it (no app server's hold), nothing runs (no build, draw or serving request) and nothing
+has been asked of it for `daemon.QUIET_SECONDS` (30 s): no door request but a status, a pid read, a
+stop or a hold, and no HTTP request but a page's watch, its version read (`serve.Server.clients_quiet`,
+the application's `EngineApp.quiet`, which counts an export kept alive too) (`Daemon.supersede`).
+With no page watching, it stops as `stop` does, saving what it holds; the next client's start brings
+up the current release's engine (`client._start`, below). With pages watching, it calls
+`SUCCESSOR(port)` (`None` from the hook is a start, words its failure, said on stderr and tried again
+later) and for a minute (`daemon.HANDOVER_SECONDS`) its pages and their HTTP work no longer count
+among its uses (`Daemon.uses`, so its status and its idle stop): a page's watch outlives its tab by a
+minute or more, and a page reloads itself on an engine that answers on its port with its token. The
+successor's start retires it as any newer release's does, binds the port and serves the pages as they
+come back; one that never comes leaves the engine serving as before, until it tries again. There is
+no request that asks an engine to hand over, and nothing for a person to click or restart.
+
+**A start brings up the current release.** `client._start` asks the distribution's
+`client.CURRENT` for the console script of the release the device runs when that is newer than the
+calling process's (cadgen's: `installations.newer`). Given one, the start runs its `cadgen server
+--port <port>`, detached, in the caller's environment without the caller's installation on
+`PYTHONPATH` or a development name, and with `CADGEN_NO_DEFER=1`, so that release's command runs as it
+is; the caller attaches to it by protocol, as to any engine. Else it starts its own installation's
+daemon module, as ever.
 
 - **A cap.** At most `CADGEN_ENGINE_WORKERS` workers are alive (default: the machine's
-  cores). A build for a script whose worker is alive goes to it, waiting while it builds
+  cores). A build for a script whose worker in the same project interpreter is alive goes to it, waiting while it builds
   something else: one build at a time per worker, builds of different scripts at once.
 - **First come, first served.** A build for a script with no worker starts one under the cap.
   At the cap, the least recently used idle worker no page watches is retired first (drained of
@@ -604,8 +708,10 @@ tessellations, is under one memory budget: **Document lifetime**.)
   with the daemon, and again each time a build takes it or starts a worker of its own, while the
   pool has a slot for it under the cap and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the
-  standby's does (`daemon.RESTARTS`), and starts a fresh worker otherwise -- after which the
-  standby, of another interpreter, is replaced by one of the build's. Taken, it is that script's
+  standby's does (the execution descriptor and `daemon.RESTARTS`), and starts a fresh worker otherwise -- after which the
+  standby, of another interpreter, is replaced by one of the build's. The server's own reads of files and of
+  documents no worker holds (the `documents` worker) take only a standby of the server's Python, never a
+  project's. Taken, it is that script's
   worker (`Worker.adopt`): its key, the environment it was asked in and the folder a fresh worker
   of it would start in, its run's environment adopted as every run's is (`worker.adopt`). A build
   arriving while the standby starts, of its interpreter, waits for it rather than start another.
@@ -631,7 +737,7 @@ tessellations, is under one memory budget: **Document lifetime**.)
 - **Collected when idle.** A worker builds with Python's cyclic collector off and collects once
   no request has come for half a second, so a script's calls one after another never wait on
   it. A worker over its memory cap collects before it measures again.
-- **One load per run.** The calls one `python model.py` process makes of its script are served
+- **One load per run.** The calls one run's process (`cadgen run model.py`) makes of its script are served
   from one load of it while every file the load read stands as it was, the call comes in the
   environment the load ran in (a run is its caller's environment, and a program that changes its
   own between two calls changes what an import of its script reads), the load made no kernel
@@ -639,8 +745,7 @@ tessellations, is under one memory budget: **Document lifetime**.)
   again: another run, an edit, a body that ran.
 
 The meshing pool starts with the first page, view or inspection, never with a build. A build
-serves its document, so the daemon's server starts with the first `python model.py`; its meshing
-pool waits. Every process starts on the first mesh a page asks for, or on `Server.warm`: sent by
+serves its document through the explicitly started server; its meshing pool waits. Every process starts on the first mesh a page asks for, or on `Server.warm`: sent by
 `cadgen viewer` at launch (`CADGEN_VIEWER_WARM=0` skips it), called when an app launches a view and
 when a build's `view:` link lands. An inspection's measurements, picked elements and poses start
 only the processes their jobs need (`Mesher.processes`, `warm=False`; a
@@ -681,34 +786,77 @@ between requests: an idle worker holds no project folder (on Windows, one a proc
 cannot be renamed or deleted). A meshing or reading pool's processes exit with the process that
 started them, however it ends.
 
-A worker is an interpreter; a run is the script in its caller's environment. A build goes to its
-script's live worker whatever the caller's environment but for what shapes the interpreter's
-import system (`daemon.RESTARTS`): `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
-`PYTHONNOUSERSITE`, `PYTHONUSERBASE` and `PYTHONPLATLIBDIR`. A relative `PYTHONPATH` entry is the
-caller's, as Python reads it for `python SCRIPT`: made absolute against the caller's working folder
-before the engine is handed it (`client.environment`), since a worker stands in the script's folder.
-A build with another value of any of them replaces the worker (retired `environment`), and its
-memo goes with it. Everything else the
-run adopts (`worker.adopt`): before the body runs, the caller's environment replaces the worker's
-`os.environ`, keeping only those variables and what the worker set for itself
-(`CADGEN_ENGINE_WORKER`, and the daemon's bytecode setting, `daemon.BYTECODE`). `PATH` and `VIRTUAL_ENV` are adopted, not
-restarts: neither changes a running interpreter's `sys.path` (the worker is the daemon's
-interpreter, started with `-P`, and `site` finds a virtual environment by the interpreter's own
-`pyvenv.cfg`, never by `VIRTUAL_ENV`, which only activation scripts and installers read), and
-the kernel reads neither; a model that starts a program finds it on its caller's `PATH`. An
-agent's shell may give each turn its own `PATH` (Codex puts a temporary folder of its own on it,
-`~/.codex/tmp/arg0/codex-arg0…`, new with each Codex process): one warm worker serves every turn.
+A worker runs the project's interpreter, identified by the calling process's
+`sys.executable` and `sys.prefix`, without resolving a virtual environment's Python
+symlink to its base interpreter. It imports cadgen and dependencies from that
+environment -- its cadgen may be another release than the engine's. The server does not
+inject its own package directory into the worker's `PYTHONPATH`. The worker reports its
+actual execution descriptor before a build, its release among it; the engine holds it to the
+rule clients meet it by (**Architecture**: protocol, document format, native line), so a
+project's worker of another release that meets it builds, nudged once at its first build
+(`runtime.nudge`), and one that does not is refused before model code runs, in one line naming
+both sides and what makes them meet (`install cadquery-ocp-novtk==8.0.* in the project
+environment`). The engine speaks to a worker of another release over the one wire, which is why a
+change to it that an older worker would misread bumps the protocol, and why a descriptor field a
+newer cadgen adds is carried, never refused (`runtime.validate`). The worker independently checks
+its package root and interpreter prefix against the request. Each process reads its own
+compatibility once (`runtime.compatibility`).
+
+A warm worker is keyed by its script, requested interpreter, virtual-environment
+prefix and import setup. Different environments keep separate warm workers behind the
+same server and viewer. Calls check that identity and runtime compatibility; installed
+packages are not watched. cadgen's actual imported root remains authoritative; its release is
+information.
+A standby follows the requested execution environment too.
+
+Project Python modules, including editable packages whose source lives outside the
+interpreter and library folders, use the existing source loader and build closure.
+Running the model again reads changed helpers and rebuilds the work that depends on
+them while retaining the worker and kernel. Source edits do not replace the worker.
+The existing build-closure rules decide which bodies can be reused: symbol-based keys
+ignore comments and unrelated bindings; conservative source-byte fallbacks can rebuild
+even for a comment change. Library code is what lies in the interpreter's library folders
+(`trace._library_roots`: its standard library, its own and its base interpreter's installed
+packages, cadgen, an installed-packages folder or archive on the path), never its whole
+prefix: a project inside its own virtual environment's folder is the model's code. A model
+script that does lie in a library folder is said on the build's log, since its edits would
+rebuild nothing.
+
+Installed packages are read once, when a worker starts. After installing, upgrading or
+reinstalling dependencies, `cadgen stop` stops the selected engine, then `cadgen server`
+starts it again (or `cadgen run` does, or the MCP server at its next CAD tool call;
+`python model.py` only attaches); restart any long-lived calling Python process, then run the
+model again on the same selected port. A project environment `cadgen run` makes is another
+environment when a dependency changes, with a worker of its own, and needs neither step
+(**Running a model**). Direct edits inside cadgen,
+installed libraries, native extensions or import hooks require reinstalling that
+distribution before restarting. Ordinary project/helper edits need neither step.
+
+The worker captures an installed-dependency snapshot once at startup; an offline process
+captures it on its first execution. It identifies cached builds and worker bytecode, so a new
+worker does not reuse a document built with a different installation. It is not refreshed
+on each model call and does not monitor package changes.
+
+The import setup (`daemon.RESTARTS`) includes `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
+`PYTHONNOUSERSITE`, `PYTHONUSERBASE` and `PYTHONPLATLIBDIR`. Relative `PYTHONPATH`
+entries are made absolute against the calling process's working folder before the
+request is sent (`client.environment`); an empty `PYTHONPATH` is none, as Python reads
+it. Changing one of these values requires a
+fresh worker and loses its memo. `PATH` and `VIRTUAL_ENV` are adopted for a run;
+`VIRTUAL_ENV` alone never chooses an interpreter. The remaining caller environment
+replaces the worker's `os.environ` before a run (`worker.adopt`), except for the
+worker-owned `CADGEN_ENGINE_WORKER` marker and bytecode settings (`daemon.BYTECODE`).
 
 `cadgen status` says what the server holds (`--json`: the same as data, `api.status()`):
 
 ```
 engine server 98307, up 2h10m · workers 3/10 with the standby · held by 1 app server · RSS 4.7 GB of 16.0 GB
-  busy  tom.py         98310   12 builds   3.7 GB  building tom.py::tom · Building geometry · 3/7 stages · 41s
-  idle  motorbike.py   98410    3 builds   0.6 GB  4m
-  standby              98512               0.4 GB  kernel loaded · 4m
+  busy  tom.py        robot/.venv   98310   12 builds   3.7 GB  building tom.py::tom · Building geometry · 3/7 stages · 41s
+  idle  motorbike.py  bike/.venv    98410    3 builds   0.6 GB  4m
+  standby                robot/.venv   98512               0.4 GB  kernel loaded · 4m
   waiting  2 builds, first come first served
 retired: finger_01.py (LRU) 3m ago · qdd_actuator.py (pressure) 41m ago · tom.py (RSS) 2h ago
-serving http://127.0.0.1:52811: 3 documents · 2.1 GB of 16.0 GB held
+serving http://127.0.0.1:3245: 3 documents · 2.1 GB of 16.0 GB held
 cache /Users/me/.cache/cadgen: 14 documents · 212.4 MB, kept until deleted
 documents:
   live      tom      8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12
@@ -718,7 +866,10 @@ documents:
 ```
 
 A worker's memory is as it measured it after its last build; a busy one's build is where its
-last progress frame says (**Progress**); the time is how long it has been busy, or idle. The
+last progress frame says (**Progress**); the time is how long it has been busy, or idle. Each
+worker's environment, and the standby's, is its Python's prefix by its last two folders, whole
+where two would read alike, so two projects' `model.py` workers are told apart (`--json`:
+`python` and `prefix`). The
 standby's line has no script: its process, its memory and how long it has stood by (`starting`
 while it loads the kernel); it counts toward the workers' count (`with the standby`) and the RSS
 the header gives against the cap (`--json`: `standby`, `rssMb`, `rssCapMb`). A retirement's reason is
@@ -733,8 +884,8 @@ folder, with no engine asked). `--json` lists the documents as `models`, the cac
 `cache`, and `serving.documents` the files served, each `held` or `evicted` (out of memory for its
 budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
-(builds and draws running) and `active` (HTTP work underway) -- which another installation's engine
-asks before it retires this one (**A link outlives its engine**).
+(builds and draws running) and `active` (HTTP work underway). A newer release's start reads
+them: it retires this engine only while all four say nothing uses it (**Starting the engine**).
 
 ## The door
 
@@ -771,7 +922,7 @@ temporary folder.
   a client waiting on a greeting it will never send sees the door go and stops waiting. Once its
   workers have stopped it removes the rest of its files -- its port file, its failure note (but a
   failure's, which its client reads) and last its lock, removed while still held (`daemon.let_go`)
-  -- whether it stopped on `stop`, a terminate, a retirement or its door gone. An engine killed
+  -- whether it stopped on `stop`, a terminate or its door gone. An engine killed
   leaves its files; a daemon starting removes every dead engine's (`daemon.sweep_dead`): its lock
   free, taken while they go, and nothing answering at its door, port file or an early engine's
   socket, never a live engine's, and a failure note only once it is two minutes old. A lock is
@@ -789,27 +940,64 @@ temporary folder.
   carries the HTTP token to that owner (`{"op": "http"}`), and the HTTP side's token, cookie and
   app-capability rules are as they were.
 
-**Starting the engine.** Outside a sandbox a client starts the daemon as before and waits for its
-door. Inside one, a daemon could make its door but never bind its HTTP port, and every build
-serves its document: so it starts none. A shell that says it is sandboxed without network (a
-variable the distribution names, `client.SANDBOXES`) and finds no door is refused at once, in one line:
-no engine runs and this shell's sandbox cannot start one; open a CAD card (the plugin's server
-starts the engine) or run `cadgen server` outside the sandbox (`client.SANDBOXED`). A daemon
-started where it may not bind a loopback port (`daemon._can_listen`, before it makes its door) or
-take its lock writes why beside its lock (`<tag>.failed`, `daemon.failure_path`) and exits 1;
-the client that started it says that reason at once, never after a timeout.
+**Starting the engine.** `cadgen server` starts the selected engine explicitly;
+MCP bootstrap starts or attaches to it before serving a host, and `cadgen run` before it runs
+a model (**Running a model**). Ordinary Python calls (`python model.py`) and document CLI verbs
+only attach, even outside a sandbox. When the private door
+is absent they fail, naming the command that starts the server; denied IPC fails
+without trying another transport or running locally. Start the server outside any
+sandbox that refuses its listener or private directory. The private directory and
+its authentication rules apply independently of the public port selector. Any other
+listener there is named to every client, `cadgen status` and `cadgen viewer` as the
+system names it (`client.holder`: `port 3245 is held by python3 (pid M), not a cadgen
+0.8.3 server`), with the remedy -- stop it, or select another port with `CADGEN_PORT` --
+never a command that would start a server where none can listen. A cadgen holding the port
+and the port's lock, with no door, is this protocol's engine starting (its HTTP server binds
+before its door is made) or stopping (its door goes first), and is said to be, to try again.
 
-**A hold.** `cadgen mcp`, the stdio peer an agent host starts, connects to the engine as it starts
-(starting it when none runs) and holds it (`client.hold`, `{"op": "hold"}`: a connection the
-daemon answers and keeps until its client goes) for as long as the host runs it. While any hold
-is open, another installation that wants the engine's port never retires it: it rolls to the next
-free port, or refuses where that port was named (**A link outlives its engine**). So a sandboxed shell an agent host runs finds an engine whenever
-the host runs. An engine that goes while
-held (`cadgen stop`, a crash) is held again at the host's next request, never at once: a stop is
-obeyed. A hold names the host it serves (`{"op": "hold", "host": "codex"}`, as `cadgen.mcp.host.family`
-names it), and `cadgen status --json` says how many hold it (`holders`), per host (`hosts`), and the
-environment it runs in (`prefix`): what the `cadgen` command reads to run, in a host's shell, the
-installation that host's server holds.
+**An upgrade converges.** One engine serves the device's port, the newest installed: a start --
+`cadgen server`, the MCP bootstrap (`client.connect(start=True)`, through `client.hold`), `cadgen
+run` (`client.connect(start=True)`), the installer -- first looks for an engine of an older cadgen release serving the selected port
+(`client.converge`): this protocol's, asked through its door over a control connection, whose
+release ranks below this installation's (`daemon.rank`, as `packaging.version` orders them: a
+release above its own development builds), or an older protocol's (0.8.0 and 0.8.1, protocol 3,
+found as `cadgen stop` finds one: `client.legacy`). Once it is idle -- its status says no holders,
+no page watching, no build, draw or HTTP work underway -- it is stopped through its own door (this
+protocol's only while it is still idle: `{"op": "stop", "idle": true}`), waited for until its door,
+its lock and its port are let go, and the start takes the port, saying so once on its starter's
+stderr, the MCP server's log for the bootstrap: `retired cadgen 0.8.2's engine (pid N) for 0.8.3`.
+One this cadgen cannot use -- another protocol, a format it cannot read, another OCP line, an older
+protocol's door -- is waited for up to ten seconds (`client.RETIRE_SECONDS`) and, still in use, is
+never displaced: the start fails naming what uses it and what frees it, `` port 3245 is held by cadgen
+0.8.2's engine (pid N), still in use by 1 app server: quit that app or run `cadgen stop` ``, which the
+MCP bootstrap's host is told. One it can use is asked once and, in use, serves on, which the start
+says. An engine of this release or a newer one is never retired: an older installation never
+retires a newer one's. `client.retire_older(port=None, *, wait=10.0)` is the retirement alone, for
+the installer: the retired engine's `{"release", "pid", "port"}` (`release` as it names itself; a
+development install's `<version>-dev.<time>`), None when no older engine serves the port,
+`ConnectionError` in one line when it is still in use after `wait`, refuses the stop or does not
+exit. The server's bind tries it too before it refuses an older protocol's engine on its port
+(`daemon._listen`). Every other client only attaches: one that meets an older engine uses it, one
+that finds an older protocol's says `` port 3245 is held by cadgen 0.8.1's engine (pid N): run
+`cadgen stop` to stop it, then start again ``, and none retires anything.
+
+**Diagnosing older engines.** `cadgen doctor --json` identifies current engines
+through their handshake and inventories older endpoints in the same private
+directory through bounded, read-only status requests. It reports only their
+identity and serving port, marking the older protocol incompatible. A current engine, the
+project Python and the CLI are held to the rule a client greets by (**Architecture**): what
+does not meet is `incompatible` (exit 3), its finding naming what differs (`protocol`,
+`format`, `native`); a release apart alone is a `release_behind` warning whose remedy is the
+nudge. This discovery never admits builds, starts or stops an engine, or changes its records. A
+refused current handshake remains refused; diagnostics do not follow it with a status request.
+
+**A hold.** `cadgen mcp` holds its selected engine through `client.hold` for the host's
+lifetime. The hold names the host (`host`, as `cadgen.mcp.host.family` spells it),
+and `cadgen status --json` reports the holder counts and host families. The engine
+outlives a closed hold. An explicit stop is obeyed; MCP may bootstrap the same selected
+port on a later request, rather than immediately undoing the stop. A held engine is in use: a
+newer release's start never retires it while a hold lasts (**Starting the engine**). Holds never
+select an installation for a shell.
 
 ## Document lifetime
 
@@ -865,10 +1053,12 @@ declares -- handed over from a REPL in a folder one of whose scripts gives a mod
 or from a script one of whose functions has its name -- naming that declaration (`identity.handed`):
 one id is one document.
 
-**The registry.** One record per document the engine built, and per CAD file a page opened,
-`documents/<id>/document.json` in the user's state folder ([registry.py](registry.py); the
-distribution names the folder, `cadgen.viewer.recents.state_dir`): it points; a document's bytes
-are the cache's, in the cache folder (**The cache**).
+**The registry.** One record per built document and opened CAD file, at
+`documents/<id>/document.json` under the shared state root
+([registry.py](registry.py), `cadgen.viewer.recents.state_dir`). All ports use the same
+records, Recents and `recents/thumbnails`. Preferences, installation records, the page
+token and engine connection records use that root too. A record points; a document's
+bytes are in the shared cache root (**The cache**).
 Every record has one shape, `{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?, revision, built, created?, facts?,
 program?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart needs
 and no more. `kind` says what it is: `model` (`home` and `entry`, its script and function; the
@@ -896,6 +1086,9 @@ its Python module qualifier (`module`); an explicit declaration keeps its first 
 the name and a collision's words (`line`, dropped when its script's run gives the name up), and a
 model of the run's script the explicit names that script declared (`declares`). Recents passes
 `namespace` and `name` through (`CadRecent`): a named model's row shows its name.
+
+Updated engines serialize shared record/cache transactions with one persistent `documents.lock`;
+known-id reads check the current record without a catalog watcher.
 
 **Re-attachment.** A run's models with nothing to take up -- no document its worker built or took,
 and no cache file at the model's id (its script moved, or new), or a named model whose record points
@@ -943,15 +1136,15 @@ first, then by last activity, the later of a row's `opened` (a page opened it) a
 file's time on disk, a model's run), each row carrying both; a model's script is never read for it.
 
 **The cache.** For every model and shape document -- never a file's, which is its own
-file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
-([cache.py](cache.py); `cadgen.viewer.recents.cache_dir`: `CADGEN_CACHE_DIR`, else
-`$XDG_CACHE_HOME/cadgen` or `%LOCALAPPDATA%\cadgen`, else `~/.cache/cadgen`, the folder 0.7's store
-used), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
-folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
+file -- the engine keeps `documents/<id>/document.xbf` in the shared cache root
+([cache.py](cache.py)), selected by `cadgen.viewer.recents.cache_dir`:
+`CADGEN_CACHE_DIR`, else `$XDG_CACHE_HOME/cadgen` or `%LOCALAPPDATA%\cadgen`, else
+`~/.cache/cadgen`, the folder 0.7's store used. Writes go through a `registry.Folder`
+with `replace_atomic`; records stay in the shared state root. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's
-store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
-bytecode is under `pycache/`), and lists, counts and removes nothing else there (`cadgen doctor
+store: document bytes are read, written, sized and removed only under `documents/`
+(process bytecode remains under `pycache/`), and lists, counts and removes nothing else there (`cadgen doctor
 --prune` removes 0.7's store once nothing has written it for seven days). It is written never on the run path:
 
 - after `CACHE_IDLE_SECONDS` (10 s) with no build and no read of the document: the daemon asks the
@@ -1013,10 +1206,11 @@ the command that builds it again (**The rebuild command**).
 
 **Kept until deleted.** Nothing removes a cache file on its own: the cache has no size cap, no
 least recently used and no age, and keeps every model document -- a shape handed over's as a
-model's -- until a person deletes it, its record and its file together (**Delete**). The one other
-removal is a corrupt file whose bytes do not read: it goes, its record kept without `cache`,
-and the next build writes it again (`Models.unreadable`). An unsupported document format or a
-failed saved-format conversion preserves the cache file and record (**Document compatibility**). A save that fails is logged and listed by `cadgen
+model's -- until a person deletes it, its record and its file together (**Delete**). A file whose
+bytes do not read is kept too, with its record: the next successful build of that model replaces
+it atomically when it is saved (`Cache.refresh`), and the old bytes stay until that write lands.
+An unsupported document format or a failed saved-format conversion likewise preserves the cache
+file and record (**Document compatibility**). A save that fails is logged and listed by `cadgen
 status`, never raised: with the cache folder read-only, or not writable at all, the engine saves
 nothing and does everything else as it would.
 
@@ -1075,11 +1269,11 @@ mark, half the budget:
 
 Where none can be read, the budget alone applies. `Pressure.simulate` is the tests' hook.
 
-**The rebuild command.** A document that is not held -- `unsaved` -- names the exact
-command that builds it again: `cadgen run` and the script that defines its model -- never a
-program that imported it and called it, a check script, whose next run may do something else -- the engine that says it is the one `cadgen run` reaches, and its
-python has the kernel a bare `python` may lack -- from the daemon's record of it, or after a
-restart the registry's. The program is quoted for the shell a person pastes it into (`registry.rerun`):
+**The rebuild command.** A document that is not held -- `unsaved` -- names the
+script that defines its model: `cadgen run` and that script, which runs it in its project's
+environment (**Running a model**), on the same selected `CADGEN_PORT` -- not an importer or check
+script whose next run may do something else. The engine only reports the command; it never executes it.
+The program is quoted for the shell a person pastes it into (`registry.rerun`):
 `shlex.quote` on POSIX; on Windows the double quotes cmd.exe and PowerShell both read, only where a
 space or a quote needs them (`subprocess.list2cmdline`), since to cmd.exe a single quote is part of
 the path. A shape handed over has none: its words say that a program the engine did
@@ -1091,13 +1285,22 @@ Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`):
 its type, state and command with its words (`daemon.refused`) and the caller raises it as that
 type (`api._failed`), so `cadgen inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
 
-`cadgen stop` stops every server of the installation, whatever protocol it speaks: the door and
-lock names carry the protocol (`daemon._tag`), and `daemon.endpoints()` lists this one's and each
-older one's, so a cadgen that bumps `PROTOCOL` still stops the server an earlier one started (from
-protocol 3, the first with a door: an earlier one listened on a Unix socket, which nothing reaches
-now, and leaves on that older cadgen's own idle timeout). Both `stop` and `status` remove the door and lock of a dead
-server (nothing reads the door and nobody holds its lock) and say so on stderr; `status` names an
-older protocol's live server, which `stop` stops. `stop` prints a line per server it stopped
+`cadgen stop` stops the selected engine: its door and lock are named by the selected port alone
+(`daemon._tag`), and it asks over a control connection (`client.hello(control=True)`: `status` or
+`stop` alone, `daemon.CONTROL`), which an engine of this protocol takes whatever its release,
+document format or native line: an explicit stop stops the selected port's engine, whatever it
+is. An older release's engine (0.8.1 and before: protocol 3, the first with a door)
+named its door by its installation and takes one request a connection with no handshake, so when
+no door of this protocol answers, `status` and `stop` look for the one whose HTTP server serves the
+selected port (`client.legacy`: each older door in the engine's folder asked its status once,
+read-only, its answer bounded to 3 s and 1 MiB). `status` names it (`cadgen 0.8.1's engine (pid N)
+serves port 3245 with an older protocol`) with the command that stops it, `cadgen stop`, and exits
+1 (`--json`: `{"ok": false, "error", "holder"}`), as it names any other holder of the port
+(**Starting the engine**); `stop` stops it through its own door, waits until
+it is gone and prints `stopped cadgen 0.8.1's engine (pid N) on port 3245`, and one that refuses the
+stop is named with its own release's command, `cadgen +0.8.1 stop`, exit 1. An engine serving another
+port is never touched. Both `stop` and `status` remove the door and lock of a dead server (nothing reads
+the door and nobody holds its lock) and say so on stderr. `stop` prints a line per server it stopped
 (`stopped the engine server at DOOR`), or `no engine server is running`; `--json` prints
 `{"ok": true, "stopped": [DOOR, ...]}` instead.
 
@@ -1178,7 +1381,7 @@ the build's last frame names it. The worker sends each frame on its pipe (`{"id"
 the daemon:
 
 - passes it to the build's caller as it does the log's lines (`client.request(on_progress=)`):
-  `python model.py` draws a bar on stderr when it is a terminal -- each
+  a run (`cadgen run model.py`) draws a bar on stderr when it is a terminal -- each
   stage finished a line with its time, the one in flight repainted in place -- and nothing when
   it is not (`progress.Bar`; `api.build_script(progress=)` takes the frames instead, `False` none);
 - keeps a busy worker's last, which `cadgen status` shows (**The engine server and its workers**);
@@ -1205,7 +1408,7 @@ model's document, by the daemon as it draws a file through a render process (`Da
 `render.service.Renders.draw`) and by the verb's own process for the write, or wholly in that process
 with `daemon=False` (`render.service.draw_here_each`). A measurement's are `inspect`'s summary
 measuring a volume per part, in the process that asks (`api._summary`). `cadgen export`, `cadgen
-snapshot` and `cadgen inspect` draw them as `python model.py` draws a build's: the one bar, on a
+snapshot` and `cadgen inspect` draw them as a model's run draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
 `api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). An MCP
 operation (`cad_export`, `cad_snapshot`, `cad_inspect`) keeps the latest as its status's `progress`
@@ -1241,7 +1444,7 @@ the xbf it declares among them: no run sends a file's page anything (**Document 
 The CAD Viewer and its document reads share the daemon's HTTP listener. The page
 reads `/__cad/api/doc/<id>` and waits on its `/version` route; dispatch calls the
 engine directly. XBF/STEP loading and geometry facts run in child processes. A
-launcher starts or reuses the engine's one page, prints its authenticated URL -- a file's page,
+launcher attaches to the selected engine, opens its page and prints its authenticated URL -- a file's page,
 `/<id>`, for each file it names, else the home's -- and exits. The standalone engine's
 minimal page (`/<id>`) and snapshot server remain available without the enclosing application.
 
@@ -1626,8 +1829,8 @@ the document holds and its build closure (`query="summary"`; `"structure"` the s
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
 building it first. A handle exports and draws its document the same way (`.export()`,
-`.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
-and its children, as declared.
+`.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` returns a `Report` of it
+and its children. `daemon=False` explicitly builds offline in the caller.
 
 ## Kinematics
 
@@ -2372,7 +2575,7 @@ below holds it, so a document of one part takes its elements by the document's n
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
 JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
-path, or a document's id (a model's, which `python SCRIPT.py` prints, or a file's), and must be the
+path, or a document's id (a model's, which `cadgen run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds
 it. A canonical ref -- what `inspect` answers --
@@ -2660,26 +2863,27 @@ The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf
 A model's document is its own cache, as a FreeCAD document is: opened, it is what was last
 computed, and only what changed is computed again. It is kept in the engine's cache (**The
 cache**), and written as the model's xbf where one is declared, the same bytes. Its main label names what
-wrote it (`cadgen.engine xbf/9 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
+wrote it (`cadgen.engine xbf/10 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
 closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cadgen.engine
 closure/2`), pointers and digests only (law 1), and nothing of a version control's -- the engine calls
 no git. It names what the document was built from and what built it, the toolchain:
 
 ```
 schema    "cadgen.engine closure/2"
-engine    {"release": "cadgen 0.8.1", "format": "xbf/9", "digest": ...}   the format (keyed); the release and
+engine    {"release": "cadgen <release>", "format": "xbf/10", "digest": ...}   the format (keyed); the release and
                                                                      the engine's code digest (information only)
-libs      {"build123d": "0.13.0", "OCP": "8.0.1.1",                   geometry and materials libraries (keyed);
-           "bd_materials": "...", "threejs_materials": "..."}         OCP leads with the OCCT it wraps
-platform  {"python": "3.12.10", "system": "Darwin", "arch": "arm64"}  the system and architecture (keyed),
+libs      {"build123d": "0.13.0", "OCP": "8.0.1.1.0",                   geometry and materials libraries (keyed);
+           "bd_materials": "0.2.5", "threejs_materials": "1.2.5"}         OCP leads with the OCCT it wraps
+platform  {"python": "3.13.13", "system": "Darwin", "arch": "arm64"}  the system and architecture (keyed),
                                                                      Python (information only):
                                                                      platform.python_version(), .system(), .machine()
+runtime   {"dependencies": "<digest>", "python": "3.13.13"}          the startup dependency snapshot and Python (keyed)
 source    {"kind": "script", "path": "../src/tom.py", "function": "tom"}
 modules   [["../src/lib/arm_parts.py", "9f3c..."], ...]
 inputs    [["file", "../STEP/gripper.step", "c0de..."], ["read", "../src/lib/ids.json", "77ab..."], ...]
 bodies    how many bodies the model is
-key       one digest over the format, libs, system and architecture, and the code (source,
-          modules and inputs); null where the closure cannot say all the model is made of
+key       one digest over the format, libs, system and architecture, runtime, and the code
+          (source, modules and inputs); null where the closure cannot say all the model is made of
 ```
 
 Beside it on the main label, a document whose build made an `animation()` holds the compiled
@@ -2692,6 +2896,8 @@ functions' code objects with no line tables or docstrings, its classes, the valu
 hold (a path value inside the script's folder relative to it), and, for a module that falls back
 to its bytes (**Body retention**), each file of its import closure by its bytes. A comment or a
 blank line changes no digest; a module the model loads and does not reach holds the empty one.
+`runtime` holds only the startup dependency fingerprint and Python version. It carries
+no interpreter path, virtual-environment prefix or import-routing settings into the artifact.
 `inputs` lists every file a body read -- through the engine (`file`: `read_step`, `read_xbf`,
 `read_mesh`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
@@ -2700,16 +2906,21 @@ null (**Body retention**). `cadgen inspect DOC` prints the closure, `cadgen.insp
 
 **When the toolchain or the format moves.** The key covers the document format
 (`previous.FORMAT`), the kernel and library versions (`libs`: build123d, OCP,
-bd_materials and threejs_materials), the operating
-system and the architecture, along with the model's code and inputs. An arm64 kernel and an
-x86-64 one write other bytes of one model; a system, architecture or library change rebuilds it,
-saying what moved (`rebuilt: arm64 became x86_64`). The cadgen release (`engine.release`) and
-Python version (`platform.python`) are recorded in the closure but not keyed: a change to either
-alone does not rebuild. The engine's code digest is information only too; an engine edit that
-leaves the written document alone keeps every xbf current. `FORMAT` is bumped deliberately when
-the stored representation changes. A new format or build key can invalidate reuse for a new
+bd_materials and threejs_materials), the operating system and architecture, the project's
+runtime dependency fingerprint and Python version, along with the model's code and inputs.
+An arm64 kernel and an x86-64 one write other bytes of one model; a system, architecture,
+library, dependency or Python change captured at startup rebuilds it, saying what moved.
+The `engine.release` and engine-code digest fields are descriptive. The startup dependency
+snapshot prevents persisted reuse after an installation change and explicit restart, even
+when the format stays the same; it does not detect changes during a worker's life.
+Use the install/restart procedure above after changing installed packages. The connection meets
+by protocol, document format and native line -- the OCP major.minor -- never by release
+(**Architecture**); the key keeps the exact library versions, so a project on another patch of the
+engine's OCP line builds with the engine and keys its documents apart. `FORMAT` is bumped deliberately when the
+stored representation changes. A new format or build key can invalidate reuse for a new
 build; keeping a saved document readable is a separate obligation (**Document compatibility**
-below). Earlier formats also used this marker for changes to what the build key covers. The bumps so far:
+below). Earlier formats also used this marker for changes to what the build key covers.
+The bumps so far:
 `xbf/2`, the key left the release, the engine digest and numpy, and the closure its commit;
 `xbf/3`, the mechanism subtree took AP242's form (**Kinematics**); `xbf/4`, a function
 motion's samples are made for linear interpolation (**Configuration sequences**); `xbf/5`, files read by motion
@@ -2718,26 +2929,34 @@ animations, and a document with any was not taken; `xbf/7`, the compiled animati
 record on the main label, the closure counts none, and an animated document is taken like any
 (**Animations**); `xbf/8`, the closure names its toolchain (`closure/2`: system and architecture
 join the key; release and Python are recorded); `xbf/9`, materials use native bd_materials
-physics and `PbrProperties`, and both material libraries join the key.
+physics and `PbrProperties`, and both material libraries join the key; `xbf/10`, the runtime
+dependency fingerprint and Python version join the key. A runtime-less cached model rebuilds on its
+next explicit call; last-built document access is separate from build reuse.
 
-**Document compatibility.** The engine reads `xbf/8` and `xbf/9`. Loading an `xbf/8`
+**Document compatibility.** The engine reads `xbf/8`, `xbf/9` and `xbf/10` (`document_migrations.readable`,
+what its hello says it `reads`: a peer that writes one of them meets it). Loading an `xbf/8`
 document converts its persisted material metadata to native material data in memory before
 viewing, inspection, snapshots, import or export. No model source is needed or executed.
 Geometry, placements, names, appearance, physical meaning, painted faces, mechanism and animation
-data remain the saved document's. Reading a current `xbf/9` is unchanged; formats outside this
+data remain the saved document's. Native-material documents in `xbf/9` and `xbf/10`
+need no material conversion; formats outside this
 supported set are refused with a clear error.
 
 The conversion is idempotent. It leaves the original build closure and toolchain provenance
 unchanged: metadata conversion does not mean the geometry was built by the current kernel.
 A separate migration record identifies the conversion (`Loaded.migration`, `Source.migration`)
-without replacing that provenance. Opening a file never rewrites its bytes. A cached snapshot
-is read the same way without rewriting its bytes, changing its record or advancing its revision.
+without replacing that provenance. Opening a file never rewrites its bytes. A cached snapshot is read the same way without rewriting its bytes, changing its record
+or advancing its revision. Saved files, cached models and cached handed-over shapes share
+this policy: an original native version or platform difference alone does not prevent
+reading them. Live peers and shape transfers meet by native line -- a format the reader reads, and
+the same system, architecture and OCP major.minor (`runtime.check_native`) -- separately from
+persisted-document readability.
 An unsupported or failed conversion preserves the original bytes and cache record.
 
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cadgen export saved-v8.xbf upgraded-v9.xbf
+cadgen export saved-v8.xbf upgraded.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,
@@ -2753,8 +2972,11 @@ download of an opened XBF file returns its original bytes, even when the display
 converted in memory; use the explicit export above to persist the conversion.
 
 Saved-document access is separate from build reuse. Explicit source execution compares the
-current format, material libraries and other build inputs with the original build key and
-builds normally when they differ. No build closure is restamped to manufacture a cache hit.
+current format, material libraries, runtime dependency fingerprint, Python version and other
+build inputs with the original build key and builds normally when they differ. A missing
+runtime identity is never fabricated: the next explicit model call rebuilds it using the
+requesting project environment. Startup, page and inspect operations never run its source.
+No build closure is restamped to manufacture a cache hit.
 The JSON identity migration (**Identity migration**) is independent of document contents, and
 this data conversion restores no retired Python authoring API or class.
 
@@ -2813,7 +3035,7 @@ if __name__ == "__main__":
 The document's id is `bracket.id` (and `handle.id`): uuid5 of the script's canonical path and the
 function's name, the same in every process (**Architecture**), or `@model(name="bracket")`'s
 folder/name id from that same formula. Different scripts can use the same function name. Running the
-script again with changed code updates the same document and open viewers; `python parts.py`
+script again with changed code updates the same document and open viewers; `cadgen run parts.py`
 prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url` is the page. No list
 of ids is saved.
 

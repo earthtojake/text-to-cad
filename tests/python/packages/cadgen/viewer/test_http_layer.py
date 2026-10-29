@@ -293,7 +293,7 @@ class Catalog(HttpLayerTestCase):
             answers["model_info"] = {"model": {"source": {"name": "cube"}, "version": "v2"}}
             self.assertEqual(catalog()[1]["entries"][0]["hash"], "model:v2")
             # One it does not hold says why, in the engine's words, and its state.
-            answers["model_info"] = {"failed": f"cube ({ident}) is not saved: run `cadgen run /m/cube.py`", "state": "unsaved"}
+            answers["model_info"] = {"failed": f"cube ({ident}) is not saved: run `python /m/cube.py`", "state": "unsaved"}
             status, answer = catalog()
             self.assertEqual((status, answer["entries"], answer["missingState"]), (200, [], "unsaved"))
             self.assertIn("is not saved", answer["missing"])

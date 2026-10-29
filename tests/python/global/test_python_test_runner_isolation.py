@@ -52,12 +52,14 @@ class PythonTestRunnerIsolation(unittest.TestCase):
 
     def test_each_file_has_an_engine_directory_of_its_own_never_the_developers(self):
         calls = []
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": "developer-engine"}), \
+        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": "developer-engine", "CADGEN_PORT": "3245"}), \
+                mock.patch.object(runner, "free_port", side_effect=[50001, 50001, 50002]), \
                 mock.patch.object(runner.subprocess, "run", side_effect=_stand_in(calls)), \
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["first.py", "second.py"], str(REPO_ROOT), 2, False)
             self.assertEqual(os.environ["CADGEN_ENGINE_DIR"], "developer-engine")
         self.assertEqual(len(calls), 2, "no daemon was left, so none was stopped")
+        self.assertEqual({env["CADGEN_PORT"] for _argv, env in calls}, {"50001", "50002"})
         engines = [env["CADGEN_ENGINE_DIR"] for _argv, env in calls]
         self.assertNotIn("developer-engine", engines)
         self.assertNotEqual(engines[0], engines[1])
@@ -77,6 +79,7 @@ class PythonTestRunnerIsolation(unittest.TestCase):
         (_file_argv, file_env), (stop_argv, stop_env) = calls
         self.assertEqual(stop_argv[1:], ["-P", "-c", "from cadgen.engine import api; api.stop()"])
         self.assertEqual(stop_env["CADGEN_ENGINE_DIR"], file_env["CADGEN_ENGINE_DIR"])
+        self.assertEqual(stop_env["CADGEN_PORT"], file_env["CADGEN_PORT"])
 
     def test_a_failed_child_still_stops_its_daemon(self):
         calls = []

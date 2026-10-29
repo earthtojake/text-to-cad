@@ -247,13 +247,13 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, True)
         self.folder, self.state = self.root / "models", self.root / "state"
         self.folder.mkdir()
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_STATE_DIR": str(self.state),
+        self.env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_STATE_DIR": str(self.state),
                                           "CADGEN_ENGINE_DIR": str(self.root / "engine"),
                                           "CADGEN_CACHE_DIR": str(self.root / "cache"),
-                                          "CADGEN_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": ""},
-                                         self.addCleanup)
+                                          "CADGEN_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": ""}
         self.addCleanup(self._stop)
         analytics.choose(True, by="cli", path=self.state / "settings.json")
+        self.env = engine_daemon.started(self.env, self.addCleanup)
 
     def _stop(self) -> None:
         """The test's engine stopped, and every process it started -- the daemon, its workers, its

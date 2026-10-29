@@ -66,11 +66,19 @@ mkdir -p "$EMPTY" "$DIST"
 # The builds below run on the engine's daemon, as every build does: this run's own, in a private
 # folder, stopped on the way out.
 export CADGEN_ENGINE_DIR="$WORK/engine" CADGEN_CACHE_DIR="$WORK/no-0.7-store"
+CADGEN_PORT="$("$PYTHON_BIN" - <<'PY'
+import socket
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
+export CADGEN_PORT
 cleanup() {
-  # The installed cadgen stops the daemon its builds started.
+  # The installed cadgen stops only this run's explicitly bootstrapped engine.
   if [ -x "$VENV/bin/python" ]; then
     "$VENV/bin/python" -m cadgen.engine stop >/dev/null 2>&1 \
-      || echo "warning: this run's engine daemon did not stop; it goes once idle" >&2
+      || echo "warning: this run's engine daemon did not stop" >&2
   fi
   rm -rf "$WORK"
 }
@@ -79,7 +87,7 @@ trap cleanup EXIT
 export CADGEN_STATE_DIR="$WORK/state"
 # And the cadgen command the installation writes for the skills: never this machine's ~/.local/bin.
 export CADGEN_LAUNCHER_DIR="$WORK/bin"
-unset CADGEN_INSTALLATION_VERSION CADGEN_VERSION
+unset CADGEN_INSTALLATION_VERSION
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
@@ -231,8 +239,10 @@ if os.path.realpath(record["prefix"]) != os.path.realpath(sys.argv[2]):
 PY
 [ -x "$CADGEN_COMMAND" ] && grep -q '^# cadgen proxy: ' "$CADGEN_COMMAND" || fail "$CADGEN_COMMAND is not the cadgen command"
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
-same "$("$CADGEN_COMMAND" "+$VERSION_INSTALLED" run -c 'import sys; print(sys.prefix)')" "$VENV" \
-  || fail "cadgen +$VERSION_INSTALLED run does not run the installation's python"
+same "$("$VENV/bin/python" -c 'import sys; print(sys.prefix)')" "$VENV" \
+  || fail "project Python does not use the installed environment"
+[ "$("$CADGEN_COMMAND" "+$VERSION_INSTALLED" --version)" = "cadgen $VERSION_INSTALLED" ] \
+  || fail "cadgen +$VERSION_INSTALLED does not dispatch the selected CLI release"
 missing="$("$CADGEN_COMMAND" +0.0.1 status 2>&1)" && fail "cadgen +0.0.1 ran"
 case "$missing" in "cadgen 0.0.1 is not installed: run "*) ;; *) fail "cadgen +0.0.1 said: $missing" ;; esac
 echo "   $(basename "$RECORD") and $CADGEN_COMMAND"
@@ -256,9 +266,9 @@ def probe():
 if __name__ == "__main__":
     probe()
 PY
-# Running the script IS the build: no CLI verb takes its place. Run as a skill runs it: cadgen +V run.
-"$CADGEN_COMMAND" "+$VERSION_INSTALLED" run models/probe.py >"$WORK/build.log" 2>&1 \
-  || { cat "$WORK/build.log" >&2; fail "cadgen +$VERSION_INSTALLED run <model>.py"; }
+# Source runs with the project's actual Python; MCP bootstrap above explicitly started the engine.
+"$VENV/bin/python" models/probe.py >"$WORK/build.log" 2>&1 \
+  || { cat "$WORK/build.log" >&2; fail "python <model>.py"; }
 for written in XBF/probe.xbf probe.step probe.stl; do
   [ -s "$EMPTY/models/$written" ] \
     || { cat "$WORK/build.log" >&2; fail "the model script did not write models/$written"; }

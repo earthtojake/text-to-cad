@@ -199,7 +199,7 @@ _GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder"
                               "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
                               "/__cad/version"})
 _POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
-                               "/__cad/analytics/activity"})
+                               "/__cad/analytics/activity", "/__cad/update"})
 
 
 class CadApp:
@@ -554,6 +554,8 @@ class CadApp:
                     response.send_json(200, self._change_recents(json.loads(request.body())))
                 elif pathname == "/__cad/pick":
                     self._handle_pick(response)
+                elif pathname == "/__cad/update":
+                    response.send_json(200, self._update())
                 elif pathname == "/__cad/reveal":
                     from .reveal import reveal_path
                     if int(request.headers.get("content-length") or 0) > 8192:
@@ -740,11 +742,20 @@ class CadApp:
 
     def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from
-        the feed as last read. A feed that is due is read in the background: the page never waits."""
+        the feed as last read. A feed that is due is read in the background: the page never waits.
+        An update installed says nothing: new sessions run it, and the engine steps aside for it."""
         from cadgen import updates
 
         updates.refresh()
         return {"notice": updates.notice()}
+
+    def _update(self) -> dict:
+        """``POST /__cad/update``, the card's Update (and Try again): the engine's self-update started
+        now, in the background (``cadgen._internal.auto_update.run_now``): ``{"started": true}``, or
+        ``{"started": false, "reason"}``. Where it stands is the notice's (``GET /__cad/version``)."""
+        from cadgen._internal import auto_update
+
+        return auto_update.run_now(self.port or None)
 
     def _report_activity(self, payload: dict) -> None:
         """What the page did: a person touched it (``touched``), a Quick Edit was sent (``quickEdit``), used its

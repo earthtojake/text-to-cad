@@ -56,11 +56,66 @@ export CADGEN_STATE_DIR="$project/state"
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CADGEN_ENGINE_DIR="$project/engine" CADGEN_ENGINE_MESH=inline CADGEN_CACHE_DIR="$project/no-0.7-store"
 export CADGEN_VIEWER_DIST="$RUNTIME"
+CADGEN_PORT="$("$PYTHON" - <<'PY'
+import socket
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
+export CADGEN_PORT
+server_pid=""
+server_log="$project/server.log"
 cleanup() {
+  exit_status=$?
+  diagnostics="${out_dir:-${VIEWER_TEST_DIAGNOSTICS_DIR:-}}"
+  if [ "$exit_status" -ne 0 ] && [ -n "$diagnostics" ] && [ -f "$server_log" ]; then
+    mkdir -p "$diagnostics" && "$PYTHON" - "$server_log" "$diagnostics/server.log" <<'PY' || true
+import re, sys
+from pathlib import Path
+
+with Path(sys.argv[1]).open("rb") as log:
+    log.seek(0, 2)
+    log.seek(max(0, log.tell() - 256 * 1024))
+    text = log.read().decode("utf-8", errors="replace")
+text = re.sub(r"https?://[^\s<>\"']+", "<URL redacted>", text)
+text = re.sub(r"(?i)\bBearer\s+\S+", "Bearer <redacted>", text)
+text = re.sub(r"(?i)(\b[\w-]*(?:token|authorization|cookie|secret|password)[\w-]*[\"']?\s*[:=]\s*)[^\r\n]+", r"\1<redacted>", text)
+Path(sys.argv[2]).write_text(text, encoding="utf-8")
+PY
+  fi
   "$PYTHON" -m cadgen.engine stop >/dev/null 2>&1 || true
+  if [ -n "$server_pid" ]; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
+
+# Document operations only attach. Bootstrap this gate's selected server before
+# the first export, then wait until that exact process answers its private door.
+"$PYTHON" -m cadgen.engine server >"$server_log" 2>&1 &
+server_pid=$!
+"$PYTHON" - "$server_pid" "$server_log" <<'PY'
+import json, os, subprocess, sys, time
+from pathlib import Path
+
+pid, log = int(sys.argv[1]), Path(sys.argv[2])
+deadline = time.monotonic() + 60
+while True:
+    status = subprocess.run([sys.executable, "-m", "cadgen.engine", "status", "--json"],
+                            capture_output=True, text=True, timeout=10)
+    if status.returncode == 0 and (json.loads(status.stdout) or {}).get("pid") == pid:
+        break
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        raise SystemExit("FAIL: explicit engine bootstrap exited: " + log.read_text())
+    if time.monotonic() >= deadline:
+        raise SystemExit("FAIL: explicit engine bootstrap did not become ready: " + log.read_text())
+    time.sleep(0.02)
+PY
 
 # The STEP the gates open: one cylinder, written by build123d's own STEP export, which the engine
 # imports as it does any STEP it did not write. It is made here so that no CAD file is committed.

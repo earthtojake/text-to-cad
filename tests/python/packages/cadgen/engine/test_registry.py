@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -52,6 +55,39 @@ class RegistryTest(unittest.TestCase):
                                                  encoding="utf-8")
             self.assertEqual(self.registry.engine("abc123"), read, port)
 
+    def test_ports_share_existing_documents_cache_and_credentials(self) -> None:
+        from cadgen._internal.engine_host import registry as engine_registry
+
+        cache = self.state / "cache"
+        self.registry.put(_record(self.ident, self.state, revision="default"))
+        stores = []
+        for port in (3245, 3246, 3247):
+            with mock.patch.dict(os.environ, CADGEN_PORT=str(port), CADGEN_STATE_DIR=str(self.state),
+                                 CADGEN_CACHE_DIR=str(cache)):
+                stores.append(engine_registry())
+        default, first, second = stores
+        self.assertEqual(default.get(self.ident)["revision"], "default")
+        self.assertEqual(default.cache.root, cache)
+        self.assertEqual(first.get(self.ident)["revision"], "default")
+        first.put(_record(self.ident, self.state, revision="first"))
+        self.assertEqual(second.get(self.ident)["revision"], "first")
+        second.put(_record(self.ident, self.state, revision="second"))
+        second.cache.write(f"documents/{self.ident}/document.xbf", b"second")
+        token = "x" * 43
+        first.put_token(token)
+        first.put_engine("installation", {"port": 3246})
+        self.assertEqual(default.token(), token)
+        self.assertEqual(second.token(), token)
+        self.assertEqual(second.engine("installation"), {"port": 3246})
+        self.assertEqual(first.state.root, self.state)
+        self.assertEqual(first.cache.root, cache)
+        self.assertEqual(default.get(self.ident)["revision"], "second")
+        self.assertEqual(first.cache.read(f"documents/{self.ident}/document.xbf"), b"second")
+        first.delete(self.ident)
+        self.assertIsNone(default.get(self.ident))
+        self.assertIsNone(second.get(self.ident))
+        self.assertIsNone(second.cache.read(f"documents/{self.ident}/document.xbf"))
+
     def test_a_record_is_written_once_until_it_changes_and_its_observers_hear_each_write(self) -> None:
         heard: list[dict] = []
         self.enterContext(mock.patch.object(registry, "OBSERVERS", [heard.append]))
@@ -67,6 +103,109 @@ class RegistryTest(unittest.TestCase):
                          f"cadgen run {self.state / 'parts.py'}", "the script that defines it, not its caller")
         self.assertTrue(self.registry.delete(self.ident))
         self.assertEqual((self.registry.get(self.ident), self.registry.list()), (None, []))
+
+    def test_processes_serialize_cache_bytes_with_their_record_revision(self) -> None:
+        cache = self.state / "cache"
+        held = Registry(self.state, cache)
+        program = textwrap.dedent("""
+            import sys
+            from pathlib import Path
+            from types import SimpleNamespace
+            from cadgen.engine import registry
+            from cadgen.engine.cache import Cache
+            from cadgen.engine.file_lock import exclusive
+            held = registry.Registry(Path(sys.argv[1]), Path(sys.argv[2]))
+            ident, mode, operation = sys.argv[3:]
+            cache = Cache(SimpleNamespace(registry=lambda: held))
+            if mode == 'a':
+                def pause():
+                    print('locked', flush=True)
+                    sys.stdin.readline()
+                if operation == 'cache':
+                    write = held.cache.write
+                    def paused(inside, data):
+                        pause()
+                        return write(inside, data)
+                    held.cache.write = paused
+                    cache._write(ident, 'a', b'aaaaaaaa')
+                else:
+                    from cadgen.engine.identity import migrate
+                    get = held.get
+                    paused = False
+                    def read(ident):
+                        global paused
+                        record = get(ident)
+                        if not paused:
+                            paused = True
+                            pause()
+                        return record
+                    held.get = read
+                    migrate(held, log=lambda _: None)
+            else:
+                registry.exclusive = lambda path: exclusive(path, waiting=lambda: print('waiting', flush=True))
+                held.update(ident, lambda record: {**record, 'revision': 'b', 'opened': True})
+                cache._write(ident, 'b', b'bbbbbbbb')
+            print('done', flush=True)
+        """)
+        def start(mode, operation):
+            process = subprocess.Popen([sys.executable, "-c", program, str(self.state), str(cache), self.ident, mode, operation],
+                                       env={**os.environ, "PYTHONPATH": str(SRC)}, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            def cleanup():
+                if process.poll() is None:
+                    process.kill()
+                process.communicate()
+            self.addCleanup(cleanup)
+            return process
+        def line(process):
+            lines = queue.Queue()
+            threading.Thread(target=lambda: lines.put(process.stdout.readline().strip()), daemon=True).start()
+            try:
+                return lines.get(timeout=30)
+            except queue.Empty:
+                self.fail("registry subprocess did not reach its transaction handshake")
+        for operation in ("cache", "migration"):
+            with self.subTest(operation=operation):
+                held.put(_record(self.ident, self.state, revision="a"))
+                first = start("a", operation)
+                self.assertEqual(line(first), "locked")
+                second = start("b", operation)
+                self.assertEqual(line(second), "waiting", "record update waits for the byte/record transaction")
+                first.stdin.write("continue\n")
+                first.stdin.flush()
+                first_output, first_error = first.communicate(timeout=30)
+                second_output, second_error = second.communicate(timeout=30)
+                self.assertEqual((first.returncode, second.returncode), (0, 0), first_error + second_error)
+                self.assertIn("done", first_output)
+                self.assertIn("done", second_output)
+                record = held.get(self.ident)
+                self.assertEqual((record["revision"], record["cache"]["revision"], record["opened"]), ("b", "b", True))
+                self.assertEqual(held.cache.read(f"documents/{self.ident}/document.xbf"), b"bbbbbbbb")
+
+    def test_saved_documents_and_revisions_are_discovered_without_a_local_index_entry(self) -> None:
+        from types import SimpleNamespace
+        from cadgen.engine.cache import Cache
+        from cadgen.engine.models import Models
+
+        held = Registry(self.state, self.state / "cache")
+        with mock.patch.object(registry, "FACTORY", lambda: held):
+            book = Models(SimpleNamespace(server=None))
+            book.cache.ensure_index()
+            listing = Cache(SimpleNamespace(registry=lambda: held))
+            listing.ensure_index()
+            writer = Cache(SimpleNamespace(registry=lambda: held))
+            held.put(_record(self.ident, self.state, revision="a"))
+            writer._write(self.ident, "a", b"aaaaaaaa")
+            self.assertEqual(listing.documents(), [self.ident], "an explicit list sees newly saved shared documents")
+            book.adopt(self.ident)
+            self.assertEqual(book.records[self.ident]["revision"], "a")
+            held.update(self.ident, lambda record: {**record, "revision": "b"})
+            writer._write(self.ident, "b", b"bbbbbbbb")
+            self.assertFalse(book.cache.current(self.ident, "a"))
+            self.assertIsNone(book.cache.read(self.ident, "a"))
+            book.adopt(self.ident)
+            self.assertEqual(book.records[self.ident]["revision"], "b")
+            self.assertEqual(book.cache.read(self.ident, "b"), b"bbbbbbbb")
 
     def test_the_rebuild_command_pastes_into_the_platform_s_shell(self) -> None:
         # Printed for a person to paste: quoted for a POSIX shell there; on Windows as cmd.exe and
@@ -170,7 +309,7 @@ class RegistryDaemonTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         # The registry alone, with a cache folder nothing can write: a restart knows an id by its
         # record and its command. What the cache adds is ``test_cache``'s.
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.engine),
+        cls.env = engine_daemon.started({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.engine),
                                          "CADGEN_STATE_DIR": str(cls.state),
                                          "CADGEN_CACHE_DIR": engine_daemon.unwritable(cls.folder),
                                          "CADGEN_ENGINE_MESH": "inline"},
@@ -194,8 +333,12 @@ class RegistryDaemonTest(unittest.TestCase):
     def ask(self, message: dict) -> dict:
         from cadgen.engine.client import request
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, self.env, clear=True):
             return request(message, start=False) or {}
+
+    @property
+    def document_state(self) -> Path:
+        return Registry(self.state).state.root
 
     def records(self) -> dict[str, dict]:
         return {record["id"]: record for record in Registry(self.state).list()}
@@ -213,20 +356,21 @@ class RegistryDaemonTest(unittest.TestCase):
         record = self.records()[cube]
         self.assertEqual((record["kind"], record["home"], Path(record["root"])), ("model", "parts.py", project))
         # What a restart needs and no more: no closure (the document's own), no versions, no stamps,
-        # no command (always `cadgen run` of its home), no record of the files it declared.
+        # no command (always `python` of its home), no record of the files it declared.
         self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created", "facts", "namespace", "name", "fingerprint", "module", "declares"})
         self.assertEqual(record["declares"], [], "the explicit names its script declares: none")
         self.assertEqual((record["namespace"], record["name"]), (str(project), "cube"))
         self.assertEqual(record["created"], record["built"], "a first build is when the model was created")
-        self.assertEqual(sorted(os.listdir(self.state / "documents" / cube)), ["document.json"], "it points: no geometry")
+        self.assertEqual(sorted(os.listdir(self.document_state / "documents" / cube)), ["document.json"], "it points: no geometry")
         self.assertEqual(listed(), before, "nothing beside the script")
-        written = (self.state / "documents" / cube / "document.json").stat().st_mtime_ns
+        written = (self.document_state / "documents" / cube / "document.json").stat().st_mtime_ns
         again = self.run_python("caller.py", cwd=project)
         self.assertEqual(again.returncode, 0, again.stderr)
-        self.assertEqual((self.state / "documents" / cube / "document.json").stat().st_mtime_ns, written,
+        self.assertEqual((self.document_state / "documents" / cube / "document.json").stat().st_mtime_ns, written,
                          "an unchanged build rewrites nothing")
         # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.bootstrap(self.env)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cadgen run {project / 'parts.py'}`", inspected.stderr)
@@ -241,7 +385,7 @@ class RegistryDaemonTest(unittest.TestCase):
         self.assertEqual(self.ask({"op": "state", "id": cube})["state"], "detached")
         self.assertTrue({entry.path: entry.public() for entry in RecentStore(self.state).list()}[cube]["missing"])
         RecentStore(self.state).remove(cube)
-        self.assertFalse((self.state / "documents" / cube).exists())
+        self.assertFalse((self.document_state / "documents" / cube).exists())
 
     def test_a_name_another_declaration_s_record_holds_is_refused_naming_it(self) -> None:
         project = self.project("keyed", {"left.py": NAMED.format(name="left"), "right.py": NAMED.format(name="right")})

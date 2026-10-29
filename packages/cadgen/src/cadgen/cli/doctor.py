@@ -1,5 +1,5 @@
 """``cadgen doctor`` — set cadgen up and report it: register the installation, write the ``cadgen``
-command, start the engine, check a skill's pin.
+command, check the engine and a skill's pin.
 
 The skills' one-time step (``uvx ... --from cadgen==<version> cadgen doctor``), and the repair
 command. It registers this installation (``<state>/installations/<version>.json``) and writes the
@@ -14,10 +14,9 @@ their size and when they were last written. ``--prune`` removes those records, t
 launchers (``cadgen-<version>``, ``cadgen-python-<version>``) earlier builds published beside the
 proxy (``installations.prune_legacy``) and those leftovers, but any written in the last seven days,
 a line for each kind; ``--all-versions`` with it removes 0.7's however recently written. Nothing is
-removed without ``--prune``. Then it starts the engine
-when none runs (``cadgen.engine.client``): in a sandbox that cannot start one it says so in its usual
-line. ``--no-server`` does all of it but start the engine, saying whether one runs: a CI job's
-smoke check, which must leave no engine behind. Run pointed at a skill (its directory or SKILL.md), it also says whether this is the cadgen the
+removed without ``--prune``. The engine is only inspected; start it separately with
+``cadgen server``. It says whether the engine keeps this computer up to date, and where that stands
+(``cadgen._internal.auto_update``). Run pointed at a skill (its directory or SKILL.md), it also says whether this is the cadgen the
 skill's docs were written against: the version its install command pins.
 
 It also proves the CAD kernel loads. ``OCP`` is imported in a fresh interpreter
@@ -25,7 +24,7 @@ It also proves the CAD kernel loads. ``OCP`` is imported in a fresh interpreter
 and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
 says (``cadgen._internal.kernel_load_hint``). And it says where the engine's server,
-where every build runs, keeps its door, and whether it was running or was started.
+where every build runs, keeps its door, and whether it is running.
 
 Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
 3 = pin mismatch; 4 = the kernel is installed but cannot be loaded (the report
@@ -42,6 +41,15 @@ installed, and never re-reads the project's metadata — so its code can be
 current while the version it reports is not, and running the release instead
 would swap the working tree being developed for a published one. The fix there
 is to re-install it in place, which re-records the version.
+
+Read-only multi-version diagnostics are separate from setup: ``--json [--python PATH] [skill]``
+reports schema-1 JSON, while ``--python PATH [skill]`` prints the same report for a person. These
+modes perform no setup or pruning, import no CAD kernel, and never start or stop an engine.
+Older private engine endpoints are identified through bounded read-only status requests;
+their identity is diagnostic evidence, never permission to run work on an older protocol.
+Their exit codes are 0 (no required failures; warnings remain visible), 3 (release or protocol mismatch),
+5 (a required interpreter, selected engine, skill or port is unavailable/invalid), and argparse's
+2 for invalid arguments. ``cadgen._internal.diagnostics`` owns that report.
 
 stdlib-only on purpose: this must work when the heavy dependency set is broken.
 """
@@ -64,41 +72,46 @@ def _resolve_skill(target: str | None) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _server(start: bool = True) -> str:
-    """The engine server this installation shares (``cadgen.engine.daemon``): where its door is,
-    and whether one is running -- started when none is and ``start``, through the client's own start,
-    which in a sandbox that cannot start one says so."""
+def _server() -> str:
+    """Inspect the selected engine without starting or replacing it."""
     try:
         from cadgen.engine import daemon as engine_daemon
         from cadgen.engine.client import request
 
         where = engine_daemon.address()
         answer = request({"op": "status"}, start=False)
-        started = False
-        if not isinstance(answer, dict) and start:
-            try:
-                answer = request({"op": "status"}, start=True)
-            except ConnectionError as error:
-                return f"not running ({where}): {error}"
-            started = True
-    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+    except Exception as error:  # a diagnostic, never a reason for the report to fail
         return f"unknown ({type(error).__name__}: {error})"
     if not isinstance(answer, dict):
-        return f"not running ({where}); a build starts it outside a sandbox; inside one, run `cadgen server` outside first"
+        # No engine of this protocol answers: say what holds the port instead, if anything does (an
+        # older release's engine, which `cadgen stop` frees; another process), as every client would.
+        from cadgen.engine.client import held_words, holder
+
+        try:
+            found = holder()
+        except Exception:  # a diagnostic, never a reason for the report to fail
+            found = None
+        if found is not None:
+            return f"{held_words(found)} ({where})"
+        return f"not running ({where}); start `cadgen server` before building, or use daemon=False for an offline build"
     from cadgen.engine.cli import workers_text
 
-    # The version the engine runs as (an engine started before engines said it, its release), so a
-    # stale one is seen; the workers as `cadgen status` counts them: the standby with them.
-    version = answer.get("installation") or answer.get("version")
-    return (f"{'started' if started else 'running'}, pid {answer.get('pid')}"
+    version = answer.get("version")
+    return (f"running, pid {answer.get('pid')}"
             + (f", cadgen {version}" if version else "") + f", {workers_text(answer)} ({where})")
 
 
 def _command_path_hint(path: str) -> str:
-    """How to reach the proxy when PATH does not resolve ``cadgen`` to it."""
+    """How to reach the proxy when PATH does not resolve ``cadgen`` to it. The running
+    interpreter's own environment is left out of the lookup: ``uvx`` puts its ephemeral
+    environment's ``bin`` first on PATH for the command it runs, so inside ``cadgen setup``
+    the environment's own ``cadgen`` script would otherwise read as shadowing the proxy."""
     from shutil import which
 
-    found = which("cadgen")
+    prefix = os.path.realpath(sys.prefix)
+    entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if entry and not os.path.realpath(entry).startswith(prefix + os.sep)]
+    found = which("cadgen", path=os.pathsep.join(entries))
     if found is not None:
         if os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(path)):
             return ""
@@ -123,6 +136,16 @@ def _sharing() -> str | None:
         return describe()
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return None
+
+
+def _update() -> str:
+    """The self-update's line, read from its files alone."""
+    try:
+        from cadgen._internal.auto_update import describe
+
+        return describe()
+    except Exception as error:  # noqa: BLE001 - a report line, never a failure of the doctor
+        return f"unknown ({type(error).__name__}: {error})"
 
 
 def _editable_source() -> str | None:
@@ -187,16 +210,18 @@ def _probe_kernel() -> tuple[str, str]:
 
 
 def _setup() -> list[str]:
-    """The report lines of the setup: this installation registered and the proxy written when this
-    installation may (a source tree registers only when named), the records whose interpreter is
-    gone, and why a write failed, which in a sandbox is the folder being out of reach."""
+    """The report lines of the setup: this installation registered, the device pointed at it when it
+    is a release past the current one, and the proxy written when this installation may (a source
+    tree registers only when named); the release the device runs (``current``); the records whose
+    interpreter is gone; and why a write failed, which in a sandbox is the folder being out of reach."""
     from cadgen._internal import installations as setup
 
     lines = []
     try:
         version = setup.own_version()
+        pointed: tuple[str, str | None] = (setup.NOT_RELEASE, None)
         if version:
-            registered, proxy = setup.setup(version)
+            registered, proxy, pointed = setup.setup(version)
         else:
             registered, proxy = None, (setup.proxy_path(), setup.proxy_status(), None)
         if registered is None:
@@ -220,6 +245,15 @@ def _setup() -> list[str]:
             lines.append(f"command  {path} {said}{path_hint}")
         else:
             lines.append(f"command  {path} {said}")
+        found = setup.current()
+        if pointed[1]:
+            lines.append(f"current  cannot be written here ({pointed[1]}): run this outside any sandbox")
+        elif found is not None:
+            lines.append(f"current  cadgen {found['release']}"
+                         + (" (pointed here now)" if pointed[0] == setup.POINTED else "")
+                         + ": what every app's next session runs")
+        else:
+            lines.append("current  none: no release is registered")
         for record in setup.records():
             if not setup.alive(record):
                 lines.append(f"registry {record['path']} dangling: its interpreter {record['python']} is gone "
@@ -344,7 +378,8 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
 def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     parser = argparse.ArgumentParser(
         prog=prog,
-        description="Set cadgen up (register it, write the cadgen command, start the engine), report it, "
+        allow_abbrev=False,
+        description="Set cadgen up (register it, write the cadgen command, inspect the environment), report it, "
                     "and verify a skill's cadgen version pin.",
     )
     parser.add_argument(
@@ -367,14 +402,22 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
              "(without it they go once nothing has written them for 7 days). Only once no cadgen 0.7 is "
              "installed in any agent app.",
     )
-    parser.add_argument(
-        "--no-server",
-        action="store_true",
-        help="Do everything but start the engine: say only whether one is running.",
-    )
+    parser.add_argument("--json", action="store_true", help="Read-only diagnostics as schema-1 JSON; no setup or pruning.")
+    parser.add_argument("--python", metavar="PATH", help="Read-only diagnostics, importing cadgen in this project Python.")
     args = parser.parse_args(argv)
+    if (args.json or args.python is not None) and args.prune:
+        parser.error("--json and --python cannot be combined with --prune")
     if args.all_versions and not args.prune:
         parser.error("--all-versions goes with --prune")
+
+    if args.json or args.python is not None:
+        import json
+
+        from cadgen._internal.diagnostics import human, report
+
+        data = report(args.python, _resolve_skill(args.skill) if args.skill else None, requested_skill=args.skill)
+        sys.stdout.write(json.dumps(data, ensure_ascii=True, separators=(",", ":")) + "\n" if args.json else human(data))
+        return data["exit_code"]
 
     if args.prune:
         from cadgen._internal import installations
@@ -411,12 +454,14 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     # What --prune would remove: nothing is removed without it.
     for line in _report_leftovers():
         sys.stdout.write(f"  {line}\n")
-    # One per installation: the same door means the same warm daemon. Started here when none runs.
-    sys.stdout.write(f"  server   {_server(start=not args.no_server)}\n")
+    # Inspect the selected port without starting or replacing an engine.
+    sys.stdout.write(f"  server   {_server()}\n")
     sharing = _sharing()
     if sharing:
         # Whether CAD's apps send usage stats, as `cadgen telemetry` says it.
         sys.stdout.write(f"  sharing  {sharing}\n")
+    # Whether the engine keeps this computer up to date, and where that stands (`_internal/auto_update.py`).
+    sys.stdout.write(f"  update   {_update()}\n")
 
     from cadgen._internal.kernel_load_hint import kernel_load_hint
 

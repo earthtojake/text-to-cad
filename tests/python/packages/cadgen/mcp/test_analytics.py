@@ -824,6 +824,21 @@ class InstallChannelTest(_Tmp):
         with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
             return install_channel.remember(path=self.record)
 
+    def test_a_server_told_the_standard_manifests_channel_takes_its_hosts_at_initialize(self) -> None:
+        # Codex reads the Agent Plugins standard's mcp.json, whose channel is the generic `agent-plugins`:
+        # its initialize names the client, and this process's batches and its installation's record carry
+        # Codex's own channel from then on. A client without a config of its own keeps the generic one.
+        for client, expected in (("codex-mcp-client", "codex-github"), ("some-cli", "agent-plugins")):
+            if self.record.exists():
+                self.record.unlink()
+            with self.subTest(client=client), mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": "agent-plugins"}):
+                server, sent = self.serve("agent-plugins", client=client)
+                server.analytics.called("cad_open", True)
+                self.assertTrue(server.analytics.flush())
+                self.assertEqual((sent[-1]["channel"], sent[-1]["client"]["name"]), (expected, client))
+                self.assertEqual(install_channel.recorded(path=self.record),
+                                 "codex-github" if client == "codex-mcp-client" else None)
+
     def test_every_process_of_the_installation_reports_the_channel_its_plugins_server_wrote_down(self) -> None:
         sender, from_sender = self.started("cli")  # the telemetry sender a command starts
         viewer, from_viewer = self.started("viewer")

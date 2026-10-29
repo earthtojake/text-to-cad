@@ -4,7 +4,13 @@ The engine imports only itself. The distribution supplies the HTTP application a
 launcher when the engine's client/daemon modules are imported; model workers load neither app.
 It also says where the user's state folder is, which the engine's registry of documents lives
 in (``cadgen.engine.registry.FACTORY``: the state directory, ``cadgen.viewer.recents.state_dir``),
-and the cache folder its documents' bytes are cached in (``cadgen.viewer.recents.cache_dir``).
+and the cache folder its documents' bytes are cached in (``cadgen.viewer.recents.cache_dir``). And
+it gives the daemon its background work (``cadgen.engine.daemon.STARTED``): the self-update's
+thread (``cadgen._internal.auto_update``). And the release the device runs, which the engine cannot
+read itself (law 3): whether a newer one supersedes this engine (``cadgen.engine.daemon
+.SUPERSEDED``: ``installations.newer``), what starts that release's engine in its place while pages
+watch it (``cadgen.engine.daemon.SUCCESSOR``: ``auto_update.successor``), and the console script a
+client's start brings up instead of its own engine (``cadgen.engine.client.CURRENT``).
 """
 from __future__ import annotations
 
@@ -20,6 +26,7 @@ def http_factory(server, host, port):
 
     app = EngineApp(server, host, session_factory=Sessions)
     server.clients_active = app.active
+    server.clients_quiet = app.quiet
     server.on_close = app.close
     server.on_hold_end = app.hold_ended
     try:
@@ -39,7 +46,44 @@ def registry():
     return Registry(state_dir(), cache=cache_dir())
 
 
-_MODULES = {"cadgen.engine.client", "cadgen.engine.daemon", "cadgen.engine.registry"}
+def auto_update(port):
+    """The self-update's thread, for the engine on ``port`` (``cadgen._internal.auto_update.start``)."""
+    from cadgen._internal.auto_update import start
+
+    return start(port)
+
+
+def successor(port):
+    """The current release's engine started on ``port`` in this one's place, or why not
+    (``cadgen._internal.auto_update.successor``)."""
+    from cadgen._internal.auto_update import successor as start
+
+    return start(port)
+
+
+def superseded():
+    """Whether the device runs a release newer than this engine's (``installations.newer``)."""
+    from cadgen._internal.installations import newer
+
+    return newer() is not None
+
+
+def current_script():
+    """The console script of the release the device runs, when it is newer than this process's."""
+    from cadgen._internal.installations import newer
+
+    found = newer()
+    return found["cadgen"] if found else None
+
+
+def diagnostics_inventory():
+    """The provider adapter's read-only inventory, loaded only for an explicit doctor report."""
+    from cadgen.mcp.diagnostics import inventory
+
+    return inventory()
+
+
+_MODULES = {"cadgen.engine.client", "cadgen.engine.daemon", "cadgen.engine.registry", "cadgen._internal.diagnostics"}
 
 
 # The agent hosts whose shells run in a sandbox that refuses the loopback port the engine's HTTP
@@ -47,31 +91,20 @@ _MODULES = {"cadgen.engine.client", "cadgen.engine.daemon", "cadgen.engine.regis
 SANDBOXES = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
 
 
-# The variables an agent host sets in the shells it runs a command in, which name it there as
-# ``cadgen.mcp.host.family`` names it from its process: Codex's (seen with ``env`` in codex-cli
-# 0.163's ``exec`` and ``sandbox`` shells), then Claude Code's. Codex first: a Codex started from a
-# Claude Code shell inherits Claude Code's. The ``cadgen`` command reads it (``proxy``).
-SHELLS = (("codex", ("CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "CODEX_SANDBOX")),
-          ("claude code", ("CLAUDECODE",)))
-
-
-def shell(environ=None) -> str | None:
-    """The host whose shell this is, from its environment (``SHELLS``), or None."""
-    environ = os.environ if environ is None else environ
-    for name, variables in SHELLS:
-        if any(environ.get(variable) for variable in variables):
-            return name
-    return None
-
-
 def _attach(module):
     if module.__name__ == "cadgen.engine.client":
         module.DAEMON_MODULE = "cadgen._internal.engine_daemon"
         module.SANDBOXES = SANDBOXES
+        module.CURRENT = current_script
     elif module.__name__ == "cadgen.engine.registry":
         module.FACTORY = registry
+    elif module.__name__ == "cadgen._internal.diagnostics":
+        module.HOST_INVENTORY = diagnostics_inventory
     else:
         module.HTTP_FACTORY = http_factory
+        module.STARTED = (auto_update,)
+        module.SUCCESSOR = successor
+        module.SUPERSEDED = superseded
 
 
 class _Loader:

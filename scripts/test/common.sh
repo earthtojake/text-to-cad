@@ -14,9 +14,7 @@ if [ -z "${PYTHON_BIN:-}" ]; then
 fi
 export PYTHON_BIN
 
-# A test's engine takes any free HTTP port, never the default (3245) that the person's own engine
-# keeps: one that found it held would move off it for good. A test of the default clears this.
-export CADGEN_ENGINE_PORT=0
+# Each test file receives a fixed, free CADGEN_PORT from unittest_files.py.
 # Nor does it keep a standby worker (``daemon.standby``): each daemon a test starts would load the
 # kernel twice over (2.4 s and 440 MB a standby) on runners short of memory. Its own tests set it on.
 export CADGEN_ENGINE_STANDBY=0

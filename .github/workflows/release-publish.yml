@@ -14,8 +14,9 @@ name: Publish Release
 # follow name it: the
 # `latest` branch and claude.ai's `claude-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
-# version, and the tag and the GitHub Release go out. The version feed cadgen's update notice
-# reads (apps/api) asks PyPI itself, so it names the release from the moment PyPI lists it. main has the new pins from
+# version, and the tag and the GitHub Release go out. The version feed the install command and
+# cadgen's update notice read (apps/api) asks PyPI itself, but Vercel's edge keeps its answer an
+# hour, so the feed job purges that cache once the branches carry the release. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
 # a version minutes before PyPI has it.
 #
@@ -298,7 +299,7 @@ jobs:
           "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" viewer --help >/dev/null)
-          "$RUNNER_TEMP/install-test/bin/cadgen" doctor --no-server skills/cad
+          "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad
           scripts/test/test-installed.sh --wheel "$wheel"
 
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
@@ -356,10 +357,14 @@ jobs:
           echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin to latest and claude-plugin."
+          echo "Would have purged the version feed's CDN cache (api.texttocad.dev) after them."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
-          for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip; do args+=(--asset "$file"); done
+          mkdir -p "$RUNNER_TEMP/installer"
+          cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
+          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS)
+          for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
@@ -493,6 +498,65 @@ jobs:
           # an unchanged plugin leaves both where they are.
           git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"
 
+  # The version feed (api.texttocad.dev/v1/versions, apps/api) names the newest release PyPI lists, and
+  # the install command and every copy's daily update check read it; but Vercel's edge keeps each answer
+  # an hour (s-maxage=3600), so for up to an hour after a release the feed can still name the one before.
+  # Once the install branches carry the release -- the plugin every install takes -- this purges the API
+  # project's CDN cache, and the feed names the release at once. Its own job, after the branches: the
+  # pypi job, the one that may mint a PyPI token, runs nothing from npm. Best effort, and nothing waits
+  # on it (the network never blocks a release): without the Vercel secrets, or when the purge fails, the
+  # feed names the release within the hour on its own, and meanwhile the install command's script
+  # installs at least the release stamped into it.
+  feed:
+    name: Version feed
+    needs:
+      - gate
+      - branches
+    if: ${{ !cancelled() && needs.branches.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: {}
+
+    steps:
+      # As the deploys set it up; without it the runner's own Node runs the CLI.
+      - name: Set up Node.js
+        continue-on-error: true
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Purge the version feed's CDN cache
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_API_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
+        run: |
+          later="the feed names cadgen $VERSION within the hour on its own"
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_API_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "$name is not set, so the version feed's CDN cache is not purged: $later."
+              exit 0
+            fi
+          done
+          if ! npm install --global vercel@50.28.0; then
+            echo "::warning::The Vercel CLI did not install, so the version feed's CDN cache is not purged: $later."
+            exit 0
+          fi
+          # Each instance of the feed's function keeps what it read from PyPI five minutes (FRESH_MS,
+          # apps/api/src/versions.mjs): purged sooner, the edge could fill again from an instance that
+          # read PyPI just before it listed the release, and keep that answer another hour.
+          sleep 300
+          # The CLI finds the project by VERCEL_ORG_ID and VERCEL_PROJECT_ID, as the deploys link it
+          # (scripts/github-workflows/deploy-vercel-app.sh), and takes the team from the project.
+          if VERCEL_PROJECT_ID="$VERCEL_API_PROJECT_ID" vercel cache purge --type cdn --yes --token "$VERCEL_TOKEN"; then
+            echo "Purged the version feed's CDN cache. It answers: $(curl -fsS --max-time 10 https://api.texttocad.dev/v1/versions || true)"
+          else
+            echo "::warning::The version feed's CDN cache could not be purged: $later."
+          fi
+
   # The docs site is built from the release commit itself: main is the source tree, and
   # apps/docs/package.json carries the stamped version the header reads -- so it follows the
   # branches the install commands it shows name.
@@ -559,9 +623,19 @@ jobs:
           name: cadgen-sourcemaps-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/sourcemaps
 
+      # The one-line installer as this release publishes it, and the SHA-256 of each script:
+      # releases/download/v<VERSION>/install.sh is the copy pinned to this release (texttocad.dev
+      # serves the newest), and SHA256SUMS is what a person checks a downloaded copy against.
+      - name: Gather the installer scripts and their checksums
+        run: |
+          mkdir -p "$RUNNER_TEMP/installer"
+          cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
+          (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS && cat SHA256SUMS)
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft. The wheel, sdist, plugin ZIP and source maps are attached
-      # to the release; a resumed run attaches them to the release that already exists.
+      # dispatch can ask for a draft. The wheel, sdist, plugin ZIP, source maps and the installer's
+      # scripts are attached to the release; a resumed run attaches them to the release that already
+      # exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -571,8 +645,9 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps"
-          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip; do
+          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
+          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
+              "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/SHA256SUMS; do
             [ -f "$file" ] && args+=(--asset "$file")
           done
           scripts/release/publish-github-release.sh "${args[@]}"

@@ -181,6 +181,19 @@ def _mcp_change(path: str) -> Select:
     return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("mcp",)))
 
 
+# `cadgen run` and the project environments it makes with uv are a leaf of cadgen too: nothing in
+# cadgen imports either but the command registry, which names the command by its module. A change to
+# one reaches the tests that drive it, those that name either module or read every command, and the
+# wheel.
+RUN_CODE = (f"{CADGEN_SRC}/cli/run.py", f"{CADGEN_SRC}/_internal/projects.py")
+RUN_TESTS = (f"{CADGEN_SUITE}/test_run.py", f"{CADGEN_SUITE}/test_projects.py")
+_NAMES_RUN = r"cadgen\.cli\.run|cadgen\._internal\.projects|_internal import projects"
+
+
+def _run_change(path: str) -> Select:
+    return select(flags=["packaging"], cadgen=[*RUN_TESTS, *_cadgen_tests_naming(_NAMES_RUN, ())])
+
+
 # The engine (cadgen.engine) is no leaf: every build, export and snapshot a skill runs is its,
 # the viewer serves every STEP and .xbf through it (``cadgen.viewer.xbf``), the CAD app's views
 # open them through the viewer's routes, and the package root's names are its. A change to it
@@ -222,6 +235,10 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
+    # The Windows installer rehearsal: a workflow of its own, dispatched by hand or by a push
+    # that changes the installer; no test reads it and no test.yml job runs it.
+    Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
+
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole
@@ -239,6 +256,7 @@ RULES: tuple[Rule, ...] = (
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
+    Rule(RUN_CODE, _run_change, final=True),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(("packages/cadgen/**", "scripts/bundle/**"), CADGEN_CONSUMERS),
 
@@ -278,6 +296,10 @@ RULES: tuple[Rule, ...] = (
          select(flags=["web_viewer", "packaging"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
+
+    # The one-line installer: its tests read both scripts, and the docs site serves copies of them.
+    Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
+         select(flags=["docs"], cadgen=[f"{CADGEN_SUITE}/test_setup.py"])),
 
     # What builds and checks the wheel: bundle.sh stamps metadata with sync-version.mjs.
     Rule((

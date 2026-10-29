@@ -68,6 +68,8 @@ class SnapshotTest(unittest.TestCase):
         # One part at a time on this process's thread: the test asks for no pool.
         cls.mesh = os.environ.get("CADGEN_ENGINE_MESH")
         os.environ["CADGEN_ENGINE_MESH"] = "inline"
+        from tests.python.support import engine_daemon
+        engine_daemon.isolate(cls.addClassCleanup)
 
     @classmethod
     def tearDownClass(cls) -> None:

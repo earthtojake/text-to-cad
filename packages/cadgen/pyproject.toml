@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.8.2"
+version = "0.8.3"
 description = "CAD models as Python, built by a warm engine into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD Viewer and the tools that show and check them."
 readme = "README.md"
 license = "MIT"
@@ -69,6 +69,12 @@ dependencies = [
   # measurements) with Pillow.
   "pillow",
   "shapely",
+  # `cadgen run` makes the environment a model runs in -- the project's dependencies and the
+  # engine's own cadgen, in one resolution -- with uv (cadgen/_internal/projects.py). uv is a
+  # dependency so it is always there: its wheel carries the binary (`uv.find_uv_bin`), for a
+  # machine with no uv on PATH. 0.7 is the first with `--managed-python`, which the environment's
+  # interpreter is made with.
+  "uv>=0.7",
 ]
 
 [project.urls]

@@ -4,8 +4,14 @@ Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the
 front door, not a second implementation. A subcommand's parser lives in its own module and
 owns its arguments, so the console and module entry points cannot drift. The engine's verbs
 (``export``, ``snapshot``, ``serve``, ``inspect``, ``status``, ``stop``, ``delete``, ``server``) are
-``cadgen.engine.cli``'s, each run by its name; the robot validators' parsers are DERIVED from
+``cadgen.engine.cli``'s, each run by its name; ``run`` runs a model script in its project's
+environment (``cadgen.cli.run``); the robot validators' parsers are DERIVED from
 the verb function's signature (``cadgen._internal.cli_from_function``).
+
+**Every command defers first.** Before any verb runs, a process whose release is older than the one
+the device runs (``<state>/current``) runs that installation's ``cadgen`` with the same arguments
+instead (``cadgen._internal.installations.defer``): an agent app's server line, pinned at install,
+is a floor, never the release that runs.
 
 **Dispatch is lazy on purpose.** Importing a CAD subcommand pulls in OCP/build123d, which
 costs seconds and needs the heavy dependency set installed. ``cadgen --help`` and an
@@ -28,9 +34,11 @@ import sys
 # Two-word names are intentional where a noun has several verbs. Dispatch joins
 # argv[0:2] before argv[0], so the two-word form wins where it exists.
 #
-# A model script builds by running it (``python <model>.py``, or ``cadgen run <model>.py`` with this
-# installation's python): no command takes its place.
+# A model script builds with ``cadgen run <model>.py``: in its project's environment, which holds the
+# engine's own cadgen (or ``python <model>.py`` in an environment where cadgen was installed by hand).
 _COMMANDS: dict[str, tuple[str, str]] = {
+    # A model built: its script run in its project's environment, on the engine (started if none runs).
+    "run": ("cadgen.cli.run", "build a model: run SCRIPT.py in its project's environment"),
     # The engine (cadgen.engine): documents exported, drawn and served, its server.
     "export": ("cadgen.cli.export", "write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf"),
     "snapshot": ("cadgen.cli.snapshot", "render any supported file to an image"),
@@ -45,10 +53,14 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
-    "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
-    "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),
-    # A page session on the installation engine; the launcher exits.
-    "viewer": ("cadgen.cli.viewer", "open a viewer page on the installation engine"),
+    "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, check the environment"),
+    # text-to-cad in every agent app here, and the engine and the cadgen command with it; again to update.
+    # `uninstall` is the same module's uninstall path, with a parser of its own.
+    "setup": ("cadgen.cli.setup", "set up or update text-to-cad in every agent app here"),
+    "update": ("cadgen.cli.setup", "the same as setup: bring every agent app up to date"),
+    "uninstall": ("cadgen.cli.uninstall", "take text-to-cad out of every agent app here"),
+    # A page session on the selected engine; the launcher exits.
+    "viewer": ("cadgen.cli.viewer", "open a viewer page on the selected engine"),
     # CAD inside an agent host's panels. The host starts a stateless stdio peer per session.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "telemetry": ("cadgen.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
@@ -141,6 +153,13 @@ def _harden_std_stream_errors() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Before any verb: a process older than the release the device runs runs that one's command
+    # instead (``cadgen._internal.installations.defer``), so an app's pinned server line is a floor.
+    from cadgen._internal.installations import defer
+
+    deferred = defer(list(sys.argv[1:] if argv is None else argv))
+    if deferred is not None:
+        return deferred
     try:
         code = _main(argv)
         if sys.stdout is not None:
@@ -214,7 +233,9 @@ def _main(argv: list[str] | None) -> int:
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
     # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`). What a command does say,
     # once and before its work, is what those two send by default (`cadgen/analytics.py`).
-    if command not in _UNTOLD:
+    diagnostic = command == "doctor" and any(arg == "--json" or arg == "--python" or arg.startswith("--python=")
+                                              for arg in rest)
+    if command not in _UNTOLD and not diagnostic:
         _tell()
     try:
         return _run(command, entry[0], rest)
@@ -240,9 +261,8 @@ def _report(error: Exception) -> None:
 
 
 # Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
-# reads; the engine's server, writing nowhere; `telemetry`, which says it its own way; and `run`, which is
-# only the python it runs, as the `cadgen` command's `run` is.
-_UNTOLD = frozenset({"mcp", "server", "telemetry", "run"})
+# reads; the engine's server; `telemetry` and `setup`, which say it their own way; and `uninstall`.
+_UNTOLD = frozenset({"mcp", "server", "telemetry", "setup", "update", "uninstall"})
 
 
 def _tell() -> None:

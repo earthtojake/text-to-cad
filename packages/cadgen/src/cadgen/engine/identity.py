@@ -146,18 +146,19 @@ def repoint(held: Registry, record: dict[str, Any], found: dict[str, Any]) -> No
     one's, and a new record equal to ``found`` is this move's. Refused (``ValueError``) when another
     record holds the new id. Never parses an XBF."""
     old, new = record["id"], found["id"]
-    if old == new:
+    with held._lock(old):
+        if old == new:
+            held.put(found)
+            return
+        there = held.get(new)
+        if there is not None and _fields(there) != _fields(found):
+            raise ValueError(f"cannot move {old} to {new}: another record holds that id")
+        if held.cache is not None:
+            source = held.cache.path(f"{DOCUMENTS}/{old}/document.xbf")
+            if source.is_file():
+                held.cache._land(f"{DOCUMENTS}/{new}/document.xbf", lambda target: shutil.copyfile(source, target))
         held.put(found)
-        return
-    there = held.get(new)
-    if there is not None and _fields(there) != _fields(found):
-        raise ValueError(f"cannot move {old} to {new}: another record holds that id")
-    if held.cache is not None:
-        source = held.cache.path(f"{DOCUMENTS}/{old}/document.xbf")
-        if source.is_file():
-            held.cache._land(f"{DOCUMENTS}/{new}/document.xbf", lambda target: shutil.copyfile(source, target))
-    held.put(found)
-    held.delete(old)
+        held.delete(old)
 
 
 def _fields(record: dict[str, Any]) -> dict[str, Any]:
@@ -229,12 +230,13 @@ def reattach(held: Registry, sources: list[dict[str, Any]], *,
             continue
         candidates.sort(key=lambda row: (row.get("built") or 0, row["id"]), reverse=True)
         before(candidates[0])
-        old = held.get(candidates[0]["id"]) or candidates[0]  # a save may have added its cache field
-        origin = home(held, old)
-        found = {**old, "id": ident, "root": str(script.parent), "namespace": str(script.parent),
-                 "home": relative(script, script.parent), "name": name,
-                 "relocated": old.get("relocated") or {"script": str(origin), "module": old.get("module") or origin.stem}}
-        repoint(held, old, found)
+        with held._lock(candidates[0]["id"]):
+            old = held.get(candidates[0]["id"]) or candidates[0]  # a save may have added its cache field
+            origin = home(held, old)
+            found = {**old, "id": ident, "root": str(script.parent), "namespace": str(script.parent),
+                     "home": relative(script, script.parent), "name": name,
+                     "relocated": old.get("relocated") or {"script": str(origin), "module": old.get("module") or origin.stem}}
+            repoint(held, old, found)
         if pool is not None:
             pool = [record for record in pool if record["id"] != old["id"]]
         adopted.append((old["id"], ident))
@@ -293,37 +295,38 @@ def migrate(held: Registry | None, *, log: Callable[[str], None] | None = None) 
             continue  # no record's folder: nothing of the registry's
         location = f"{DOCUMENTS}/{ident}/{RECORD}"
         try:
-            record = held.get(ident)
-            if record is None:
-                raise ValueError("unreadable record or unsupported schema/id")
-            if record.get("kind") not in ("model", "shape", "file"):
-                raise ValueError("unknown document kind")
-            if not all(isinstance(record.get(field), str) and record[field] for field in ("root", "home")):
-                raise ValueError("missing root/home")
-            if record["kind"] != "file" and not isinstance(record.get("entry"), str):
-                raise ValueError("missing entry")
-            found = dict(record)
-            found.setdefault("namespace", record["root"])
-            legacy = record.get("key")
-            keyed = isinstance(legacy, str) and ident == str(uuid.uuid5(NAMESPACE, "key::" + legacy))
-            name = legacy if keyed and record["kind"] == "model" else record.get("entry") or Path(record["home"]).name
-            found.setdefault("name", name)
-            if "fingerprint" not in found and record["kind"] == "model":
-                found["fingerprint"] = fingerprint(home(held, record))
-            if keyed and record["kind"] == "model" and "line" not in found:
-                tree = _parsed(home(held, record))
-                line = next((_first(node) for node in _functions(tree) if node.name == record["entry"]), None) \
-                    if tree is not None else None
-                if line is not None:
-                    found["line"] = line
-            if keyed:
-                scope = found["namespace"] if record["kind"] == "model" else home(held, record)
-                found["id"] = derived_id(scope, found["name"])
-                found.pop("key", None)
-                repoint(held, record, found)
-                moved += 1
-            elif held.put(found):
-                filled += 1
+            with held._lock(ident):
+                record = held.get(ident)
+                if record is None:
+                    raise ValueError("unreadable record or unsupported schema/id")
+                if record.get("kind") not in ("model", "shape", "file"):
+                    raise ValueError("unknown document kind")
+                if not all(isinstance(record.get(field), str) and record[field] for field in ("root", "home")):
+                    raise ValueError("missing root/home")
+                if record["kind"] != "file" and not isinstance(record.get("entry"), str):
+                    raise ValueError("missing entry")
+                found = dict(record)
+                found.setdefault("namespace", record["root"])
+                legacy = record.get("key")
+                keyed = isinstance(legacy, str) and ident == str(uuid.uuid5(NAMESPACE, "key::" + legacy))
+                name = legacy if keyed and record["kind"] == "model" else record.get("entry") or Path(record["home"]).name
+                found.setdefault("name", name)
+                if "fingerprint" not in found and record["kind"] == "model":
+                    found["fingerprint"] = fingerprint(home(held, record))
+                if keyed and record["kind"] == "model" and "line" not in found:
+                    tree = _parsed(home(held, record))
+                    line = next((_first(node) for node in _functions(tree) if node.name == record["entry"]), None) \
+                        if tree is not None else None
+                    if line is not None:
+                        found["line"] = line
+                if keyed:
+                    scope = found["namespace"] if record["kind"] == "model" else home(held, record)
+                    found["id"] = derived_id(scope, found["name"])
+                    found.pop("key", None)
+                    repoint(held, record, found)
+                    moved += 1
+                elif held.put(found):
+                    filled += 1
         except Exception as error:  # noqa: BLE001 - a record this pass cannot bring over stays as it is
             skipped.append(f"{location}: {error}")
     result = {"filled": filled, "moved": moved, "skipped": skipped}

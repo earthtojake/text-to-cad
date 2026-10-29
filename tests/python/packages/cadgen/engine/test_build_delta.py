@@ -134,7 +134,7 @@ class DeltaTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         cls.addClassCleanup(shutil.rmtree, engine, True)
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
+        cls.env = engine_daemon.started({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
                                          "CADGEN_STATE_DIR": str(cls.folder / "state"),
                                          "CADGEN_CACHE_DIR": engine_daemon.unwritable(cls.folder),
                                          "CADGEN_ENGINE_MESH": "inline"},

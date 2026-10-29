@@ -7,11 +7,12 @@ When a build writes a model's xbf, the document's main label carries its closure
 - ``engine``: the keyed xbf format (``FORMAT``); as information only, the release that wrote it
   (``cadgen <VERSION>``, the version declared beside this very code: ``version``) and a digest of
   the engine's own code;
-- ``libs``: the versions of build123d and OCP (the kernel: OCCT's release leads its version),
-  which decide the geometry;
+- ``libs``: the versions of build123d, OCP (the kernel: OCCT's release leads its version),
+  bd_materials and threejs_materials, which decide geometry and native material payload;
 - ``platform``: the keyed system and architecture (``platform.system()``, ``platform.machine()``):
   an arm64 kernel and an x86-64 one write other bytes of one model; the Python version is recorded
   as information only;
+- ``runtime``: the keyed effective dependency snapshot and Python version;
 - ``source``: ``{"kind": "script", "path", "function"}`` -- the script relative to the
   document's folder and the model's function;
 - ``modules``: ``[path, digest]`` per first-party module the script's load imported or the
@@ -29,10 +30,9 @@ When a build writes a model's xbf, the document's main label carries its closure
 - ``key``: one digest over the format, the libraries, the system and the architecture, and the
   code: the source, the modules and the inputs; ``null`` where the closure
   cannot say all the model is made of (a body read a pipe, or reaches what cannot be keyed).
-  Not the engine's code digest: an engine edit that leaves the document alone keeps every xbf
-  current. ``FORMAT`` is what moves when the written document, or what the key covers, changes
-  (``xbf/1`` to ``xbf/2``), and every xbf then builds once, cleanly. A cadgen release or Python
-  version change alone leaves the key current.
+  The separate engine digest is descriptive; actual cadgen source and release contribute to
+  the dependency snapshot. ``FORMAT`` moves when the written document, or what the key covers,
+  changes (``xbf/1`` to ``xbf/2``), and an explicit build rebuilds the old format once.
 
 No source text, no line, no input's contents (**the file is the document**, **names are the
 durable tie to code**).
@@ -79,7 +79,8 @@ SCHEMA = "cadgen.engine closure/2"
 # xbf/7: the build's animations are a record on the main label (``animations.record``); the closure counts none.
 # xbf/8: the closure names the toolchain that built it (closure/2): the system and architecture join the key.
 # xbf/9: native bd_materials physics and PbrProperties replace the cadgen material schema.
-FORMAT = "xbf/9"
+# xbf/10: the effective Python dependency environment and Python version join the key.
+FORMAT = "xbf/10"
 # The libraries a key covers: what decides the geometry and native material payload.
 KEYED_LIBRARIES = ("build123d", "OCP", "bd_materials", "threejs_materials")
 # The keyed platform fields; the closure also records Python as information only.
@@ -218,6 +219,7 @@ def manifest(keys: dict[str, tuple], name: str, folder: Path, model: Any, module
     ``folder``, the document's: ``keys`` the run's bodies (``memo``), ``name`` the model's
     body, ``modules`` and ``unkeyable`` its closure by file (``sources.Symbols.modules``)."""
     from cadgen.engine.kernel import memo
+    from cadgen.engine import runtime
 
     found = keys.get(name)
     keyed = found is not None and bool(found[2]) and not unkeyable
@@ -234,7 +236,7 @@ def manifest(keys: dict[str, tuple], name: str, folder: Path, model: Any, module
                 inputs.append(row)
     record: dict[str, Any] = {
         "schema": SCHEMA, "engine": _engine(), "libs": _libraries(), "platform": _platform(),
-        "source": _source(model, folder),
+        "runtime": runtime.closure(), "source": _source(model, folder),
         "modules": sorted([_relative(path, folder), digest] for path, digest in modules.items()),
         "symbols": _named(symbols or {}, folder),
         "inputs": inputs, "bodies": len(closure(keys, name)) if found is not None else None}
@@ -250,12 +252,13 @@ def _named(symbols: dict[str, dict[str, str]], folder: Path) -> dict[str, dict[s
 
 def key(record: dict[str, Any]) -> str:
     """The digest a restart compares: the format, the libraries, the system and the architecture,
-    and the code: the source, the modules and the inputs. The release, Python version and engine's
-    code digest are recorded but not keyed; the format moves when what an engine writes does."""
+    and the code: the source, the modules and the inputs. The runtime dependency snapshot and
+    its Python version are keyed too. The release, the platform record's informational Python
+    version and the engine's code digest are not keyed; the format moves when its coverage changes."""
     libs = {name: record["libs"].get(name) for name in KEYED_LIBRARIES}
     platform = {name: record["platform"].get(name) for name in KEYED_PLATFORM}
     return _digest([SCHEMA, record["engine"]["format"], libs, platform,
-                    record["source"], record["modules"], record["inputs"]])
+                    record.get("runtime"), record["source"], record["modules"], record["inputs"]])
 
 
 def text(record: dict[str, Any]) -> str:
@@ -271,10 +274,14 @@ def again(record: dict[str, Any], model: Any, folder: Path, modules: dict[str, s
     each by name (a changed module names what changed in it where the record holds its names)."""
     from cadgen.engine.kernel import memo
 
+    from cadgen.engine import runtime
+
     now = {"schema": SCHEMA, "engine": _engine(), "libs": _libraries(), "platform": _platform(),
-           "source": _source(model, folder),
+           "runtime": runtime.closure(), "source": _source(model, folder),
            "modules": sorted([_relative(path, folder), digest] for path, digest in modules.items())}
     changes: list[str] = []
+    if now["runtime"] != record.get("runtime"):
+        changes.append("the Python execution environment changed")
     if now["engine"]["format"] != record["engine"].get("format"):
         changes.append(f"the xbf format changed ({record['engine'].get('format')} to {now['engine']['format']})")
     for name in sorted(set(now["libs"]) | set(record["libs"])):

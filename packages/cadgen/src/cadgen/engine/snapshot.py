@@ -1056,7 +1056,7 @@ def _arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?",
                         help="a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
-                             "a drawing (.dxf), or a document id (a model's, which python SCRIPT.py prints: drawn "
+                             "a drawing (.dxf), or a document id (a model's, which cadgen run SCRIPT.py prints: drawn "
                              "from what the engine holds); with --job, a file drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
                         help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
@@ -1106,7 +1106,11 @@ def add_parser(verbs: Any) -> argparse.ArgumentParser:
 
 def build_parser(prog: str = "cadgen snapshot") -> argparse.ArgumentParser:
     """``cadgen snapshot``'s parser."""
-    return _arguments(argparse.ArgumentParser(prog=prog, description=_HELP))
+    from cadgen.engine.cli import _port_argument
+
+    parser = _arguments(argparse.ArgumentParser(prog=prog, description=_HELP))
+    _port_argument(parser)
+    return parser
 
 
 def main(argv: list[str] | None = None, prog: str = "cadgen snapshot") -> int:

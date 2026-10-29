@@ -23,9 +23,13 @@ a plugin's server once ran from its installation, whose channel it then shares.
 cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
 its name but ``dev``, a development install (and a source tree, installed editable or imported from
 a checkout by path), which hears of no release and sends no telemetry by default. A process of an
-installation no plugin's server ever ran from -- a skills-only install, or cadgen run by hand -- is
+installation no plugin's server ever ran from -- a skills-only install, or cadgen invoked by hand -- is
 ``unknown``. Which app runs a server is not a channel either: the MCP handshake says that
-(``clientInfo``), so a plugin several apps read names one channel.
+(``clientInfo``), so a plugin several apps read names one channel -- with one exception. The Agent
+Plugins standard's ``mcp.json`` names the generic ``agent-plugins``, and a host with a config of its
+own may read the standard's instead of it: a server told the generic channel takes the host's own, as
+its adapter resolves it from the handshake (``refine``), for itself and for its installation's record,
+and a process told the generic one reports that record where there is one.
 
 Whether a copy hears of a new release (``cadgen/updates.py``) is ``told``: not when something
 keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
@@ -46,6 +50,7 @@ ENV = "CADGEN_INSTALL_CHANNEL"
 AUTO_UPDATED_ENV = "CADGEN_AUTO_UPDATED"
 DEV = "dev"
 UNKNOWN = "unknown"
+GENERIC = "agent-plugins"  # the Agent Plugins standard's mcp.json, which several hosts read as it is
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 # Where each installation's channel is written down, in the state directory, and how many installations
 # it keeps: the most recently written, as uv makes a new one for each release a plugin pins.
@@ -88,8 +93,25 @@ def named() -> str | None:
 
 def channel() -> str:
     """This install's channel: what its plugin named, else ``dev`` for a source tree, else the one written down for
-    this installation (``recorded``), else ``unknown``."""
-    return named() or recorded() or UNKNOWN
+    this installation (``recorded``), else ``unknown``. The generic channel is a placeholder the host's handshake
+    refines (``refine``): a process told it reports the record where a server wrote one."""
+    value = named()
+    if value == GENERIC:
+        return recorded() or value
+    return value or recorded() or UNKNOWN
+
+
+def refine(value: object) -> str | None:
+    """Called by the CAD server as a session's initialize names its client, with the channel the host's own
+    config would have named (its adapter knows which host reads the standard's manifest instead), or ``None``:
+    a server told the generic channel names that one from here on -- for this process (its environment, which
+    what it starts inherits) and for its installation (``remember``), so the engine's counts carry it too. What
+    was named, or ``None``; a channel a plugin named itself is never refined."""
+    if named() != GENERIC or not is_channel(value):
+        return None
+    os.environ[ENV] = str(value)
+    remember()
+    return str(value)
 
 
 def _record_path() -> Path:

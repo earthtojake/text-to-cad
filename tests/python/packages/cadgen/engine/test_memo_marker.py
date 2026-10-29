@@ -412,6 +412,8 @@ class MemoNamesTest(MemoCase):
         return {p.name: (dict(p.face_names), dict(p.edge_names), dict(p.vertex_names)) for p in loaded.prototypes}
 
     def test_names_are_the_same_with_and_without_memo_and_when_replayed(self) -> None:
+        from tests.python.support import engine_daemon
+        engine_daemon.isolate(self.addCleanup)
         self.stage("")
         self.build("staged.py")
         plain = self.names()

@@ -5,9 +5,10 @@ calls; this module hands each one to the viewer's own router -- one :class:`~cad
 request, for every view of this server -- and returns the status, headers and
 body bytes. There is one backend, not two: the router, its checks and its limits
 are the ones the web app uses, the model library, the home's Open, Reveal, the
-person's analytics answer and language, and the update check included. The app
-keeps the server's own library and analytics, so a model a view opens is
-counted once, by this process.
+person's analytics answer and language, and the update check included -- whose
+Update (``POST /__cad/update``) a view reaches as any other route. The app keeps
+the server's own library and analytics, so a model a
+view opens is counted once, by this process.
 
 A body travels base64 inside the host's JSON, and a JSON body of more than
 ``GZIP_JSON_MIN_BYTES`` travels gzipped as well, flagged ``encoding: "gzip"``: the

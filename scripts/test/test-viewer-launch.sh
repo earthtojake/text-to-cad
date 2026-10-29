@@ -65,7 +65,7 @@ if ! pick_interpreter; then
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"
 "$PYTHON" - <<'PYTHON'
-import json, os, subprocess, sys, tempfile
+import json, os, socket, subprocess, sys, tempfile, time
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -73,16 +73,32 @@ from playwright.sync_api import sync_playwright
 
 with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
     root = Path(temporary)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
     env = {**os.environ, "CADGEN_ENGINE_DIR": str(root / "engine"),
            "CADGEN_STATE_DIR": str(root / "state"), "CADGEN_ENGINE_MESH": "inline",
-           "CADGEN_CACHE_DIR": str(root / "no-0.7-store"), "CADGEN_ENGINE_PORT": "0",
+           "CADGEN_CACHE_DIR": str(root / "no-0.7-store"), "CADGEN_PORT": str(port),
            "CADGEN_ENGINE_STANDBY": "0"}
     def launch(*options):
         result = subprocess.run([sys.executable, "-m", "cadgen.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
+    server = subprocess.Popen([sys.executable, "-m", "cadgen.engine", "server"], env=env,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     try:
+        deadline = time.monotonic() + 60
+        while True:
+            if server.poll() is not None:
+                raise AssertionError(server.stderr.read())
+            state = subprocess.run([sys.executable, "-m", "cadgen.engine", "status", "--json"],
+                                   env=env, capture_output=True, text=True, timeout=10)
+            if state.returncode == 0 and (json.loads(state.stdout) or {}).get("pid") == server.pid:
+                break
+            if time.monotonic() >= deadline:
+                raise AssertionError("explicit engine server did not become ready")
+            time.sleep(0.02)
         first = launch()
         again = launch()
         assert first["pid"] == again["pid"] and first["port"] == again["port"]
@@ -118,4 +134,7 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
                 browser.close()
     finally:
         subprocess.run([sys.executable, "-m", "cadgen.engine", "stop"], env=env, capture_output=True, timeout=120)
+        if server.poll() is None:
+            server.terminate()
+        server.communicate(timeout=30)
 PYTHON

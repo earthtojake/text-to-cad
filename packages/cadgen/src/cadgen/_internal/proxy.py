@@ -1,30 +1,11 @@
-"""``cadgen``, the command (``~/.local/bin/cadgen``): which installation runs, and running it.
+"""Select an installed cadgen CLI by +VERSION, otherwise the release the device runs
+(``installations.current``: the pointer, else the newest live registered release), else the newest
+live registration. One selected by version runs as it is (``CADGEN_NO_DEFER=1``): the command
+never defers it to the current release (``installations.defer``).
 
-The proxy's ``sh`` runs this module with the interpreter registered last
-(``cadgen._internal.installations``); it picks one installation's record, first match wins:
-
-a. ``+<version>`` as the first argument (``cadgen +0.8.0 export ...``: what the skills run);
-b. ``CADGEN_VERSION``;
-c. the installation whose engine runs and is held by a CAD app server of the host this shell is
-   (``engine_host.shell``: its variables; the hold names its host, ``cadgen.mcp.host.family``);
-d. any installation whose engine runs, the newest version first;
-e. the newest installation registered.
-
-A version named (a-b) that is not registered, or whose interpreter is gone, fails in one line that
-names the command that installs it. So only a version (``installations.VERSION``: a digit, then
-letters, digits and ``.+_-``) is named: anything else -- a value carrying spaces, shell or uv
-options -- is refused without building a command of it. The engines are found by their doors in
-the engine folder, each asked its ``status`` at once and waited for ``ASK_SECONDS`` at most:
-only (c) and (d) ask.
-
-Then ``cadgen [+V] run ARGS`` runs that installation's ``python ARGS`` (a model script, ``-m``,
-``-c``), and anything else its ``cadgen`` console script with the arguments: by ``exec``, so the
-proxy adds no process and no output of its own -- or, when the installation chosen is the one this
-interpreter is (the usual case: one installation), as its console script would, in this process.
-A development or source registration cannot know the version it is registered as (it reports its
-release's), so it runs with ``CADGEN_INSTALLATION_VERSION`` set to its record's
-(``installations.named``): its ``doctor``, its records and its engine name it rightly, and the
-processes it starts, the same installation, inherit it.
+Server selection is independent: CADGEN_PORT (or --port) chooses its address, and client and
+engine meet by protocol, never by release. The launcher never searches running engines or
+chooses a Python interpreter for model scripts.
 """
 
 from __future__ import annotations
@@ -32,21 +13,34 @@ from __future__ import annotations
 import os
 import sys
 
-ASK_SECONDS = 0.5
-NOT_INSTALLED = ("cadgen {version} is not installed: run `uvx --no-config --managed-python --python 3.13 "
-                 "--from cadgen=={version} cadgen doctor` once, outside any sandbox or with its permission")
-# The ``cadgen`` command's own words (``installations._SH``) when no installation is registered.
-NONE_INSTALLED = ("cadgen is not installed: run `uvx --no-config --managed-python --python 3.13 --from cadgen "
-                  "cadgen doctor` once, outside any sandbox or with its permission")
+# What the command says when the release it names is not installed, and when none is (``refusal``): first
+# the install command, which installs text-to-cad and brings it up to date in every agent app on the
+# computer, then the one command that registers a release alone. The ``cadgen`` script says the same
+# when no installation is alive (``installations._SH``, ``_CMD``).
+NOT_INSTALLED = ("cadgen {version} is not installed: run `{install}`, or, to register exactly this release "
+                 "without changing any agent app, `uvx --no-config --managed-python --python 3.13 "
+                 "--from cadgen=={version} cadgen doctor`, once, outside any sandbox or with its permission")
+NONE_INSTALLED = ("cadgen is not installed: run `{install}`, or, to register the latest release without "
+                  "changing any agent app, `uvx --no-config --managed-python --python 3.13 --from cadgen "
+                  "cadgen doctor`, once, outside any sandbox or with its permission")
 
 
 class Refused(Exception):
     """What the proxy says instead of running anything: one line."""
 
 
+def refusal(version: str | None, system: str | None = None) -> str:
+    """That ``version`` (``None``: any release) is not installed, with the install command for this
+    computer (or for ``system``, an ``os.name``): ``NOT_INSTALLED`` or ``NONE_INSTALLED``."""
+    from cadgen.updates import command  # the install command's one definition, imported only to refuse
+
+    if version is None:
+        return NONE_INSTALLED.format(install=command(system))
+    return NOT_INSTALLED.format(version=version, install=command(system))
+
+
 def version_key(version: str) -> tuple:
-    """Newest last, in the order an engine retires older installations' engines by
-    (``cadgen.engine.daemon.rank``, ``packaging.version``'s): a release above its own pre-releases
+    """Newest last, using ``cadgen.engine.daemon.rank``'s release ordering: a release above its own pre-releases
     and development builds (``0.8.0-dev.<time>``), which sort by their time; a version that is no
     PEP 440 version below every one that is."""
     from cadgen.engine.daemon import rank
@@ -60,8 +54,6 @@ def named(args: list[str], environ) -> tuple[str | None, list[str]]:
     that is no version: never echoed into the command the refusal names."""
     if args and args[0].startswith("+") and len(args[0]) > 1:
         return _version(args[0][1:], "its first argument"), args[1:]
-    if environ.get("CADGEN_VERSION"):
-        return _version(environ["CADGEN_VERSION"], "CADGEN_VERSION"), args
     return None, args
 
 
@@ -78,97 +70,51 @@ def _same(one: str, other: str) -> bool:
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
 
 
-def choose(version: str | None, records: list[dict], engines, host: str | None) -> dict:
-    """The record to run (a-e); ``engines()`` the running engines' statuses, asked only for (c)-(d)."""
+def choose(version: str | None, records: list[dict], current: dict | None = None) -> dict:
+    """The explicitly named installation, else the ``current`` one (``installations.current``), else
+    the newest installed release; no server discovery."""
     from cadgen._internal.installations import alive
 
+    live = [record for record in records if alive(record)]
     if version is not None:
-        for record in records:
-            if record["version"] == version and alive(record):
+        for record in live:
+            if record["version"] == version:
                 return record
-        raise Refused(NOT_INSTALLED.format(version=version))
-    live = sorted((record for record in records if alive(record)), key=lambda r: version_key(r["version"]), reverse=True)
+        raise Refused(refusal(version))
+    if current is not None:
+        for record in live:
+            if record["version"] == current["release"] and _same(record["cadgen"], current["cadgen"]):
+                return record
     if not live:
-        raise Refused(NONE_INSTALLED)
-    running = engines()
-    serving = [record for record in live
-               if any(isinstance(status.get("prefix"), str) and _same(status["prefix"], record["prefix"])
-                      for status in running)]
-    if host is not None:
-        for record in serving:
-            if any(_same(status["prefix"], record["prefix"]) and _hosted(status.get("hosts"), host)
-                   for status in running if isinstance(status.get("prefix"), str)):
-                return record
-    return serving[0] if serving else live[0]
-
-
-def _hosted(hosts: object, host: str) -> bool:
-    """Whether an engine's ``hosts`` names ``host``: its holds per agent host, a count each, or a list
-    of the hosts; anything else names none."""
-    if isinstance(hosts, dict):
-        return bool(hosts.get(host))
-    return isinstance(hosts, list) and host in hosts
-
-
-def engines() -> list[dict]:
-    """The ``status`` of every engine whose door answers in the engine folder, asked at once and
-    waited for ``ASK_SECONDS`` at most: an engine that does not answer by then is left out."""
-    import threading
-
-    from cadgen.engine import client, daemon
-
-    try:
-        doors = sorted(daemon.state_dir().glob("*.port" if daemon.WINDOWS else "*.door"))
-    except OSError:
-        return []
-    answers: list[dict] = []
-
-    def ask(door) -> None:
-        try:
-            connection = client._connect(door)
-            if connection is not None:
-                answer = client._exchange(connection, {"op": "status"}, address=door)
-                if answer.get("ok"):
-                    answers.append(answer)
-        except (OSError, ValueError):
-            pass
-
-    asking = [threading.Thread(target=ask, args=(door,), daemon=True) for door in doors]
-    for thread in asking:
-        thread.start()
-    import time
-
-    deadline = time.monotonic() + ASK_SECONDS
-    for thread in asking:
-        thread.join(max(0.0, deadline - time.monotonic()))
-    return list(answers)
+        raise Refused(refusal(None))
+    return max(live, key=lambda record: version_key(record["version"]))
 
 
 def command(record: dict, args: list[str]) -> list[str]:
-    """What runs: the installation's python for ``run``, else its console script."""
-    if args[:1] == ["run"]:
-        return [record["python"], *args[1:]]
+    """Dispatch CLI arguments to the selected installed console script."""
     return [record["cadgen"], *args]
 
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     try:
-        from cadgen._internal.installations import records
-        from cadgen._internal.engine_host import shell
+        from cadgen._internal.installations import current, records
 
         version, args = named(args, os.environ)
-        record = choose(version, records(), engines, shell())
+        found = records()
+        record = choose(version, found, None if version is not None else current())
     except Refused as refusal:
         print(refusal, file=sys.stderr)
         return 1
     run = command(record, args)
-    from cadgen._internal.installations import NAME_ENV, named as told
+    from cadgen._internal.installations import NAME_ENV, NO_DEFER_ENV, named as told
 
     if told(record):  # an installation that cannot know its own name: told it
         os.environ[NAME_ENV] = told(record)
     else:  # a release knows its own, whatever another installation's process that ran this was told
         os.environ.pop(NAME_ENV, None)
+    if version is not None:  # asked for by version: it runs as it is, whatever the device runs
+        os.environ[NO_DEFER_ENV] = "1"
     if run[0] == record["cadgen"] and _same(sys.prefix, record["prefix"]):
         # The installation this interpreter is: its console script's work, here, without a second start.
         sys.argv = run

@@ -2,14 +2,19 @@
 engine has let go is anyone's, and the page token every call carries outlives the engine: once
 the engine that named the endpoint is gone (its door no longer answers, or is another's), the
 shim reads its endpoint from the door again before it sends anything, so a listener on the
-freed port is sent neither a request nor the token."""
+freed port is sent neither a request nor the token. Its bootstrap retires an older release's
+engine on the port once it is idle, and says so once on its log."""
 
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from unittest import mock
 
 from cadgen.mcp.protocol import RequestContext
@@ -178,7 +183,8 @@ class HolderTest(unittest.TestCase):
             def __exit__(self, *_exc):
                 return None
 
-        def hold(host=None, holder=None):
+        def hold(host=None, holder=None, start=False, told=None):
+            self.assertTrue(start, 'the MCP bootstrap explicitly starts its engine')
             calls.append(host)
             taking.wait(10)  # the engine starting: the host's initialize arrives meanwhile
             return Held()
@@ -198,7 +204,8 @@ class HolderTest(unittest.TestCase):
     def test_a_hold_that_fails_unexpectedly_is_tried_again_at_the_next_request(self) -> None:
         calls = []
 
-        def hold(host=None, holder=None):
+        def hold(host=None, holder=None, start=False, told=None):
+            self.assertTrue(start, 'the MCP bootstrap explicitly starts its engine')
             calls.append(host)
             raise RuntimeError("an answer of no shape")
 
@@ -215,3 +222,92 @@ class HolderTest(unittest.TestCase):
                 threading.Event().wait(0.01)
         self.assertEqual(len(calls), 2)
         self.assertTrue(holder.thread.is_alive())
+
+    def test_a_bootstrap_that_could_not_hold_the_engine_tells_the_host_why(self) -> None:
+        from cadgen.mcp.protocol import RpcError
+        from cadgen.mcp.shim import Holder
+
+        why = ("the engine server did not start: port 3245 is held by cadgen 0.8.1's engine (pid 4242): run "
+               "`cadgen stop` to stop it, then start again")
+
+        def hold(host=None, holder=None, start=False, told=None):
+            raise ConnectionError(why)
+
+        class Unreached:
+            def call(self, *_args, **_kwargs):
+                raise ConnectionError("no cadgen server is running on port 3245")
+
+        holder = Holder()
+        with mock.patch("cadgen.engine.client.hold", hold):
+            holder.start()
+            self.assertTrue(holder.tried.wait(10))
+            with self.assertRaises(RpcError) as said:
+                Proxy(Unreached(), holder=holder).handle("initialize", {}, RequestContext(1, {}))
+        self.assertEqual(said.exception.message, why, "the host's initialize says why, not only that none answers")
+
+
+@unittest.skipIf(os.name == "nt", "an older engine's door is a POSIX engine's")
+class BootstrapConvergesTest(unittest.TestCase):
+    """The MCP bootstrap (``Holder``: ``hold(start=True)``) finds an older release's engine on its port
+    (0.8.1's, protocol 3): once it is idle it is retired through its own door, said once on the
+    server's log, and the engine started in its place is held; in use, it is never displaced and the
+    host is told what uses it."""
+
+    def setUp(self) -> None:
+        from tests.python.support import engine_daemon
+
+        self.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp")).resolve()
+        self.addCleanup(shutil.rmtree, self.engine, True)
+        folder = Path(tempfile.mkdtemp(prefix="cadgen-shim-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.port = engine_daemon.free_port()
+        patch = mock.patch.dict(os.environ, {
+            "CADGEN_ENGINE_DIR": str(self.engine), "CADGEN_PORT": str(self.port), "CADGEN_ENGINE_STANDBY": "0",
+            "CADGEN_STATE_DIR": str(folder / "state"), "CADGEN_CACHE_DIR": str(folder / "cache")})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def older(self, **options):
+        from tests.python.packages.cadgen.engine.test_daemon import OlderEngine
+
+        engine = OlderEngine(self.engine, "111111111111", self.port, **options)
+        self.addCleanup(engine.close)
+        return engine
+
+    def stop(self) -> None:
+        from cadgen.engine import client
+
+        if client.request({"op": "stop"}, start=False) is not None:
+            self.assertTrue(client.wait_gone())
+
+    def test_an_idle_older_engine_is_retired_said_once_and_its_successor_held(self) -> None:
+        from cadgen.engine import client, daemon
+        from cadgen.mcp.shim import Holder
+
+        older = self.older()
+        holder = Holder(host=lambda: "test-host")
+        self.addCleanup(self.stop)
+        with self.assertLogs("cadgen.mcp", level="INFO") as logged:
+            holder.start()
+            self.assertTrue(holder.tried.wait(120), "the bootstrap held an engine, or said why not")
+        self.assertIsNone(holder.failure)
+        self.assertTrue(older.gone.is_set(), "stopped through its own door")
+        retired = [line for line in logged.output if "retired" in line]
+        self.assertEqual(retired, [f"INFO:cadgen.mcp:retired cadgen 0.8.1's engine (pid 4242) for {daemon.installation()}"])
+        status = client.request({"op": "status"})
+        self.assertEqual((status["holders"], status["hosts"], status["serving"]["port"]), (1, {"test-host": 1}, self.port))
+
+    def test_an_older_engine_in_use_is_never_displaced_and_the_host_is_told_what_uses_it(self) -> None:
+        from cadgen.engine import client
+        from cadgen.mcp.shim import Holder
+
+        older = self.older(uses={"watched": 1})
+        holder = Holder()
+        with mock.patch.object(client, "RETIRE_SECONDS", 0), mock.patch.object(client, "_start") as start:
+            holder.start()
+            self.assertTrue(holder.tried.wait(60))
+        start.assert_not_called()
+        self.assertEqual(holder.failure, f"port {self.port} is held by cadgen 0.8.1's engine (pid 4242), still in use by "
+                                         f"1 open page: close that page or run `cadgen stop --port {self.port}`")
+        self.assertFalse(older.gone.is_set())
+        self.assertEqual({request["op"] for request in older.requests}, {"status"})

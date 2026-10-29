@@ -4,7 +4,7 @@
     snapshot(source, out, *, display=None, camera=None, grid=False, pose=None,
              width=None, height=None, annotation=None, measurements=None) -> Drawn
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
-    serve(source, port=0) -> Served
+    serve(source) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
     status() / stop() / daemon()
 
@@ -138,6 +138,9 @@ class Document:
         self.cwd = Path(cwd)
         self._shape = shape
         self._inside = inside
+        from cadgen.engine import daemon
+
+        self._engine = None if inside else (daemon.address().absolute(), daemon.selected_port())
 
     @classmethod
     def inside(cls, model: Any, shape: Any) -> "Document":
@@ -180,15 +183,28 @@ class Document:
         part's shape bytes, as an ``export.Source`` of this process. Nothing is built."""
         from cadgen.engine.export import Source
 
-        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd)})
-        payload = base64.b64decode(answer.get("payload") or "")
+        self._selected_engine()
+        from cadgen.engine import client, runtime
+
+        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd),
+                       "execution": runtime.describe(client.environment())})
         done = answer["done"]
+        runtime.check_native(done.get("compatibility"))
+        payload = base64.b64decode(answer.get("payload") or "")
         shapes, at = {}, 0
         for key, size in done["shapes"]:
             shapes[key] = payload[at:at + size]
             at += size
         placements = {tuple(path): matrix for path, matrix in done.get("placements") or ()}
         return Source(done["structure"], shapes, live=False, local_placements=placements)
+
+    def _selected_engine(self) -> None:
+        """A handle names its original server, even when another server holds the same id."""
+        from cadgen.engine import daemon
+
+        if self._engine is not None and self._engine[0] != daemon.address().absolute():
+            raise EngineError(f"document {self.name} belongs to the cadgen server on port {self._engine[1]}; "
+                              "restore its CADGEN_PORT and CADGEN_ENGINE_DIR before using this handle")
 
     def _outside(self, verb: str) -> None:
         if self._inside:
@@ -269,9 +285,13 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     filename = frame.f_code.co_filename if frame is not None else ""
     scope = canonical(filename if filename and os.path.isfile(filename) else os.getcwd())
     ident = derived_id(scope, name)
+    from cadgen.engine import client, runtime
+
+    execution = runtime.describe(client.environment())
+    runtime.check_native(execution["compatibility"])
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii")})
+                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), "execution": execution})
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
               "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
@@ -392,8 +412,11 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 streamed = streamed or (log is not None and message.get("stream") == "model")
                 shown(message["log"] if message.get("stream") == "model" else f"  {message['log']}")
 
+            from cadgen.engine import client, runtime
+
             order = {"op": "build", "script": str(script), "functions": functions,
-                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program()}
+                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program(),
+                     "execution": runtime.describe(client.environment())}
             try:
                 answer = _ask(order, relay, frames)
             except EngineError as error:
@@ -434,6 +457,7 @@ def _source(source: Any) -> dict[str, Any]:
     if isinstance(source, Model):
         return {"script": str(source.script), "function": source.name}
     if isinstance(source, Document):
+        source._selected_engine()
         return {"id": source.id}
     text = os.fspath(source)
     if is_id(text):
@@ -677,7 +701,7 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     return path
 
 
-def serve(source: Any, port: int = 0, three: str | None = None) -> Served:
+def serve(source: Any, three: str | None = None) -> Served:
     """Serve a document (``.xbf``, ``.step``, or a document id the engine holds) from the daemon;
     its page's URL, ``/<id>``."""
     from cadgen.engine.addresses import key
@@ -688,7 +712,7 @@ def serve(source: Any, port: int = 0, three: str | None = None) -> Served:
 
         found = find_three()
         three = str(found) if found else None
-    answer = _ask({"op": "serve", "path": str(path), "port": port, "three": three})
+    answer = _ask({"op": "serve", "path": str(path), "three": three})
     return Served(answer["url"], answer["port"])
 
 

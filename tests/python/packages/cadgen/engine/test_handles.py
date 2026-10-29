@@ -246,10 +246,12 @@ class HandleTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.engine),
+                                         "CADGEN_PORT": str(engine_daemon.free_port()),
                                          "CADGEN_STATE_DIR": str(cls.state), "CADGEN_CACHE_DIR": str(cls.cache),
                                          "CADGEN_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(cls.cli, "stop")
+        engine_daemon.bootstrap(cls.env)
 
     @classmethod
     def cli(cls, *args: str):
@@ -270,7 +272,7 @@ class HandleTest(unittest.TestCase):
     def ask(self, message: dict) -> dict:
         from cadgen.engine.client import request
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, self.env, clear=True):
             return request(message, start=False) or {}
 
     def test_a_call_returns_a_handle_whose_shape_loads_on_first_access_and_a_child_s_composes(self) -> None:
@@ -287,6 +289,61 @@ class HandleTest(unittest.TestCase):
         self.assertEqual((project / "out/a.step").read_bytes(), (project / "out/b.step").read_bytes(),
                          "handle.export is export(handle)")
         self.assertEqual(_served(found["url"], ident)["name"], "base", "its page serves it")
+
+    def test_a_handle_cannot_silently_read_the_same_id_on_another_server(self) -> None:
+        other = {**self.env, "CADGEN_PORT": str(engine_daemon.free_port())}
+        engine_daemon.bootstrap(other)
+        try:
+            project = self.project("selected-server", {"parts.py": '''
+                import os
+                import build123d as bd
+                from cadgen import model
+
+                @model
+                def cube():
+                    size = int(os.environ.get("CUBE_SIZE", "1"))
+                    return bd.Box(size, size, size)
+            ''', "caller.py": f'''
+                import os
+                import cadgen
+                from cadgen.engine.api import EngineError
+                from parts import cube
+
+                first = cube()
+                os.environ["CADGEN_PORT"] = {other['CADGEN_PORT']!r}
+                os.environ["CUBE_SIZE"] = "2"
+                second = cube()
+                assert first.id == second.id
+                assert abs(second.shape.volume - 8) < 0.001
+                for action in (lambda: first.shape, lambda: first.export("wrong.step"),
+                               lambda: first.snapshot("wrong.png")):
+                    try:
+                        action()
+                    except EngineError as error:
+                        assert "belongs to the cadgen server" in str(error), error
+                    else:
+                        raise AssertionError("a handle crossed servers")
+                cadgen.export(first.id, "selected.step")
+                os.environ["CADGEN_PORT"] = {self.env['CADGEN_PORT']!r}
+                assert abs(first.shape.volume - 1) < 0.001
+                os.environ["CADGEN_ENGINE_DIR"] += "-different"
+                try:
+                    first.export("wrong-directory.step")
+                except EngineError:
+                    pass
+                else:
+                    raise AssertionError("a handle crossed private engine directories")
+                print('RESULT {{"ok": true}}')
+            '''})
+            self.assertTrue(self.run_python("caller.py", cwd=project)["ok"])
+            self.assertTrue((project / "selected.step").is_file())
+            self.assertFalse((project / "wrong.step").exists())
+        finally:
+            from cadgen.engine import client
+
+            with mock.patch.dict(os.environ, other, clear=True):
+                client.request({"op": "stop"}, start=False)
+                self.assertTrue(client.wait_gone())
 
     def test_a_model_exported_by_its_function_is_built_as_its_call_is_never_cold(self) -> None:
         """``export(model, path)`` is the model's call, then its handle's export: eight in one program
@@ -308,6 +365,7 @@ class HandleTest(unittest.TestCase):
         self.run_python("exporter.py", *draw, cwd=project)
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "a second program's run replays")
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.bootstrap(self.env)
         self.run_python("exporter.py", *draw, cwd=project)
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from the cache")
         self.assertEqual((project / "out/m0.step").read_bytes(), (project / "out/handle.step").read_bytes(),
@@ -328,7 +386,8 @@ class HandleTest(unittest.TestCase):
                                                    "revision", "built", "created", "namespace", "name"}, "a model's shape, and the program that showed it")
         from cadgen.viewer.recents import RecentStore
 
-        [shown] = [entry.public() for entry in RecentStore(self.state).list() if entry.path == ident]
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            [shown] = [entry.public() for entry in RecentStore(self.state).list() if entry.path == ident]
         self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
                       "its words, from its program")
         # From a REPL: the working folder is its scope.
@@ -338,10 +397,13 @@ class HandleTest(unittest.TestCase):
         # Exported by its id, as any document the engine holds; after a restart, from the cache.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.bootstrap(self.env)
         self.assertEqual(self.cli("export", ident, str(project / "restarted.stl")).returncode, 0)
         # With its cache file gone, nothing builds it again, and the words say so.
         self.assertEqual(self.cli("stop").returncode, 0)
-        shutil.rmtree(self.cache / "documents" / ident)
+        stored = Registry(self.state, self.cache)
+        shutil.rmtree(stored.cache.root / "documents" / ident)
+        engine_daemon.bootstrap(self.env)
         refused = self.cli("export", ident, str(project / "gone.stl"))
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("a program the engine did not run: no script to rerun", refused.stderr)
@@ -376,6 +438,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(found["caller"], found["inside"])
         # After a restart the document comes from the engine's cache, read as its xbf: the same tree.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.bootstrap(self.env)
         self.assertEqual(self.run_python("nested.py", cwd=project)["caller"], found["inside"])
 
     def test_a_relative_pythonpath_names_a_folder_of_the_caller_s_working_folder(self) -> None:
@@ -448,7 +511,7 @@ if __name__ == "__main__":
 
 class UnreachedEngineTest(unittest.TestCase):
     def test_a_model_call_no_engine_serves_ends_in_one_line_on_stderr(self) -> None:
-        """``python model.py`` and ``cadgen run model.py`` in a sandboxed shell with no engine: the
+        """``python model.py`` and ``python model.py`` in a sandboxed shell with no engine: the
         client's line on stderr, as a ``cadgen`` verb says it, status 1, no traceback; a program
         that catches the error hears nothing."""
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="unreached-")))
@@ -457,17 +520,23 @@ class UnreachedEngineTest(unittest.TestCase):
         engine.mkdir(mode=0o700)
         (folder / "peg.py").write_text(UNREACHED, encoding="utf-8")
         from cadgen._internal.engine_host import SANDBOXES
-        from cadgen.engine.client import SANDBOXED
+        from cadgen.engine.client import missing
 
         env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
+               "CADGEN_PORT": str(engine_daemon.free_port()),
                "CADGEN_STATE_DIR": str(folder / "state"), "CADGEN_CACHE_DIR": str(folder / "cache"),
                **dict(SANDBOXES)}
-        for command in ([sys.executable, "peg.py"], [sys.executable, "-m", "cadgen.cli", "run", "peg.py"]):
-            done = engine_daemon.run(command, cwd=folder, env=env)
-            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cadgen: {SANDBOXED}\n"), command)
+        with mock.patch.dict(os.environ, env, clear=True):
+            reason = str(missing())
+        done = engine_daemon.run([sys.executable, "peg.py"], cwd=folder, env=env)
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cadgen: {reason}\n"))
         caught = engine_daemon.run([sys.executable, "peg.py", "catch"], cwd=folder, env=env)
         self.assertEqual((caught.returncode, caught.stdout, caught.stderr), (0, "caught\n", ""))
         self.assertEqual(sorted(path.name for path in engine.iterdir()), [], "no engine started")
+        # A CADGEN_PORT that names no port is said the same way, as `cadgen status` says it.
+        done = engine_daemon.run([sys.executable, "peg.py"], cwd=folder, env={**env, "CADGEN_PORT": "abc"})
+        self.assertEqual((done.returncode, done.stdout, done.stderr),
+                         (1, "", "cadgen: CADGEN_PORT='abc' must be a port between 1 and 65535\n"))
 
 
 if __name__ == "__main__":

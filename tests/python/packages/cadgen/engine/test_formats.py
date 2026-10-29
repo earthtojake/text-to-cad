@@ -35,6 +35,7 @@ import textwrap
 import unittest
 import zipfile
 from pathlib import Path
+from tests.python.support import engine_daemon
 
 import numpy as np
 
@@ -1113,6 +1114,7 @@ class DaemonFileTest(unittest.TestCase):
 
         self.cli = cli
         self.addCleanup(cli, "stop")
+        env = engine_daemon.started(env, self.addCleanup)
 
     def snapshot(self, out: str) -> dict:
         done = self.cli("snapshot", "part.stl", out, "--width", "200", "--height", "150", "--json")

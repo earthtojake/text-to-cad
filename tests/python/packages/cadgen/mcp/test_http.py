@@ -48,12 +48,14 @@ class HttpSessionsTest(unittest.TestCase):
         cls.engine_browser = cls.browser('engine', 0)
         cls.env = engine_daemon.watched({**os.environ, 'CADGEN_ENGINE_DIR': str(cls.root / 'engine'),
                    'CADGEN_STATE_DIR': str(cls.root / 'state'), 'CADGEN_ENGINE_MESH': 'inline',
+                   'CADGEN_PORT': str(engine_daemon.free_port()),
                    'CADGEN_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser}, cls.addClassCleanup)
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
         from cadgen.engine.api import stop
         cls.addClassCleanup(stop)
+        engine_daemon.bootstrap(cls.env)
         cls.endpoint = EngineClient().connect()
         cls.model = cls.root / 'part.stl'
         cls.model.write_bytes(b'solid part\nendsolid part\n')
@@ -272,6 +274,7 @@ class HttpSessionsTest(unittest.TestCase):
         from cadgen.engine.api import stop
         pid = request({'op': 'status'})['pid']
         self.assertTrue(stop())
+        engine_daemon.bootstrap(self.env)  # a deliberate restart, not a document client side effect
         self.assertEqual(self.call(proxy, 'ping'), {})
         self.assertNotEqual(proxy.session, second)
         self.assertNotEqual(request({'op': 'status'})['pid'], pid)
@@ -360,4 +363,4 @@ def setUpModule() -> None:
     # (``engine_daemon.isolate``); each test still names its own engine folder.
     from tests.python.support import engine_daemon
 
-    engine_daemon.isolate(unittest.addModuleCleanup)
+    engine_daemon.isolate(unittest.addModuleCleanup, start=False)

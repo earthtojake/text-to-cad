@@ -1,6 +1,6 @@
 """Versioned conversions of an already-loaded XCAF document, without rebuilding geometry.
 
-Only xbf/8 -> xbf/9 is supported. Original physical attributes and NamedData remain
+xbf/8 converts legacy materials; xbf/9 -> xbf/10 records the newer writer only. Original physical attributes and NamedData remain
 on their labels; each distinct resolved look gets a native payload on a copied
 physical label. Shape/face/component visual references, geometry and the original
 build closure are untouched. The caller owns any eventual file write.
@@ -234,7 +234,24 @@ def _xbf8(doc: Any) -> int:
     return len(plans) + sum(entry not in {key[0] for key in plans} for entry in originals)
 
 
-_UPGRADES = {"xbf/8": ("xbf/9", _xbf8)}
+def _xbf9(_doc: Any) -> int:
+    """The build key changed; saved geometry and its historical closure stay as written."""
+    return 0
+
+
+_UPGRADES = {"xbf/8": ("xbf/9", _xbf8), "xbf/9": ("xbf/10", _xbf9)}
+
+
+def readable() -> list[str]:
+    """The document formats this cadgen reads, oldest first: the one it writes (``previous.FORMAT``)
+    and each it converts to it in memory (``_UPGRADES``). A peer that writes one of them meets this
+    one's documents (``runtime.refusal``); a format outside them is refused."""
+    from cadgen.engine.previous import FORMAT
+
+    def number(name: str) -> int:
+        return int(name.rpartition("/")[2])
+
+    return sorted({*_UPGRADES, FORMAT}, key=number)
 
 
 def upgrade(doc: Any) -> dict[str, Any] | None:

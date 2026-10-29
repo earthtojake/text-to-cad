@@ -1,4 +1,4 @@
-"""The host's stdio transport: forward JSON-RPC to this installation's engine.
+"""The host's stdio transport: forward JSON-RPC to the selected engine, started or attached to here.
 
 Only connection metadata lives here. Tools, views, pages and document state belong
 in the engine. Host capability corrections are made at this boundary: what the person
@@ -54,11 +54,13 @@ def initialize_params(params, launcher=None, holder=None):
 
 class Holder:
     """This server's hold on the engine (``cadgen.engine.client.hold``): taken as the server starts,
-    starting the engine when none runs, and kept while the host runs, so a shell the host runs in a
+    starting the engine when none runs -- an older release's engine on the port retired first once it
+    is idle, which the log says -- and kept while the host runs, so a shell the host runs in a
     sandbox that cannot start an engine always finds one. Once the host has quit, and this process
-    with it, the engine runs on unheld until it is stopped or a newer installation retires it. An
+    with it, the engine runs on until explicitly stopped. An
     engine that goes while held (``cadgen stop``, a crash) is held again at the host's next request,
-    never at once: a stop is obeyed."""
+    never at once: a stop is obeyed. A hold that failed keeps why (``failure``): the reason the
+    host's request finds no engine (``Proxy._send``)."""
 
     def __init__(self, host=lambda: None):
         self.host = host  # the host this server serves, said with the hold (``host.family``)
@@ -68,6 +70,7 @@ class Holder:
         self.wanted = threading.Event()
         self.tried = threading.Event()  # the first hold taken, or failed
         self.holding = False
+        self.failure = None  # why the last hold failed: the engine could not be started or reached
         self.thread = threading.Thread(target=self._run, name='cadgen-hold', daemon=True)
 
     def start(self):
@@ -76,6 +79,7 @@ class Holder:
 
     def want(self):
         if not self.holding:
+            self.tried.clear()
             self.wanted.set()
 
     def _run(self):
@@ -84,11 +88,15 @@ class Holder:
             self.wanted.wait()
             self.wanted.clear()
             try:
-                connection = hold(host=self.host, holder=self.ident)
+                # A start retires an older release's engine on the port once it is idle, and says so
+                # once (``client.converge``): logged here, on the host's log of this server.
+                connection = hold(start=True, host=self.host, holder=self.ident, told=LOG.info)
             except Exception as error:  # noqa: BLE001 - held again at the next request; the thread lives
                 LOG.info('could not hold the engine: %s', error)
+                self.failure = str(error)
                 self.tried.set()
                 continue
+            self.failure = None
             self.holding = True
             self.wanted.clear()  # the requests made while it was taken are served by this hold
             self.tried.set()
@@ -124,10 +132,21 @@ class Proxy:
     def _send(self, message, session, *, fresh=False):
         if self.holder is not None:
             self.holder.want()
+            self.holder.tried.wait(60)
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
         if session:
             headers['Mcp-Session-Id'], headers['MCP-Protocol-Version'] = session
-        return self.client.call('POST', '/mcp', json.dumps(message).encode('utf-8'), headers, fresh=fresh)
+        try:
+            return self.client.call('POST', '/mcp', json.dumps(message).encode('utf-8'), headers, fresh=fresh)
+        except ConnectionRefusedError:
+            raise  # the engine's port let go: ``_post`` asks the door again
+        except ConnectionError:
+            # No engine to send to because the bootstrap could not hold one: the host is told why
+            # (a port another engine holds, a refused setting), not only that none answers.
+            failure = self.holder.failure if self.holder is not None and not self.holder.holding else None
+            if failure:
+                raise RpcError(-32000, failure) from None
+            raise
 
     def _open(self, request_id, params):
         # The host's initialize goes only to the endpoint the engine's door names now, never to
@@ -225,7 +244,7 @@ class Proxy:
             # The session's end, told to the engine that holds it: never an engine started to hear it
             # (a host closing after `cadgen stop` would start one up for nothing).
             try:
-                self.client.call('DELETE', '/mcp', headers={'Mcp-Session-Id': ident}, start=False)
+                self.client.call('DELETE', '/mcp', headers={'Mcp-Session-Id': ident})
             except OSError:
                 pass
 
@@ -260,8 +279,7 @@ def serve(argv=None):
         reading.join(5)
         return found.get('host')
 
-    # The engine up and held from the start, not from the first card; the hold names the host once
-    # it is read, so the `cadgen` command in that host's shells runs this installation.
+    # Bootstrap the selected server at MCP startup and keep this host's sessions attached to it.
     holder = Holder(host=lambda: family(launched()))
     holder.start()
 

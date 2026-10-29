@@ -34,12 +34,13 @@ LAW = ("law 22 (packages/cadgen/README.md): \"A verb's option is about the pictu
 
 
 class ExportTakesADocumentAndDestinations(unittest.TestCase):
-    def test_the_command_takes_src_dst_and_json_alone(self) -> None:
+    def test_the_command_takes_document_destinations_and_connection_options(self) -> None:
         parser = build_parser()
         found = {(action.dest, tuple(action.option_strings), action.nargs) for action in parser._actions
                  if not isinstance(action, argparse._HelpAction)}
-        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("json", ("--json",), 0)},
-                         f"`cadgen export` takes SRC DST [DST ...] [--json] alone; {LAW}")
+        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("json", ("--json",), 0),
+                                 ("port", ("--port",), None)},
+                         f"`cadgen export` takes SRC DST [DST ...] [--json] [--port PORT]; {LAW}")
 
     def test_the_function_takes_a_source_destinations_and_its_seams_alone(self) -> None:
         parameters = inspect.signature(cadgen.export).parameters.values()

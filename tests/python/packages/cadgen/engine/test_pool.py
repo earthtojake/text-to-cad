@@ -236,6 +236,59 @@ class StandbyTest(unittest.TestCase):
         self.assertEqual(self.standing(pool, spare).environment, {"PYTHONPATH": "/other"})
         self.assertEqual(list(pool.retired), [], "the standby is never a script's retirement")
 
+    def test_a_server_s_document_read_never_takes_a_project_interpreter_s_standby(self) -> None:
+        # After a project's build the standby stands by in that project's Python. A read of a file or
+        # of a document no worker holds asks in no project's (execution None): it starts a worker of
+        # the server's own Python, and the project's standby stays for the project's next script.
+        from cadgen.engine import runtime
+
+        own = runtime.describe()
+        project = {**own, "python": "/project/.venv/bin/python", "prefix": "/project/.venv", "fingerprint": "project"}
+        gate = threading.Event()
+        gate.set()
+        started: list = []
+
+        def start(script, environment, cwd, execution=None):
+            started.append((script, execution))
+            worker = Fake(script, environment, cwd)
+            worker.execution = execution or own  # as a worker of none runs the daemon's Python
+            return worker
+
+        def spare(environment, execution=None):
+            gate.wait(30)
+            worker = Fake("standby", environment, None, rss=440.0)
+            worker.execution = execution or own
+            return worker
+
+        pool = Pool(4, start)
+        pool.spare = spare
+        self.addCleanup(pool.stop)
+        pool.release(pool.lease("/p/model.py", {}, execution=project))
+        standing = self.standing(pool)
+        self.assertEqual(standing.execution, project, "the standby follows the project's Python")
+        read = pool.lease("documents", {})
+        self.assertEqual((read.execution["python"], read.execution["prefix"]),
+                         (os.path.abspath(sys.executable), os.path.abspath(sys.prefix)), "the server's own Python")
+        self.assertIs(pool.standby, standing, "the project's standby stays")
+        self.assertFalse(standing.stopped)
+        pool.release(read)
+        pool.stop()
+        # Nor does it wait for a project's standby still being started: it starts its own at once.
+        gate.clear()
+        started.clear()
+        pool = Pool(4, start)
+        pool.spare = spare
+        self.addCleanup(pool.stop)
+        self.addCleanup(gate.set)
+        pool.stand({}, project)
+        await_(lambda: pool.readying is not None, "the project's standby starting")
+        got: list = []
+        threading.Thread(target=lambda: got.append(pool.lease("documents", {})), daemon=True).start()
+        await_(lambda: got, "the read's own worker, without waiting for the project's standby")
+        self.assertEqual((started, got[0].execution), ([("documents", None)], own))
+        self.assertIsNotNone(pool.readying, "the project's standby is still starting")
+        gate.set()
+
     def test_a_build_arriving_while_the_standby_starts_waits_for_it_and_a_long_wait_is_said(self) -> None:
         gate = threading.Event()
         pool = self.pool(gate=gate)
@@ -317,9 +370,16 @@ class StandbyTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_PRESSURE": "yes", "CADGEN_ENGINE_DIR": str(folder)}):
             with self.assertRaisesRegex(ValueError, "CADGEN_ENGINE_PRESSURE is 'yes': 0 .*, 1 .*, or unset"):
                 Daemon(cap=1)
-            with mock.patch("sys.stderr"):
+            with mock.patch("sys.stderr") as said:
                 self.assertEqual(engine.main([]), 1, "refused at the start")
-            self.assertIn("CADGEN_ENGINE_PRESSURE is 'yes'", json.loads(engine.failure_path().read_text(encoding="utf-8"))["reason"])
+            self.assertIn("CADGEN_ENGINE_PRESSURE is 'yes'", "".join(call.args[0] for call in said.write.call_args_list))
+            # Started for a client (the MCP bootstrap), its stderr is nowhere: its note says why, and so
+            # does the client that started it.
+            self.assertIn("CADGEN_ENGINE_PRESSURE is 'yes'",
+                          json.loads(engine.failure_path().read_text(encoding="utf-8"))["reason"])
+            from cadgen.engine import client
+
+            self.assertIn("did not start: CADGEN_ENGINE_PRESSURE is 'yes'", str(client._not_started(1)))
 
     def test_status_shows_the_standby_with_its_memory_and_never_as_a_script_s_worker(self) -> None:
         from cadgen.engine.cli import status_text
@@ -342,6 +402,36 @@ class StandbyTest(unittest.TestCase):
         self.assertIn("workers 2/4 with the standby", lines[0])
         self.assertIn("RSS 0.5 GB of", lines[0])
         self.assertRegex(lines[2], rf"^  standby +{spare.pid}  +0\.4 GB  kernel loaded · \d+s$")
+
+    def test_status_tells_each_worker_s_python_environment_apart(self) -> None:
+        # One worker per script and interpreter: two projects' model.py workers, and the server's own
+        # Python's documents worker, each named by its environment's prefix.
+        from cadgen.engine import runtime
+        from cadgen.engine.cli import status_text
+
+        own = runtime.describe()
+        daemon = Daemon(cap=4)
+        self.addCleanup(daemon.shutdown)
+
+        def start(script, environment, cwd, execution=None):
+            worker = Fake(script, environment, cwd)
+            worker.execution = execution or own
+            return worker
+
+        daemon.pool.start = start
+        prefixes = ("/work/robot/.venv", "/work/bike/.venv", "/other/robot/.venv")
+        for prefix in prefixes:
+            project = {**own, "python": f"{prefix}/bin/python", "prefix": prefix, "fingerprint": prefix}
+            daemon.pool.release(daemon.pool.lease(f"{Path(prefix).parent}/model.py", {}, execution=project))
+        daemon.pool.release(daemon.pool.lease("documents", {}))
+        answer = daemon.status()
+        self.assertEqual([(Path(w["script"]).name, w["prefix"]) for w in answer["workers"]],
+                         [("model.py", prefix) for prefix in prefixes] + [("documents", own["prefix"])])
+        self.assertEqual(answer["workers"][0]["python"], "/work/robot/.venv/bin/python")
+        rows = [line.split() for line in status_text(answer).splitlines()[1:5]]
+        self.assertEqual([row[2] for row in rows], ["/work/robot/.venv", "bike/.venv", "/other/robot/.venv",
+                                                    "/".join(Path(own["prefix"]).parts[-2:])],
+                         "the last two folders, whole where two would read alike")
 
 
 class ConnectedPoolTest(unittest.TestCase):
@@ -495,7 +585,7 @@ class DaemonPoolTest(unittest.TestCase):
         # Its engine, its registry of documents and its cache are its own, never the developer's.
         own = Path(tempfile.mkdtemp(prefix="engine-own-"))  # beside the project: nothing lands in it
         self.addCleanup(shutil.rmtree, own, True)
-        private = {"CADGEN_ENGINE_DIR": str(self.state), "CADGEN_STATE_DIR": str(own / "state"),
+        private = {"CADGEN_PORT": str(engine_daemon.free_port()), "CADGEN_ENGINE_DIR": str(self.state), "CADGEN_STATE_DIR": str(own / "state"),
                    "CADGEN_CACHE_DIR": str(own / "cache")}
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), **private,
                                           "CADGEN_ENGINE_MESH": "inline",
@@ -503,6 +593,7 @@ class DaemonPoolTest(unittest.TestCase):
         # This process asks the test's daemon what it holds (``status``), never starting one.
         self.enterContext(mock.patch.dict(os.environ, private))
         self.addCleanup(self._stop)
+        engine_daemon.bootstrap(self.env)
 
     def _stop(self) -> None:
         self.cli("stop")
@@ -592,6 +683,8 @@ class DaemonPoolTest(unittest.TestCase):
             await_(ready, "a standby with the kernel loaded", 120)
             return found
 
+        self.cli("stop")
+        engine_daemon.bootstrap(env)
         self.script("a")
         self.build("a", env)  # the standby stands by in a's environment from now on
         spare = standby()
@@ -603,7 +696,11 @@ class DaemonPoolTest(unittest.TestCase):
         self.assertGreater(spare["rssMb"], 0)
         again = standby(spare["pid"])
         self.assertNotIn("standby", [Path(w["script"]).name for w in status["workers"]])
-        self.assertRegex(self.cli("status").stdout, rf"with the standby .*\n(.*\n)*  standby +{again['pid']} ")
+        import re
+
+        # In the environment it stands in, a's and b's: this interpreter's, by its last two folders.
+        place = re.escape("/".join(Path(os.path.abspath(sys.prefix)).parts[-2:]))
+        self.assertRegex(self.cli("status").stdout, rf"with the standby .*\n(.*\n)*  standby +{place} +{again['pid']} ")
 
 
 if __name__ == "__main__":

@@ -339,8 +339,7 @@ class Server:
             from cadgen.analytics import Recorder
             from cadgen.settings import FILE
 
-            # The settings beside the model library (the state directory, by default): shared by every process.
-            path = Path(self._recents.root).parent / FILE if self._recents is not None else None
+            path = self._recents.registry.state.root / FILE if self._recents is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
 
@@ -419,8 +418,34 @@ class Server:
 
     def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         from cadgen import __version__
+        from cadgen.engine.daemon import selected_port
+        from cadgen.updates import INSTALL, INSTALL_WINDOWS
+
+        port = selected_port()
+        authoring = (
+            "Run a model script with `cadgen run model.py`; `cadgen` is the command this server writes as it "
+            "starts, `~/.local/bin/cadgen` (on Windows `%USERPROFILE%\\.local\\bin\\cadgen.cmd`). It runs the script "
+            "in a Python environment it makes for the project, with the dependencies the project declares in "
+            "pyproject.toml, requirements.txt or the script's inline metadata (`# /// script`) and the engine's own "
+            "cadgen: declare the model's other dependencies there. Nothing needs installing in the project, and its "
+            ".venv is never touched. "
+            f"This MCP server already starts or attaches to the engine on port {port}. "
+            f"Set `CADGEN_PORT={port}` where `cadgen run` runs; model calls attach to that engine. "
+            "A minimal model script is:\n"
+            "```python\nimport build123d as bd\nfrom cadgen import model\n\n"
+            "@model\ndef part():\n    return bd.Box(10, 20, 5)\n\n"
+            "if __name__ == \"__main__\":\n    part()\n```\n"
+            "A model is a no-argument function returning a build123d shape. "
+            "Running the script prints its live document id; pass that id to `cad_show`. "
+            "A virtual environment someone made with cadgen installed runs models with `python model.py` too: an "
+            "older cadgen there keeps working, and its builds say when `uv pip install -U cadgen` would update it. "
+            f"Run `{INSTALL}` (on Windows: `{INSTALL_WINDOWS}`) to update text-to-cad for every app. "
+        )
 
         client = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
+        from cadgen._internal.channel import refine
+
+        refine(host.channel_for(client))  # a server told the standard manifest's channel takes its host's own
         offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         transport = meta.get("dev.texttocad/transport") if isinstance(meta.get("dev.texttocad/transport"), dict) else {}
@@ -441,7 +466,7 @@ class Server:
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": INSTRUCTIONS if self.tabs else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS,
+            "instructions": authoring + (INSTRUCTIONS if self.tabs else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS),
         }
 
     # -- the catalog -----------------------------------------------------------
@@ -962,15 +987,18 @@ class Server:
 
     def _told(self, result: dict[str, Any]) -> dict[str, Any]:
         """A text-only app has no card for the update notice (``cadgen/updates.py``): this process's
-        first result that can carry it does, as a line for the agent to pass on."""
+        first result that can carry it does, as a line for the agent to pass on. An update pending,
+        installing itself or installed says nothing (``updates.line``, ``updates.notice``), and leaves
+        the line to a later result."""
         if self._update_told:
             return result
         from cadgen import updates
 
         found = updates.notice()
-        if found is not None:
+        said = None if found is None else updates.line(found)
+        if said is not None:
             self._update_told = True
-            result["content"].append({"type": "text", "text": updates.line(found)})
+            result["content"].append({"type": "text", "text": said})
         return result
 
     def _shown(self, view_id: Any) -> Any:

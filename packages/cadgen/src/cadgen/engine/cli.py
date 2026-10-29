@@ -1,7 +1,8 @@
 """The engine's verbs as commands -- a thin argparse over the functions of ``api`` -- and
 ordinary Python scripts call decorated models explicitly.
 
-    python SCRIPT.py                                 the models the script explicitly calls
+    cadgen run SCRIPT.py                             the models the script explicitly calls, in its project's
+                                                     environment (or python SCRIPT.py where cadgen is installed)
     cadgen export SRC DST [DST ...] [--json]
     cadgen snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
@@ -12,7 +13,7 @@ ordinary Python scripts call decorated models explicitly.
     cadgen inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path or a document's id (``ids``): a model's id is what
-``python SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
+``cadgen run SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
 
 cadgen's command line runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cadgen.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
@@ -36,7 +37,7 @@ __all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", 
 
 def _export_arguments(export: argparse.ArgumentParser) -> None:
     export.add_argument("source", metavar="SRC", help="an .xbf, a .step, a document id (a model's, which "
-                                                      "python SCRIPT.py prints), or a mesh file (.glb, .stl, "
+                                                      "cadgen run SCRIPT.py prints), or a mesh file (.glb, .stl, "
                                                       ".3mf), which exports to the other two mesh kinds")
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
@@ -46,7 +47,6 @@ def _export_arguments(export: argparse.ArgumentParser) -> None:
 
 def _serve_arguments(serve: argparse.ArgumentParser) -> None:
     serve.add_argument("document", help="an .xbf, a STEP, or a document id")
-    serve.add_argument("--port", type=int, default=0)
     serve.add_argument("--three", help="the three.js package folder (default: the nearest node_modules/three)")
 
 
@@ -67,10 +67,6 @@ def _delete_arguments(delete: argparse.ArgumentParser) -> None:
 
 
 def _server_arguments(server: argparse.ArgumentParser) -> None:
-    server.add_argument("--port", type=int, default=None,
-                        help="the HTTP port the engine takes, refused when another process holds it (else "
-                             "CADGEN_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
-                             "any free port")
     server.add_argument("--rotate-token", action="store_true",
                         help="replace this installation's page token first: every link shared before stops working")
 
@@ -114,7 +110,9 @@ def build_parser(prog: str = "python -m cadgen.engine") -> argparse.ArgumentPars
     parser = argparse.ArgumentParser(prog=prog, description="Export, draw and serve cadgen engine documents.")
     verbs = parser.add_subparsers(dest="verb", required=True)
     for verb, (help_text, arguments, _runner) in VERBS.items():
-        arguments(verbs.add_parser(verb, help=help_text, description=help_text))
+        child = verbs.add_parser(verb, help=help_text, description=help_text)
+        _port_argument(child)
+        arguments(child)
     return parser
 
 
@@ -122,8 +120,14 @@ def parser_for(verb: str, prog: str | None = None) -> argparse.ArgumentParser:
     """One verb's parser, as a command of its own (``cadgen export``, ``cadgen snapshot``, ...)."""
     help_text, arguments, _runner = VERBS[verb]
     parser = argparse.ArgumentParser(prog=prog or f"cadgen {verb}", description=help_text)
+    _port_argument(parser)
     arguments(parser)
     return parser
+
+
+def _port_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--port", type=int, default=None,
+                        help="select the engine port (else CADGEN_PORT, else 3245)")
 
 
 def run(verb: str, argv: list[str] | None = None, prog: str | None = None) -> int:
@@ -149,12 +153,18 @@ def answered(runner: Callable[[argparse.Namespace, str], int], args: argparse.Na
     status 1; else its words on stderr and its own status. A failure no verb expected is said in
     JSON too, then raised as ever (its traceback the person's, and a crash the command reports)."""
     as_json = bool(getattr(args, "json", False))
-    from cadgen.engine import client
-
-    # A verb that starts the engine says so, once, on stderr: a person can tell a fresh engine (its
-    # first build cold, every document read again) from the one they had.
-    client.on_started = lambda: print("engine started", file=sys.stderr, flush=True)
     try:
+        port = getattr(args, "port", None)
+        if port is not None:
+            if not 1 <= port <= 65535:
+                raise Failed("--port must be between 1 and 65535", 2)
+            os.environ["CADGEN_PORT"] = str(port)
+        from cadgen.engine.daemon import selected_port
+
+        try:
+            selected_port()
+        except ValueError as error:
+            raise Failed(str(error), 2) from None
         return runner(args, prog)
     except (Failed, ConnectionError) as failure:
         # ``ConnectionError``: the engine not reached (none runs and none can start: a sandbox, a
@@ -415,7 +425,7 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     from cadgen.engine import api
 
     try:
-        print(api.serve(args.document, args.port, args.three).url)
+        print(api.serve(args.document, three=args.three).url)
     except ValueError as error:
         raise Failed(str(error), 2) from None
     except api.EngineError as error:
@@ -627,18 +637,29 @@ def plain(text: str) -> str:
 def _server(args: argparse.Namespace, prog: str) -> int:
     from cadgen.engine.daemon import main as daemon
 
-    if args.port is not None and not 0 <= args.port <= 65535:
-        raise Failed("--port must be between 0 and 65535", 2)
+    if args.port is not None and not 1 <= args.port <= 65535:
+        raise Failed("--port must be between 1 and 65535", 2)
     return daemon([], port=args.port, rotate=args.rotate_token, foreground=True)
 
 
 def _status(args: argparse.Namespace, _prog: str) -> int:
-    from cadgen.engine.client import request, sweep
+    from cadgen.engine.client import held_words, holder, request, stop_command, sweep
 
     swept = sweep(stop=False)
     _told_swept(swept)
     answer = request({"op": "status"}, start=False)
     if answer is None:
+        found = holder()
+        if found is not None:
+            # Something else holds the selected port: this cadgen cannot use it, as it cannot use
+            # another release's engine (a refusal, status 1). An older release's engine ``stop``
+            # stops; another process is named, with what frees the port.
+            said = (f"{found['said']} serves port {found['port']} with an older protocol: stop it with "
+                    f"`{stop_command(found['port'])}`" if found["kind"] == "engine" else held_words(found))
+            if args.json:
+                print(json.dumps({"ok": False, "error": said, "holder": _holder(found)}, indent=2))
+                return 1
+            raise Failed(said)
         print("null" if args.json else "no engine server is running")
         return 0
     if args.json:
@@ -648,37 +669,50 @@ def _status(args: argparse.Namespace, _prog: str) -> int:
     return 0
 
 
+def _holder(found: dict[str, Any]) -> dict[str, Any]:
+    """What holds the selected port as ``--json`` says it (``client.holder``): an older engine by
+    what it says of itself and its door, another process by what the system says of it."""
+    return {key: found[key] for key in ("kind", "port", "release", "installation", "pid", "address", "name", "cadgen")
+            if key in found}
+
+
 def _told_swept(swept: dict[str, list[str]]) -> None:
-    """What a sweep found besides this protocol's server, on stderr (stdout is the answer's): the
-    stale files it removed, and a server of an older protocol, which ``stop`` stops."""
+    """The selected server's stale files removed, on stderr; stdout holds the answer."""
     for path in swept["removed"]:
         print(f"removed stale engine file {path}", file=sys.stderr)
-    from cadgen.engine.daemon import address
-
-    current = str(address())
-    for address in swept["running"]:
-        if address != current:
-            print(f"an engine server of an older cadgen runs at {address}; cadgen stop stops it", file=sys.stderr)
 
 
 def _stop(args: argparse.Namespace, prog: str) -> int:
-    from cadgen.engine.client import sweep
+    from cadgen.engine.client import legacy, stop_legacy, sweep
 
-    # Every server of this installation, whatever protocol it speaks; stopped means gone: the next
-    # command starts a fresh one, never reaches these.
+    # Stop only the selected server and wait for its workers to exit.
     try:
         swept = sweep(stop=True)
     except ConnectionError as error:
         raise Failed(str(error)) from None
     _told_swept(swept)
+    lines = [f"stopped the engine server at {address}" for address in swept["stopped"]]
+    older = None if swept["stopped"] else legacy()
+    if older is not None:
+        # An older release's engine serving the selected port, stopped through its own door; one on
+        # another port is never touched.
+        try:
+            stopped = stop_legacy(older)
+        except ConnectionError as error:
+            raise Failed(str(error)) from None
+        if not stopped:
+            raise Failed(f"{older['said']} serves port {older['port']} with an older protocol and did not take the "
+                         f"stop request: stop it with `cadgen +{older.get('installation') or older['release']} stop`")
+        swept["stopped"].append(older["address"])
+        lines.append(f"stopped {older['said']} on port {older['port']}")
     if args.json:
         print(json.dumps({"ok": True, "stopped": swept["stopped"]}, indent=2))
         return 0
-    if not swept["stopped"]:
+    if not lines:
         print("no engine server is running")
     # A line per server stopped, for a person or an agent; JSON only under ``--json``.
-    for address in swept["stopped"]:
-        print(f"stopped the engine server at {address}")
+    for line in lines:
+        print(line)
     return 0
 
 
@@ -729,18 +763,14 @@ def _gb(megabytes: Any) -> str:
 
 
 def _port(serving: dict[str, Any]) -> str:
-    """Where the served port came from, in words -- the default, ``--port``, ``CADGEN_ENGINE_PORT``
-    or a roll from a held default -- as the serving line's parenthesis; nothing for an answer that
-    does not say."""
+    """How this server's explicit port was selected."""
     port, default = serving.get("port"), serving.get("defaultPort")
     if port is None or default is None:
         return ""
     if port == default:
         return " (the default port)"
     source = serving.get("portSource") or ""
-    if source == "rolled":
-        return f" (rolled from {default} because {serving.get('portBecause') or 'another process'} holds it)"
-    return " (" + {"--port": "the port --port named", "CADGEN_ENGINE_PORT": "the port CADGEN_ENGINE_PORT names"
+    return " (" + {"--port": "the port --port named", "CADGEN_PORT": "the port CADGEN_PORT names"
                    }.get(source, f"not the default {default}") + ")"
 
 
@@ -750,6 +780,16 @@ def cache_text(root: Any, documents: Any, size: Any) -> str:
     them (no cap)."""
     return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_bytes(size)}, "
             "kept until deleted")
+
+
+def environments(prefixes: list[Any]) -> dict[str, str]:
+    """Each Python environment ``status`` lists, by its prefix, as it shows it: the prefix's last
+    two folders (``projA/.venv``), or the whole prefix where two would read alike."""
+    from collections import Counter
+
+    short = {prefix: "/".join(Path(prefix).parts[-2:]) for prefix in prefixes if isinstance(prefix, str) and prefix}
+    alike = Counter(short.values())
+    return {prefix: label if alike[label] == 1 else prefix for prefix, label in short.items()}
 
 
 def workers_text(answer: dict[str, Any]) -> str:
@@ -782,6 +822,10 @@ def status_text(answer: dict[str, Any]) -> str:
                          memory])]
     names = [Path(str(worker["script"])).name for worker in workers]
     width = max((len(name) for name in names), default=0)
+    # Which Python each runs: one worker per script and interpreter, so two projects' model.py
+    # workers are told apart by their environments.
+    places = environments([worker.get("prefix") for worker in workers] + [(standby or {}).get("prefix")])
+    room = max((len(place) for place in places.values()), default=0)
     for worker, name in zip(workers, names):
         builds = f"{worker.get('builds', 0)} build{'' if worker.get('builds') == 1 else 's'}"
         doing = _span(worker.get("seconds"))
@@ -793,11 +837,13 @@ def status_text(answer: dict[str, Any]) -> str:
             # export's or a snapshot's frame says its kind the same way: ``exporting``, ``drawing``).
             verb = {"export": "exporting", "snapshot": "drawing"}.get(str(frame.get("kind")), "building")
             doing = f"{verb} {frame.get('job')} · {describe(frame)} · {doing}"
-        lines.append(f"  {'busy' if worker.get('busy') else 'idle'}  {name:<{width}}  {str(worker.get('pid')):>6}  "
-                     f"{builds:>10}  {_gb(worker.get('rssMb')):>7}  {doing}")
+        place = places.get(worker.get("prefix"), "")
+        lines.append(f"  {'busy' if worker.get('busy') else 'idle'}  {name:<{width}}  {place:<{room}}  "
+                     f"{str(worker.get('pid')):>6}  {builds:>10}  {_gb(worker.get('rssMb')):>7}  {doing}")
     if standby:
-        # The kernel loaded and no script: the next new script's worker.
-        lines.append(f"  standby  {'':<{width}}  {str(standby.get('pid') or ''):>6}  {'':>10}  "
+        # The kernel loaded and no script: the next new script's worker, in the Python it stands in.
+        place = places.get(standby.get("prefix"), "")
+        lines.append(f"  standby  {'':<{width}}  {place:<{room}}  {str(standby.get('pid') or ''):>6}  {'':>10}  "
                      f"{_gb(standby.get('rssMb')):>7}  "
                      + ("starting" if standby.get("starting") else f"kernel loaded · {_span(standby.get('seconds'))}"))
     if answer.get("waiting"):
@@ -821,8 +867,6 @@ def status_text(answer: dict[str, Any]) -> str:
         lines.append(f"serving {serving['url']}{_port(serving)}: {opened} document{'' if opened == 1 else 's'} opened by a page or a command"
                      + (f" · {renders} render process{'' if renders == 1 else 'es'}" if renders else "")
                      + (f" · {_gb(held / 2**20)} of {_gb(memory['budget'] / 2**20)} held" if memory.get("budget") else ""))
-        # What this engine's start said: the older engines it retired, a move of its port.
-        lines.extend(f"  {said}" for said in (serving.get("portNotice") or "").splitlines())
     cache = answer.get("cache") or {}
     if cache.get("enabled"):
         failures = cache.get("failures") or []

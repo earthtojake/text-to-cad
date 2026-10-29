@@ -147,7 +147,10 @@ Retention is PostHog's: events go after the period its plan keeps them (a year o
 free plan), and the privacy policy says so.
 
 The feed moves when PyPI does: no release deploys anything here, and `latest` never
-names a release that cannot be installed yet. Only a copy installed by hand reads it: a
+names a release that cannot be installed yet. The edge keeps an answer an hour, so
+`Publish Release` purges this project's CDN cache once a release's install branches carry
+it, five minutes on, when no instance still holds what it read before (its `feed` job):
+the feed names the release then, not up to an hour later. Only a copy installed by hand reads it: a
 store's copy (`claude-directory`, `openai-directory`, `cursor-marketplace`) never checks
 and is never told, since its store updates it.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a

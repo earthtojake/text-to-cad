@@ -2191,20 +2191,28 @@ def first_party_file(filename: str) -> bool:
 
 @functools.cache
 def _library_roots() -> tuple[Path, ...]:
+    """The folders whose ``.py`` files are libraries, never a model's: cadgen's, this interpreter's
+    standard library and installed packages (``sysconfig``'s, its own and its base interpreter's,
+    and ``site``'s), and every installed-packages folder or archive on the module search path. Never
+    a whole environment: a project may live inside its own virtual environment's folder (``python
+    -m venv .``, or a venv at ``proj`` with the project in ``proj/work``), and its files there are
+    the model's."""
     import site
     import sysconfig
 
     found: set[Path] = {_ENGINE.parent}
-    for key in ("stdlib", "platstdlib", "purelib", "platlib"):
-        value = sysconfig.get_paths().get(key)
-        if value:
-            found.add(Path(value).resolve())
+    base = {"base": sys.base_prefix, "platbase": sys.base_exec_prefix}
+    for paths in (sysconfig.get_paths(), sysconfig.get_paths(vars=base)):
+        for key in ("stdlib", "platstdlib", "purelib", "platlib"):
+            if paths.get(key):
+                found.add(Path(paths[key]).resolve())
     # And every installed-packages folder on the module search path, whoever put it there: a
     # ``.pth`` line or PYTHONPATH reaching another environment's packages (numpy, build123d)
-    # makes them no less a library than this interpreter's own.
-    entries = [entry for entry in sys.path if entry and Path(entry).name in ("site-packages", "dist-packages")]
-    for value in (sys.prefix, sys.base_prefix, sys.exec_prefix, *site.getsitepackages(), site.getusersitepackages(),
-                  *entries):
+    # makes them no less a library than this interpreter's own; and an archive there (a zip of the
+    # standard library, an egg), which only a library is.
+    entries = [entry for entry in sys.path if entry and (Path(entry).name in ("site-packages", "dist-packages")
+                                                         or Path(entry).is_file())]
+    for value in (*site.getsitepackages(), site.getusersitepackages(), *entries):
         if value:
             try:
                 found.add(Path(value).resolve())

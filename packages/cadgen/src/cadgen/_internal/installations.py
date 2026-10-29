@@ -1,4 +1,5 @@
-"""The installations of cadgen this user has, and the one ``cadgen`` command that runs them.
+"""The installations of cadgen this user has, the one of them the device runs, and the one ``cadgen``
+command that runs it.
 
 A skill runs cadgen in the agent's shell, and that shell is often a sandbox that lets a command
 read and execute anything but write only to its working folder and the temporary folder. ``uvx``
@@ -10,19 +11,39 @@ caller names:
   paths of its ``python`` and its ``cadgen`` console script, its environment (``prefix``) and when
   it registered (``registered``). The state folder's ``Folder`` (``cadgen.engine.registry``) writes
   it, as it writes everything there.
+- ``<state>/current``, the pointer: the release the device runs, ``{"release", "cadgen", "python",
+  "set"}`` -- its version, the paths its record names, and when it was set -- written whole
+  (``atomic_replace``) by ``point`` and read by everything through ``current``, which falls back to
+  the newest live registered release where the file is missing or names an installation that is
+  gone, and never raises. A registration points it at its installation when that is a release past
+  the one it names (``setup``): ``cadgen setup``, as the install command or the self-update runs it,
+  ``cadgen doctor``, and the first start of a newer release a host brought in as its plugin's
+  floor (``startup``). Never a
+  development install, and never back to an older release unless the install command was asked for
+  that one by name (``cadgen setup --version``).
 - ``~/.local/bin/cadgen`` (``CADGEN_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
-  script that runs the installation registered last with ``-m cadgen._internal.proxy``, which picks
-  the installation the command names (``cadgen +0.8.0 ...``) or the one running, and runs its
-  ``cadgen`` or, for ``cadgen run``, its ``python``. Every version writes the same file
+  script that runs the pointer's installation, else the installation registered last, with ``-m
+  cadgen._internal.proxy``, which picks the installation the command names (``cadgen +0.8.0 ...``)
+  or the current one, and runs its ``cadgen`` console command. Every version writes the same file
   (``REVISION``), so the proxy is no installation's. On Windows it is ``cadgen.cmd``, the same logic.
 
-Both are written at install moments only, in two places: the CAD app's server (``cadgen mcp``) as it
-starts (:func:`startup`), which the host does outside any sandbox at the moment it installs or
-updates the plugin, and ``cadgen doctor``, the skills' one-time step, which says what it found. A
-folder either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``.
-No other command writes either. A file named ``cadgen`` there that is not the proxy (``uv tool
-install``'s link) is left alone, and said. ``cadgen doctor --prune`` removes the records whose
-interpreter is gone.
+Every command defers to the current release (``defer``, at the top of the CLI's ``main``): a process
+whose release is older than the one the pointer names runs that installation's console script with
+its arguments and environment instead, ``exec`` on POSIX and a child it waits for on Windows. So an
+agent app's server line, written once at install with the release it installed (``uvx ... --from
+cadgen==0.8.3 cadgen mcp``), is a floor: the next session the app starts runs whatever the device
+runs, with nothing rewritten and nothing restarted. ``cadgen +<version>`` (the proxy says so with
+``CADGEN_NO_DEFER=1``), ``CADGEN_NO_DEFER=1`` itself, a development install, and ``cadgen setup
+--version`` run as they are.
+
+The records, the pointer and the proxy are written at explicit setup moments: ``cadgen server``,
+the CAD app's server (``cadgen mcp``) as it starts (:func:`startup`), which the host does outside any
+sandbox at the moment it installs or updates the plugin, ``cadgen doctor``, the skills' one-time
+step, which says what it found, and ``cadgen setup``, which does as ``doctor`` does. A folder they
+cannot write (a sandbox's) is skipped, silently by the server and said by the other two. No other
+command writes them. A file
+named ``cadgen`` there that is not the proxy (``uv tool install``'s link) is left alone, and said.
+``cadgen doctor --prune`` removes the records whose interpreter is gone.
 
 An editable install (a checkout's environment) registers nothing by itself: it reports the release's
 version, and its record would take a user's place. A development install names its own
@@ -43,14 +64,27 @@ NAME_ENV = "CADGEN_INSTALLATION_VERSION"
 FOLDER = "installations"
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
-# earlier, so an older installation's server starting never undoes a newer one's proxy.
+# earlier, so an older installation's server starting never undoes a newer one's proxy. Any change to
+# the script's text moves it: an older installation would otherwise take the new text for a stale copy
+# of its own and write its own back. 5: the refusal leads with the install command. 7: the pointer first.
 MARK = "cadgen proxy: "
-REVISION = 3
+REVISION = 7
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # A release's version, as a wheel reports it of itself (``cadgen.__version__``). Any other version a
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
 # installation cannot know by itself: the ``cadgen`` command gives it (``named``).
 RELEASE = re.compile(r"[0-9]+(\.[0-9]+)*((a|b|rc)[0-9]+)?(\.post[0-9]+)?")
+# The release the device runs (``current``), in the state folder; a command run with this set to 1
+# runs as it is (``defer``), and the variable goes with that process.
+CURRENT = "current"
+NO_DEFER_ENV = "CADGEN_NO_DEFER"
+_POINTABLE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+# What ``point`` did: the pointer written (``POINTED``), already naming this installation (``OK``),
+# left naming a newer release (``BEHIND``), or not a release it ever names (``NOT_RELEASE``: a
+# development build, a pre-release).
+POINTED = "pointed"
+BEHIND = "behind"
+NOT_RELEASE = "not a release"
 
 OK = "ok"
 MISSING = "missing"
@@ -319,39 +353,208 @@ def forget(version: str, folder=None) -> None:
     _forget_read()
 
 
+# --- the release the device runs ---------------------------------------------------------------
+
+
+def release_key(version: object) -> tuple[int, ...] | None:
+    """A release's numbers (``0.8.4`` -> ``(0, 8, 4)``), or ``None`` for anything the pointer never
+    names: a development build's ``<version>-dev.<time>``, a pre-release, no version at all."""
+    found = _POINTABLE.fullmatch(version) if isinstance(version, str) else None
+    return tuple(int(part) for part in found.groups()) if found else None
+
+
+def development() -> bool:
+    """Whether this process is a development install, which neither defers nor points nor is
+    superseded: a source tree (``cadgen._internal.channel``), a plugin that says ``dev``, or a
+    version the ``cadgen`` command named that is no release (``<version>-dev.<time>``)."""
+    from cadgen._internal import channel
+
+    named = os.environ.get(NAME_ENV) or ""
+    return channel.named() == channel.DEV or channel._source_tree() or (bool(named) and release_key(named) is None)
+
+
+def _pointer_path():
+    from cadgen.viewer.recents import state_dir  # the state folder's one definition, light to import
+
+    return state_dir() / CURRENT
+
+
+def _pointer(data: bytes | None) -> dict | None:
+    try:
+        found = json.loads(data) if data is not None else None
+    except ValueError:
+        return None
+    if not isinstance(found, dict) or release_key(found.get("release")) is None \
+            or not all(isinstance(found.get(key), str) for key in ("cadgen", "python")):
+        return None
+    return found
+
+
+def current(folder=None) -> dict | None:
+    """The installation the device runs: ``{"release", "cadgen", "python", "set"}``, the pointer's
+    (``<state>/current``) while its interpreter and console script are there (``alive``), else the
+    newest live registered release's (``set`` its registration's time), else ``None``. Read by the
+    proxy, every command's ``defer``, the engine's start and its supersession. Never raises."""
+    try:
+        found = _pointer(_read(_pointer_path() if folder is None else folder.path(CURRENT)))
+        if found is not None and alive(found):
+            return {key: found.get(key) for key in ("release", "cadgen", "python", "set")}
+        live = [record for record in records(folder) if release_key(record["version"]) is not None and alive(record)]
+        if not live:
+            return None
+        best = max(live, key=lambda record: release_key(record["version"]) or ())
+        return {"release": best["version"], "cadgen": best["cadgen"], "python": best["python"],
+                "set": best.get("registered")}
+    except Exception:  # noqa: BLE001 - every command reads it before its work: none fails for it
+        return None
+
+
+def point(version: str, found: tuple[str, str, str] | None = None, *, folder=None, explicit: bool = False) -> str:
+    """Make the installation ``found`` (this one by default), registered as ``version``, the one the
+    device runs: the pointer written whole, under the state folder's lock, when ``version`` is a
+    release past the current one (``current``) or the same release elsewhere; with ``explicit`` (the
+    install command asked for that release by name) whatever the current one is. ``POINTED``, ``OK``
+    (it names it already), ``BEHIND`` (a newer release runs; left alone) or ``NOT_RELEASE``.
+    ``OSError`` when the state folder cannot be written."""
+    mine = release_key(version)
+    if mine is None:
+        return NOT_RELEASE
+    found = found or targets()
+    if found is None:
+        raise OSError(f"this cadgen has no console script to point at ({sys.prefix})")
+    console, python, _prefix = found
+    from cadgen._internal.atomic_replace import write_bytes_atomic
+    from cadgen._internal.file_lock import state as state_lock
+
+    path = folder.path(CURRENT) if folder is not None else _pointer_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with state_lock(path.parent):
+        now = current(folder)
+        same = now is not None and (now["release"], now["cadgen"], now["python"]) == (version, console, python)
+        if same and _pointer(_read(path)) is not None:
+            return OK
+        if not same and now is not None and not explicit and (release_key(now["release"]) or ()) > mine:
+            return BEHIND
+        pointer = {"release": version, "cadgen": console, "python": python,
+                   "set": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        # One key a line, as a record: the proxy's sh reads the python and cadgen lines (``script``).
+        write_bytes_atomic(path, (json.dumps(pointer, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+    return POINTED
+
+
+def _read(path) -> bytes | None:
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(4096)
+    except OSError:
+        return None
+
+
+def newer() -> dict | None:
+    """The installation the device runs (``current``) when it is a release past this process's
+    (``cadgen.__version__``), else ``None``: what a command defers to (``defer``), what the engine's
+    start brings up (``cadgen.engine.client.CURRENT``), and what supersedes a running engine
+    (``cadgen.engine.daemon.SUPERSEDED``). A development install has none. Never raises."""
+    try:
+        if development():
+            return None
+        from cadgen import __version__
+
+        mine, found = release_key(__version__), current()
+        if mine is None or found is None:
+            return None
+        return found if (release_key(found["release"]) or ()) > mine else None
+    except Exception:  # noqa: BLE001 - a process that cannot tell runs as it is
+        return None
+
+
+def _runs_as_asked(argv: list[str]) -> bool:
+    """A command that runs as it is whatever the device runs: one the ``cadgen`` command was asked
+    for by version (``+<version>``, or ``CADGEN_NO_DEFER=1``, which the proxy sets for it), and the
+    setup of a release the install command was asked for by name (``setup --version``)."""
+    if argv[:1] and argv[0].startswith("+"):
+        return True
+    if argv[:1] and argv[0] in ("setup", "update"):
+        return any(arg == "--version" or arg.startswith("--version=") for arg in argv[1:])
+    return False
+
+
+def defer(argv: list[str]) -> int | None:
+    """At the top of the CLI's ``main``: when the device runs a release past this process's
+    (``newer``), that installation's console script run with ``argv`` and this environment (but the
+    name a development install is told, ``NAME_ENV``: a release knows its own), and its exit status;
+    ``None`` to run here: nothing newer, a pointer that is gone, a development install, or a command
+    that runs as asked (``_runs_as_asked``). ``exec`` on POSIX; on Windows a child with this process's
+    stdio, waited for, since an exec there breaks the pipes the host reads. ``NO_DEFER_ENV`` is
+    taken out of the environment: it is for this process alone."""
+    if os.environ.pop(NO_DEFER_ENV, "") == "1" or _runs_as_asked(argv):
+        return None
+    found = newer()
+    if found is None:
+        return None
+    run = [found["cadgen"], *argv]
+    env = {name: value for name, value in os.environ.items() if name != NAME_ENV}
+    try:
+        if WINDOWS:
+            import subprocess
+
+            return subprocess.call(run, env=env)
+        os.execve(run[0], run, env)
+    except OSError:
+        return None  # gone between the look and the run: this release does the work
+    return None  # not reached
+
+
 # --- the proxy --------------------------------------------------------------------------------
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cadgen command: runs the installation of cadgen that `+<version>`, CADGEN_VERSION or
-# a running engine names (cadgen._internal.proxy), through the one registered last.
+# The cadgen command: +<version> selects an installation, otherwise the release the device runs.
+# The selected CLI connects only to CADGEN_PORT (cadgen._internal.proxy).
 # Every cadgen writes this same file as it registers (cadgen doctor, the CAD app's server).
 if [ -n "$CADGEN_STATE_DIR" ]; then state=$CADGEN_STATE_DIR
 elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cadgen"
 else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cadgen"
 fi
-for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2>/dev/null); do
-  record="$state/installations/$name"
+# The pointer (the release the device runs) first, then each record, the one registered last first.
+for record in "$state/current" $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2>/dev/null); do
+  [ "$record" = "$state/current" ] || record="$state/installations/$record"
+  [ -f "$record" ] || continue
   python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
   console=$(sed -n 's/^ *"cadgen": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
   # Alive as ``alive`` says it: its python and its console script (an uninstalled cadgen leaves the python).
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cadgen._internal.proxy "$@"
 done
-case $1 in +?*) version=${{1#+}} ;; *) version= ;; esac
-echo "cadgen${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python 3.13 \\
---from cadgen${{version:+==$version}} cadgen doctor\\` once, outside any sandbox or with its permission" >&2
+# What cadgen._internal.proxy says (refusal), with the version named only when it is one.
+case $1 in +[0-9]*) version=${{1#+}} which="exactly this" ;; *) version= which="the latest" ;; esac
+case $version in *[!0-9A-Za-z.+_-]*) version= which="the latest" ;; esac
+echo "cadgen${{version:+ $version}} is not installed: run \\`curl -fsSL https://texttocad.dev/install.sh | sh\\`, \\
+or, to register $which release without changing any agent app, \\`uvx --no-config --managed-python \\
+--python 3.13 --from cadgen${{version:+==$version}} cadgen doctor\\`, once, outside any sandbox or with its \\
+permission" >&2
 exit 1
 """
 
 _CMD = """@echo off\r
 rem {mark}{revision}\r
-rem The cadgen command: runs the installation of cadgen that +<version>, CADGEN_VERSION or\r
-rem a running engine names (cadgen._internal.proxy), through the one registered last.\r
+rem The cadgen command: +<version> selects an installation, otherwise the release the device runs.\r
+rem The selected CLI connects only to CADGEN_PORT (cadgen._internal.proxy).\r
 setlocal EnableDelayedExpansion\r
 if defined CADGEN_STATE_DIR (set "state=!CADGEN_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cadgen-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cadgen-state")\r
 rem A record's python and cadgen lines are: space "KEY": "PATH", -- split at each quote, PATH is the\r
 rem fourth piece. Alive as alive() says it: its python and its console script (an uninstalled cadgen\r
-rem leaves the python), else the next record.\r
+rem leaves the python), else the next. The pointer (the release the device runs) first.\r
+if exist "!state!\\current" (\r
+  set "python="\r
+  set "console="\r
+  for /f usebackq^ tokens^=4^ delims^=^" %%p in (`findstr /c:"\\"python\\":" "!state!\\current"`) do set "python=%%p"\r
+  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cadgen\\":" "!state!\\current"`) do set "console=%%c"\r
+  if defined python if defined console (\r
+    set "python=!python:\\\\=\\!"\r
+    set "console=!console:\\\\=\\!"\r
+    if exist "!python!" if exist "!console!" goto run\r
+  )\r
+)\r
 for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') do (\r
   set "python="\r
   set "console="\r
@@ -363,12 +566,43 @@ for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') 
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-echo cadgen is not installed: run `uvx --no-config --managed-python --python 3.13 --from cadgen cadgen doctor` once, outside any sandbox or with its permission 1>&2\r
+echo cadgen is not installed: run `irm https://www.texttocad.dev/install.ps1 ^| iex`, or, to register the latest release without changing any agent app, `uvx --no-config --managed-python --python 3.13 --from cadgen cadgen doctor`, once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
-endlocal & "%python%" -P -m cadgen._internal.proxy %*\r
-exit /b %errorlevel%\r
+rem The command is the last line, and nothing follows it: cmd reads the next line of this file\r
+rem once the command returns, so `cadgen uninstall`, run through this file, appends\r
+rem the line that deletes it (remove_proxy); CADGEN_PROXY tells it which file that is.\r
+endlocal & set "CADGEN_PROXY=%~f0" & "%python%" -P -m cadgen._internal.proxy %*\r
 """
+
+
+PROXY_ENV = "CADGEN_PROXY"  # the batch proxy names itself to the python it runs (Windows)
+SELF_DELETE = '\r\n(goto) 2>nul & del "%~f0"\r\n'
+
+
+def remove_proxy(path: str, windows: bool = WINDOWS) -> None:
+    """Remove the proxy at ``path``. On Windows the proxy is a batch file, and the command removing it
+    (``cadgen uninstall``) usually runs through it: cmd reads a batch file as it runs it, and
+    reads its next line once a command returns, so a file gone by then is "The batch file cannot be
+    found" and exit 1, and nothing a process of its own deletes later runs reliably. So when this
+    process runs through that file (``CADGEN_PROXY`` names it), the line that deletes it is appended:
+    cmd reads it next, ``(goto) 2>nul`` ends the batch, and ``del`` runs with the file let go."""
+    if windows and _runs_through(path):
+        with open(path, "a", encoding="utf-8", newline="") as handle:
+            handle.write(SELF_DELETE)
+        return
+    os.remove(path)
+
+
+def _runs_through(path: str) -> bool:
+    """Whether this process was started by the batch proxy at ``path``."""
+    named = os.environ.get(PROXY_ENV, "")
+    if not named:
+        return False
+    try:
+        return os.path.normcase(os.path.realpath(named)) == os.path.normcase(os.path.realpath(path))
+    except OSError:
+        return False
 
 
 def script(windows: bool = WINDOWS) -> str:
@@ -436,8 +670,12 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
     return path, status, None
 
 
-def setup(version: str) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None]]:
-    """Register this installation as ``version`` and write the proxy: each ``(path, status, error)``."""
+def setup(version: str, *, explicit: bool = False) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None],
+                                                            tuple[str, str | None]]:
+    """Register this installation as ``version``, point the device at it when it is a release past
+    the current one (``point``; ``explicit``, whatever the current one is; never for a development
+    install, ``NOT_RELEASE``) and write the proxy: the record's and the proxy's ``(path, status,
+    error)``, and the pointer's ``(status, error)``."""
     try:
         path, status = register(version)
         registered: tuple[str, str, str | None] = (path, status, None)
@@ -447,11 +685,19 @@ def setup(version: str) -> tuple[tuple[str, str, str | None], tuple[str, str, st
         except (OSError, ValueError):
             where = version
         registered = (where, MISSING, f"{type(failure).__name__}: {getattr(failure, 'strerror', None) or failure}")
-    return registered, write_proxy()
+    pointed: tuple[str, str | None] = (NOT_RELEASE, None)
+    if registered[2] is None and not development():
+        try:
+            pointed = (point(version, explicit=explicit), None)
+        except OSError as failure:
+            pointed = (MISSING, f"{type(failure).__name__}: {failure.strerror or failure}")
+    return registered, write_proxy(), pointed
 
 
 def startup() -> None:
-    """As the CAD app's server starts: register this installation and write the proxy, silently."""
+    """As the CAD app's server or ``cadgen server`` starts: register this installation, point the
+    device at it when it is a release past the current one -- a host's plugin update that brought a
+    newer floor makes it current at its first start -- and write the proxy, silently."""
     try:
         version = own_version()
         if version:

@@ -113,7 +113,7 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(entry["updated"], 1.0)
         self.assertGreater(entry["opened"], 1.0, "a page's open of its id says when")
         self.assertTrue(self.change("pin", ident)[1]["recents"][0]["pinned"])
-        cached = self.tmp / "cache" / "documents" / ident / "document.xbf"
+        cached = RecentStore().registry.cache.path(f"documents/{ident}/document.xbf")
         cached.parent.mkdir(parents=True)
         cached.write_bytes(b"its document")
         self.assertEqual(self.change("remove", ident)[0], 400, "a model is deleted, never removed: the word is Delete")

@@ -959,6 +959,10 @@ class Server:
         self.three = Path(three) if three else find_three()
         self.touch = touch
         self.clients_active = lambda: False
+        # Whether no HTTP request but a page's watch has run in the last so many seconds, nor runs
+        # now (the application's, ``cadgen.viewer.engine_app.EngineApp.quiet``): a superseded engine
+        # steps aside only then (``daemon.Daemon.supersede``).
+        self.clients_quiet: Callable[[float], bool] = lambda _seconds: True
         self.on_close = lambda: None
         # A hold's client gone (``Daemon.hold``), by the name it held with: its MCP sessions end.
         self.on_hold_end: Callable[[str], None] = lambda _holder: None

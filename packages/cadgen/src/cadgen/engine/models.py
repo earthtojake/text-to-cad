@@ -155,7 +155,7 @@ class Models:
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
                 if (report.get("cache") or {}).get("unreadable"):
-                    self.cache.remove(ident)  # this build found its cache file broken: the idle save writes it again
+                    self.cache.refresh(ident)  # retain old bytes until this successful build is saved atomically
                 self.cache.touch(ident)
         held = self.registry() if declared else None
         if held is not None:
@@ -238,36 +238,37 @@ class Models:
             return {}
         ident, source = report["id"], report["source"]
         script = Path(source["script"])
-        old = held.get(ident) or {}
-        root = str(script.parent)
-        # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
-        # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cadgen run``
-        # of its home, always), the revision the cache and the delta compare, when it was built (the
-        # home's order) and when it was first built (``created``, the home's Created: kept from the
-        # record it had; a record from before the time was kept stays without one). The closure is
-        # its document's own (``previous``); which files it declared is no one's: they are exports.
-        found: dict[str, Any] = {
-            "id": ident, "kind": "model", "root": root, "home": registering.relative(script, root),
-            "entry": source["name"], "namespace": root, "name": source.get("explicit_name") or source["name"],
-            "revision": recorded, "fingerprint": source.get("fingerprint"), "module": source.get("module"),
-            "built": old["built"] if old.get("revision") == recorded and old.get("built") else time.time()}
-        if not old:
-            found["created"] = found["built"]
-        elif "created" in old:
-            found["created"] = old["created"]
-        if source.get("explicit_name") is not None:
-            found["line"] = source["line"]  # its claim of the name in its folder (``identity.claimed``)
-        if isinstance(source.get("declares"), list):
-            found["declares"] = source["declares"]  # the explicit names its script declared at this run
-        if facts is not None:
-            found["facts"] = facts
-        for key in ("opened", "pinned", "preview", "cache", "relocated"):  # the home's and the cache's, kept across builds
-            if key in old:
-                found[key] = old[key]
-        if not (report.get("cache") or {}).get("used"):
-            found.pop("relocated", None)  # a fresh document has paths at its new home
-        held.put(found)
-        return old
+        with held._lock(ident):
+            old = held.get(ident) or {}
+            root = str(script.parent)
+            # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
+            # code is (``root``, ``home``, ``entry``: the command that builds it again is ``python``
+            # of its home, always), the revision the cache and the delta compare, when it was built (the
+            # home's order) and when it was first built (``created``, the home's Created: kept from the
+            # record it had; a record from before the time was kept stays without one). The closure is
+            # its document's own (``previous``); which files it declared is no one's: they are exports.
+            found: dict[str, Any] = {
+                "id": ident, "kind": "model", "root": root, "home": registering.relative(script, root),
+                "entry": source["name"], "namespace": root, "name": source.get("explicit_name") or source["name"],
+                "revision": recorded, "fingerprint": source.get("fingerprint"), "module": source.get("module"),
+                "built": old["built"] if old.get("revision") == recorded and old.get("built") else time.time()}
+            if not old:
+                found["created"] = found["built"]
+            elif "created" in old:
+                found["created"] = old["created"]
+            if source.get("explicit_name") is not None:
+                found["line"] = source["line"]  # its claim of the name in its folder (``identity.claimed``)
+            if isinstance(source.get("declares"), list):
+                found["declares"] = source["declares"]  # the explicit names its script declared at this run
+            if facts is not None:
+                found["facts"] = facts
+            for key in ("opened", "pinned", "preview", "cache", "relocated"):  # the home's and the cache's, kept across builds
+                if key in old:
+                    found[key] = old[key]
+            if not (report.get("cache") or {}).get("used"):
+                found.pop("relocated", None)  # a fresh document has paths at its new home
+            held.put(found)
+            return old
 
     def hand_over(self, request: dict[str, Any]) -> dict[str, Any]:
         """A shape a program handed over (``api.hand_over``): its document's bytes read through the
@@ -321,23 +322,24 @@ class Models:
         held = self.registry()
         if held is not None:
             root = scope if os.path.isdir(scope) else str(Path(scope).parent)
-            previous = held.get(ident) or {}
-            found: dict[str, Any] = {
-                "id": ident, "kind": "shape", "root": root,
-                "home": registering.relative(scope, root), "entry": name, "namespace": root, "name": name,
-                "revision": recorded,
-                "built": previous["built"] if previous.get("revision") == recorded and previous.get("built")
-                else time.time()}
-            if not previous:  # first handed over now; an older record keeps what it has (``record``)
-                found["created"] = found["built"]
-            elif "created" in previous:
-                found["created"] = previous["created"]
-            if program:
-                found["program"] = registering.relative(program, root)  # what its words name (``shown``)
-            for key in ("opened", "pinned", "preview", "cache"):
-                if key in previous:
-                    found[key] = previous[key]
-            held.put(found)
+            with held._lock(ident):
+                previous = held.get(ident) or {}
+                found: dict[str, Any] = {
+                    "id": ident, "kind": "shape", "root": root,
+                    "home": registering.relative(scope, root), "entry": name, "namespace": root, "name": name,
+                    "revision": recorded,
+                    "built": previous["built"] if previous.get("revision") == recorded and previous.get("built")
+                    else time.time()}
+                if not previous:  # first handed over now; an older record keeps what it has (``record``)
+                    found["created"] = found["built"]
+                elif "created" in previous:
+                    found["created"] = previous["created"]
+                if program:
+                    found["program"] = registering.relative(program, root)  # what its words name (``shown``)
+                for key in ("opened", "pinned", "preview", "cache"):
+                    if key in previous:
+                        found[key] = previous[key]
+                held.put(found)
         server = self.register_page(ident)
         server.keep(ident, structure, shapes, version, data)
         self.cache.keep(ident, recorded, data)
@@ -392,7 +394,7 @@ class Models:
 
     def rebuild(self, ident: str) -> dict[str, Any] | None:
         """What the engine knows of a model document it does not hold: its state (``unsaved``), the
-        command that builds it again -- ``cadgen run`` and the script that defines it -- and why, in
+        command that builds it again -- ``python`` and the script that defines it -- and why, in
         words (the page's ``error``). None for a document it holds or never built. The engine never
         runs the command."""
         self.adopt(ident)
@@ -416,7 +418,7 @@ class Models:
         return {"error": unsaved(name, ident, command), "state": "unsaved", "rebuild": command}
 
     def command(self, ident: str) -> str | None:
-        """The command that builds model document ``ident`` again: ``cadgen run`` and the script that
+        """The command that builds model document ``ident`` again: ``python`` and the script that
         defines its model -- never a program that imported it and called it -- from this process's
         book or the registry's record. None for an id the engine never built."""
         with self.lock:
@@ -529,7 +531,8 @@ class Models:
         if leaving is None and not whole and self.daemon.pool.holds(worker):
             replies = []
             # Asked of the worker that built it (``via``): a child model's is its parent's script's.
-            self.daemon.handle({**order, "env": worker.environment, "via": worker.script}, replies.append)
+            self.daemon.handle({**order, "env": worker.environment, "via": worker.script,
+                                "execution": getattr(worker, "execution", None)}, replies.append)
             answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
             payload = base64.b64decode(answer.get("payload", ""))
         else:
@@ -670,14 +673,23 @@ class Models:
         if not is_id(ident):
             return
         with self.lock:
-            if ident in self.records:
+            before = self.records.get(ident)
+        if before is not None:
+            if self._working(before["worker"]):
                 return
+            server = self.daemon.server
+            if server is not None:
+                with server.load_lock:
+                    if ident in server.served and server.model_versions.get(ident) == before["version"]:
+                        return
         found = self.cache.found(ident)
         if found is None:
             return
         from cadgen.engine import registry as registering
 
         record, meta = found
+        if before is not None and before["revision"] == meta["revision"]:
+            return
         held = self.registry()
         program = registering.program(held, record)
         row = {"id": ident, "source": {"script": str(registering.home(held, record)), "name": record["entry"]},
@@ -685,7 +697,7 @@ class Models:
                "builtAt": record.get("built"), "version": secrets.token_hex(8),
                "files": [], "revision": meta["revision"]}
         with self.lock:
-            if ident in self.records:
+            if self.records.get(ident) is not before:
                 return
             self.records[ident] = row
         if self.daemon.server is not None:
@@ -710,20 +722,6 @@ class Models:
             doc = server.served.get(ident)
             return doc.xbf if doc is not None and server.model_versions.get(ident) == version else None
 
-    def unreadable(self, ident: str, why: str) -> Exception:
-        """Document ``ident``'s held bytes did not read (``build.Unreadable``, ``why``): its cache file
-        removed, with its record's ``cache`` (``Cache.remove``), so it is no longer held on disk and its
-        next build writes it again -- rather than every restart offering the same bytes and failing
-        on them. The refusal to answer with: that, and the command that builds it again."""
-        from cadgen.engine.serve import NotHeld
-
-        self.cache.remove(ident)
-        said = f"the engine's cache of {ident} does not read ({why}), and is removed"
-        found = self.rebuild(ident)
-        if found is None:
-            return NotHeld(said, "unsaved", self.command(ident))
-        return NotHeld(f"{said}: {found['error']}", found["state"], found["rebuild"])
-
     def disk_bytes(self, ident: str) -> bytes | None:
         """The bytes of document ``ident``'s cache file when it is at the revision the book holds, its
         read noted (its idle timer and its recency); else None."""
@@ -731,7 +729,7 @@ class Models:
             record = self.records.get(ident)
         if record is None or not self.cache.current(ident, record.get("revision")):
             return None
-        data = self.cache.read(ident)
+        data = self.cache.read(ident, record.get("revision"))
         if data is not None:
             self.cache.touch(ident)
         return data
@@ -751,7 +749,11 @@ class Models:
                           {"id": 1, "op": "result", "document": True, "name": name}, replies.append, data)
         answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
         if "done" not in answer:
-            raise ValueError(answer.get("failed") or f"{name} ({ident}): its cache file could not be read")
+            from cadgen.engine.document_migrations import DocumentCompatibilityError
+
+            error = DocumentCompatibilityError if answer.get("kind") == (
+                "cadgen.engine.document_migrations:DocumentCompatibilityError") else ValueError
+            raise error(answer.get("failed") or f"{name} ({ident}): its cache file could not be read")
         payload = base64.b64decode(answer.get("payload", ""))
         done = answer["done"]
         shapes, at = {}, 0

@@ -1,22 +1,10 @@
-"""A skill that runs cadgen must run its version by the `cadgen` command, and name its install command,
-pinned to this release.
+"""Skills pin their CLI/bootstrap, and the cadgen an environment of one's own installs, to the
+current release.
 
-The CAD plugin's server is one command,
-`uvx --no-config --managed-python --python 3.13 --from cadgen==<release> cadgen mcp`
-(cadgen._internal.launch): uv keeps one installation per requirement, and that installation
-registers itself and writes the `cadgen` command, `~/.local/bin/cadgen`
-(cadgen._internal.installations), which every skill runs as `cadgen +<release>` -- uvx cannot start
-in an agent's sandbox, the command can. The same installation, so the same warm daemon. A skill
-names the uvx command once, as `cadgen doctor`, which installs cadgen, registers it and writes the
-command when they are missing. A skill that runs cadgen any other way -- a `pip install -r
-requirements.txt` into the project's interpreter -- makes a second installation with a daemon of
-its own, and its docs may describe a cadgen that is not the one running.
-
-Stated as a criterion rather than a list, as before: "uses cadgen" is what the skill's docs
-TEACH (`cadgen ...`) or what its own Python imports. Skills that never touch cadgen
-(bambu-labs, dfam-check, gcode, sendcutsend, step-parts) carry no launch command, and a
-mention on a line that hands off to another skill (`$cad: cadgen stl build ...`) is that
-skill's command, not this one's.
+Models run with `cadgen run`, which makes each project's environment with the engine's own
+cadgen; the selected engine launches project workers in that interpreter. An environment a
+person made holds its own cadgen: a compatible one, not necessarily the same release.
+Skills that only hand off a cadgen command to another skill need no dependency.
 """
 
 from __future__ import annotations
@@ -25,21 +13,17 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.python.support.paths import add_repo_path
+
+add_repo_path("packages/cadgen/src")
+from cadgen.cli import read_skill_pin  # noqa: E402
+from cadgen.updates import INSTALL, INSTALL_WINDOWS  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 LAUNCH = "uvx --no-config --managed-python --python 3.13 --from cadgen=={version} {tool}"
-DEFINITIONS = ("- `cadgen` below means `cadgen +{version}` (`~/.local/bin/cadgen +{version}` where "
-               "`~/.local/bin` is not on your PATH)\n- `python` below means `cadgen +{version} run`\n")
-INSTALL = ("If `cadgen` is not on your PATH, or it says {version} is not installed, run\n"
-           "`{command}` once,\noutside any sandbox or with its permission: it installs cadgen, registers it, "
-           "writes the\n`cadgen` command and starts the engine. With the CAD app's server running, nothing else\n"
-           "needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed\n"
-           "shell cannot start the engine; when a command says no engine is running, run `cadgen server`\n"
-           "outside the sandbox once.\n")
-
-
 _HANDOFF_MARKER = re.compile(r"\$(?P<name>[a-z0-9-]+)")
 
 
@@ -95,31 +79,44 @@ class SkillLaunchCommand(unittest.TestCase):
                 if not _teaches_cadgen(skill):
                     self.assertNotIn("--from cadgen==", text, "a skill that never runs cadgen downloads nothing")
                     continue
-                self.assertIn(DEFINITIONS.format(version=VERSION), text)
-                self.assertIn(INSTALL.format(version=VERSION, command=LAUNCH.format(version=VERSION, tool="cadgen doctor")),
-                              text)
-
-    def test_no_skill_installs_cadgen_any_other_way(self) -> None:
-        # A requirements.txt naming cadgen is a second installation, with a daemon of its own.
-        for skill in SKILLS:
-            manifest = skill / "requirements.txt"
-            with self.subTest(skill=skill.name):
-                if manifest.is_file():
-                    lines = [line.split("#")[0].strip() for line in manifest.read_text(encoding="utf-8").splitlines()]
-                    self.assertFalse([line for line in lines if line.startswith("cadgen")], manifest)
+                self.assertIn(f"`cadgen` below means `~/.local/bin/cadgen +{VERSION}`", text)
+                self.assertEqual(read_skill_pin(skill / "SKILL.md"), VERSION)
+                setup = skill / "references" / "setup.md"
+                self.assertRegex(text, r"\]\(references/setup\.md(?:#[^)]*)?\)", "runtime setup must be reachable from the skill")
+                self.assertTrue(setup.is_file(), "the installed skill carries its own setup guide")
+                guide = setup.read_text(encoding="utf-8")
+                self.assertEqual(read_skill_pin(setup), VERSION)
+                self.assertIn(LAUNCH.format(version=VERSION, tool="cadgen server"), guide)
+                # The two remedies the command's refusal names, in its order (proxy.refusal).
+                self.assertLess(guide.index(INSTALL), guide.index(LAUNCH.format(version=VERSION, tool="cadgen doctor")))
+                self.assertIn(INSTALL_WINDOWS, guide)
+                if skill.name in {"cad", "dxf", "engineering-drawing"}:
+                    self.assertIn("Run models with `cadgen run model.py`.", text)
+                    self.assertIn("(references/setup.md#your-own-python-environment)", text)
+                # Models run with `cadgen run`; installing cadgen is the own-environment path alone.
+                self.assertIn("## Your own Python environment", guide)
+                self.assertIn(f"uv pip install --python <python> cadgen=={VERSION}", guide)
+                self.assertIn(f"uv run --with cadgen=={VERSION} pytest", guide)
+                self.assertNotIn("pip install cadgen", text)
+                self.assertNotRegex(text, r"`python` below means `cadgen[^`]*`")
+                self.assertIn("CADGEN_PORT", text + guide)
 
     def test_the_launch_command_and_the_refusal_are_cadgens_own(self) -> None:
         import sys
 
         sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
         from cadgen._internal.launch import launch_command, pinned
-        from cadgen._internal.proxy import NOT_INSTALLED
+        from cadgen._internal.proxy import refusal
 
-        self.assertEqual(launch_command("python", VERSION), LAUNCH.format(version=VERSION, tool="python"))
+        self.assertEqual(launch_command("cadgen server", VERSION), LAUNCH.format(version=VERSION, tool="cadgen server"))
         self.assertEqual(pinned(VERSION), f"cadgen +{VERSION}")
-        # The line the skills tell the agent to act on is the one the command says.
-        self.assertIn(f"{VERSION} is not installed", NOT_INSTALLED.format(version=VERSION))
-        self.assertIn(LAUNCH.format(version=VERSION, tool="cadgen doctor"), NOT_INSTALLED.format(version=VERSION))
+        # The lines the skills tell the agent to act on are the ones the command says: the install command
+        # first, then the registration of exactly this release, which every setup guide carries too.
+        for system, install in (("posix", INSTALL), ("nt", INSTALL_WINDOWS)):
+            said = refusal(VERSION, system)
+            with self.subTest(system=system):
+                self.assertTrue(said.startswith(f"cadgen {VERSION} is not installed: run `{install}`, or, "), said)
+                self.assertIn(LAUNCH.format(version=VERSION, tool="cadgen doctor"), said)
 
 if __name__ == "__main__":
     unittest.main()

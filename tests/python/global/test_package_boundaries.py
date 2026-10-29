@@ -75,13 +75,13 @@ _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
         r"\.github/",
     ),
     # Skills own their scripts/<tool> entrypoints; the repo's scripts/
-    # families, its venv and its dev manifests are not theirs to name.
+    # families and dev manifests are not theirs to name. A project's `.venv`
+    # is a user environment, like its models/ directory, not a repository dependency.
     "skills": (
         r"apps/",
         r"packages/",
         r"tests/",
         r"scripts/(?:bundle|dev|test|release|install|github-workflows)/",
-        r"\.venv",
         r"requirements-dev",
         r"AGENTS\.md",
         r"CONTRIBUTING\.md",

@@ -221,7 +221,9 @@ def load_kernel() -> None:
     installation's native libraries (macOS checks each once) is paid here, while nobody waits."""
     import build123d
     import OCP.TopoDS  # noqa: F401
+    from cadgen.engine import runtime
 
+    runtime.check_native(runtime.compatibility())
     from cadgen.engine.kernel import determinism, history, memo, trace  # noqa: F401
 
     build123d.Box(1, 1, 1)
@@ -265,7 +267,7 @@ def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
     from cadgen.engine.daemon import BYTECODE, RESTARTS
 
     # The worker's bytecode is the daemon's (``daemon.bytecode``), never a run's.
-    wanted = {name: value for name, value in environment.items() if name not in (*RESTARTS, *BYTECODE)}
+    wanted = {name: value for name, value in environment.items() if name not in (*RESTARTS, *BYTECODE, "CADGEN_ENGINE_WORKER")}
     wanted.update(own)
     for name in [name for name in os.environ if name not in wanted]:
         del os.environ[name]
@@ -421,7 +423,9 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     """A ``result`` request: the document of a model this worker built, as its structure and each
     part's shape bytes (``[key, size]`` in ``shapes``, the bytes after the line in order)."""
     from cadgen.engine import build as engine_build
+    from cadgen.engine import runtime
 
+    runtime.check_native(runtime.compatibility())
     if request.get("document"):
         # The engine's cache file of a document no worker holds: read as a held document's bytes are.
         source = engine_build.held_source(request.get("payload") or b"", str(request.get("name") or "document"))
@@ -434,7 +438,9 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     from cadgen.engine import previous
 
     _writer, closure = previous.read_record(source.xcaf)
-    answer = {"structure": source.structure, "closure": json.loads(closure) if closure else None,
+
+    answer = {"compatibility": runtime.compatibility(),
+              "structure": source.structure, "closure": json.loads(closure) if closure else None,
               "shapes": [[key, len(part)] for key, part in zip(keys, data)],
               "placements": [[list(path), matrix] for path, matrix in source.locals().items()]}
     if request.get("whole"):
@@ -543,6 +549,14 @@ def main() -> int:
     # process stands in cannot be renamed or deleted) and never stands in a folder others write.
     home, neutral = os.getcwd(), _neutral_folder()
     os.chdir(neutral)
+    from cadgen.engine import runtime
+
+    snapshot = runtime.dependencies()
+    if sys.pycache_prefix is not None:
+        # Reinstallation can preserve source size/mtime. A restarted worker uses the new
+        # installation's bytecode folder before importing its kernel or project dependencies.
+        sys.pycache_prefix = str(Path(sys.pycache_prefix) / "workers" / snapshot[:24])
+        os.environ["PYTHONPYCACHEPREFIX"] = sys.pycache_prefix
     own = kept()
 
     def leave() -> None:
@@ -554,7 +568,8 @@ def main() -> int:
     if "--standby" in sys.argv[1:]:
         load_kernel()
     resident = resident_mb()
-    send({"ready": os.getpid(), "rssMb": None if resident is None else round(resident)})
+    execution = runtime.describe()
+    send({"ready": os.getpid(), "rssMb": None if resident is None else round(resident), "execution": execution})
     gc.disable()
     threading.Thread(target=read, daemon=True).start()
     owed = False  # a collection, since the last request answered
@@ -625,6 +640,9 @@ def main() -> int:
             send({"id": ident, "failed": f"unknown request {op!r}"})
             continue
         try:
+            requested = runtime.validate(request.get("execution"))
+            if requested != execution or runtime.describe() != execution:
+                raise ValueError("the worker's Python environment changed; restart the selected engine before building again")
             adopt(request.get("env"), own)
             cwd = request.get("cwd")
             os.chdir(cwd or home)

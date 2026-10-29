@@ -351,6 +351,8 @@ class ExportTest(unittest.TestCase):
                 status = cli.main(list(argv))
             return status, out.getvalue(), err.getvalue()
 
+        from tests.python.support import engine_daemon
+        engine_daemon.bootstrap(dict(os.environ))
         status, out, err = run("export", str(self.xbf), str(self.folder / "json.stl"), "--json")
         self.assertEqual(status, 0, err)
         found = json.loads(out)

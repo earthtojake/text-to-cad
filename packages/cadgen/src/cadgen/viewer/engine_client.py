@@ -1,4 +1,4 @@
-"""HTTP access for a client of the installation's engine (never a document relay)."""
+"""HTTP access for a client of the explicitly selected engine (never a document relay)."""
 from __future__ import annotations
 
 import http.client
@@ -7,11 +7,11 @@ import threading
 from urllib.parse import urlsplit
 
 from cadgen.engine import daemon
-from cadgen.engine.client import _answering, request
+from cadgen.engine.client import _answering, missing, request
 
 
 def _door(address=None):
-    """Which engine the door at ``address`` (by default this installation's) names now: the identity
+    """Which engine the selected private door names now: the identity
     of the door a daemon reads (on Windows, of its port file, made anew at each start), or None when
     no engine answers there. A stat and an open of the door that writes nothing: some 15 us."""
     address = address or daemon.address()
@@ -39,19 +39,21 @@ class EngineClient:
         self.door = None  # the identity of the door that named ``endpoint`` (``_door``)
         self.address = None  # where that door is
 
-    def connect(self, *, fresh=False, start=True):
-        """The endpoint held, or -- when there is none, the engine that named it is gone, or
-        ``fresh`` -- the one the engine's door names now: an engine started when none answers,
-        unless ``start`` is false (``ConnectionError``)."""
+    def connect(self, *, fresh=False):
+        """Attach to the endpoint the private door names; no HTTP client starts an engine."""
         with self.lock:
-            if self.endpoint is not None and not fresh and (self.door is None or _door(self.address) != self.door):
+            selected = daemon.address()
+            if self.endpoint is not None and not fresh and (self.address != selected or self.door is None
+                                                            or _door(self.address) != self.door):
                 self.endpoint = None  # its engine is gone: its port, and the token sent there, anyone's
             if self.endpoint is None or fresh:
                 self.endpoint = None
-                answer = request({'op': 'http'}, start=start)
-                if not answer or 'failed' in answer:
-                    raise ConnectionError((answer or {}).get('failed', 'engine did not answer'))
-                self.address = daemon.address()
+                answer = request({'op': 'http'}, start=False)
+                if not answer:
+                    raise missing()
+                if 'failed' in answer:
+                    raise ConnectionError(answer['failed'])
+                self.address = selected
                 self.endpoint, self.door = answer, _door(self.address)
             return self.endpoint
 
@@ -65,11 +67,10 @@ class EngineClient:
             if self.endpoint is endpoint:
                 self.endpoint = None
 
-    def call(self, method, path, body=b'', headers=None, *, fresh=False, start=True):
-        # An engine restarted since the endpoint was read refuses its old token (same --port) or
-        # its old port: either is refused before any route runs, so it is sent once more, to the
-        # endpoint the door names now. ``start``: whether a call may start an engine to answer it.
-        endpoint = self.connect(fresh=fresh, start=start)
+    def call(self, method, path, body=b'', headers=None, *, fresh=False):
+        # A refused connection or credential is rediscovered through the private door before
+        # retrying. HTTP attachment never starts an engine.
+        endpoint = self.connect(fresh=fresh)
         for attempt in (1, 2):
             parsed = urlsplit(endpoint['url'])
             conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=600)
@@ -82,7 +83,7 @@ class EngineClient:
                 self._forget(endpoint)
                 if attempt == 2:
                     raise
-                endpoint = self.connect(fresh=True, start=start)
+                endpoint = self.connect(fresh=True)
                 continue
             except (OSError, http.client.HTTPException):
                 self._forget(endpoint)
@@ -92,6 +93,6 @@ class EngineClient:
             if not 200 <= answer[0] < 300:
                 self._forget(endpoint)  # the next call asks the door where the engine listens
                 if attempt == 1 and answer[0] == 403 and b'engine token required' in answer[2]:
-                    endpoint = self.connect(fresh=True, start=start)
+                    endpoint = self.connect(fresh=True)
                     continue
             return answer

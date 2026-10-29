@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest import mock
 
-from cadgen.engine import client, daemon, reader
+from cadgen.engine import client, daemon, reader, runtime
 from cadgen.engine.render import service
 
 # Windows' values: ``subprocess`` names them on Windows alone.
@@ -50,7 +50,10 @@ class WindowsConsoleTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="windowless-"))
         self.addCleanup(os.rmdir, folder)
         script = str(folder / "model.py")
-        for name, start in (("worker", lambda: daemon.Worker(script, dict(os.environ))),
+        # Collect caller metadata before capturing engine launches: Windows' platform query
+        # can start the stdlib's `ver` subprocess, which is not the worker under test.
+        execution = runtime.describe()
+        for name, start in (("worker", lambda: daemon.Worker(script, dict(os.environ), execution=execution)),
                             ("reader", lambda: reader.Reader()._start()),
                             ("render process", lambda: service.RenderProcess(folder / "part.xbf", dict(os.environ)))):
             with self.subTest(process=name):

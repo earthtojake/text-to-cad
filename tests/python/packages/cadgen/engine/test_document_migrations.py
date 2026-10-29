@@ -20,7 +20,7 @@ from OCP.TDF import TDF_ChildIterator
 from OCP.XCAFDoc import XCAFDoc, XCAFDoc_DocumentTool, XCAFDoc_Material
 from OCP.collections import Sequence_TDF_Label
 
-from cadgen.engine import build, document, document_migrations, export, mesh
+from cadgen.engine import build, document, document_migrations, export, mesh, previous
 from cadgen.engine.colors import srgb_to_linear
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -147,7 +147,7 @@ class DocumentMigrationsTest(unittest.TestCase):
             self.assertEqual(loaded.closure, EXPECTED["closure"])
             self.assertEqual(loaded.migration["from"], "xbf/8")
             self.assertEqual(loaded.migration["writer"], EXPECTED["writer"])
-            self.assertEqual(document.written_format(loaded.writer), "xbf/9")
+            self.assertEqual(document.written_format(loaded.writer), previous.FORMAT)
             self.assertAlmostEqual(sum(bd.Compound(p.shape).volume for p in loaded.prototypes),
                                    EXPECTED["total_volume"], places=7)
             for prototype in loaded.prototypes:
@@ -155,6 +155,23 @@ class DocumentMigrationsTest(unittest.TestCase):
                 self.assertGreater(len(triangulated.indices), 0)
                 self.assertEqual(triangulated.unmeshed, {})
         self.assert_original_untouched()
+
+    def test_saved_native_material_format_nine_opens_without_rekeying_its_original_closure(self):
+        raw = document.read_bytes(self.original)
+        with mock.patch.object(previous, "FORMAT", "xbf/9"), mock.patch.object(
+                document, "_writer", return_value="cadgen.engine xbf/9 (cadgen 0.8.1)"):
+            document_migrations.upgrade(raw)
+        saved = document.to_bytes(raw)
+        path = self.folder / "native-nine.xbf"
+        path.write_bytes(saved)
+        loaded = document.Loaded(path)
+        self.assertEqual(document.written_format(loaded.writer), "xbf/10")
+        self.assertEqual(loaded.migration["from"], "xbf/9")
+        self.assertEqual(loaded.migration["materials"], 0)
+        self.assertEqual(loaded.migration["previous"]["from"], "xbf/8")
+        self.assertEqual(loaded.closure, EXPECTED["closure"])
+        self.assert_structure(loaded)
+        self.assertEqual(path.read_bytes(), saved, "opening does not rewrite the saved format-nine bytes")
 
     def test_old_physical_values_convert_units_without_catalogue_substitution_and_keep_metadata(self):
         raw = document.read_bytes(self.original)

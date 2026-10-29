@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cadgen.engine.ids import model_id
 from cadgen.engine.registry import Registry
@@ -21,6 +22,23 @@ class RecentStoreTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_ports_share_recents_pins_and_thumbnails(self) -> None:
+        path = str(self.tmp / 'part.step')
+        with mock.patch.dict(os.environ, {'CADGEN_PORT': '3246', 'CADGEN_CACHE_DIR': str(self.tmp / 'cache')}):
+            first = RecentStore(self.tmp)
+            first.opened(path)
+            first.pin(path, True)
+            image = first.thumbnail(path, b'\x89PNG first')
+        with mock.patch.dict(os.environ, {'CADGEN_PORT': '3247', 'CADGEN_CACHE_DIR': str(self.tmp / 'cache')}):
+            second = RecentStore(self.tmp)
+            self.assertEqual([entry.path for entry in second.list()], [path])
+            self.assertEqual(second.read_thumbnail(image), b'\x89PNG first')
+            second.opened(path)
+            self.assertTrue(second.list()[0].pinned)
+            second.remove(path)
+        self.assertEqual(first.list(), [])
+        self.assertEqual(first.registry.state.root, second.registry.state.root)
 
     def test_pins_lead_then_the_most_recent_and_a_removal_forgets(self) -> None:
         store = RecentStore(self.tmp)
@@ -158,7 +176,7 @@ class RecentStoreTest(unittest.TestCase):
         writers = [subprocess.Popen([sys.executable, "-c", code, str(self.tmp), name], env={**os.environ}) for name in ("x", "y")]
         for writer in writers:
             self.assertEqual(writer.wait(120), 0)
-        documents = self.tmp / "documents"
+        documents = Registry(self.tmp).state.root / "documents"
         # A record of another schema, a torn one, and a folder that is no id: none of them is read.
         for name, text in (("00000000-0000-4000-8000-000000000001", json.dumps({"schema": 99})),
                            ("00000000-0000-4000-8000-000000000002", '{"schema": 1, "id": "00000000'), ("notes", "{}")):

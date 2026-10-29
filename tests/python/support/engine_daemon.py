@@ -20,6 +20,7 @@ from __future__ import annotations
 import locale
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
 import threading
@@ -34,7 +35,26 @@ TIMEOUT_SECONDS = 300.0
 STACK_LINES = 30  # a thread's innermost frames: where it waits
 
 
-def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
+def free_port() -> int:
+    """Allocate an explicit test port without touching the machine's default server."""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
+def bootstrap(env: dict[str, str]) -> None:
+    """Explicitly start or attach to the server this fixture selected: with the self-update off unless
+    ``env`` says otherwise, so no test's engine reads a receipt it did not write
+    (``cadgen._internal.auto_update``)."""
+    from unittest import mock
+    from cadgen.engine.client import connect
+
+    with mock.patch.dict(os.environ, {"CADGEN_UPDATE_CHECK": "0", **env}, clear=True):
+        with connect(start=True):
+            pass
+
+
+def isolate(cleanup: Callable[..., Any], *, start: bool = True) -> dict[str, str]:
     """An engine, a state and a cache folder of the caller's own (``CADGEN_ENGINE_DIR``,
     ``CADGEN_STATE_DIR``, ``CADGEN_CACHE_DIR``) in ``os.environ`` until ``cleanup`` (a module's
     ``unittest.addModuleCleanup``, a test's ``addCleanup``) stops an engine started there, puts the
@@ -47,26 +67,32 @@ def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
     folder = tempfile.mkdtemp(prefix="cadgen-test-")
     # A short folder of its own for the engine's door: a socket's path has a length limit on POSIX.
     engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
-    given = {"CADGEN_ENGINE_DIR": engine, "CADGEN_STATE_DIR": os.path.join(folder, "state"),
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    given = {"CADGEN_PORT": str(port), "CADGEN_ENGINE_DIR": engine, "CADGEN_STATE_DIR": os.path.join(folder, "state"),
              "CADGEN_CACHE_DIR": os.path.join(folder, "cache")}
     patch = mock.patch.dict(os.environ, given)
     patch.start()
     cleanup(shutil.rmtree, folder, True)
     cleanup(shutil.rmtree, engine, True)
     cleanup(patch.stop)
-    cleanup(_stop_engine, engine)
+    cleanup(_stop_engine, engine, str(port))
+    if start:
+        from cadgen.engine.client import connect
+        with connect(start=True):
+            pass
     return given
 
 
-def _stop_engine(engine: str) -> None:
-    """The engine in folder ``engine`` stopped, when one runs there."""
-    if not any(name.endswith((".door", ".port")) for name in os.listdir(engine)):
-        return
+def _stop_engine(engine: str, port: str | None = None) -> None:
+    """Stop only this fixture's selected server."""
     from unittest import mock
-
     from cadgen.engine import api
 
-    with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine}):
+    if not os.path.isdir(engine) or not any(name.endswith((".door", ".port")) for name in os.listdir(engine)):
+        return
+    with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine, **({"CADGEN_PORT": port} if port else {})}):
         api.stop()
 
 
@@ -88,6 +114,19 @@ def watched(env: dict[str, str], cleanup: Callable[..., Any]) -> dict[str, str]:
     cleanup(shutil.rmtree, folder, True)
     path = os.pathsep.join(item for item in (str(SITE), env.get("PYTHONPATH", "")) if item)
     return {**env, "PYTHONPATH": path, JOURNAL: folder}
+
+
+def started(env: dict[str, str], cleanup: Callable[..., Any]) -> dict[str, str]:
+    """Explicit live-server fixture, with its own port and caller environment restored at cleanup."""
+    from unittest import mock
+
+    env = watched({**env, "CADGEN_PORT": str(free_port())}, cleanup)
+    patch = mock.patch.dict(os.environ, env, clear=True)
+    patch.start()
+    cleanup(patch.stop)
+    cleanup(_stop_engine, env["CADGEN_ENGINE_DIR"], env["CADGEN_PORT"])
+    bootstrap(env)
+    return env
 
 
 def run(command: Sequence[str], *, env: dict[str, str], timeout: float = TIMEOUT_SECONDS, input: str | None = None,

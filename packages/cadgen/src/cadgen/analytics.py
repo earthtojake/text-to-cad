@@ -1443,11 +1443,12 @@ class Recorder:
         down for its installation -- read again for each batch, as the engine outlives the server that wrote it, and
         may have been started by a script that was told nothing: the CAD app's own recorder reads it too, since
         the server that is told runs in another process (``cadgen/_internal/channel.py``)."""
-        from cadgen._internal.channel import RECORD, UNKNOWN, recorded
+        from cadgen._internal.channel import GENERIC, RECORD, UNKNOWN, recorded
 
-        if self._named is not None:
+        if self._named is not None and self._named != GENERIC:
             return self._named
-        return recorded(path=self.path.with_name(RECORD) if self.path else None) or UNKNOWN  # beside the settings
+        # Beside the settings. A process told the generic channel reports the record where a server wrote one.
+        return recorded(path=self.path.with_name(RECORD) if self.path else None) or self._named or UNKNOWN
 
     @_guarded(lambda: None)
     def _decision(self) -> Any:
@@ -1508,10 +1509,15 @@ class Recorder:
         """Whose use this process's batches count: the agent app a session's initialize names, and how it shows CAD
         (``cadgen.mcp.server``), or the browser viewer's page as the client ``cadgen-viewer`` in a ``browser``
         (``cadgen.viewer.engine_app``)."""
+        from cadgen._internal.channel import GENERIC, named
+
         name, version = client.get("name"), client.get("version")
         with self._lock:
             self._context["client"] = {"name": _token(name or "unknown", 64), "version": _token(version, 32)}
             self._context["presentation"] = presentation
+            if self._named == GENERIC:  # the handshake may have refined it to the host's own (``channel.refine``)
+                self._named = named()
+                self._context["channel"] = self._channel()
 
     @_guarded(lambda: None)
     def called(self, tool: str, ok: bool, reason: str | None = None) -> None:

@@ -44,6 +44,7 @@ import locale
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -217,19 +218,24 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-def stop_engine(top: str, engine_dir: str) -> None:
-    """Stop the engine daemon a file left running in its own engine directory, if it left one."""
+def free_port() -> int:
+    """Reserve an OS-selected loopback port long enough to choose a test address."""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
+def stop_engine(top: str, engine_dir: str, port: str | None = None) -> None:
+    """Stop the test-owned selected server in this isolated directory."""
     try:
         names = os.listdir(engine_dir)
     except FileNotFoundError:
         return
     if not any(name.endswith((".door", ".port")) for name in names):
         return
-    env = {**os.environ, "CADGEN_ENGINE_DIR": engine_dir,
-           "PYTHONPATH": os.pathsep.join(filter(None, [os.path.join(top, "packages", "cadgen", "src"),
-                                                       os.environ.get("PYTHONPATH", "")]))}
-    stopped = subprocess.run([sys.executable, "-P", "-c", "from cadgen.engine import api; api.stop()"],
-                             env=env, capture_output=True, text=True, timeout=ENGINE_STOP_SECONDS)
+    extra = {"CADGEN_PORT": port} if port is not None else {}
+    stopped = _engine_python(top, "from cadgen.engine import api; api.stop()",
+                             CADGEN_ENGINE_DIR=engine_dir, **extra)
     if stopped.returncode:
         raise RuntimeError(f"the test engine daemon in {engine_dir} did not stop: {stopped.stdout}{stopped.stderr}")
 
@@ -276,7 +282,7 @@ _PERSON_PLACES = (
     "os.environ.pop('CADGEN_STATE_DIR', None)\n"
     "os.environ.pop('CADGEN_LAUNCHER_DIR', None)\n"
     "places.append((str(state_dir()), proxy_path()))\n"
-    "print(json.dumps({'places': places, 'engine': daemon._tag(versioned=False)}))\n"
+    "print(json.dumps({'places': places, 'engine': daemon._tag()}))\n"
 )
 
 
@@ -328,7 +334,7 @@ def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
     try:
         return _run_file(path, top, verbose, env, started, places)
     finally:
-        stop_engine(top, env["CADGEN_ENGINE_DIR"])
+        stop_engine(top, env["CADGEN_ENGINE_DIR"], env.get("CADGEN_PORT"))
 
 
 def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: float,
@@ -397,11 +403,17 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = []
+            ports: set[int] = set()
             for index, path in enumerate(files):
+                port = free_port()
+                while port in ports:
+                    port = free_port()
+                ports.add(port)
                 # A state folder and a command folder of its own too: the engine's registry of
                 # documents (and Recents), the installations and the ``cadgen`` command are the
                 # developer's, never a test's.
                 env = {**os.environ, **shared, "CADGEN_ENGINE_DIR": os.path.join(engines, f"e{index}"),
+                       "CADGEN_PORT": str(port), "CADGEN_ENGINE_STANDBY": "0",
                        "CADGEN_STATE_DIR": os.path.join(engines, f"s{index}"),
                        "CADGEN_CACHE_DIR": os.path.join(engines, f"c{index}"),
                        "CADGEN_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}

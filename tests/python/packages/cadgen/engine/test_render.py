@@ -34,6 +34,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from tests.python.support import engine_daemon
 from unittest import mock
 
 import numpy as np
@@ -757,6 +758,7 @@ class DaemonRenderTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
         self.addCleanup(self.cli, "stop")
+        self.env = engine_daemon.started(self.env, self.addCleanup)
 
     def cli(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, "-m", "cadgen.engine", *args], cwd=self.folder, env=self.env,
@@ -814,6 +816,7 @@ class DaemonRenderTest(unittest.TestCase):
             self.assertFalse(_alive(pid), "gone with the daemon")
 
     def test_daemon_false_draws_in_this_process(self) -> None:
+        self.assertEqual(self.cli("stop").returncode, 0)
         # A seam of the Python function's alone: no command draws outside the engine.
         self.build(10, daemon=False)
         code = ("import json; from cadgen.engine import api; print(json.dumps(api.snapshot('XBF/pair.xbf', "

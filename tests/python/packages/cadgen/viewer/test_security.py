@@ -302,7 +302,7 @@ def setUpModule() -> None:
     # (``engine_daemon.isolate``); each test still names its own engine folder.
     from tests.python.support import engine_daemon
 
-    engine_daemon.isolate(unittest.addModuleCleanup)
+    engine_daemon.isolate(unittest.addModuleCleanup, start=False)
 
 
 if __name__ == "__main__":

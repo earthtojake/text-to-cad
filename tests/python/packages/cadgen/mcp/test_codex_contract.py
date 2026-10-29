@@ -3,7 +3,8 @@
 The server answers Codex (its client names itself ``codex-mcp-client``) with tab surfaces the agent
 opens once and then drives. ``codex_contract.json`` records that conversation -- initialize, the
 catalog, the resource, and the launches each surface returns -- with the page's build and this run's
-paths replaced by placeholders. A change to Codex's side has to change that file on purpose.
+paths, release and selected port replaced by placeholders. A change to Codex's side has to change
+that file on purpose.
 """
 
 from __future__ import annotations
@@ -50,6 +51,13 @@ def converse(tmp: Path) -> dict:
             return call(name, arguments)
 
     initialized = server.handle("initialize", initialize_params(CODEX_INITIALIZE), None)
+    from cadgen.engine.daemon import selected_port
+
+    version, port = initialized["serverInfo"]["version"], selected_port()
+    initialized["instructions"] = (initialized["instructions"]
+                                   .replace(f"cadgen=={version}", "cadgen==<version>")
+                                   .replace(f"port {port}.", "port <port>.")
+                                   .replace(f"CADGEN_PORT={port}", "CADGEN_PORT=<port>"))
     initialized["serverInfo"]["version"] = "<version>"
     uri = server.handle("resources/list", {}, None)["resources"][0]["uri"]
     record = {

@@ -124,7 +124,7 @@ class WorkCopyTest(unittest.TestCase):
             for key in keys:
                 self.assertTrue(Path(prepared.env[key]).is_relative_to(out), key)
             self.assertEqual(len({prepared.env[key] for key in keys}), len(keys))
-            self.assertEqual(prepared.env["CADGEN_ENGINE_PORT"], "0")
+            self.assertGreater(int(prepared.env["CADGEN_PORT"]), 0)
             self.assertEqual(prepared.env["DO_NOT_TRACK"], "1")
             self.assertNotIn("PYTHONDONTWRITEBYTECODE", prepared.env)
             self.assertTrue(Path(prepared.env["PYTHONPYCACHEPREFIX"]).is_relative_to(out))

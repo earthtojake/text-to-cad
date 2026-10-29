@@ -72,6 +72,7 @@ def setUpModule() -> None:
     # The builds below run on an engine daemon of this module's own, never the developer's.
     ENGINE = str(root / "engine")
     WATCHED.update(engine_daemon.watched({}, unittest.addModuleCleanup))
+    engine_daemon.bootstrap(_env())
 
 
 def tearDownModule() -> None:

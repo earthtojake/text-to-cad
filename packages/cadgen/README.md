@@ -22,8 +22,13 @@ if __name__ == "__main__":
     arm()
 ```
 
+`cadgen run` builds a model in its project's environment -- the project's dependencies and
+the engine's own cadgen, made by uv once -- starting the selected engine when none runs; the
+other commands attach to the running engine (which `cadgen server` in another terminal, or the
+MCP bootstrap, starts too).
+
 ```bash
-python arm.py                                 # builds it in the engine's warm worker
+cadgen run arm.py                             # builds it in the engine's warm worker
 cadgen export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
 cadgen snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
 cadgen serve XBF/arm.xbf                      # the document on a local page
@@ -33,7 +38,7 @@ cadgen inspect XBF/arm.xbf                    # what it holds, then its build cl
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cadgen viewer [FILE]`: a
-launcher for the installation’s engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cadgen mcp`: a stateless stdio peer of the engine’s
+launcher for the selected engine's one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cadgen mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
 engineering drawings (`@eng_drawing`).
 
@@ -51,7 +56,7 @@ the two disagree, the engine's README is right.
 
 | Document | What it is for | Go there when |
 |---|---|---|
-| [`src/cadgen/engine/README.md`](src/cadgen/engine/README.md) | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| [`src/cadgen/engine/README.md`](src/cadgen/engine/README.md) | The engine: models and decorators, running a model in its project's environment, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -70,16 +75,17 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    `$TMPDIR`), else `/tmp/cadgen-<uid>` -- and cadgen's own
    state in the user's state folder: settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
-   file, the user's one page token, every installation's engine record (the port it rolled to while
-   3245 is another program's; both this user's alone), and each registered installation's record
-   (`installations/<version>.json`: its python, its console script, its environment);
-   never geometry and never source. In the
-   platform's cache folder (`~/.cache/cadgen`, by 0.7's rule) it keeps, under `documents/` and
-   nowhere else there, each model document's bytes as it last built them: its own file, never a
+   file, the user's one page token, each engine's connection metadata (keyed by its selected port; this user's alone), and each registered installation's record
+   (`installations/<version>.json`: its python, its console script, its environment), and the
+   release the device runs (`current`).
+   Document records, Recents, thumbnails and cached document bytes are shared across
+   ports, as are preferences, the page token and installation registry. State stores
+   neither geometry nor source. In the platform's cache folder (`~/.cache/cadgen`, by
+   0.7's rule), under `documents/`, it keeps each model document's last-built bytes: its own file, never a
    declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
-   restart opens every project at once; and under `pycache/` the bytecode its own processes compile of the libraries they load
-   (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
+   restart opens saved documents; and under `pycache/` the bytecode its own processes compile of the libraries they load
+   (`PYTHONPYCACHEPREFIX`, with worker bytecode separated by its startup dependency snapshot), regenerable too, so nothing is written
    beside a library or a model. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -182,9 +188,12 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name
     that never existed.
 
+    Read-only diagnostics may identify an older engine through its status protocol.
+    This restores no authoring API and never admits builds against that engine.
+
     **Persisted-document exception.** Saved documents have a separate compatibility contract:
     opening, viewing, importing and exporting supported formats must not require their source or
-    a rebuild just because cadgen was upgraded. The engine reads `xbf/8` and `xbf/9`; it converts
+    a rebuild just because cadgen was upgraded. The engine reads `xbf/8`, `xbf/9` and `xbf/10`; it converts
     `xbf/8` material metadata in memory, without executing model code or changing source or cache
     bytes. A separate migration record identifies the conversion while the original build closure
     and toolchain provenance remain unchanged. Explicit export to a different XBF path can save
@@ -203,8 +212,10 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 18. **Nothing waits on the network.** Once installed, cadgen works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (`analytics.py`, usage
     counts under a random id, sent by default once a `cadgen` command has said so, and never
-    after the person's no) and the daily version check (`updates.py`). Both run in the
-    background and fail silently: no start, command, build, request or tool call waits on them.
+    after the person's no) and the hourly version check (`updates.py`), with the download of a
+    newer release the engine's self-update makes where the install command set the computer up
+    (`_internal/auto_update.py`). They run in the background and fail silently: no start,
+    command, build, request or tool call waits on them.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, cadgen's observer of the engine), a drawing, a
     crash -- is kept in a small file beside the settings (`analytics.spool`), which the CAD app's
@@ -229,32 +240,54 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     document out of memory, for the engine's cache to give back, only when nothing watches it (the
     engine's **Document lifetime**).
 
-20. **One engine serves the installation; tabs select documents at `/<uuid>`.** A tab names
-    a model's id, or a file's id after a launcher registers it; Python scripts are never
-    documents. A page never replaces or re-executes the engine. Its one page and document reads
-    share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no
-    standalone serving mode, and no Python function starts, stops or serves it (law 21). Launchers
-    exit; clients closing never stop it. Kernel operations run in child processes, never in the
-    engine's request threads. There are no page sessions: the explorer opens where it was last, else
-    the person's home folder, and a launch's folder resolves only the relative files it names; each
-    MCP session owns its views and resource. The
-    stdio shim owns only connection metadata, and the one act a text host's `cad_show` asks of
-    the person's machine: it opens their browser, in the environment its host gave it, and the
-    engine, which runs in whatever environment started it, never does. The shim tells the engine,
-    on its session, whether the page opened before its host has the answer, and keeps nothing of
-    it after; the engine counts a page as open in a browser only once told it opened. Sidebar
-    sharing stays in memory, and host quirks stay in the shim and page. The viewer's routes are
-    the page's alone (`cad_http`), behind the session capability delivered in UI-only launch
-    metadata. Only the person answers telemetry, through a page or the telemetry CLI. See the
-    engine's **Architecture**.
+20. **The port selects the engine; tabs select documents at `/<uuid>`.** The
+    default is 3245; `CADGEN_PORT` or CLI `--port` selects another. Clients from
+    different Python environments attach to that port's private authenticated
+    transport. `cadgen server` starts the engine explicitly, and MCP bootstrap and
+    `cadgen run` start or attach to it; a start first retires an older cadgen release's engine on
+    the port once it is idle, and brings up the engine of the release the device runs
+    (`<state>/current`) where that is newer than its own. An engine of an older release than the
+    current one is superseded and steps aside by itself once nothing holds it, nothing runs and
+    nothing has been asked of it for a while, first starting its successor when pages watch it, so
+    they reload on it; nothing asks it to. An engine in
+    use is never displaced, and no release retires a newer one's. Every `cadgen` command defers
+    to the current release as it starts (an older process runs that installation's command with
+    its arguments), so an agent app's pinned server line is a floor, written once at install and
+    never rewritten for a release. Ordinary model calls,
+    `serve`, `viewer` and document operations only attach: a missing engine, a conflicting
+    listener or an engine they do not meet fails, with no automatic start, local fallback,
+    rollover or retirement. A client, a project's worker and the engine meet by protocol,
+    document format and native line (system, architecture, OCP major.minor), never by
+    release: a project of another cadgen release that meets the engine is served, and told
+    once. Model workers run in the calling project's interpreter, with that environment's
+    dependencies and its own cadgen: the environment `cadgen run` makes holds the engine's cadgen,
+    and that rule is for one where cadgen was installed by hand.
+    The persistent document library, cache, Recents and thumbnails are shared across ports.
+    No decorator selects a port and no Python connection API selects an engine.
+    A tab names a model's id, or a registered file's id; scripts are never documents.
+    A page never replaces or re-executes the engine. Its page and document reads
+    share one authenticated HTTP listener. Launchers exit; clients closing never
+    stop the engine. Kernel operations run in child processes, never request threads.
+    There are no page sessions: the explorer opens where it was last, else home;
+    each MCP session owns its views and resource, and a launch's folder resolves only the
+    relative files it names. The stdio shim owns only connection metadata, and the one act a
+    text host's `cad_show` asks of the person's machine: it opens their browser, in the
+    environment its host gave it, and the engine, which runs in whatever environment started
+    it, never does. The shim tells the engine, on its session, whether the page opened before
+    its host has the answer, and keeps nothing of it after; the engine counts a page as open in
+    a browser only once told it opened. Sidebar sharing stays in memory, and host quirks stay
+    in the shim and page. The viewer's routes are the page's alone (`cad_http`), behind the
+    session capability delivered in UI-only launch metadata. Only the person answers
+    telemetry, through a page or the telemetry CLI. See the engine's **Architecture**.
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** `export`, `snapshot` and `inspect` are functions of the root
     (`cadgen.export`, ...) and commands that call them; serving, the engine's status, stopping it
     and running it (`cadgen serve`, `status`, `stop`, `server`), and deleting a document (`cadgen
     delete`, which the home's Delete is too), are commands only, with no function of the root. Every successful server-backed build reports its id and localhost
-    viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
-    URL.
+    viewer URL, including a build with file outputs. Explicit offline `Model.build(daemon=False)`, `export(..., daemon=False)` and
+    `snapshot(..., daemon=False)` run cold in the caller, with no server required,
+    no live document and no served URL. Failure to attach never selects this mode.
 
 22. **A verb's option is about the picture or the path, never the model.** `export` takes a
     document and destinations: what the file holds, its parts and their placement, colours and
@@ -265,7 +298,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     assembly in a state (`cadgen.ap242.posed`).
 
 23. **Push, not pull: a model is what its last run told the engine.** The engine's knowledge of a
-    model comes from a run an agent or a person starts (`python model.py`, `cadgen run model.py`),
+    model comes from a run an agent or a person starts (`cadgen run model.py`),
     which pushes the model's code, its key and its document to the engine. The engine never reads a
     script to learn what a model is, never watches one, never infers a document from a path on
     disk, and never runs code on its own: a script edited and not run changes nothing the engine
@@ -383,43 +416,102 @@ src/cadgen/
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the state directory
   language.py            # the language the person chose for the CAD views
-  updates.py             # the daily version check, for a copy nothing else keeps current
+  updates.py             # the hourly version check, and the notice of a newer release
   assets.py              # where the bundled runtime is
   check_fonts.py         # `python -m cadgen.check_fonts`: the font that breaks
                          #   `import build123d`
-  _internal/             # the launch command, the installations' registry and the proxy
+  _internal/             # the launch command, the installations' registry, the release
+                         #   the device runs (<state>/current, which every command
+                         #   defers to) and the proxy
                          #   it writes (installations: ~/.local/bin/cadgen, which the
                          #   skills run as `cadgen +<version>`; written as `cadgen mcp`
-                         #   starts and by `cadgen doctor`, never by another command), the
-                         #   proxy's resolver (proxy), the font guard,
+                         #   or `cadgen server` starts and by `cadgen doctor`, never by
+                         #   another command), the
+                         #   proxy's resolver (proxy), the project environments `cadgen run`
+                         #   makes with uv (projects), the font guard,
                          #   the lazy kernel (lazy_kernel: `import build123d` binds, the
                          #   kernel loads on first use; cadgen-lazy-kernel.pth, at the root
                          #   of site-packages, installs it at interpreter start),
                          #   the engine observer and the telemetry sender, the install
-                         #   channel, atomic replace, file locks (the state folder's one
+                         #   channel, the self-update (auto_update), atomic replace,
+                         #   file locks (the state folder's one
                          #   lock: `file_lock.state`), the CLI derivation
   _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced
                          #   when the wheel is packaged, never committed, never edited
 ```
 
-Commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and
-`server` are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
-robot among them); `cadgen urdf|sdf|srdf validate` the validators; `cadgen
-doctor` the setup (the installation registered, the `cadgen` command written, the engine started),
-a skill's pin and what cadgen left behind that nothing needs, which `cadgen doctor --prune` removes
-(`_internal/leftovers.py`: engine records of an older format, the bytecode of installations no longer
-registered, cache folders no record names; none written in the last seven days); `cadgen run` a model script by the installation's python; `cadgen viewer` the engine page launcher;
-`cadgen mcp` the stateless proxy an agent host starts; and `cadgen telemetry` the person's answer. A
-model builds by running its script: `python model.py`, or `cadgen +<version> run model.py` through
-the `cadgen` command, which picks the installation by the first that names one, in this order
-(`_internal/proxy.py`): `+<version>`, `CADGEN_VERSION`, the engine held by this shell's host,
-any running engine (the newest version first), and the newest installation registered.
+Start a standalone server explicitly, or let the MCP bootstrap or `cadgen run` start it:
+
+```bash
+uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen server
+```
+
+`cadgen run model.py` builds a model: the engine's installation runs it in the project's
+environment, which holds the project's dependencies (its `requirements.txt`, the project
+itself, the script's inline `# /// script` metadata) and the engine's own cadgen, created with
+uv once and kept under the cache folder's `envs/` -- so the script, its worker and the engine
+run one cadgen by construction, and a dependency change or an engine upgrade makes a new
+environment. Its Python is the project's `.python-version` or `requires-python`, else the
+engine's; `--refresh` makes the environment again, `--show-env` prints its folder (the
+engine's **Running a model**). `python model.py` from an environment where cadgen was
+installed by hand attaches too: client, engine and worker meet by protocol, document format
+and native line, never by release (law 20), and an older project cadgen is served and nudged
+once to update. Either way the builds run in warm workers of the project's interpreter, on the
+selected engine; set `CADGEN_PORT` in both environments when using another port.
+
+Commands: `cadgen run` builds a model script in its project's environment, starting the
+selected engine when none runs; `cadgen export`, `snapshot`, `serve`, `inspect`, `status`,
+`stop`, `delete` and `server` are the engine's verbs (`snapshot` draws every file the viewer
+opens, a DXF or a robot among them); `cadgen urdf|sdf|srdf validate` validates robot descriptions;
+`cadgen viewer` launches the selected engine's page; `cadgen mcp` is the stdio peer
+an agent host starts; and `cadgen telemetry` records the person's answer.
+`cadgen doctor` checks setup, registers the installation (the release the device runs from then
+on, when it is one past the current one) and writes the global
+`cadgen` command without starting an engine. Its `--prune` removes records and
+caches nothing needs, as reported by `_internal/leftovers.py`. `cadgen setup`
+(also `cadgen update`), which the install command `curl -fsSL https://texttocad.dev/install.sh | sh`
+runs, sets up or updates text-to-cad in every agent app it finds, each by its own
+command (Claude Desktop's config merged where it has no CAD server, a `.bak` beside it; one it has
+is kept, whatever release it names), gives the agents without a
+plugin the skills alone through the Skills CLI (`npx skills add`), removes second copies,
+retires an older engine on the selected port once it is idle, then does what `doctor`
+does, makes its release the one the device runs (`<state>/current`, when it is past the current
+one; `--version`, the install command's for a release asked for by name, whatever the current one
+is), and keeps a receipt that `cadgen uninstall` takes back (with `--purge`, cadgen's
+state and cache folders too); `--dry-run` prints either one's plan alone. An app's server line
+is written once and is a floor: every command defers to the current release
+(`_internal/installations.py`), so the next session an app starts runs it, with nothing to
+restart. From then on the
+engine on that port runs a newer release's `cadgen setup` itself, within the hour of the
+release (`_internal/auto_update.py`), or at once when the update card asks; `CADGEN_UPDATE_CHECK=0`
+turns that and the version check off.
+For a version or connection conflict, `cadgen doctor --json` reports the current CLI,
+registered installations, known engines and discoverable agent configuration, and with
+`--python <python>` an environment where cadgen was installed by hand (one `cadgen run` makes
+holds the engine's own cadgen). Omit `--json` to read the report as text.
+These diagnostic modes inspect without registering an installation, changing
+configuration, or starting or stopping an engine. Discovery covers supported local
+provider configuration and registered or cached plugins; it does not scan every
+virtual environment or establish what a running agent host has loaded. The report
+states these limits. Remedies are suggestions to apply explicitly, including
+updating a project's cadgen or the engine, or configuring distinct ports. JSON includes a schema
+version, findings and remedies. Diagnostic exit codes are `0` for no required
+failures (warnings may remain, a release apart among them), `3` for an incompatible
+project or engine (another protocol, a document format it cannot read, or another OCP
+line, the finding naming which), and `5` for an unavailable or invalid required
+interpreter, skill, engine or port; invalid arguments return `2`.
+The registered proxy accepts `~/.local/bin/cadgen +<version> <verb>` to select a
+CLI installation; use `cadgen.cmd` on Windows, or its `CADGEN_LAUNCHER_DIR` path.
+Use the explicit proxy path when a virtual environment with a cadgen of its own is active, so
+that its ordinary `cadgen` console script cannot shadow the dispatcher. A model script runs with
+`cadgen run`; in an environment where cadgen was installed by hand, with that environment's
+actual `python`, never the proxy.
 
 Coming from 0.7: cadgen 0.7.x kept a cache store, which can hold gigabytes, at
 `~/.cache/cadgen` (macOS and Linux; `$XDG_CACHE_HOME/cadgen` when that is set),
 `%LOCALAPPDATA%\cadgen` (Windows) or the folder `CADGEN_CACHE_DIR` named: its `objects/` and
-`index/`. 0.8 keeps its document cache in that folder's `documents/` and its engine's bytecode in
-`pycache/`, and neither reads nor writes 0.7's store beside it, nor the state files only 0.7 writes
+`index/`. 0.8 keeps the shared document cache in that folder's `documents/`
+and the engine's bytecode under `pycache/`, and neither reads nor writes 0.7's store beside it, nor the state files only 0.7 writes
 (its sidebar views, its snapshot browser's lock, its viewer's log, its Recents log). Whether a 0.7
 is still installed cannot be told from here (0.7 never registered itself; it lives in uv's
 environments and the agent apps' plugin configs), so they retire themselves: `cadgen doctor` says

@@ -20,9 +20,13 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    from cadgen.engine.cli import run
+    from cadgen.engine.cli import VERBS, answered
+    from cadgen._internal.installations import startup
 
-    return run(ENGINE_VERB, list(argv) if argv is not None else None, prog)
+    args = build_parser(prog).parse_args(argv)
+    if args.port is None or 1 <= args.port <= 65535:
+        startup()
+    return answered(VERBS[ENGINE_VERB][2], args, prog)
 
 
 if __name__ == "__main__":

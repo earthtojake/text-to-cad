@@ -223,8 +223,9 @@ class ReattachmentDaemonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, engine, True)
         self.env = {**os.environ, "CADGEN_ENGINE_DIR": engine, "CADGEN_STATE_DIR": str(self.folder / "state"),
                     "CADGEN_CACHE_DIR": str(self.folder / "cache"), "CADGEN_LAUNCHER_DIR": str(self.folder / "bin"),
-                    "CADGEN_ENGINE_PORT": "0", "CADGEN_ENGINE_STANDBY": "0", "DO_NOT_TRACK": "1"}
+                    "CADGEN_PORT": str(engine_daemon.free_port()), "CADGEN_ENGINE_STANDBY": "0", "DO_NOT_TRACK": "1"}
         self.addCleanup(self.stop)
+        engine_daemon.bootstrap(self.env)
         self.registry = Registry(self.env["CADGEN_STATE_DIR"], self.env["CADGEN_CACHE_DIR"])
 
     def stop(self):
@@ -247,6 +248,7 @@ class ReattachmentDaemonTest(unittest.TestCase):
         script.write_text(SCRIPT.format(options=""), encoding="utf-8")
         self.run_script(script)
         self.stop()
+        engine_daemon.bootstrap(self.env)
         first = model_id(script, "part")
         digest = self.cached(first)
         self.registry.update(first, lambda row: {**row, "preview": {"thumbnail": "kept.png"}, "opened": 3})
@@ -271,6 +273,7 @@ class ReattachmentDaemonTest(unittest.TestCase):
         self.assertIsNone(self.registry.get(second))
         self.assertEqual(self.cached(third), digest)
         self.stop()
+        engine_daemon.bootstrap(self.env)
         self.run_script(script, warm=True)
         before = self.registry.get(third)
         copy = self.folder / "copy"
@@ -289,6 +292,7 @@ class ReattachmentDaemonTest(unittest.TestCase):
         script.write_text(SCRIPT.format(options='(name="named")'), encoding="utf-8")
         self.run_script(script)
         self.stop()
+        engine_daemon.bootstrap(self.env)
         ident = model_id(script, "part", "named")
         digest = self.cached(ident)
         script.rename(self.folder / "elsewhere.py")

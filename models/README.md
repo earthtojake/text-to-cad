@@ -49,17 +49,23 @@ project delivers them and because something outside the model reads them:
 
 ## Build and snapshot
 
-From a model's `src/` folder, with the engine's environment (cadgen on the path):
+From a model's `src/` folder, `cadgen run` builds it: it starts the engine when none is
+running (or uses the plugin's) and makes the folder's Python environment with the engine's
+own cadgen. Select the same `CADGEN_PORT` everywhere (default 3245). To build with this
+checkout's cadgen instead, run the script with the `.venv`'s Python (the projects' own
+notes say `python SCRIPT.py`) against an engine you started, or make a development install,
+whose `cadgen run` installs the checkout ([CONTRIBUTING.md](../CONTRIBUTING.md#the-engine-server)).
 
 ```
-python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
+cadgen run SCRIPT.py                     # the models its __main__ calls: each prints id: and view:
 cadgen snapshot "$ID" OUT.png            # drawn by OCCT
 cadgen export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
-A model script is Python and takes no options: running it asks the engine to build each
-model its `__main__` calls, in the script's warm worker (the engine starts on demand;
-`cadgen stop` stops it), so a second run of an unchanged model replays it from memory.
+A model script is ordinary Python and owns its arguments. Running it asks the selected
+engine to build each model its `__main__` calls, in a worker using that environment's
+Python; `cadgen stop` stops the engine. A second run of an unchanged model replays it
+from memory. Use `Model.build(daemon=False)` explicitly for an offline build.
 A script's models count as one run of the memo's last four, however many it builds, so a
 robot and its links replay together. Nothing is written beside a model: no sidecar, no
 cache.

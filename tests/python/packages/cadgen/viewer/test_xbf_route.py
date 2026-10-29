@@ -68,12 +68,14 @@ class XbfRouteTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.base = Path(os.path.realpath(tempfile.mkdtemp(prefix="viewer-xbf-")))
         cls.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        cls.saved = {name: os.environ.get(name) for name in ("CADGEN_ENGINE_DIR", "CADGEN_ENGINE_MESH")}
+        cls.saved = {name: os.environ.get(name) for name in ("CADGEN_ENGINE_DIR", "CADGEN_ENGINE_MESH", "CADGEN_PORT")}
         # The daemon this test starts is its own: its own socket folder, one part meshed at a time.
-        os.environ.update({"CADGEN_ENGINE_DIR": str(cls.state), "CADGEN_ENGINE_MESH": "inline"})
+        os.environ.update({"CADGEN_ENGINE_DIR": str(cls.state), "CADGEN_ENGINE_MESH": "inline",
+                           "CADGEN_PORT": str(engine_daemon.free_port())})
         (cls.base / "models.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
         env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
-        # Built as a script runs: through this test's own engine daemon.
+        engine_daemon.bootstrap(env)
+        # Built as a script runs: attached to this explicitly started engine.
         done = engine_daemon.run([sys.executable, "models.py"], cwd=cls.base, env=env)
         assert done.returncode == 0, done.stderr
         cls.document = cls.base / "XBF" / "block.xbf"
@@ -316,7 +318,7 @@ def setUpModule() -> None:
     # (``engine_daemon.isolate``); each test still names its own engine folder.
     from tests.python.support import engine_daemon
 
-    engine_daemon.isolate(unittest.addModuleCleanup)
+    engine_daemon.isolate(unittest.addModuleCleanup, start=False)
 
 
 if __name__ == "__main__":

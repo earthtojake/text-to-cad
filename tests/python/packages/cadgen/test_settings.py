@@ -61,6 +61,34 @@ class StateFolderTest(unittest.TestCase):
         self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8"))["language"], {"locale": "ja"})
         self.assertEqual(channel.recorded(path=state / "install-channels.json"), "claude-github")
 
+    def test_the_generic_channel_is_refined_by_the_hosts_handshake(self) -> None:
+        # The Agent Plugins standard's mcp.json names `agent-plugins`, which Codex reads over its own
+        # config: a server told it takes Codex's channel as initialize names the client, for itself and
+        # for its installation's record; a process told the generic one reports that record.
+        import os
+        from unittest import mock
+
+        from cadgen._internal import channel
+
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        state = tmp / "state"
+        state.mkdir()
+        record = state / "install-channels.json"
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "agent-plugins"}):
+            self.assertEqual(channel.channel(), "agent-plugins", "nothing written down yet")
+            self.assertIsNone(channel.refine(None), "a host without a config of its own")
+            self.assertEqual(os.environ["CADGEN_INSTALL_CHANNEL"], "agent-plugins")
+            self.assertEqual(channel.refine("codex-github"), "codex-github")
+            self.assertEqual(os.environ["CADGEN_INSTALL_CHANNEL"], "codex-github")
+            self.assertEqual(channel.channel(), "codex-github")
+        self.assertEqual(channel.recorded(path=record), "codex-github")
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "agent-plugins"}):
+            self.assertEqual(channel.channel(), "codex-github", "another process told the generic one: the record")
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "claude-github"}):
+            self.assertIsNone(channel.refine("codex-github"), "a channel a plugin named is never refined")
+            self.assertEqual(channel.channel(), "claude-github")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,7 +49,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
 
 # The engine snapshot's options (``cadgen.engine.snapshot``).
 SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "width", "height",
-                      "size_profile", "pose", "annotation", "measurements", "json"})
+                      "size_profile", "pose", "annotation", "measurements", "json", "port"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
 # generated parser to compare against a signature, so the declaration IS the contract, and a
@@ -63,22 +63,29 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "mcp": frozenset(),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
+    # A model built: its script run in its project's environment (uv makes it once), on the engine;
+    # the script's own arguments after it, untouched.
+    "run": frozenset({"script", "args", "port", "refresh", "show_env"}),
     # The engine's verbs (cadgen.engine.cli), each a command of its own.
-    "export": frozenset({"source", "destinations", "json"}),
+    "export": frozenset({"source", "destinations", "json", "port"}),
     "snapshot": SNAPSHOT,
     "serve": frozenset({"document", "port", "three"}),
-    "inspect": frozenset({"document", "ref", "query", "json"}),
-    "status": frozenset({"json"}),
-    "stop": frozenset({"json"}),
-    "delete": frozenset({"documents", "json"}),
+    "inspect": frozenset({"document", "ref", "query", "json", "port"}),
+    "status": frozenset({"json", "port"}),
+    "stop": frozenset({"json", "port"}),
+    "delete": frozenset({"documents", "json", "port"}),
     "server": frozenset({"port", "rotate_token"}),
+    # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
+    # for which apps, and the release the install command was asked for (`--version`, which the
+    # device's pointer then follows); and `uninstall`, which takes it out again.
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "port", "json", "release"}),
+    "update": frozenset({"dry_run", "only", "no_telemetry", "port", "json", "release"}),
+    "uninstall": frozenset({"dry_run", "only", "purge", "port", "json"}),
 }
 
 # Commands that own their parser outright and mirror no function.
 UNCLASSIFIED = {
     "doctor",
-    # The installation's python with the arguments, whatever they are: no parser of its own.
-    "run",
     # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
     # one port, the --json announce line) is not a function signature to mirror.
     "viewer",
@@ -134,10 +141,12 @@ class Manifest(unittest.TestCase):
         # No backwards compatibility: a retired command has no entry and no module, so it gets the
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "step snapshot", "stl build", "stl snapshot", "3mf build",
-                        "3mf snapshot", "glb build", "glb snapshot", "store", "daemon", "daemon status", "xbf", "where"):
+                        "3mf snapshot", "glb build", "glb snapshot", "store", "daemon", "daemon status", "xbf", "where",
+                        "install"):
             self.assertNotIn(command, cli._COMMANDS)
         for module in ("cadgen.cli.build", "cadgen.engine.shape_input", "cadgen.cli.step_build", "cadgen.cli.step_snapshot", "cadgen.cli.stl_build",
-                       "cadgen.cli.where", "cadgen.cli.store", "cadgen.cli.daemon", "cadgen.cli.daemon_status", "cadgen.step", "cadgen.store", "cadgen.daemon"):
+                       "cadgen.cli.where", "cadgen.cli.store", "cadgen.cli.daemon", "cadgen.cli.daemon_status", "cadgen.step", "cadgen.store", "cadgen.daemon",
+                       "cadgen.cli.install"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 

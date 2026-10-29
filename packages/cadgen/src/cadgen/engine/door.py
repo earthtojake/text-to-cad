@@ -71,13 +71,13 @@ def pair(folder: Path, ident: str) -> tuple[Path, Path]:
     return folder / f"{ident}.up", folder / f"{ident}.down"
 
 
-def _private(folder: Path) -> bool:
+def _private(folder: Path, *, repair: bool = True) -> bool:
     """Whether ``folder`` (made when missing) is a real folder, this user's, closed to everyone else.
     A folder of this user's opened to others is closed again: it is in the engine's folder, which
     is this user's alone (``daemon.folder_refusal``), so only this user made it so."""
     folder.mkdir(mode=0o700, exist_ok=True)
     found = os.lstat(folder)
-    if stat.S_ISDIR(found.st_mode) and found.st_uid == os.getuid() and found.st_mode & 0o077:
+    if repair and stat.S_ISDIR(found.st_mode) and found.st_uid == os.getuid() and found.st_mode & 0o077:
         os.chmod(folder, 0o700)  # a real folder (lstat): no link followed
         found = os.lstat(folder)
     return stat.S_ISDIR(found.st_mode) and found.st_uid == os.getuid() and not found.st_mode & 0o077
@@ -109,6 +109,9 @@ def answering(door: Path) -> bool:
 class Connection:
     """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``)."""
 
+    engine_identity: dict[str, Any]  # what each request echoes: the engine's protocol, release, port, instance
+    engine: dict[str, Any]  # what the engine said of itself greeting it (``client._greet``)
+
     def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any) -> None:
         self.reader = reader
         self.writer = writer
@@ -128,14 +131,16 @@ class Connection:
         self.close()
 
 
-def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
+def dial(door: Path, timeout: float = GREETING_SECONDS, *, repair: bool = True) -> Connection | None:
     """A connection to the daemon reading ``door``, or None when none reads it or it never greets.
     ``PermissionError`` when this process may not make its pair in the engine's folder (a sandbox
-    that forbids writing there)."""
+    that forbids writing there). ``repair=False`` leaves existing permissions untouched and
+    removes a newly created empty clients folder after its temporary pair is unlinked."""
     folder = door.parent / CLIENTS
     ident = secrets.token_hex(ID_CHARACTERS // 2)
     up, down = pair(folder, ident)
     opened: list[int] = []
+    made_folder = not folder.exists()
 
     def take(path: Path, flags: int) -> int:
         fd = _open(path, flags)
@@ -143,7 +148,7 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
         return fd
 
     try:
-        if not _private(folder):
+        if not _private(folder, repair=repair):
             return None
         os.mkfifo(up, 0o600)
         os.mkfifo(down, 0o600)
@@ -172,6 +177,11 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
         for path in (up, down):
             try:
                 path.unlink()
+            except OSError:
+                pass
+        if made_folder and not repair:
+            try:
+                folder.rmdir()  # another connection may hold it: only remove an empty folder
             except OSError:
                 pass
 
