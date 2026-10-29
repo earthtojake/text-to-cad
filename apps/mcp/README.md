@@ -180,12 +180,9 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   a `cadgen` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. The channel is reported with the
-  counts; it decides nothing there. The agent's `cad_http` reads the setting with
-  `GET /__cad/analytics` and turns it off with `POST /__cad/analytics`, body
-  `{"share":false}` (base64 in the tool call). This works with no open page and
-  in text-only hosts. Opt-out deletes the installation ID and requests deletion
-  of data sent under it. The reply's `saved:false` means persisting the choice
-  failed; agents cannot opt in.
+  counts; it decides nothing there. No tool of the agent's reads or changes it:
+  the person answers in the menu or with `cadgen telemetry`. Opt-out deletes the
+  installation ID and requests deletion of data sent under it.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -225,13 +222,12 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   answer and language, the update check. One route is the server's own, not the
   viewer's: `/__cad/browser/open`, which opens the web viewer's page of what the view shows
   in the person's browser, for Open in browser. Only the clipboard stays the host's: a
-  view copies through its frame. `cad_sync` and `cad_capture_reply` remain app-only
-  and are absent in text-only hosts. `cad_http` is shared with agents: without
-  an app capability, only telemetry status and opt-out are authorized. Every
+  view copies through its frame. `cad_sync`, `cad_capture_reply` and `cad_http` are
+  app-only and absent in text-only hosts. Every
   page launch includes a session capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
   carry it. The page sends `x-cadgen-app` with HTTP calls, and the same capability
-  as the `app` argument of `cad_sync` and `cad_capture_reply`, which refuse a call
+  as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
   without it: a host is asked to keep app-only tools from the model, and the server
   does not rely on it. The server validates
   it before routing or serving cached ranges. An arbitrary guard header, view
@@ -337,12 +333,14 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
 
 ## Protocol migration
 
+`cad_http` is app-only, as the page's other tools are: agents no longer read or turn
+off telemetry through it (the person does, in the menu or with `cadgen telemetry`). The
+page is unchanged, so the protocol is too.
 Protocol 9 replaces protocol 8: `cad_sync` and `cad_capture_reply` take the session's
 app capability as an argument, as `cad_http` takes it as a header, and refuse a call
 without it or with another session's; a page from an earlier build says CAD was updated.
 Protocol 8 replaced protocol 7: reopen restored views so their launch carries the
-app capability. `cad_telemetry` is removed, with no alias; agents use `cad_http`
-with `GET /__cad/analytics` or opt-out `POST` and base64 `eyJzaGFyZSI6ZmFsc2V9`.
+app capability. `cad_telemetry` is removed, with no alias.
 The obsolete `/__cad/features` route and shared client's `features()` are removed.
 Quick Edit has no enable/disable setting in either app; stale `features.quickEdit`
 values have no reader and cannot hide it. Settings files need no conversion.

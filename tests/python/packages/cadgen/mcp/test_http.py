@@ -172,14 +172,10 @@ class HttpSessionsTest(unittest.TestCase):
     def test_two_sessions_share_engine_and_router_but_not_conversation_views(self):
         first, second = self.proxy(), self.proxy()
         self.assertNotEqual(first.session, second.session)
-        # Agent access works over the real transport before any view has opened.
-        status = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/__cad/analytics'})
-        self.assertEqual(status['structuredContent']['status'], 200)
-        self.assertIn('sharing', json.loads(status['content'][0]['text']))
-        refused = self.tool(first, 'cad_http', {'method': 'POST', 'url': '/__cad/analytics',
-                            'body': base64.b64encode(b'{"share":true}').decode()})
+        # Over the real transport, a request without the page's capability is refused, never routed.
+        refused = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/__cad/analytics'})
         self.assertTrue(refused['isError'])
-        self.assertEqual(refused['structuredContent']['status'], 403)
+        self.assertNotIn('structuredContent', refused)
         info = request({'op': 'status'})
         sessions = {item['id'] for item in info['sessions'] if item['kind'] == 'mcp'}
         self.assertTrue({first.session, second.session} <= sessions)
@@ -269,8 +265,8 @@ class HttpSessionsTest(unittest.TestCase):
         proxy.notify('notifications/initialized', {})
         first = proxy.session
         self.assertEqual(EngineClient().call('DELETE', '/mcp', headers={'Mcp-Session-Id': first})[0], 200)
-        status = self.tool(proxy, 'cad_http', {'method': 'GET', 'url': '/__cad/analytics'})
-        self.assertEqual(status['structuredContent']['status'], 200)
+        views = self.tool(proxy, 'cad_view')
+        self.assertEqual(views['structuredContent'], {'views': []})
         second = proxy.session
         self.assertNotEqual(second, first)
         from cadgen.engine.api import stop

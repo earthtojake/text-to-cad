@@ -535,7 +535,7 @@ class CadApp:
                     if type(payload) is not dict:
                         raise ValueError("an analytics request is an object")
                     if pathname == "/__cad/analytics":
-                        response.send_json(200, self._consent(payload.get("share"), by=request.consent_by))
+                        response.send_json(200, self._consent(payload.get("share")))
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
@@ -727,13 +727,13 @@ class CadApp:
 
     # --- usage stats (telemetry) --------------------------------------------
 
-    def _consent(self, share=None, *, by=None) -> dict:
+    def _consent(self, share=None) -> dict:
         """The app menu's Share anonymous usage data toggle: whether sharing is on and why, and, from the person's
         click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
         ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL
 
-        changed = self.analytics.choose(share, by=by or self.consent_by) if isinstance(share, bool) else None
+        changed = self.analytics.choose(share, by=self.consent_by) if isinstance(share, bool) else None
         found = self.analytics.status()
         return {"sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL,
                 **({"saved": bool(changed.get("saved"))} if changed is not None else {})}

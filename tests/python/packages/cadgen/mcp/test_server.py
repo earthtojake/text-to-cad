@@ -225,12 +225,13 @@ class TabServerTest(_Session):
         def request(url, headers=None, body=None, method="GET"):
             return self.call("cad_http", {"method": method, "url": url, "headers": headers or {},
                                          "body": base64.b64encode(json.dumps(body).encode()).decode() if body is not None else ""})
-        for url in ("/__cad/server", "/__cad/pick", "/__cad/recents", "/__cad/asset?file=x",
+        # Refused before anything routes it, the range cache included.
+        for url in ("/__cad/server", "/__cad/pick", "/__cad/recents", "/__cad/asset?file=x", "/__cad/analytics",
                     "/__cad/analytics/activity", "/__cad/analytics?share=true"):
             with self.subTest(url=url):
                 blocked = request(url, {"x-cadgen-viewer": "1", "range": "bytes=0-20", "if-range": "guessed"})
                 self.assertTrue(blocked["isError"])
-                self.assertEqual(blocked["structuredContent"]["status"], 403)
+                self.assertNotIn("structuredContent", blocked)
         for bad in ("guessed", other._app_token):
             self.assertTrue(request("/__cad/analytics", {"x-cadgen-app": bad})["isError"])
         self.assertEqual(request("/__cad/server", {"X-Cadgen-App": token})["structuredContent"]["status"], 200)
@@ -271,11 +272,11 @@ class TabServerTest(_Session):
                        if "entrypoints" in value.get("openai/ui", {})}
         self.assertEqual(entrypoints, {"cad_home": "global", "cad_tab": "thread", "cad_file": "file"})
         agent = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") != ["app"]}
-        self.assertEqual(agent, {"cad_open", "cad_show", "cad_view", "cad_screenshot", "cad_http"} | START.keys())
+        self.assertEqual(agent, {"cad_open", "cad_show", "cad_view", "cad_screenshot"} | START.keys())
         # The page's own: its sync, its answer to a capture, and the viewer's routes, which carry the rest.
         page = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") == ["app"]} - set(entrypoints)
-        self.assertEqual(page, {"cad_sync", "cad_capture_reply"})
-        # All but one read: cad_http turns the person's telemetry off when they ask.
+        self.assertEqual(page, {"cad_sync", "cad_capture_reply", "cad_http"})
+        # All but the page's requests (its library, settings and telemetry answer among them) and the files the agent writes read.
         self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_http", "cad_export", "cad_snapshot"])
         uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
         self.assertRegex(uri, r"^ui://cad/[0-9a-f]{16}/app\.html$")
@@ -607,7 +608,7 @@ class InlineServerTest(_Session):
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
         agent = {name for name, tool in tools.items() if tool.get("_meta", {}).get("ui", {}).get("visibility") != ["app"]}
         # A chat shows files: no home.
-        self.assertEqual(agent, {"cad_show", "cad_view", "cad_screenshot", "cad_http"} | START.keys())
+        self.assertEqual(agent, {"cad_show", "cad_view", "cad_screenshot"} | START.keys())
         uri = tools["cad_show"]["_meta"]["ui"]["resourceUri"]
         self.assertFalse(any(key.startswith("openai/") for tool in tools.values() for key in tool.get("_meta", {})))
         self.assertEqual((tools["cad_view"]["inputSchema"]["required"], tools["cad_screenshot"]["inputSchema"]["required"]), (["view"], ["view"]))
@@ -679,7 +680,7 @@ class InlineServerTest(_Session):
             self.assertEqual(self.http("GET", route)[0], 405)
             self.assertEqual(self.http("POST", route, {"model": 7})[0], 400)
             agent = self.call("cad_http", {"method": "POST", "url": route, "body": base64.b64encode(b"{}").decode()})
-            self.assertEqual(agent["structuredContent"]["status"], 403)
+            self.assertTrue(agent["isError"])
             self.assertEqual(len(opened), 2)
             # No browser here, or no page: 503 in words, when the card opens its launch's page through its host.
             self.server._browser_opener = lambda _target: False
@@ -815,15 +816,16 @@ class InlineServerTest(_Session):
         self.assertGreaterEqual(len(token), 40)
         self.assertNotIn(token, json.dumps({k: v for k, v in shown.items() if k != "_meta"}))
         self.assertNotIn(token, json.dumps(self.server.handle("resources/read", {"uri": self.server.page.uri}, None)))
-        # Without it: one route, two exact requests.
-        for method, url in (("GET", "/__cad/server"), ("GET", "/__cad/recents"), ("GET", "/__cad/analytics?x=1"),
-                            ("POST", "/__cad/analytics/activity"), ("GET", "/__cad/./analytics/../server"),
+        # Without it, nothing: no route, the telemetry setting included, is routed.
+        for method, url in (("GET", "/__cad/server"), ("GET", "/__cad/recents"), ("GET", "/__cad/analytics"),
+                            ("POST", "/__cad/analytics"), ("POST", "/__cad/analytics/activity"),
+                            ("GET", "/__cad/./analytics/../server"),
                             ("GET", "http://cad.invalid/__cad/catalog?file=" + quote(self.bracket, safe=""))):
-            with self.subTest(url=url):
-                self.assertEqual(agent(method, url)["structuredContent"]["status"], 403)
-        self.assertEqual(agent("HEAD", "/__cad/analytics")["structuredContent"]["status"], 405)
-        self.assertEqual(agent("GET", "/__cad/analytics")["structuredContent"]["status"], 200)
-        # A wrong capability is refused, not served as the agent; another session's is wrong here.
+            with self.subTest(method=method, url=url):
+                refused = agent(method, url, b'{"share":false}' if method == "POST" else b"")
+                self.assertTrue(refused["isError"])
+                self.assertNotIn("structuredContent", refused)
+        # A wrong capability is refused in words; another session's is wrong here.
         stale = agent("GET", "/__cad/server", headers={"x-cadgen-app": token[:-1] + "x"})
         self.assertTrue(stale["isError"])
         self.assertIn("open CAD again", stale["content"][0]["text"])
@@ -846,13 +848,13 @@ class TextServerTest(_Session):
 
     def test_a_client_with_no_page_has_no_app_capability(self) -> None:
         self.assertNotIn("_meta", self.call("cad_show", {"source": self.bracket}))
-        refused = self.call("cad_http", {"method": "GET", "url": "/__cad/server",
-                                         "headers": {"x-cadgen-app": self.server._app_token}})
-        self.assertTrue(refused["isError"])
+        # Nor the page's tools: they are not listed, and a call naming one is refused.
+        with self.assertRaises(RpcError):
+            self.call("cad_http", {"method": "GET", "url": "/__cad/server", "headers": {"x-cadgen-app": self.server._app_token}})
 
     def test_cad_show_opens_the_model_in_the_browser_and_says_so_with_its_url(self) -> None:
         tools = self.server.handle("tools/list", {}, None)["tools"]
-        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False), ("cad_http", False)] + [(name, False) for name in START])
+        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False)] + [(name, False) for name in START])
         self.assertIn("cannot show CAD views", self.initialized["instructions"])
         told = []
         self.server._browser_opened = told.append
@@ -1090,7 +1092,7 @@ class CodexExecTest(_Session):
     def test_a_server_codex_exec_launched_is_a_text_server_whatever_its_calls_say(self) -> None:
         # codex-cli 0.153 sends no turn metadata: the launcher alone says it.
         server = self.greet(CODEX_EXEC)
-        self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]][:2], ["cad_show", "cad_http"])
+        self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]], ["cad_show", *START])
         shown = deliver(server.handle("tools/call", {"name": "cad_show", "arguments": {"source": self.bracket}},
                                       RequestContext(1, {"threadId": "t"})), self.record)["content"][0]["text"]
         self.assertTrue(shown.startswith("bracket.stl opened in your browser at http://127.0.0.1:3245/"), shown)

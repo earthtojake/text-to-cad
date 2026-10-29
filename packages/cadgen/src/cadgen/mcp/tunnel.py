@@ -47,7 +47,6 @@ import base64
 import email.utils
 import gzip
 import io
-import json
 import re
 import threading
 import time
@@ -172,30 +171,11 @@ class ViewerTunnel:
             self._revisions[file] = (now, revision)
         return revision
 
-    def serve(self, *, method: str, url: str, headers: dict[str, str], body: bytes, agent: bool = False) -> dict[str, Any]:
+    def serve(self, *, method: str, url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
         # ``url`` is already text (the view's fetch URL, often absolute against
         # a placeholder origin); the router's own parser drops the authority.
         method = method.upper()
         path = url_norm.request_pathname(url)
-        if agent:
-            # Authorize before routing or serving cached ranges. Headers and view ids are no authority.
-            if path != "/__cad/analytics" or list(url_norm.request_query(url)):
-                return _result(403, {"content-type": "application/json"}, b'{"error":"CAD app capability required"}')
-            if method not in ("GET", "POST"):
-                return _result(405, {"allow": "GET, POST"}, b"")
-            if len(body) > 4096:
-                return _result(413, {}, b"")
-            if method == "POST":
-                try:
-                    payload = json.loads(body)
-                except (ValueError, UnicodeError):
-                    payload = None
-                if not isinstance(payload, dict) or set(payload) != {"share"} or payload["share"] is not False:
-                    return _result(403, {"content-type": "application/json"}, b'{"error":"Agents may only disable telemetry"}')
-            elif body:
-                return _result(400, {"content-type": "application/json"}, b'{"error":"GET takes no body"}')
-            # This authenticated tool action passed its own stricter gate; use the normal HTTP route.
-            headers = {"x-cadgen-viewer": "1", "content-type": "application/json"}
         if method not in _ALLOWED_METHODS:
             return _result(405, {"allow": "GET, HEAD, POST", "content-length": "0"}, b"")
         if not path.startswith(_API_PREFIXES) or path in _HOST_EFFECT_ROUTES:
@@ -212,7 +192,7 @@ class ViewerTunnel:
             part = self._kept_part(lowered["if-range"], byte_range)
             if part is not None:
                 return part
-        request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body, consent_by="agent" if agent else None)
+        request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body)
         handler = _CapturedHandler()
         response = Response(handler, head_only=request.is_head, byte_range=byte_range, on_parts=self._keep)
         try:

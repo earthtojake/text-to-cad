@@ -858,9 +858,8 @@ fixed list (Select, Measure, Explode, Clip, the display modes, Preview, playback
 home's search and filters, and the like), with how many times each was used and, for a tool
 that stays on, how many whole seconds it was on -- never what you typed, a value you chose
 (other than a choice that is itself a name on the list, such as a display mode), or a file's
-or a part's name. The CAD app's `cad_telemetry` tool is gone: an agent reads the status
-through `cad_http` (`GET /__cad/analytics`) and can opt you out when you ask (`POST` with
-the body `{"share":false}`); only you can opt in.
+or a part's name. The CAD app's `cad_telemetry` tool is gone: you answer in the CAD app's
+menu, the CAD Viewer's, or with `cadgen telemetry`.
 
 ## What lands where
 

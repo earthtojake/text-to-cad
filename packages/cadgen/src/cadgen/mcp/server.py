@@ -190,29 +190,16 @@ _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to 
 _WATCH = _object({"file": {"type": ["string", "null"]}})
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
-# Shared with agents, but the viewer routes require the capability delivered only to the UI.
+# The capability a page's launch delivers it, in UI-only result metadata (``_call``). Every one of the
+# page's tools refuses a call without it: a host is asked to keep app-only tools from the model, and the
+# server does not rely on it. ``cad_http`` takes it as a header, the others as an argument.
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cadgen-app"
-# The page's own tools (``cad_sync``, ``cad_capture_reply``) take the same capability as an argument:
-# a host is asked to keep app-only tools from the model, and the server does not rely on it.
 _APP_TOKEN_ARGUMENT = "app"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Open in browser: this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
 _BROWSER_OPEN_ROUTE = "/__cad/browser/open"
-_HTTP_TOOL = {
-    "name": "cad_http", "title": "CAD HTTP request", "icons": [ICON],
-    "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
-    "description": ("Read CAD telemetry status with method GET and url /__cad/analytics. "
-                    "Only when the user asks to opt out, POST to that URL with base64 body eyJzaGFyZSI6ZmFsc2V9 "
-                    "(JSON {\"share\":false}). Opt-out removes the installation ID and requests deletion of previously "
-                    "sent data; saved:false means the choice could not be persisted. Agents cannot opt in or access "
-                    "other routes. CAD app requests carry a session capability. Replies contain HTTP status, headers "
-                    "and a base64 body; agent replies also include readable JSON text."),
-    "inputSchema": _object({"method": {"type": "string"}, "url": {"type": "string"},
-                            "headers": {"type": "object", "additionalProperties": {"type": "string"}},
-                            "body": {"type": "string", "description": "Base64-encoded request body."}}, ["method", "url"]),
-}
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
@@ -504,7 +491,6 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what an open CAD viewer in this thread shows right now.",
              "inputSchema": _object({"view": _VIEW})},
-            _HTTP_TOOL,
             *self._page_tools(),
         ]
 
@@ -524,7 +510,6 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what a CAD viewer in this chat shows right now.",
              "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
-            _HTTP_TOOL,
             *self._page_tools(),
         ]
 
@@ -537,15 +522,16 @@ class Server:
                              f"its script prints it) or a local CAD file's absolute path ({FORMATS}). Answers with the "
                              "page's URL: give it to the user. " + FOLLOWS),
              "inputSchema": _object({"source": _SOURCE}, ["source"])},
-            _HTTP_TOOL,
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
-        """The tools only the page calls: its sync and its answer to a capture."""
+        """The tools only the page calls: its sync, its answer to a capture, and its requests of the
+        viewer's routes."""
 
-        def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
+        def app(name: str, title: str, description: str, schema: dict[str, Any],
+                annotations: dict[str, Any] = _READ_ONLY) -> dict[str, Any]:
             return {"name": name, "title": title, "description": description, "inputSchema": schema,
-                    "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
+                    "annotations": annotations, "_meta": {"ui": {"visibility": ["app"]}}}
 
         return [
             app("cad_sync", "CAD sync", "This view's one call each second: what it shows and watches, and what is waiting for it.",
@@ -555,6 +541,14 @@ class Server:
             app("cad_capture_reply", "Answer CAD", "Answer the server's request for a capture.",
                 _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"},
                          _APP_TOKEN_ARGUMENT: _APP_TOKEN_SCHEMA}, ["requestId", _APP_TOKEN_ARGUMENT])),
+            # Its library, settings, Reveal and Open in browser among them, and the person's telemetry answer,
+            # which reaches the receiver off this machine.
+            app("cad_http", "CAD HTTP request", "This view's request of one of the CAD viewer's routes; the reply is its "
+                "HTTP status, headers and base64 body.",
+                _object({"method": {"type": "string"}, "url": {"type": "string"},
+                         "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                         "body": {"type": "string", "description": "Base64-encoded request body."}}, ["method", "url"]),
+                {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}),
         ]
 
     # -- calls -----------------------------------------------------------------
@@ -1143,19 +1137,12 @@ class Server:
             raise ToolFailed(str(error), "bad_request") from error
         headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else {}
         headers = {name.lower(): str(value) for name, value in headers.items()}
-        token = headers.pop(_APP_TOKEN_HEADER, "")
-        app = not self.text and secrets.compare_digest(token.encode("utf-8"), self._app_token.encode("utf-8"))
-        if app:
-            self._contact()
-        if token and not app:
-            # A view opened in an earlier session (the engine restarted under its host) holds that one's.
-            raise ToolFailed("This CAD view was opened before CAD restarted: close it and open CAD again.", "bad_request")
+        # Refused before anything routes it, the range cache included.
+        self._app_only({_APP_TOKEN_ARGUMENT: headers.pop(_APP_TOKEN_HEADER, None)})
+        self._contact()
         method, url = str(arguments.get("method") or "GET"), str(arguments.get("url") or "")
         from cadgen.viewer import url_norm
 
-        if app and url_norm.request_pathname(url) == _BROWSER_OPEN_ROUTE:
+        if url_norm.request_pathname(url) == _BROWSER_OPEN_ROUTE:
             return _data(self._open_in_browser(method, body))
-        reply = self.tunnel.serve(method=method, url=url, headers=headers, body=body, agent=not app)
-        if app:
-            return _data(reply)
-        return _text(base64.b64decode(reply["body"]).decode("utf-8"), reply, error=reply["status"] >= 400)
+        return _data(self.tunnel.serve(method=method, url=url, headers=headers, body=body))

@@ -80,7 +80,7 @@ It is sent by default once the person has been told, and never after their no. S
    viewer and the telemetry sender go by the settings.
 2. The person's choice, kept as the ``telemetry`` section of their settings (``cadgen/settings.py``:
    ``settings.json`` in the state directory) and shared by every process: either app's menu,
-   ``cadgen telemetry on|off``, or the agent's ``cad_http`` POST to ``/__cad/analytics`` (off only). A yes sends all of
+   or ``cadgen telemetry on|off``. A yes sends all of
    the above; a no, nothing.
 3. Otherwise the default: all of the above, from the moment the person has been told -- one line,
    said once by the first ``cadgen`` command that may (``notify``). What a running process noted

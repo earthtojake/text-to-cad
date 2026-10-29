@@ -485,52 +485,6 @@
    "title": "Capture CAD view"
   },
   {
-   "annotations": {
-    "destructiveHint": false,
-    "idempotentHint": false,
-    "openWorldHint": true,
-    "readOnlyHint": false
-   },
-   "description": "Read CAD telemetry status with method GET and url /__cad/analytics. Only when the user asks to opt out, POST to that URL with base64 body eyJzaGFyZSI6ZmFsc2V9 (JSON {\"share\":false}). Opt-out removes the installation ID and requests deletion of previously sent data; saved:false means the choice could not be persisted. Agents cannot opt in or access other routes. CAD app requests carry a session capability. Replies contain HTTP status, headers and a base64 body; agent replies also include readable JSON text.",
-   "icons": [
-    {
-     "mimeType": "image/svg+xml",
-     "sizes": [
-      "any"
-     ],
-     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
-    }
-   ],
-   "inputSchema": {
-    "additionalProperties": false,
-    "properties": {
-     "body": {
-      "description": "Base64-encoded request body.",
-      "type": "string"
-     },
-     "headers": {
-      "additionalProperties": {
-       "type": "string"
-      },
-      "type": "object"
-     },
-     "method": {
-      "type": "string"
-     },
-     "url": {
-      "type": "string"
-     }
-    },
-    "required": [
-     "method",
-     "url"
-    ],
-    "type": "object"
-   },
-   "name": "cad_http",
-   "title": "CAD HTTP request"
-  },
-  {
    "_meta": {
     "ui": {
      "visibility": [
@@ -634,6 +588,50 @@
    },
    "name": "cad_capture_reply",
    "title": "Answer CAD"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": false
+   },
+   "description": "This view's request of one of the CAD viewer's routes; the reply is its HTTP status, headers and base64 body.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "description": "Base64-encoded request body.",
+      "type": "string"
+     },
+     "headers": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "method": {
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "method",
+     "url"
+    ],
+    "type": "object"
+   },
+   "name": "cad_http",
+   "title": "CAD HTTP request"
   },
   {
    "annotations": {
