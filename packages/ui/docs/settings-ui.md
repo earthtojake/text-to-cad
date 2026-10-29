@@ -55,7 +55,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   is that control where it opens the name menu (below), where the view can show another
   document; where it cannot it is plain text. The ⋯
   is the file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host can do it, and no ⋯ where it can do none. The name has
+  manager, each only where the host can do it; then, after a rule, the web viewer's
+  **Export**: its label and one item per format the document writes, each a browser
+  download (a model's ⋯ holds Export alone); and no ⋯ where there is none of either. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right, only what a host or a file adds: first, the
@@ -65,8 +67,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
   navbar action. Then the host's own actions: inline, where the host can show the view full size,
-  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button); the web viewer's
-  **Export**; last, **Open in browser** (the CAD app's: an arrow out of a box, a ghost icon button,
+  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button); last, **Open in browser** (the CAD app's: an arrow out of a box, a ghost icon button,
   where a launch carried the web viewer's page of what it shows). A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
@@ -133,7 +134,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   no ⋯, no Export and no Open in browser. What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
   the host can show the view full size, **Full size**; then, while its install is behind, the
-  update as a notice — the update card itself, Send to agent or Copy prompt, closable for the
+  update as a notice — the update card itself, Send to agent or Copy command, closable for the
   view — rather than the blue button. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,

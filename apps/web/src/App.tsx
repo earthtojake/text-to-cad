@@ -131,9 +131,10 @@ export default function App({ client, server, tabStore, notice = null, language:
   // shared with the CAD app.
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
   // A newer text-to-cad, as the CAD app says it (`cadgen/updates.py`): the blue update button, first
-  // in the navbar and a row of its own on the home while this install is behind, from the notice read
-  // with the server's description (`main.tsx`). A page in a browser cannot reach the agent's chat, so
-  // its prompt is copied.
+  // in the navbar while there is something to do, from the notice read with the server's description
+  // (`main.tsx`). A page in a browser cannot reach the agent's chat, so its prompt is copied. Where the
+  // engine updates itself, Try again starts a failed update again; an installed one needs nothing here:
+  // the engine steps aside for the new release's and the page reloads on it (`useEngineReconnect`).
   const updateNotice = useUpdateNotice(client.version, notice);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
@@ -170,7 +171,8 @@ export default function App({ client, server, tabStore, notice = null, language:
     <div className="min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
-      update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab} /> : null}
+      update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab}
+        update={client.update} /> : null}
       colorScheme={colorScheme} language={language} />
   </div></div>;
 }

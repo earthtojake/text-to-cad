@@ -183,7 +183,8 @@ inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 CAD view asks of its server, so each host reaches it the same way: the model
 library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
 (`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), the
-update check (`version`) and what the page did for
+update check (`version`), the engine's own update (`update`, a failed one's Try again) and what
+the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
 change is a POST with the viewer's guard header. A host reports its page's crashes
 with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` (a

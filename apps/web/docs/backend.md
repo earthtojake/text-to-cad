@@ -16,9 +16,10 @@ reads, meshes and measures it in processes of its own.
 
 ## Launching
 
-The engine serves every CAD file by absolute path on port 3245, or the port this
-installation rolled to when another program held it (`cadgen status` says which and why),
-or the one `--port N` or `CADGEN_ENGINE_PORT` names. Run the installed CLI from anywhere:
+Start the engine explicitly with `cadgen server` or MCP bootstrap. It serves CAD
+files by absolute path on port 3245, or the fixed port selected by `CADGEN_PORT`
+or CLI `--port N`. Bootstrap reuses a compatible selected engine; a conflicting listener fails, with no rollover or retirement of another
+engine. Run the installed CLI from anywhere:
 
 ```bash
 cadgen viewer --host 127.0.0.1 --json
@@ -39,16 +40,18 @@ cadgen viewer --host 127.0.0.1 --json
 Repository setup and editable-install instructions live in
 `CONTRIBUTING.md`.
 
-The launcher connects to this installation's engine, starting it if needed, and
-exits after printing or opening its page's URL: `/<id>` for each FILE it names (an on-disk CAD
+The launcher only attaches to the selected engine, which must speak its protocol (not share its
+release), and exits after printing or opening its page's URL: `/<id>` for each FILE it names (an on-disk CAD
 file it registers by the id of its canonical path, or a document id the engine holds), else the
 home, `/`. `--json` prints the launch record without opening a browser. An explicit host or port
 must match a running engine. There is one page per engine and no page session: each launch's
 folder becomes the folder the home shows, replacing the last. Always use the printed URL,
 including its token query; the browser exchanges the token for a same-site HTTP-only cookie.
 
-`cadgen stop` stops the installation's whole engine, including its workers and
-MCP sessions. Closing a page, a Vite process or a host's stdio shim does not stop it.
+`cadgen stop` stops the selected engine, including its workers and
+MCP sessions. The document registry, cached last-built documents, Recents and thumbnails
+are shared across ports, as are preferences and the user token.
+Closing a page, a Vite process or a host's stdio shim does not stop it.
 Python source edits require restarting your own test engine. There is no viewer
 server process, source re-exec, detached launch log or per-port shutdown route.
 
@@ -192,6 +195,7 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 | `POST /__cad/analytics/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{controls: [{control, count, seconds}]}`, the view controls used (names from `cadgen.analytics.CONTROLS`); `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). Its body may run to 16 KiB. |
 | `GET`/`POST /__cad/language` | The person's language for the CAD views (`cadgen/language.py`): `{locale, inferred, choice}`; `{choice}` sets it (null is Automatic). |
 | `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |
+| `POST /__cad/update` | Start the engine's own update now (`cadgen._internal.auto_update.run_now`): `{started, reason?}`; the card's Try again. |
 | `POST /__cad/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cadgen snapshot --job` draws the packet later. Carries `x-cadgen-viewer`, as the GET below does. |
 | `GET /__cad/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |
 

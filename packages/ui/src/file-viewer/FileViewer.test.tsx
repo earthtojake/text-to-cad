@@ -5,6 +5,7 @@ import { isMissingFileError } from '@text-to-cad/core/client';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
+import { DropdownMenuItem } from '../../dist/primitives/dropdown-menu.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -171,6 +172,29 @@ it('opens the app menu from the logo: Back to home where the host has a home, th
   await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
+});
+
+it('the host\'s items for the document (`fileMenuItems`: Export) close the ⋯ after a rule, and give a model with no file action a ⋯ of their own', async () => {
+  const user = userEvent.setup();
+  const chosen = vi.fn();
+  const items = <DropdownMenuItem onSelect={chosen}>STEP</DropdownMenuItem>;
+  open({ host: { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': vi.fn() } } }, fileMenuItems: items } as any);
+  await screen.findByText('shown');
+  // Nothing of it at the navbar's right.
+  expect(labels()).toEqual(['File actions']);
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect([...document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menu"] [role="separator"]')].map(node => node.textContent || node.getAttribute('role')))
+    .toEqual(['Copy path', 'separator', 'STEP']);
+  await user.click(screen.getByRole('menuitem', { name: 'STEP' }));
+  expect(chosen).toHaveBeenCalledOnce();
+  cleanup();
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const model = { ...host, files: { id: 'one', stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
+  open({ host: model, file: id, fileMenuItems: items } as any);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['STEP']);
+  expect(screen.queryByRole('separator')).toBeNull();
 });
 
 it('the app menu holds the person\'s theme in one row: System, Light and Dark as segments, the one in force checked, a press keeping the menu open', async () => {

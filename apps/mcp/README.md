@@ -2,11 +2,37 @@
 
 The page an agent host renders for CAD: the same `@text-to-cad/ui` FileViewer and
 renderers `apps/web` composes, behind a different host — an MCP Apps bridge
-instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
+instead of an HTTP origin. The engine selected by `CADGEN_PORT` (default 3245) serves
+its tools, page resource and HTTP routes. The persistent document library, cached bytes,
+Recents and thumbnails are shared across ports.
+Preferences, installation records and the user's page token remain shared.
 `cadgen mcp` is the stateless stdio shim that agent hosts launch: it ensures that
 engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
+
+Codex marks this MCP server as required and allows 300 seconds for cold startup.
+It waits for initialization; a failed download, connection or bootstrap blocks session
+startup or resume, including unrelated work while CAD is enabled. Fix the server or
+disable the CAD MCP server/plugin before continuing without it. Other hosts retain their
+own startup behavior.
+
+Diagnose setup and version conflicts from the local shell with
+`cadgen doctor --json --python <python>`, `<python>` being the interpreter a model runs in
+(`cadgen run --show-env model.py` prints the environment it made). Its read-only report includes
+discoverable provider configuration, registered installations, project identity
+and known engines. It works independently of a successful MCP session, so the
+same command is available to skills and to a person troubleshooting host startup.
+
+Every presentation's initialization instructions explain project authoring as well as viewing:
+run a no-argument `@model` with `cadgen run model.py`, which makes the project's Python
+environment (the dependencies the project declares, and the engine's own cadgen), with
+`CADGEN_PORT` set to the server's selected port, and pass its printed document id to
+`cad_show`; a virtual environment someone made with cadgen installed keeps working, its builds
+saying when `uv pip install -U cadgen` would update it. The instructions include a minimal
+runnable model and the install command that updates text-to-cad for every app
+(`curl -fsSL https://texttocad.dev/install.sh | sh`). MCP and `cadgen run` start or attach to
+the engine; a model's worker runs in its environment's interpreter, with its dependencies.
 
 Hosts present it in one of two ways, which `initialize` selects (`cadgen/mcp/host.py`):
 a host can declare the `dev.texttocad/tabs` extension with the `global`, `thread` and `file`
@@ -146,16 +172,22 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   size, until the person closes it or sends its prompt. A launch carries the
   notice the server last read, so the button draws with the page; the page reads it
   again (`/__cad/version`) when the person comes back to it. The card says: "A new version of text-to-cad
-  is available. Send a message to your agent asking it to update to the latest
-  version:", and a prompt worded like the install message, "Update text-to-cad to
-  0.9.0 from https://github.com/earthtojake/text-to-cad".
-  **Send to agent** posts it as the person's message (`ui/message`) where the host
-  takes messages (`chatReach`); elsewhere the card's button is **Copy prompt**.
-  The prompt has a copy icon in its top-right corner either way. **Manual installation** opens the docs site's
-  Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
-  person whose agent cannot do it. The agent does
-  the update, with the commands under its app's heading in the text-to-cad README;
-  nothing here updates anything.
+  is available. Update with this command:", and the install command for this
+  computer, `curl -fsSL https://texttocad.dev/install.sh | sh` (on Windows
+  `irm https://www.texttocad.dev/install.ps1 | iex`), which updates text-to-cad in every
+  agent app when run again. **Send to agent** posts the notice's prompt, "Run
+  `curl -fsSL https://texttocad.dev/install.sh | sh` to update text-to-cad to 0.9.0
+  (on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`)", as the person's
+  message (`ui/message`) where the host takes messages (`chatReach`); elsewhere the
+  card's button is **Copy command**. The command has a copy icon in its top-right
+  corner either way. **Manual installation** opens the install instructions on the docs site
+  (`https://www.texttocad.dev/install`, its homepage's install box) through `ui/open-link`. Where the install
+  command set text-to-cad up, the engine updates it itself (`cadgen/_internal/auto_update.py`), and the
+  button shows only once its update failed: the card says why, and **Try again** starts the engine's
+  update over the tunnel (`POST /__cad/update`), its card showing the download and the install until
+  it lands, when the notice goes. An installed update shows nothing: the next thread or session runs
+  it. For a copy nothing updates by itself the person, or their agent, runs
+  the command.
   A text client gets the same line with its first `cad_show` result. Where the
   install came from is its channel, which each plugin's startup config names in
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
@@ -439,4 +471,8 @@ same view through the document version stream.
 
 The stdio peer exits with its host session; it deletes only that MCP session.
 There is no viewer subprocess or file-backed sidebar registry to clean up.
-Restart the installation engine explicitly after editing its Python source.
+MCP bootstrap starts or attaches to the selected engine: the two need the same protocol, not the
+same release. A newer release's bootstrap takes over from an older engine once nothing is using it.
+`cadgen run` starts or attaches to it too; a script run by its own Python only attaches, and
+project workers use the caller's interpreter.
+Restart your own selected engine explicitly after editing its Python source.

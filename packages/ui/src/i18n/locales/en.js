@@ -7,6 +7,7 @@
  */
 export default {
   "export.button": "Export",
+  "export.as": "Export as {format}",
   "export.preparing": "Preparing {name}…",
   "export.dismiss": "Dismiss export status",
   "export.failed": "Export failed",
@@ -14,7 +15,7 @@ export default {
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "The CAD Viewer is not answering",
   "app.engine.notRunning": "The engine is not running; the page reconnects when it is back.",
-  "app.engine.startIt": "Run cadgen run <script>.py or cadgen viewer to start it.",
+  "app.engine.startIt": "Run cadgen server to start it.",
   "app.engine.linkReplaced": "This page's link was replaced; the page reconnects once its new link is opened.",
   "app.engine.openNewLink": "Run cadgen viewer and open the link it prints.",
 
@@ -136,15 +137,22 @@ export default {
   "update.toAria": "Update to {version}",
   "update.available": "Update available",
   "update.close": "Close",
-  "update.description": "A new version of text-to-cad is available. Send a message to your agent asking it to update to the latest version:",
+  "update.description": "A new version of text-to-cad is available. Update with this command:",
   "update.copy": "Copy",
   "update.copied": "Copied",
-  "update.copyPrompt": "Copy prompt",
+  "update.copyCommand": "Copy command",
   "update.sendToAgent": "Send to agent",
   "update.manualInstallation": "Manual installation",
-  "update.sendFailed": "It could not be sent to the chat. Copy the prompt instead.",
-  "update.copiedHint": "Copied. Paste it into your agent's chat.",
-  "update.copyFailed": "It could not be copied. Select the prompt above and copy it.",
+  "update.sendFailed": "It could not be sent to the chat. Copy the command and run it in a terminal.",
+  "update.copiedHint": "Copied. Run it in a terminal.",
+  "update.copyFailed": "It could not be copied. Select the command above and copy it.",
+  "update.failed": "Update failed",
+  "update.failedUnexplained": "text-to-cad v{release} could not install itself.",
+  "update.tryAgain": "Try again",
+  "update.notStarted": "The update did not start.",
+  "update.updatingTitle": "Updating",
+  "update.downloading": "Downloading v{release}…",
+  "update.installing": "Installing v{release}…",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",

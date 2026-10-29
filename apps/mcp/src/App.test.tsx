@@ -237,7 +237,7 @@ it('every view has the navbar but the file handler: the sidebar\'s home, a threa
 it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it, the update notice under it', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0', instructions: 'https://www.texttocad.dev/install' };
+    command: 'curl -fsSL https://texttocad.dev/install.sh | sh', prompt: 'Run the install command', instructions: 'https://www.texttocad.dev/install' };
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', notice }} />);
   expect(viewer.props!.chrome).toBe('bare');
@@ -429,12 +429,15 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));
 });
 
-it('a newer release is the navbar\'s blue update button: its card sends the prompt to the chat where the host takes messages, copies it elsewhere, the full instructions a link away; the file handler has it as a notice in its corner, closed for the view', async () => {
+it('a newer release is the navbar\'s blue update button: its card sends the prompt to the chat where the host takes messages, copies the install command elsewhere, the instructions a link away; the file handler has it as a notice in its corner, closed for the view', async () => {
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
+    command: 'curl -fsSL https://texttocad.dev/install.sh | sh',
+    prompt: 'Run `curl -fsSL https://texttocad.dev/install.sh | sh` to update text-to-cad to 0.9.0 (on Windows: `irm https://www.texttocad.dev/install.ps1 | iex`)',
+    instructions: 'https://www.texttocad.dev/install' };
   {
     // The launch carries the notice as the server last read it: the button draws with the page, over the home too.
     const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+    server.answers['/__cad/version'] = () => ({ notice });
     const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice }} />);
     const update = await findByRole('button', { name: 'Update to 0.9.0' });
     expect(update.closest('[data-card-corner]')).toBeNull();
@@ -446,20 +449,21 @@ it('a newer release is the navbar\'s blue update button: its card sends the prom
     expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
     expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
     expect(getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
-    expect(server.asked('/__cad/version')).toEqual([]); // nothing to read, and nothing kept
+    expect(server.asked('/__cad/version')).toEqual([null]); // read again as the card opened, and nothing kept
     cleanup();
   }
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
   {
     const { bridge, server } = host({ displayMode: 'fullscreen' });
+    server.answers['/__cad/version'] = () => ({ notice });
     const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'tab', notice }} />);
     // Looked up outside act: act holds React's updates until it returns, and the lookup waits on them.
     const update = await findByRole('button', { name: 'Update to 0.9.0' });
     await act(async () => update.click());
-    const copy = await findByRole('button', { name: 'Copy prompt' });
+    const copy = await findByRole('button', { name: 'Copy command' });
     await act(async () => copy.click());
-    expect(writeText).toHaveBeenCalledWith(notice.prompt);
+    expect(writeText).toHaveBeenCalledWith(notice.command);
     expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
     cleanup();
   }
@@ -471,4 +475,21 @@ it('a newer release is the navbar\'s blue update button: its card sends the prom
   expect(queryByRole('button', { name: 'Update to 0.9.0' })).toBeNull();
   await act(async () => getByRole('button', { name: 'Close' }).click());
   expect(queryByRole('region', { name: 'Update available' })).toBeNull();
+});
+
+it('the engine\'s own update: a failed one\'s Try again goes through the tunnel and the corner follows its run', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
+    command: 'curl -fsSL https://texttocad.dev/install.sh | sh', prompt: 'Run it', instructions: 'https://www.texttocad.dev/install' };
+  const failed = { ...notice, auto: { state: 'failed' as const, release: '0.9.0', error: 'The download was interrupted.' } };
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  server.answers['/__cad/update'] = () => ({ started: true });
+  server.answers['/__cad/version'] = () => ({ notice: { ...notice, auto: { state: 'updating', release: '0.9.0', stage: 'installing' } } });
+  const { findByRole, findByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'file', notice: failed }} />);
+  await findByRole('region', { name: 'Update failed' });
+  await act(async () => getByRole('button', { name: /Try again/ }).click());
+  expect(server.asked('/__cad/update')).toEqual([{}]);
+  expect(await findByText('Downloading v0.9.0…')).toBeTruthy();
+  // The run it started keeps the corner, though an update under way alone would show nothing.
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  expect(await findByText('Installing v0.9.0…')).toBeTruthy();
 });

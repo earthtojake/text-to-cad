@@ -237,7 +237,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ navbar, overlay }) => <FileViewer navbarActions={fullSize || openInBrowser ? <>{fullSize}{navbar}{openInBrowser}</> : navbar} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize || openInBrowser ? <>{fullSize}{openInBrowser}</> : null} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

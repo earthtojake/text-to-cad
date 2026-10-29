@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
 import { useI18n } from "@text-to-cad/ui/i18n";
@@ -34,12 +34,13 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * alike), which opens the app's menu (`AppMenu`: Back to home
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
  * where the host keeps the view's own history (`history`); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
- * where the view can show another; and the ⋯ menu of what the host can do with the file.
+ * where the view can show another; and the ⋯ menu of what the host can do with the file, then the
+ * host's own items for the document (`menuItems`: the CAD Viewer's Export, its formats).
  *
  * Right, only what a host or a file adds: the host's update button while its install is behind
  * (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the
  * CAD viewer's one: a dismissed alert's icon, which brings its card back); last, the host's own
- * actions (`actions`: the web viewer's Export). The colour scheme is the app menu's. A view's own
+ * actions (`actions`: the CAD app's Full size and Open in browser). The colour scheme is the app menu's. A view's own
  * controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
@@ -86,12 +87,16 @@ function HistoryButtons({ viewHistory }) {
   </span>;
 }
 
-/** The ⋯ after the file's name: what the host can do with the file. A host that can do nothing has none. */
-function FileMenu({ path, platform, capabilities, onAction }) {
+/**
+ * The ⋯ after the file's name: what the host can do with the file (Copy path, Reveal), then, after a
+ * rule, the host's own items for the document on screen (`items`: the CAD Viewer's Export, its
+ * formats). A document with neither has none.
+ */
+function FileMenu({ path, platform = "linux", capabilities = new Set(), onAction = () => {}, items: hostItems = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const items = entryMenu(platform, capabilities, t);
-  if (!items.length) return null;
+  if (!items.length && !hostItems) return null;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
       className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
@@ -99,6 +104,8 @@ function FileMenu({ path, platform, capabilities, onAction }) {
     </button></DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="w-56" sideOffset={6}>
       {items.map(item => <DropdownMenuItem key={item.action} onSelect={() => { usage.used(FILE_ACTION_CONTROLS[item.action]); onAction(item.action, path); }}>{item.label}</DropdownMenuItem>)}
+      {items.length && hostItems ? <DropdownMenuSeparator /> : null}
+      {hostItems}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
@@ -192,12 +199,15 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   The host's library: the name menu's Models, its models alone.
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
  *   onAction(action: import("./entry-menu.js").EntryAction, path: string): void } | null} [props.fileMenu]
+ * @param {import("react").ReactNode} [props.menuItems] The host's items in the ⋯, after the file's own
+ *   (stock `DropdownMenu` items: the CAD Viewer's Export); the ⋯ is there for them alone where the host
+ *   has no file action.
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] Host workflow controls at the right end.
  * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, update = null, actions = null, className }) {
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, menuItems = null, trailing = null, update = null, actions = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
@@ -210,7 +220,7 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
         {history ? <HistoryButtons viewHistory={history} /> : null}
         {file ? <span className="flex min-w-0 items-center">
           <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
-          {fileMenu ? <FileMenu path={file} {...fileMenu} /> : null}
+          {fileMenu || menuItems ? <FileMenu path={file} {...fileMenu} items={menuItems} /> : null}
         </span> : null}
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>

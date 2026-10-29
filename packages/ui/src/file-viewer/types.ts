@@ -159,6 +159,11 @@ export interface RendererRegistration {
 export interface FileViewerProps {
   /** Additive host actions at the navbar right, and persistent feedback below it. */
   navbarActions?: ReactNode;
+  /**
+   * The host's items in the ⋯ after the file's name, after the file's own (stock `DropdownMenu`
+   * items: the CAD Viewer's Export); a document with none of its own has the ⋯ for these alone.
+   */
+  fileMenuItems?: ReactNode;
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;

@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { UpdateCard, type UpdateNotice as Notice } from '@text-to-cad/ui/update';
+import { UpdateCard, type UpdateNotice as Notice, type UpdateStart } from '@text-to-cad/ui/update';
 
 /**
  * The file handler's corner: what this host adds to the one view that has no navbar (`chrome: "bare"`,
@@ -19,14 +19,18 @@ export function CardCorner({ fullSize = null, update = null }: { fullSize?: Reac
 
 /**
  * A newer text-to-cad, as a notice in the file handler's corner rather than the navbar's blue button: the update
- * card itself (`UpdateCard`: its prompt, Send to agent where the host takes messages, else Copy
- * prompt, and Manual installation), until the person closes it for this view.
+ * card itself (`UpdateCard`: the install command, Send to agent where the host takes messages, else Copy
+ * command, and Manual installation; or, where the engine updates itself, its failure and Try again, whose
+ * run it follows), while it leaves the person something to do or a run it
+ * started is under way (`onRun`), until the person closes it for this view. Always open, it reads the
+ * notice again as the window regains focus, and every two seconds while its run is under way.
  */
-export function UpdateNotice({ notice, send, copy, onLink, onClose }: {
+export function UpdateNotice({ notice, send, copy, onLink, onClose, update, onRun }: {
   notice: Notice; send?: (prompt: string) => Promise<void>; copy(prompt: string): Promise<void>; onLink(url: string): void; onClose(): void;
+  update?: UpdateStart; onRun?(running: boolean): void;
 }) {
   const id = useId();
   return <section aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`} data-update-notice="">
-    <UpdateCard id={id} notice={notice} send={send} copy={copy} onLink={onLink} onClose={onClose} />
+    <UpdateCard id={id} notice={notice} send={send} copy={copy} onLink={onLink} onClose={onClose} update={update} onRun={onRun} />
   </section>;
 }

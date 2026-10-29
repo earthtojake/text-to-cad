@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSPro
 import { ExternalLink, Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { translator, useI18n, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, updateShows, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { TooltipHint } from '@text-to-cad/ui/primitives/tooltip';
@@ -291,12 +291,15 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
-  // A newer text-to-cad (`cadgen/updates.py`), from the launch's notice at once, while this install is
-  // behind: the navbar's blue update button, first among its controls; in the file handler, which has
-  // no navbar, a notice at the view's top-right until the person closes it for this view. Its prompt
-  // goes to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
+  // A newer text-to-cad (`cadgen/updates.py`), from the launch's notice at once, while it leaves the
+  // person something to do: the navbar's blue update button, first among its controls; in the file
+  // handler, which has no navbar, a notice at the view's top-right until the person closes it for this
+  // view, kept while a run its Try again started is under way. Its prompt goes to the chat where the
+  // host takes messages, so the agent updates CAD; elsewhere it is copied. An installed update shows
+  // nothing: the next thread or session runs it.
   const updateNotice = useUpdateNotice(client.version, initial.notice ?? null);
   const [updateClosed, setUpdateClosed] = useState(false);
+  const [updateRunning, setUpdateRunning] = useState(false);
   const sendPrompt = chat.send
     ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
     : undefined;
@@ -317,9 +320,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     overlay={lost ? <Banner message={lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
-      update={!updateNotice ? null : !alone ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)} onLink={openLink} />
-        : updateClosed ? null : <UpdateNotice notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
-          onLink={openLink} onClose={() => setUpdateClosed(true)} />}
+      update={!updateNotice ? null : !alone ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)} onLink={openLink} update={client.update} />
+        : updateClosed || !(updateShows(updateNotice) || updateRunning) ? null : <UpdateNotice notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
+          onLink={openLink} onClose={() => setUpdateClosed(true)} update={client.update} onRun={setUpdateRunning} />}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser ? <OpenInBrowserButton open={openInBrowser} /> : null}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />

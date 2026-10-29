@@ -18,6 +18,7 @@ import { ExportControls } from '../../dist/export/ExportControls.js';
 import { useExportView } from '../../dist/export/context.js';
 import { I18nProvider } from '../../dist/i18n/index.js';
 import { ViewerElementContext, ViewerHostContext } from '../../dist/host/context.js';
+import { ViewerNavbar } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 const view = { doc: 'doc', revision: 'v1', file: '/probe_couple.xbf', name: 'probe_couple.xbf' };
 function Document() { useExportView(view); return null; }
 const finish = [];
@@ -31,16 +32,16 @@ const service = {
 const downloads = { save() {} };
 function App() {
   const viewer = useRef(null);
-  return <I18nProvider locale="en"><ExportControls service={service} downloads={downloads} file={view.file}>{({ navbar, overlay }) =>
+  return <I18nProvider locale="en"><ExportControls service={service} downloads={downloads} file={view.file}>{({ menu, overlay }) =>
     <ViewerHostContext.Provider value={{ environment: { colorScheme: 'light' } }}><ViewerElementContext.Provider value={viewer}>
       <div ref={viewer} className="text-ui" style={{ height: '100vh' }}>
-        <header data-viewer-navbar="" style={{ height: 40, display: 'flex', justifyContent: 'flex-end' }}>{navbar}</header>
+        <ViewerNavbar file={view.file} menuItems={menu} />
         <Document />{overlay}
       </div>
     </ViewerElementContext.Provider></ViewerHostContext.Provider>}</ExportControls></I18nProvider>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
-` }, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic' });
+` }, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', loader: { '.svg': 'dataurl' } });
   const styles = await readFile(new URL('../../dist/styles.css', import.meta.url));
   const server = createServer((request, response) => {
     if (request.url === '/app.js') { response.setHeader('content-type', 'text/javascript'); response.end(outputFiles[0].contents); }
@@ -57,9 +58,11 @@ createRoot(document.getElementById('root')).render(<App/>);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.getByRole('button', { name: 'Export', exact: true }).click();
-    const menuFont = await page.getByRole('menuitem', { name: 'STEP' }).evaluate(item => getComputedStyle(item).fontSize);
-    await page.getByRole('menuitem', { name: 'STEP' }).click();
+    // Export is the ⋯ menu's, after the file's name.
+    await page.getByRole('button', { name: 'File actions' }).click();
+    const menuFont = await page.getByRole('menuitem', { name: 'Export as STEP' }).evaluate(item => getComputedStyle(item).fontSize);
+    await page.getByRole('menuitem', { name: 'Export as STEP' }).click();
+    const navbarBottom = await page.locator('[data-viewer-navbar]').evaluate(bar => bar.getBoundingClientRect().bottom);
     for (const [type, title] of [['loading', 'Preparing probe_couple.step…']]) {
       const toast = page.locator(`[data-sonner-toast][data-type="${type}"][data-mounted="true"]`);
       await toast.waitFor();
@@ -74,9 +77,9 @@ createRoot(document.getElementById('root')).render(<App/>);
       });
       const label = `${width}px ${type}`;
       assert.equal(box.title, title, label);
-      // Under the navbar (40px) by the gutter, at the right gutter.
-      assert.equal(box.top, 56, label);
-      assert.equal(box.listTop, 56, label);
+      // Under the navbar by the gutter, at the right gutter.
+      assert.equal(box.top, navbarBottom + 16, label);
+      assert.equal(box.listTop, navbarBottom + 16, label);
       assert.equal(box.right, width - 16, label);
       // A menu item's text, regular weight, with a 14px icon; one line under 32px.
       assert.deepEqual([box.font, box.weight, box.icon, box.description], [menuFont, '400', '14px', false], label);

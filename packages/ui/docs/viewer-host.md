@@ -9,7 +9,7 @@ shared. Missing optional methods mean an operation is unsupported.
 A view shows a file by its absolute path, or a document the engine holds by its id alone (a
 model's: a lower-case UUID, `cadgen.engine.ids`). A file's metadata may carry `navigationPath`,
 the on-disk file to browse from and act on; null says the document has no file of its own (a
-model's): its view has no file menu, its navbar and Preview's bar name it by its `name`, with no glyph, and
+model's): its view has no file actions (its ⋯ holds the host's `fileMenuItems` alone), its navbar and Preview's bar name it by its `name`, with no glyph, and
 its Files starts where the explorer was last in this tab, else the person's home folder, never
 the folder of the script that built it. A file's Files (the explorer its name menu holds) is rooted at that file's folder. Python scripts are never documents: no view opens one,
 and no folder lists one.
@@ -102,9 +102,12 @@ Export writes the document as its code built it, so the menu offers formats alon
 selection or a pose, and the formats follow from the file's kind (`export/formats.ts`), so it
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
-before it converts the file to the other mesh kinds. `FileViewer.navbarActions` and `overlay` are named
-composition slots: the first is in the navbar's right group; the second is in the
-relative viewport below it. The generic FileViewer knows nothing about export jobs.
+before it converts the file to the other mesh kinds. `FileViewer.fileMenuItems`, `navbarActions` and `overlay` are named
+composition slots: the first is stock `DropdownMenu` items at the end of the ⋯ after the file's
+name (Export: its label, then one item per format, "Export as STEP" to a screen reader), after
+the file's own items and a rule; the second is in the navbar's right group (the CAD app's Full
+size and Open in browser); the third is in the relative viewport below it. The generic
+FileViewer knows nothing about export jobs.
 
 ## A CAD renderer's controls
 
@@ -547,11 +550,21 @@ has said so. The host supplies the call and where the answer is kept.
 first among the navbar's right-hand controls, an icon, over every file and over the home), which opens its card in a popover; `UpdateCard`, that card, which a host with no navbar shows as its notice instead (the CAD app's corner, closable for the view); and `useUpdateNotice(call, initial)`, which
 starts on the notice the host already has (a CAD app's launch carries it; the web page reads it with
 its server's description), so the button draws with the page, and reads the host's call again when
-the page regains focus. Nothing it does is an answer the server keeps: the button stays while the
-install is behind and goes once the update lands. The card sends its prompt
-to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
-`copy`, its button then Copy prompt; the prompt has a copy icon in its top-right corner either way; the host decides which it supplies. Its
-Manual installation link, the notice's `instructions`, opens through the host's `onLink`. The shell
+the page regains focus and when the card opens. The button shows only while the notice leaves the
+person something to do (`updateShows`): a copy the engine does not update, or the engine's update
+failed; one pending or under way draws nothing, and one installed is no notice at all (the next
+thread, session or page runs it). Nothing it does is an answer the server
+keeps. For a copy the engine does not update, the card shows the notice's `command`, the
+install command that updates text-to-cad, with a copy icon in its top-right corner that copies it
+through the host's `copy`; its button sends the notice's `prompt` to the agent's chat through the
+host's `send`, where the host can, and otherwise copies the command, its button then Copy command;
+the host decides which it supplies. Its
+Manual installation link, the notice's `instructions`, opens through the host's `onLink`. Where the
+engine updates itself, its one action follows a failure (Update failed): the engine's `error` and
+Try again, the host's `update`, whose run the card then follows, reading the notice every two
+seconds only while it is under way, until it fails again or the notice goes (the run landed: the
+host drops the button, and the card with it). A Try again the engine refuses says its `reason`
+under the button. The X closes every card. The shell
 handles placement and hides the toolbar in
 Preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.

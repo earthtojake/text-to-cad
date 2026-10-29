@@ -53,8 +53,21 @@ export interface CadRecent {
 }
 /** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
 export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
-/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
-export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
+/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the install command that
+ * updates it, and the prompt that has the person's agent run it. Where the engine updates itself, `auto`
+ * says how far it has got (`pending`, `updating` at its `stage`, `failed` with its `error`); a copy
+ * nothing updates by itself has none. Once installed there is no notice: the next thread, session or
+ * page runs the release. */
+export interface CadUpdateNotice {
+  latest: string; version: string; text: string; command: string; prompt: string; instructions: string;
+  auto?: CadAutoUpdate;
+}
+export interface CadAutoUpdate {
+  state: 'pending' | 'updating' | 'failed';
+  release: string;
+  stage?: 'downloading' | 'installing';
+  error?: string;
+}
 export interface CadCatalog {
   entries: CadEntry[];
   /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
@@ -203,6 +216,8 @@ export interface CadWorkspaceService {
   language(locale?: string | null): Promise<{ locale: string | null }>;
   /** Whether a newer text-to-cad is out: the update button's notice, or null. */
   version(): Promise<{ notice: CadUpdateNotice | null }>;
+  /** Starts the engine's own update now (`POST /__cad/update`); `reason` says why it did not. */
+  update(): Promise<{ started: boolean; reason?: string }>;
   /**
    * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
    * noted by the server and sent only with consent. Never fails.

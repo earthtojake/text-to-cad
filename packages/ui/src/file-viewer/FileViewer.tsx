@@ -25,7 +25,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems = null, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -108,7 +108,8 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     : path && !isDocumentId(path) ? path : null;
   const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
   const folder = navigationPath ? null : explorerFolder;
-  // What the host can do with the file on screen: its ⋯ menu.
+  // What the host can do with the file on screen: its ⋯ menu, before the host's own items for the
+  // document (`fileMenuItems`), which a model has too.
   const perform = host.fileActions?.perform;
   const fileMenu = useMemo(() => {
     const capabilities = new Set(Object.keys(perform ?? {}) as EntryAction[]);
@@ -137,7 +138,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const navbar = (Boolean(path) || home) && !appearance.compact && chrome !== "bare" && previewing !== key;
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
     {navbar ? (path
-      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} trailing={trailing} actions={navbarActions} update={update} />
+      ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name} kind={model ? "model" : "file"} explorer={explorer} recent={recentMenu} fileMenu={fileMenu} menuItems={fileMenuItems} trailing={trailing} actions={navbarActions} update={update} />
       : <ViewerNavbar menu={menu} history={history} actions={navbarActions} update={update} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="min-w-0 flex-1 overflow-hidden">{body}</div>

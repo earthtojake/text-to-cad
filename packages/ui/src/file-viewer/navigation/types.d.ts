@@ -60,7 +60,7 @@ export function fuzzyMatch(
 /**
  * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
  * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
- * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯. Right: `update`, `trailing` (the file's actions), then `actions`.
+ * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (the file's actions, then the host's `menuItems`). Right: `update`, `trailing` (the file's actions), then `actions`.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to home. */
@@ -80,10 +80,12 @@ export const ViewerNavbar: ComponentType<{
   /** The name menu's Recent: the host's library, in the explorer's style, a row opening its document. */
   recent?: { list(): Promise<readonly import("../types.js").RecentDocument[]>; onOpen: (path: string) => void } | null;
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction, path: string) => void } | null;
+  /** The host's items in the ⋯, after the file's own and a rule (the CAD Viewer's Export); the ⋯ is there for them alone where `fileMenu` is not. */
+  menuItems?: ReactNode;
   trailing?: ReactNode;
   /** The host's update button, first among the controls, while its install is behind. */
   update?: ReactNode;
-  /** The host's own actions (the web viewer's Export), last in the row. */
+  /** The host's own actions (the CAD app's Full size and Open in browser), last in the row. */
   actions?: ReactNode;
   className?: string;
 }>;

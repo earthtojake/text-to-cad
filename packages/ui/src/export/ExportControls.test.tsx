@@ -9,6 +9,7 @@ import { useExportView } from '../../dist/export/context.js';
 import { I18nProvider } from '../../dist/i18n/index.js';
 import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
 import { ViewerElementContext, ViewerHostContext } from '../../dist/host/context.js';
+import { ViewerNavbar } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 
 // A retry's pause is the test's to end: a dropped connection is asked again when it says so.
 vi.mock('@text-to-cad/core/client', async original => ({
@@ -25,10 +26,11 @@ const part = { doc: 'doc', revision: 'v1', file: '/part.xbf', name: 'part.xbf' }
 type Shown = typeof part & { planar?: boolean };
 function Document({ view }: { view: Shown }) { useExportView(view); return <div>Model</div>; }
 const host = { environment: { colorScheme: 'light' } } as any;
-function mount(service: any, downloads: any, { locale = 'en', phone = false, view = part as Shown, viewer = { current: null } as any } = {}) {
-  // The overlay renders inside the viewer, which says whether its width is a phone's, its colour
-  // scheme, and the element its navbar is in.
-  return render(<I18nProvider locale={locale}><ExportControls service={service} downloads={downloads} file={view.file}>{({ navbar, overlay }: any) => <><nav>{navbar}</nav><Document view={view} />
+function mount(service: any, downloads: any, { locale = 'en', phone = false, view = part as Shown, viewer = { current: null } as any, fileMenu = null as any } = {}) {
+  // Export is the document's ⋯ menu's, in the navbar after the file's name, after what the host can
+  // do with the file (`fileMenu`). The overlay renders inside the viewer, which says whether its
+  // width is a phone's, its colour scheme, and the element its navbar is in.
+  return render(<I18nProvider locale={locale}><ExportControls service={service} downloads={downloads} file={view.file}>{({ menu, overlay }: any) => <><ViewerNavbar file={view.file} fileMenu={fileMenu} menuItems={menu} /><Document view={view} />
     <ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewer}><ViewerMobileContext.Provider value={phone}>{overlay}</ViewerMobileContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></>}</ExportControls></I18nProvider>);
 }
 function server() {
@@ -49,10 +51,11 @@ function server() {
   const finish = (id: string) => answer(id, { state: 'ready', stage: 'Ready to save', bytes: 5, finishedAt: Date.now() / 1000, expiresAt: Date.now() / 1000 + 3600 });
   return { service, jobs, waiting, answer, finish };
 }
-const menu = () => screen.queryByRole('menu', { name: 'Export' });
+const menu = () => screen.queryByRole('menu', { name: 'File actions' });
+const opener = () => screen.queryByRole('button', { name: 'File actions' });
 async function exportOnce(user: ReturnType<typeof userEvent.setup>, format = 'STEP') {
-  await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
-  await user.click(within(menu()!).getByRole('menuitem', { name: format }));
+  await user.click(opener()!);
+  await user.click(within(menu()!).getByRole('menuitem', { name: `Export as ${format}` }));
 }
 const toasts = () => [...document.querySelectorAll<HTMLElement>('[data-sonner-toast]')];
 /** The one toast on screen: its Sonner type, its one line, whether it shows its state's icon, and its buttons. */
@@ -64,7 +67,7 @@ async function shown(type: 'loading' | 'success' | 'error', title: string) {
   return { item, buttons: [...item.querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent) };
 }
 
-it('the menu is the formats the file\'s kind writes and nothing else, there at once: nothing is asked of the server before a choice', async () => {
+it('the ⋯ menu\'s Export is the formats the file\'s kind writes and nothing else, there at once: nothing is asked of the server before a choice', async () => {
   const kinds: [string, string[]][] = [
     ['/bracket.step', ['STEP', 'STL', '3MF', 'GLB', 'XBF']],
     ['/part.xbf', ['STEP', 'STL', '3MF', 'GLB', 'XBF']],
@@ -80,24 +83,33 @@ it('the menu is the formats the file\'s kind writes and nothing else, there at o
     const { service } = server();
     const { unmount } = mount(service, { save: vi.fn() }, { view: { ...part, file, name: file.split('/').pop()!, ...(planar ? { planar } : {}) } });
     const user = userEvent.setup({ skipHover: true });
-    await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
+    await user.click(opener()!);
     const items = within(menu()!).getAllByRole('menuitem');
+    // The format on screen under the menu's one label, Export; each item named for what it does.
     expect(items.map(item => item.textContent), shownFile).toEqual(labels);
-    // Plain items alone: no checks, no icons, no heading, no button, no select, no rule, no note.
+    expect(items.map(item => item.getAttribute('aria-label')), shownFile).toEqual(labels.map(label => `Export as ${label}`));
+    expect(menu()!.querySelector('[data-export-menu]')?.textContent).toBe('Export');
+    // Plain items alone: no checks, no icons, no button, no select, no rule, no note.
     for (const item of items) expect(item.querySelector('svg')).toBeNull();
     expect(within(menu()!).queryByRole('button')).toBeNull();
     expect(within(menu()!).queryByRole('combobox')).toBeNull();
     expect(within(menu()!).queryByRole('separator')).toBeNull();
-    // As wide as its items, shadcn's least: no width of its own.
-    expect(menu()!.className).toMatch(/(?:^|\s)min-w-\[8rem\](?:\s|$)/);
-    expect(menu()!.className).not.toMatch(/(?:^|\s)w-/);
     expect([service.epoch, service.create].map(call => call.mock.calls.length)).toEqual([0, 0]);
     unmount();
   }
-  // A view whose file writes nothing has no Export at all.
+  // After what the host can do with the file, by a rule: the file's own items first.
   const { service } = server();
-  mount(service, { save: vi.fn() }, { view: { ...part, file: '/arm.urdf', name: 'arm.urdf' } });
-  expect(screen.queryByRole('button', { name: 'Export', exact: true })).toBeNull();
+  const reveal = vi.fn();
+  const { unmount } = mount(service, { save: vi.fn() }, { fileMenu: { platform: 'darwin', capabilities: new Set(['copy-path', 'reveal']), onAction: reveal } });
+  const user = userEvent.setup({ skipHover: true });
+  await user.click(opener()!);
+  expect([...menu()!.querySelectorAll('[role="menuitem"], [role="separator"], [data-export-menu]')].map(node => node.getAttribute('role') ?? node.textContent))
+    .toEqual(['menuitem', 'menuitem', 'separator', 'Export', 'menuitem', 'menuitem', 'menuitem', 'menuitem', 'menuitem']);
+  expect(within(menu()!).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Reveal in Finder', 'STEP', 'STL', '3MF', 'GLB', 'XBF']);
+  unmount();
+  // A view whose file writes nothing has no Export at all, and no ⋯ where the host can do nothing else.
+  mount(server().service, { save: vi.fn() }, { view: { ...part, file: '/arm.urdf', name: 'arm.urdf' } });
+  expect(opener()).toBeNull();
 });
 
 it('a choice starts its export at once with a spinning toast; the menu stays the formats, and a second choice is another export', async () => {
@@ -117,10 +129,10 @@ it('a choice starts its export at once with a spinning toast; the menu stays the
   const { item, buttons } = await shown('loading', 'Preparing part.glb…');
   expect(item.querySelector('[data-icon] svg.animate-spin')).toBeTruthy();
   expect(buttons).toEqual([]);
-  await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
+  await user.click(opener()!);
   expect(within(menu()!).getAllByRole('menuitem').map(row => row.textContent)).toEqual(['STEP', 'STL', '3MF', 'GLB', 'XBF']);
   // An xbf's XBF is the file's own bytes: the server copies the original, never writes an xbf of an xbf.
-  await user.click(within(menu()!).getByRole('menuitem', { name: 'XBF' }));
+  await user.click(within(menu()!).getByRole('menuitem', { name: 'Export as XBF' }));
   await waitFor(() => expect(service.create).toHaveBeenCalledTimes(2));
   expect(service.create.mock.calls[1][0]).toMatchObject({ format: 'original', epoch: 'epoch' });
   await waitFor(() => expect(toasts()).toHaveLength(2));
@@ -208,12 +220,12 @@ it('an export under way when the page reloaded picks up again by its request; on
   expect(downloads.remember).toHaveBeenLastCalledWith([]);
 });
 
-it('the keyboard opens the menu, walks it and chooses', async () => {
+it('the keyboard opens the ⋯ menu, walks its formats and chooses', async () => {
   const { service } = server();
   mount(service, { save: vi.fn() });
   const user = userEvent.setup({ skipHover: true });
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Export', exact: true }));
+  expect(document.activeElement).toBe(opener());
   await user.keyboard('{Enter}');
   await waitFor(() => expect(document.activeElement?.textContent).toBe('STEP'));
   await user.keyboard('{ArrowDown}');
@@ -221,7 +233,7 @@ it('the keyboard opens the menu, walks it and chooses', async () => {
   await user.keyboard('{Enter}');
   await waitFor(() => expect(service.create).toHaveBeenCalledTimes(1));
   expect(service.create.mock.calls[0][0].format).toBe('stl');
-  await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
+  await user.click(opener()!);
   await user.keyboard('{Escape}');
   await waitFor(() => expect(menu()).toBeNull());
 });
@@ -230,8 +242,9 @@ it('the menu and the toast speak the page language, never the server stage', asy
   const { service } = server();
   mount(service, { save: vi.fn() }, { locale: 'ja' });
   const user = userEvent.setup({ skipHover: true });
-  await user.click(screen.getByRole('button', { name: 'エクスポート', exact: true }));
-  await user.click(screen.getByRole('menuitem', { name: 'STEP' }));
+  await user.click(screen.getByRole('button', { name: 'ファイルの操作' }));
+  expect(screen.getByText('エクスポート')).toBeTruthy();
+  await user.click(screen.getByRole('menuitem', { name: 'STEP 形式でエクスポート' }));
   await shown('loading', 'part.step を準備中…');
   expect(screen.queryByText(/Waiting for worker/)).toBeNull();
 });

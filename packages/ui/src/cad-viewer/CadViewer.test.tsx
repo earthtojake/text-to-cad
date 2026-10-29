@@ -240,16 +240,17 @@ test('a document named by its id is its row, joined by id: the host hears its fi
   expect(detached.getByText('This model’s script is gone')).toBeTruthy();
 });
 
-test("the host's Full size and Open in browser are the navbar's host actions, Full size first and Open in browser last, around a host's Export", () => {
+test("the host's Full size and Open in browser are the navbar's host actions, Full size first and Open in browser last; Export is the ⋯ menu's, never the navbar's", () => {
   const client = cadClient();
   const view = (extra: object) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file=""
     library={library} onShow={() => {}} {...extra} />;
   const { rerender } = render(view({ fullSize: <b data-full="" />, openInBrowser: <i data-open="" /> }));
   const { container } = render(<>{props().navbarActions}</>);
   expect([...container.querySelectorAll('[data-full], [data-open]')].map(node => node.tagName)).toEqual(['B', 'I']);
-  // A host that hands neither: the navbar's actions are the Export controls' alone (none without downloads).
+  // A host that hands neither has no navbar actions; Export, where there is one, is the ⋯ menu's
+  // items (none without downloads).
   rerender(view({}));
-  expect(props().navbarActions ?? null).toBeNull();
+  expect([props().navbarActions ?? null, props().fileMenuItems ?? null]).toEqual([null, null]);
 });
 
 test("a model's Files starts where the explorer was last this tab, else the person's home folder, never the script's", async () => {

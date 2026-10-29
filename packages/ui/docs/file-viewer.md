@@ -99,15 +99,17 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   button that opens the name menu where the view can show another document, and plain text
   otherwise;
 - the ⋯ file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host's `fileActions` can do it, and no ⋯ where it can do
-  none.
+  manager, each only where the host's `fileActions` can do it; then, after a rule, the
+  host's own items for the document (`fileMenuItems`: the CAD Viewer's Export, its label
+  and the formats the document writes), which a model has too; and no ⋯ where there is
+  none of either.
 
 The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
 At the right, only what a host or a file adds: the host's update button, a renderer's
-actions, and last the host's own (`navbarActions`: the web viewer's Export). A renderer's own
+actions, and last the host's own (`navbarActions`: the CAD app's Full size and Open in browser). A renderer's own
 view controls are never here: a 3D view's Projection, Display and Preview end its tool strip,
 and Preview's settings and Exit preview are Preview's bar's.
 
