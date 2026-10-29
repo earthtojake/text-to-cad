@@ -8,6 +8,11 @@ owns its arguments, so the console and module entry points cannot drift. The eng
 environment (``cadgen.cli.run``); the robot validators' parsers are DERIVED from
 the verb function's signature (``cadgen._internal.cli_from_function``).
 
+**Every command defers first.** Before any verb runs, a process whose release is older than the one
+the device runs (``<state>/current``) runs that installation's ``cadgen`` with the same arguments
+instead (``cadgen._internal.installations.defer``): an agent app's server line, pinned at install,
+is a floor, never the release that runs.
+
 **Dispatch is lazy on purpose.** Importing a CAD subcommand pulls in OCP/build123d, which
 costs seconds and needs the heavy dependency set installed. ``cadgen --help`` and an
 unknown command must not pay for that, so the registry stores dotted module names as
@@ -148,6 +153,13 @@ def _harden_std_stream_errors() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Before any verb: a process older than the release the device runs runs that one's command
+    # instead (``cadgen._internal.installations.defer``), so an app's pinned server line is a floor.
+    from cadgen._internal.installations import defer
+
+    deferred = defer(list(sys.argv[1:] if argv is None else argv))
+    if deferred is not None:
+        return deferred
     try:
         code = _main(argv)
         if sys.stdout is not None:

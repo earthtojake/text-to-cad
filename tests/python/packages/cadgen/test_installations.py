@@ -1,5 +1,6 @@
-"""The installations' registry and the ``cadgen`` command that runs them
-(``cadgen._internal.installations``, ``cadgen._internal.proxy``).
+"""The installations' registry, the release the device runs (``current``) and every command's
+deferral to it, and the ``cadgen`` command that runs them (``cadgen._internal.installations``,
+``cadgen._internal.proxy``).
 
 Each test writes into temporary folders from fake environments; none touches ~/.local/bin or the
 user's state folder, and no engine runs: the running engines the proxy asks are faked.
@@ -140,7 +141,7 @@ class RegistryTests(Fixture):
         with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets",
                                                                      return_value=self.environment("env")):
             shim.start()  # the server says nothing and raises nothing
-            (_, _, unregistered), (_, _, unwritten) = installations.setup("1.2.3")
+            (_, _, unregistered), (_, _, unwritten), _pointed = installations.setup("1.2.3")
         self.assertTrue(unregistered and unwritten)
 
 
@@ -266,9 +267,11 @@ class ProxyFileTests(Fixture):
             (line,) = [row for row in lines if f'"{key}":' in row]
             pieces = [piece for piece in line.split('"') if piece]
             self.assertEqual(pieces[int(taken) - 1].replace("\\\\", "\\"), record[key])
-        # Alive as alive() says it, as the sh does: an uninstalled cadgen leaves its python.
+        # Alive as alive() says it, as the sh does: an uninstalled cadgen leaves its python. The
+        # pointer is read the same way, first.
         self.assertIn('if exist "!python!" if exist "!console!" goto run', text)
-        self.assertEqual(text.count("goto run"), 1)
+        self.assertEqual(text.count("goto run"), 2)
+        self.assertLess(text.index('"!state!\\current"'), text.index('"!state!\\installations\\*.json"'))
 
     @POSIX
     def test_the_sh_passes_over_an_installation_whose_cadgen_is_gone(self) -> None:
@@ -284,6 +287,149 @@ class ProxyFileTests(Fixture):
         ran = subprocess.run([installations.proxy_path(where, windows=False), "status"], capture_output=True,
                              text=True, env=environment, cwd=self.root)
         self.assertEqual(ran.stdout, "1.0.0\n", ran.stderr)
+
+
+class CurrentTests(Fixture):
+    """``<state>/current``: what the device runs, read with a fallback, pointed forward only."""
+
+    def point(self, version: str, *, explicit: bool = False) -> str:
+        record = next(found for found in installations.records(self.state) if found["version"] == version)
+        return installations.point(version, (record["cadgen"], record["python"], record["prefix"]), folder=self.state,
+                                   explicit=explicit)
+
+    def test_current_reads_the_pointer_falls_back_to_the_newest_live_release_and_never_raises(self) -> None:
+        self.assertIsNone(installations.current(self.state))
+        old, new = self.registered("0.8.3"), self.registered("0.8.4")
+        self.registered("0.8.5-dev.1")  # a development build is never what the device runs
+        self.assertEqual(installations.current(self.state)["release"], "0.8.4")
+        self.assertEqual(self.point("0.8.3", explicit=True), installations.POINTED)
+        pointer = json.loads((self.root / "state" / installations.CURRENT).read_text(encoding="utf-8"))
+        self.assertEqual(set(pointer), {"release", "cadgen", "python", "set"})
+        self.assertEqual({key: installations.current(self.state)[key] for key in ("release", "cadgen", "python")},
+                         {"release": "0.8.3", "cadgen": old["cadgen"], "python": old["python"]})
+        os.unlink(old["python"])  # the pointer's installation is gone
+        self.assertEqual(installations.current(self.state)["cadgen"], new["cadgen"])
+        (self.root / "state" / installations.CURRENT).write_text("{not json", encoding="utf-8")
+        self.assertEqual(installations.current(self.state)["release"], "0.8.4")
+        with mock.patch.object(installations, "records", side_effect=OSError("unreadable")):
+            self.assertIsNone(installations.current(self.state))
+
+    def test_a_pointer_moves_forward_only_unless_asked_and_never_to_a_development_build(self) -> None:
+        for version in ("0.8.3", "0.8.4", "0.8.5-dev.1"):
+            self.registered(version)
+        self.assertEqual(self.point("0.8.4"), installations.POINTED)
+        self.assertEqual(self.point("0.8.4"), installations.OK)
+        self.assertEqual(self.point("0.8.3"), installations.BEHIND)
+        self.assertEqual(self.point("0.8.5-dev.1", explicit=True), installations.NOT_RELEASE)
+        self.assertEqual(installations.current(self.state)["release"], "0.8.4")
+        self.assertEqual(self.point("0.8.3", explicit=True), installations.POINTED)
+        self.assertEqual(installations.current(self.state)["release"], "0.8.3")
+
+    def test_a_development_install_registers_but_never_points(self) -> None:
+        found = self.environment("env")
+        named = {"CADGEN_STATE_DIR": str(self.root / "state"), installations.DIR_ENV: str(self.root / "bin")}
+        with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets", return_value=found):
+            with mock.patch.object(installations, "development", return_value=True):
+                (_, registered, _), _proxy, (pointed, _) = installations.setup("0.8.4")
+            self.assertEqual((registered, pointed), (installations.REGISTERED, installations.NOT_RELEASE))
+            self.assertFalse((self.root / "state" / installations.CURRENT).exists())
+            with mock.patch.object(installations, "development", return_value=False):
+                self.assertEqual(installations.setup("0.8.4")[2], (installations.POINTED, None))
+
+    def test_a_newer_floor_a_host_brought_becomes_current_at_its_first_start(self) -> None:
+        self.registered("0.8.3")
+        self.assertEqual(self.point("0.8.3"), installations.POINTED)
+        floor = self.environment("plugin-0.8.4")
+        named = {"CADGEN_STATE_DIR": str(self.root / "state"), installations.DIR_ENV: str(self.root / "bin")}
+        with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets", return_value=floor), \
+                mock.patch.object(installations, "own_version", return_value="0.8.4"), \
+                mock.patch.object(installations, "development", return_value=False):
+            installations.startup()
+            self.assertEqual(installations.current()["cadgen"], floor[0])
+            with mock.patch.object(installations, "own_version", return_value="0.8.2"), \
+                    mock.patch.object(installations, "targets", return_value=self.environment("plugin-0.8.2")):
+                installations.startup()  # an older floor registers, and the device runs on as it was
+            self.assertEqual(installations.current()["release"], "0.8.4")
+
+    @POSIX
+    def test_the_sh_runs_the_pointer_s_installation_first_then_the_records(self) -> None:
+        where = str(self.root / "bin")
+        installations.write_proxy(where, windows=False)
+        environment = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.root), "CADGEN_STATE_DIR": str(self.root / "state")}
+        for version in ("1.0.0", "2.0.0"):
+            record = self.registered(version)
+            Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}"\n', encoding="utf-8")
+            os.chmod(record["python"], 0o755)
+        self.assertEqual(self.point("1.0.0", explicit=True), installations.POINTED)  # 2.0.0 registered last
+        run = [installations.proxy_path(where, windows=False), "status"]
+        ran = subprocess.run(run, capture_output=True, text=True, env=environment, cwd=self.root)
+        self.assertEqual(ran.stdout, "1.0.0\n", ran.stderr)
+        os.remove(self.root / "env-1.0.0" / "bin" / "cadgen")  # the pointer's installation is gone
+        ran = subprocess.run(run, capture_output=True, text=True, env=environment, cwd=self.root)
+        self.assertEqual(ran.stdout, "2.0.0\n", ran.stderr)
+
+
+class DeferralTests(Fixture):
+    """Every command defers to the release the device runs when that is newer than its own
+    (``installations.defer``, at the top of ``cadgen.cli.main``)."""
+
+    def run_cli(self, argv: list[str], *, release: str = "0.9.0", development: bool = False,
+                environ: dict | None = None) -> mock.Mock:
+        from cadgen import cli
+
+        script = str(self.root / f"env-{release}" / "bin" / "cadgen")
+        if not os.path.exists(script):
+            self.environment(f"env-{release}")
+        current = {"release": release, "cadgen": script, "python": script, "set": None}
+        given = {installations.NAME_ENV: "0.8.3-dev.1", **(environ or {})}
+        with mock.patch.dict("os.environ", given), \
+                mock.patch.object(installations, "current", return_value=current), \
+                mock.patch.object(installations, "development", return_value=development), \
+                mock.patch("cadgen.__version__", "0.8.3"), \
+                mock.patch.object(installations.os, "execve") as execve, \
+                mock.patch("subprocess.call", return_value=0) as call, \
+                mock.patch.object(cli, "_main", return_value=0):
+            cli.main(argv)
+            self.left = installations.NO_DEFER_ENV in os.environ
+        self.script = script
+        return call if os.name == "nt" else execve  # no exec on Windows: a child, waited for
+
+    def test_an_older_process_runs_the_current_release_s_command_with_its_arguments(self) -> None:
+        ran = self.run_cli(["mcp", "--port", "4000"])
+        self.assertTrue(ran.called)
+        if os.name == "nt":
+            (argv,), options = ran.call_args
+            env = options["env"]
+        else:
+            path, argv, env = ran.call_args.args
+            self.assertEqual(path, self.script)
+        self.assertEqual(argv, [self.script, "mcp", "--port", "4000"])
+        self.assertNotIn(installations.NAME_ENV, env, "a release knows its own version")
+
+    def test_what_runs_as_it_is(self) -> None:
+        cases = {"a release no newer": {"release": "0.8.3"}, "a development install": {"development": True},
+                 "CADGEN_NO_DEFER=1": {"environ": {installations.NO_DEFER_ENV: "1"}}}
+        for why, given in cases.items():
+            with self.subTest(why):
+                self.assertFalse(self.run_cli(["status"], **given).called)
+                self.assertFalse(self.left, "the switch is this process's alone")
+        for argv in (["+0.8.3", "status"], ["setup", "--version", "0.8.3"], ["update", "--version=0.8.3"]):
+            with self.subTest(argv=argv):
+                self.assertFalse(self.run_cli(argv).called)
+        self.assertTrue(self.run_cli(["setup"]).called, "a setup not asked for by name defers too")
+
+    def test_the_proxy_runs_a_named_version_as_it_is(self) -> None:
+        record = self.registered("0.8.0")
+        with mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": str(self.root / "state")}), \
+                mock.patch.object(proxy.os, "execve") as execve, mock.patch("subprocess.call", return_value=0) as call:
+            proxy.main(["+0.8.0", "status"])
+            if os.name == "nt":
+                (argv,), options = call.call_args
+                env = dict(options["env"])
+            else:
+                _path, argv, env = execve.call_args.args
+                env = dict(env)  # the process's own environment, which the patch puts back
+        self.assertEqual((argv, env[installations.NO_DEFER_ENV]), ([record["cadgen"], "status"], "1"))
 
 
 class ResolutionTests(Fixture):
@@ -304,6 +450,11 @@ class ResolutionTests(Fixture):
         self.assertEqual(self.choose(["status"], {"CADGEN_VERSION": "0.8.0"})[0], "0.9.0")
         os.unlink(self.new["python"])
         self.assertEqual(self.choose(["status"])[0], "0.9.0-dev.20261024")
+
+    def test_the_current_release_is_the_default_and_a_named_one_wins(self) -> None:
+        current = {"release": "0.8.0", "cadgen": self.old["cadgen"], "python": self.old["python"], "set": None}
+        self.assertEqual(proxy.choose(None, self.records, current)["version"], "0.8.0")
+        self.assertEqual(proxy.choose("0.9.0", self.records, current)["version"], "0.9.0")
 
     def test_a_shell_whose_folder_was_removed_still_resolves(self) -> None:
         with mock.patch("os.getcwd", side_effect=FileNotFoundError(2, "No such file or directory")), \

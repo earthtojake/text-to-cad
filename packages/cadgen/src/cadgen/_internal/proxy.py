@@ -1,8 +1,11 @@
-"""Select an installed cadgen CLI by +VERSION, otherwise the newest live registration.
+"""Select an installed cadgen CLI by +VERSION, otherwise the release the device runs
+(``installations.current``: the pointer, else the newest live registered release), else the newest
+live registration. One selected by version runs as it is (``CADGEN_NO_DEFER=1``): the command
+never defers it to the current release (``installations.defer``).
 
-Server selection is independent: CADGEN_PORT (or --port) chooses its address and the
-client handshake requires the exact installed release. The launcher never searches
-running engines or chooses a Python interpreter for model scripts.
+Server selection is independent: CADGEN_PORT (or --port) chooses its address, and client and
+engine meet by protocol, never by release. The launcher never searches running engines or
+chooses a Python interpreter for model scripts.
 """
 
 from __future__ import annotations
@@ -67,8 +70,9 @@ def _same(one: str, other: str) -> bool:
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
 
 
-def choose(version: str | None, records: list[dict]) -> dict:
-    """The explicitly named installation, or newest installed release; no server discovery."""
+def choose(version: str | None, records: list[dict], current: dict | None = None) -> dict:
+    """The explicitly named installation, else the ``current`` one (``installations.current``), else
+    the newest installed release; no server discovery."""
     from cadgen._internal.installations import alive
 
     live = [record for record in records if alive(record)]
@@ -77,6 +81,10 @@ def choose(version: str | None, records: list[dict]) -> dict:
             if record["version"] == version:
                 return record
         raise Refused(refusal(version))
+    if current is not None:
+        for record in live:
+            if record["version"] == current["release"] and _same(record["cadgen"], current["cadgen"]):
+                return record
     if not live:
         raise Refused(refusal(None))
     return max(live, key=lambda record: version_key(record["version"]))
@@ -90,20 +98,23 @@ def command(record: dict, args: list[str]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     try:
-        from cadgen._internal.installations import records
+        from cadgen._internal.installations import current, records
 
         version, args = named(args, os.environ)
-        record = choose(version, records())
+        found = records()
+        record = choose(version, found, None if version is not None else current())
     except Refused as refusal:
         print(refusal, file=sys.stderr)
         return 1
     run = command(record, args)
-    from cadgen._internal.installations import NAME_ENV, named as told
+    from cadgen._internal.installations import NAME_ENV, NO_DEFER_ENV, named as told
 
     if told(record):  # an installation that cannot know its own name: told it
         os.environ[NAME_ENV] = told(record)
     else:  # a release knows its own, whatever another installation's process that ran this was told
         os.environ.pop(NAME_ENV, None)
+    if version is not None:  # asked for by version: it runs as it is, whatever the device runs
+        os.environ[NO_DEFER_ENV] = "1"
     if run[0] == record["cadgen"] and _same(sys.prefix, record["prefix"]):
         # The installation this interpreter is: its console script's work, here, without a second start.
         sys.argv = run

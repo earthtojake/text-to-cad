@@ -176,6 +176,11 @@ main() {
   else
     if [ -n "$version" ]; then
       origin="as --version asked"
+      # A release asked for by name becomes the one the device runs, even past a newer one
+      # (`cadgen setup --version`); one older than this script's knows no such option.
+      if [ "$verb" = setup ] && ! older "$version" "$CADGEN_VERSION"; then
+        set -- --version "$version" "$@"
+      fi
     else
       version=$(latest)
       if [ -z "$version" ]; then

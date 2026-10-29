@@ -210,16 +210,18 @@ def _probe_kernel() -> tuple[str, str]:
 
 
 def _setup() -> list[str]:
-    """The report lines of the setup: this installation registered and the proxy written when this
-    installation may (a source tree registers only when named), the records whose interpreter is
-    gone, and why a write failed, which in a sandbox is the folder being out of reach."""
+    """The report lines of the setup: this installation registered, the device pointed at it when it
+    is a release past the current one, and the proxy written when this installation may (a source
+    tree registers only when named); the release the device runs (``current``); the records whose
+    interpreter is gone; and why a write failed, which in a sandbox is the folder being out of reach."""
     from cadgen._internal import installations as setup
 
     lines = []
     try:
         version = setup.own_version()
+        pointed: tuple[str, str | None] = (setup.NOT_RELEASE, None)
         if version:
-            registered, proxy = setup.setup(version)
+            registered, proxy, pointed = setup.setup(version)
         else:
             registered, proxy = None, (setup.proxy_path(), setup.proxy_status(), None)
         if registered is None:
@@ -243,6 +245,15 @@ def _setup() -> list[str]:
             lines.append(f"command  {path} {said}{path_hint}")
         else:
             lines.append(f"command  {path} {said}")
+        found = setup.current()
+        if pointed[1]:
+            lines.append(f"current  cannot be written here ({pointed[1]}): run this outside any sandbox")
+        elif found is not None:
+            lines.append(f"current  cadgen {found['release']}"
+                         + (" (pointed here now)" if pointed[0] == setup.POINTED else "")
+                         + ": what every app's next session runs")
+        else:
+            lines.append("current  none: no release is registered")
         for record in setup.records():
             if not setup.alive(record):
                 lines.append(f"registry {record['path']} dangling: its interpreter {record['python']} is gone "

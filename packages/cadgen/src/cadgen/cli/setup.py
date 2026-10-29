@@ -6,7 +6,11 @@ The install command runs it (``cadgen.updates.INSTALL``: ``curl -fsSL https://te
 sh``; on Windows ``INSTALL_WINDOWS``, ``irm https://www.texttocad.dev/install.ps1 | iex``) after finding or
 installing uv: the newest release's cadgen, run through ``uvx``. Running it again is the update, and
 from then on the engine runs it itself, within the hour of each release
-(``cadgen._internal.auto_update``). In order, each step said as it runs:
+(``cadgen._internal.auto_update``). An app's server line is written once, with the release that
+installed it, and never rewritten for a release: it is a floor, and every entry defers to the
+release the device runs (``<state>/current``, ``cadgen._internal.installations``), which this
+command points at itself. So an update restarts nothing: the next session an app starts runs it.
+In order, each step said as it runs:
 
 1. **Plan.** Under a lock in the state folder, every agent app is read
    (``cadgen._internal.providers``), and the plan printed: per app, ``install``, ``update``,
@@ -14,13 +18,17 @@ from then on the engine runs it itself, within the hour of each release
    ``--dry-run`` stops there and writes nothing; otherwise the run goes on. Nothing is asked.
 2. **Engine.** An older cadgen's engine serving the selected port is retired once it is idle
    (``cadgen.engine.client.retire_older``); one still in use is said, and converges on its next start.
-3. **Apps.** Each app's own command installs or updates the plugin; Claude Desktop's config gets
-   CAD's server, written atomically with a ``.bak`` beside it; every second copy goes. The agents
+3. **Apps.** Each app's own command installs or updates the plugin, which refreshes its skills (and
+   may move its server's floor); Claude Desktop's config gets CAD's server where it has none, written
+   atomically with a ``.bak`` beside it, and keeps the one it has whatever release that names; every
+   second copy goes. The agents
    with no plugin that the Skills CLI knows get the skills, copied into their own skills folders by
    one ``npx skills add`` (Node needed); an app with a plugin never does. A command that fails is
    said with its output, and the other apps go on; the exit status is then 1.
-4. **The cadgen command.** This installation registered and ``~/.local/bin/cadgen`` written, as
-   ``cadgen doctor`` does it (``cadgen._internal.installations``).
+4. **The cadgen command.** This installation registered, made the release the device runs when it is
+   one past the current one (``--version``, the install command's when it was asked for a release by
+   name: whatever the current one is), and ``~/.local/bin/cadgen`` written, as ``cadgen doctor`` does
+   it (``cadgen._internal.installations``).
 5. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take back;
    and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from which
    release (``skills``), since that CLI keeps no versions: the next run adds them again for an agent
@@ -29,7 +37,8 @@ from then on the engine runs it itself, within the hour of each release
    and the PATH this run found their commands on (``path``), recorded at every run.
 6. **Report.** The doctor's read-only report for each app (``cadgen._internal.diagnostics``), the
    telemetry notice (``--no-telemetry`` turns it off, as ``cadgen telemetry off`` does), and the apps
-   to restart; ``already up to date`` when a run found nothing to do and changed nothing. Its last line
+   to restart to load a plugin this run installed (an update needs none); ``already up to date`` when
+   a run found nothing to do and changed nothing. Its last line
    says that text-to-cad updates itself from now on, and how to turn that off
    (``cadgen._internal.auto_update.said``).
 
@@ -100,6 +109,9 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> argpar
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cadgen telemetry off` does")
+        parser.add_argument("--version", metavar="X.Y.Z", dest="release",
+                            help="the release the install command was asked for by name, this one: it becomes "
+                                 "the one this device runs even when a newer one is installed")
         parser.add_argument("--port", type=int, metavar="PORT",
                             help="the engine port the apps' configs name (default: CADGEN_PORT, else 3245)")
     parser.add_argument("--json", action="store_true",
@@ -128,6 +140,12 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
         port = args.port or environment_port() or DEFAULT_PORT
     except ValueError as error:
         parser.error(str(error))
+    if not uninstall and args.release is not None:
+        from cadgen import __version__
+
+        if args.release != __version__:
+            parser.error(f"--version {args.release}: this is cadgen {__version__}; run the install command "
+                         f"with --version {args.release}")
     installer = Installer(args, only, port)
     return installer.uninstall() if uninstall else installer.install()
 
@@ -327,13 +345,16 @@ class Installer:
     # --- the cadgen command -------------------------------------------------------------------
 
     def _register(self) -> dict[str, Any]:
-        """This installation registered and the proxy written: ``cadgen doctor``'s setup."""
+        """This installation registered, the device pointed at it (``installations.point``) and the
+        proxy written: ``cadgen doctor``'s setup."""
         from cadgen._internal import installations
         from cadgen.cli.doctor import _command_path_hint
 
         version = installations.own_version()
+        pointed, point_error = installations.NOT_RELEASE, None
         if version:
-            (record, recorded, record_error), (proxy, before, proxy_error) = installations.setup(version)
+            (record, recorded, record_error), (proxy, before, proxy_error), (pointed, point_error) = \
+                installations.setup(version, explicit=self.args.release is not None)
         else:
             record, recorded, record_error = None, None, None
             proxy, before, proxy_error = installations.proxy_path(), installations.proxy_status(), None
@@ -343,6 +364,14 @@ class Installer:
             self.say(f"cadgen   {record} cannot be written here ({record_error}): run this outside any sandbox")
         elif recorded == installations.REGISTERED:
             self.say(f"cadgen   registered {version} ({self.providers.shown(record, self.machine)})")
+        if point_error:
+            self.say(f"current  cannot be written here ({point_error}): run this outside any sandbox")
+        elif pointed == installations.POINTED:
+            self.say(f"current  cadgen {version}: what every app's next session runs")
+        elif pointed == installations.BEHIND:
+            found = installations.current() or {}
+            self.say(f"current  cadgen {found.get('release')}, newer than {version}, left as it is "
+                     "(the install command's --version makes an older release current)")
         wrote = bool(version) and not proxy_error and before in (installations.MISSING, installations.STALE)
         where = self.providers.shown(proxy, self.machine)
         if proxy_error:
@@ -353,12 +382,14 @@ class Installer:
             self.say(f"command  {where} is not cadgen's, left alone: remove it to run cadgen by it")
         return {"registered": record if recorded and not record_error else None,
                 "record_written": recorded == installations.REGISTERED,
+                "pointed": pointed == installations.POINTED,
                 "launcher": {"path": proxy, "status": before, "written": wrote, "error": proxy_error}}
 
     # --- the report ---------------------------------------------------------------------------
 
     def _verify(self, apps: dict[str, Any]) -> dict[str, Any]:
-        """The doctor's read-only report, a line per app: the cadgen each app's config now runs."""
+        """The doctor's read-only report, a line per app: the cadgen each app's config names, a floor
+        the release the device runs stands in for (``ok`` at or below this release)."""
         from cadgen._internal import diagnostics
 
         try:
@@ -376,11 +407,16 @@ class Installer:
             if not app.present or (self.only and name not in self.only):
                 continue
             releases = sorted(found.get(name, ()), key=self.providers.version_key)
-            verdict = ("ok" if self.release in releases else "stale" if releases
+            floors = [release for release in releases if release != self.release]
+            newer = [release for release in releases
+                     if self.providers.version_key(release) > self.providers.version_key(self.release)]
+            verdict = ("newer" if newer else "ok" if releases
                        else "served" if name in self.providers.FED_BY and self.fed
                        else "not seen" if name in self.providers.INVENTORIED else "not read")
             verdicts[name] = {"verdict": verdict, "releases": releases}
-            said = {"ok": f"cadgen {self.release}", "stale": f"cadgen {', '.join(releases)} (not {self.release})",
+            said = {"ok": f"cadgen {self.release}" + (f" (its config names {', '.join(floors)}, a floor)" if floors
+                                                      else ""),
+                    "newer": f"cadgen {', '.join(newer)}, newer than {self.release}",
                     "served": f"by the {self.providers.LABELS['claude']} plugin",
                     "not seen": "no copy of CAD's server found in what the report reads",
                     "not read": "not among what the report reads"}[verdict]
@@ -418,6 +454,9 @@ class Installer:
         return said
 
     def _restart(self, apps: dict[str, Any], changed: set[str]) -> list[str]:
+        """What to restart to load what this run did (``changed``: the apps and agents that got it for
+        the first time, and a config it edited, which its app reads as it opens); an update needs
+        nothing, as the next session runs it."""
         providers = self.providers
         names = [name for name in providers.APPS if name in changed]
         if "claude" in changed:  # Cursor and Grok Build load the Claude Code plugin
@@ -473,10 +512,12 @@ class Installer:
                                               aside=aside, backed_up=backed_up)
                 self.actions += records
                 failed = failed or not ok
-                if ok and records:
+                # An update loads in the next session; Claude Desktop reads its config only as it opens.
+                if ok and records and (step.action == "install" or step.edit):
                     changed.add(step.app)
                 if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
-                    changed.update(step.agents)
+                    actions = {other.app: other.action for other in steps}
+                    changed.update(agent for agent in step.agents if actions.get(agent) == "install")
                     said = next((record["skills"] for record in records if record.get("skills") is not None), None)
                     got = dict(receipt.get("skills") or {})
                     for agent in step.agents:
@@ -494,7 +535,8 @@ class Installer:
             for key in ("path", "only"):
                 receipt.pop(key, None)
             receipt.update(remembered)
-            if self.actions or self.retired or registered["record_written"] or launcher["written"]:
+            if self.actions or self.retired or registered["record_written"] or registered["pointed"] \
+                    or launcher["written"]:
                 receipt.update({"release": self.release, "updated": providers.stamp(), "port": self.port})
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
                 if self.retired:

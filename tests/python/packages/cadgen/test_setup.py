@@ -293,6 +293,55 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual({path: found for path, found in self.snapshot().items() if not path.endswith(setup.LOCK)},
                          {path: found for path, found in before.items() if not path.endswith(setup.LOCK)})
 
+    def test_claude_desktop_s_server_is_written_once_and_another_release_s_pin_is_left_alone(self) -> None:
+        self.desktop_with({})
+        self.assertEqual(self.run_setup()[0], 0)
+        floor = {**self.entry(), "args": [*LAUNCHER[1:], "cadgen==0.0.1", "cadgen", "mcp"]}
+        written = self.desktop_with({"cad": floor})  # installed by an earlier release: its floor
+        code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        where = providers.shown(self.desktop, self.machine)
+        self.assertIn(f"Claude Desktop  leave  mcpServers.cad in {where}: there, from cadgen 0.0.1; it runs the "
+                      "release this device runs", out)
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.desktop.read_bytes(), written)
+        self.assertIn(f"verify   Claude Desktop: cadgen {RELEASE} (its config names 0.0.1, a floor)", out)
+        self.assertNotIn("Restart", out, "an update restarts nothing")
+
+    def test_setup_makes_its_release_current_never_a_development_build_nor_an_older_one_unasked(self) -> None:
+        pointer = self.state / installations.CURRENT
+
+        def environment(name: str) -> tuple[str, str, str]:
+            scripts = self.root / name / "bin"
+            scripts.mkdir(parents=True)
+            for path in (scripts / "cadgen", scripts / "python"):
+                path.write_text("", encoding="utf-8")
+            return str(scripts / "cadgen"), str(scripts / "python"), str(self.root / name)
+
+        here = environment("this")
+        with mock.patch.object(installations, "targets", return_value=here), \
+                mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            with mock.patch.object(installations, "development", return_value=True):
+                self.assertEqual(self.run_setup()[0], 0)
+            self.assertFalse(pointer.exists(), "a development install never points")
+            with mock.patch.object(installations, "development", return_value=False):
+                code, out, _err = self.run_setup()
+                self.assertEqual(code, 0, out)
+                self.assertIn(f"current  cadgen {RELEASE}: what every app's next session runs", out)
+                self.assertEqual(installations.current()["cadgen"], here[0])
+                newer = environment("newer")
+                installations.register("99.0.0", newer)
+                installations.point("99.0.0", newer)
+                code, out, _err = self.run_setup()
+                self.assertEqual(code, 0, out)
+                self.assertIn(f"current  cadgen 99.0.0, newer than {RELEASE}, left as it is", out)
+                self.assertEqual(installations.current()["release"], "99.0.0")
+                code, out, _err = self.run_setup("--version", RELEASE)  # the install command asked for it
+                self.assertEqual(code, 0, out)
+                self.assertEqual(installations.current()["release"], RELEASE)
+                self.assertEqual(self.run_setup("--version", "99.0.0")[0], 2, "only this release can be asked for")
+
     def test_the_verify_line_names_the_engine_on_the_port_this_run_set_up(self) -> None:
         self.serving = {"status": "compatible", "release": RELEASE}
         code, out, _err = self.run_setup("--port", "3399")
@@ -510,8 +559,11 @@ class TheOneLineInstaller(unittest.TestCase):
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual(given, [*head, "cadgen==9.9.9", "cadgen", "setup", "--dry-run", "--only", "claude,codex"])
             self.assertIn("cadgen setup --dry-run --only claude,codex\n", done.stderr)  # the Running: line
+            # A release asked for by name is told so: it becomes the one the device runs.
             done, given = run("--version", "1.2.3")
-            self.assertEqual(given, [*head, "cadgen==1.2.3", "cadgen", "setup"])
+            self.assertEqual(given, [*head, "cadgen==1.2.3", "cadgen", "setup", "--version", "1.2.3"])
+            done, given = run("--version", "0.0.1")  # older than the script's own: it knows no --version
+            self.assertEqual(given, [*head, "cadgen==0.0.1", "cadgen", "setup"])
             # --uninstall picks the verb, wherever it is given; the rest goes to `cadgen uninstall`.
             done, given = run("--purge", "--uninstall", "--dry-run")
             self.assertEqual(given, [*head, "cadgen==9.9.9", "cadgen", "uninstall", "--purge", "--dry-run"])

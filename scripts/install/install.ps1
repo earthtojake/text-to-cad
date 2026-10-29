@@ -116,6 +116,9 @@ function Install-TextToCad {
     } else {
         if ($version) {
             $origin = 'as --version asked'
+            # A release asked for by name becomes the one the device runs, even past a newer one
+            # (`cadgen setup --version`); one older than this script's knows no such option.
+            if ($verb -eq 'setup' -and -not (Test-Older $version $CadgenVersion)) { $rest = @('--version', $version) + $rest }
         } else {
             # An older Windows PowerShell may not offer TLS 1.2 on its own.
             [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12

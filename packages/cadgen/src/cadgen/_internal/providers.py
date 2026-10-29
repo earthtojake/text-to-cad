@@ -1133,10 +1133,22 @@ def _plan_gemini(app: App, release: str, machine: Machine, **_: Any) -> List[Ste
                            "--auto-update"]])]
 
 
+def _unpinned(entry: Any) -> Any:
+    """A server entry with the release it pins left out (``cadgen==X`` as ``cadgen``): a pin is the
+    floor it was written with, and every entry runs the release the device runs
+    (``cadgen._internal.installations.defer``), so two entries that differ in it alone are the same."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("args"), list):
+        return entry
+    return {**entry, "args": ["cadgen" if isinstance(word, str) and word.startswith("cadgen==") else word
+                              for word in entry["args"]]}
+
+
 def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]] = None,
                   **_: Any) -> List[Step]:
-    """Claude Desktop's config: ``mcpServers.cad`` set to ``desktop_entry``, and every other entry that
-    runs cadgen taken out, in one write of the file (one ``.bak``)."""
+    """Claude Desktop's config: ``mcpServers.cad`` set to ``desktop_entry`` where it has none, or one
+    that differs in more than its release (its uvx, its port); one that differs in the release alone
+    is left as it is, whatever release it names, since that is a floor (``_unpinned``). Every other
+    entry that runs cadgen is taken out, in the same write of the file (one ``.bak``)."""
     path = app.config or str(desktop_config(machine))
     others = [copy for copy in app.copies if not copy.ours]
     remove = [copy.name for copy in others]
@@ -1148,12 +1160,11 @@ def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optio
         steps.append(_leave(app, "no uvx found to run CAD's server with: install uv, then run this again"))
     elif ours is None:
         change = Step(app.id, "install", f"{where}: cadgen {release}")
-    elif ours.entry == desktop_entry:
-        steps.append(_leave(app, f"{where}: cadgen {ours.version or '?'}, up to date"))
-    elif ours.version and is_release(ours.version) and version_key(ours.version) > version_key(release):
-        steps.append(_leave(app, f"{where}: cadgen {ours.version}, newer than {release}, left alone"))
+    elif _unpinned(ours.entry) == _unpinned(desktop_entry):
+        steps.append(_leave(app, f"{where}: there, from cadgen {ours.version or '?'}; it runs the release this "
+                                 "device runs"))
     else:
-        change = Step(app.id, "update", f"{where}: cadgen {ours.version or '?'} -> {release}")
+        change = Step(app.id, "update", f"{where}: its command or port, as cadgen {release} writes them")
     if change is not None:
         change.edit = {"op": "servers", "path": path, "set": {DESKTOP_KEY: desktop_entry}, "remove": remove}
         return [Step(app.id, "remove duplicate", copy.words(machine), note="in the same edit") for copy in others] \
