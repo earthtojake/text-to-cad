@@ -97,12 +97,26 @@ CARD_HEADERS = ('authorization', 'content-type', 'range', 'if-range', 'x-cadgen-
 _CARD_EXPOSED = 'content-length, content-range, etag'
 
 
-def _watch(request):
-    """Whether ``request`` is a page's watch of a document, its version read
-    (``GET /api/doc/<id>/version``, ``/__cad/api/doc/<id>/version``): what a page left open asks
-    for as long as it is open, which is no work (``EngineApp.quiet``)."""
-    parts = request.path.removeprefix('/__cad').strip('/').split('/')
-    return request.method == 'GET' and len(parts) == 4 and parts[:2] == ['api', 'doc'] and parts[3] == 'version'
+# What a page left open asks for as long as it is open, besides its document's version read: the
+# server's description, the catalog, the explorer's folders and searches, the version feed, its
+# language, telemetry's standing and thumbnails, read every few seconds; and its activity reports.
+_IDLE_GETS = frozenset({'server', 'catalog', 'folder', 'search', 'version', 'language', 'analytics', 'thumbnail'})
+_IDLE_POSTS = frozenset({'analytics/activity'})
+
+
+def _idle(request):
+    """Whether ``request`` is a page's idle traffic, which is no work (``EngineApp.quiet``): its
+    watch of a document, the version read (``GET /api/doc/<id>/version``,
+    ``/__cad/api/doc/<id>/version``), or one of the reads and reports a page left open makes on its
+    own (``_IDLE_GETS``, ``_IDLE_POSTS``). Everything else -- a document's data, a build, an export,
+    a draw, a pick -- is work, and a superseded engine serves it out before it steps aside."""
+    path = request.path.removeprefix('/__cad').strip('/')
+    parts = path.split('/')
+    if request.method == 'GET':
+        if len(parts) == 4 and parts[:2] == ['api', 'doc'] and parts[3] == 'version':
+            return True
+        return parts[0] in _IDLE_GETS and len(parts) == 1
+    return request.method == 'POST' and path in _IDLE_POSTS
 _PREFLIGHT_SECONDS = 600
 
 
@@ -209,7 +223,7 @@ class EngineApp:
         self.cookie = 'cadgen-' + _mac(self.token, 'cookie')[:12]
         self.lock = threading.RLock()
         self.active_requests = 0
-        # The requests under way that are not a page's watch (``_watch``), and when the last began or
+        # The requests under way that are not a page's idle traffic (``_idle``), and when the last began or
         # ended (``time.monotonic``): what ``quiet`` says.
         self.working_requests = 0
         self.worked = time.monotonic()
@@ -235,8 +249,9 @@ class EngineApp:
         return active or bool(self._mcp and self._mcp.active())
 
     def quiet(self, seconds):
-        """Whether no request but a page's watch runs now, has run in the last ``seconds``, or keeps
-        an export alive: a superseded engine steps aside only then (``daemon.Daemon.supersede``)."""
+        """Whether no request but a page's idle traffic (``_idle``) runs now, has run in the last
+        ``seconds``, or keeps an export alive: a superseded engine steps aside only then
+        (``daemon.Daemon.supersede``)."""
         with self.lock:
             apps = [self._default] if self._default else []
             working = self.working_requests > 0 or time.monotonic() - self.worked < seconds
@@ -374,7 +389,7 @@ class EngineApp:
         origin = _card_origin(request)
         if origin and bearer and standing(self.token, 'link', bearer) == 'ok':
             response.also = (*response.also, *self._card(origin))
-        work = not _watch(request)
+        work = not _idle(request)
         with self.lock:
             self.active_requests += 1
             if work:
