@@ -34,40 +34,20 @@ Use the corresponding robot-description skill for URDF, SRDF or SDF.
 
 ## Setup and paths
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+- `cadgen` below means `~/.local/bin/cadgen +0.8.3`, the registered CLI.
+- Run models with `cadgen run model.py`. It runs the script in a Python environment it makes
+  for the project: the dependencies the project declares (`requirements.txt`,
+  `pyproject.toml` or the script's inline `# /// script` metadata) and the engine's own
+  cadgen. Declare what a model imports; nothing needs installing in the project, and its
+  own `.venv` is never touched. Tests and notebooks in an environment of your own:
+  [setup](references/setup.md#your-own-python-environment).
+- MCP starts or attaches to the engine, and so does `cadgen run`; to keep one running
+  without either, run `cadgen server`. Use the port advertised by MCP, or 3245 by default;
+  set `CADGEN_PORT` (or pass `cadgen run --port N`) for another port. Nothing falls back
+  to a local build.
 
-- `cadgen` below means `cadgen +0.8.2` (`~/.local/bin/cadgen +0.8.2` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.2 run`
-
-If `cadgen` is not on your PATH, or it says 0.8.2 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
-
-`cadgen doctor <skill-dir>` reports the installation in use, whether it is the one
-this skill pins, whether the CAD kernel loads, and whether the engine is running, starting
-it when none is. Each
-command's `--help` lists its flags. The first launch downloads cadgen and may outlast a
-host's server start timeout (Claude Code: 30 s by default, raised by setting `MCP_TIMEOUT` in
-milliseconds; Codex: the plugin asks for 300 s); a restart resumes the download.
-
-A project venv can put its own `cadgen` ahead of the launcher on PATH, even when
-`~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.2 doctor` to diagnose that
-case and use that full launcher path for commands until PATH is corrected.
-
-One engine serves the installation: the first run starts it, every run and every
-command goes through it, and it serves the viewer. `cadgen status` lists its workers
-and the documents it holds; `cadgen stop` stops it, and any older one left running.
-A build cut off by the shell's time limit keeps running in the engine; run the same
-command again and it waits for that build and replays it (`cadgen status` shows it).
-Give a cold build of a large model the shell tool's longest timeout, or run it in the
-background. A refused folder is another case: if a command ends with 'the system denies
-cadgen's local engine', this shell's sandbox forbids the engine's folder itself: rerun it
-with the sandbox's permission (in Codex, escalated permissions) rather than retrying.
+For first-time setup or an update, Windows or a relocated CLI, or an installation/connection
+error, read [Setup and troubleshooting](references/setup.md).
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
@@ -112,7 +92,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/bracket.py
+cadgen run src/bracket.py
 ```
 
 ```text
@@ -353,7 +333,7 @@ own work; review with `cadgen snapshot`.
   cadgen viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command attaches to the selected engine, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.

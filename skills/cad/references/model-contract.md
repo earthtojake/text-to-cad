@@ -58,9 +58,18 @@ if __name__ == "__main__":
 - **A script is plain Python, loaded afresh by each run.** Its folder is first on the
   module search path, so a module beside it imports by its own name. A script inside a
   package (its folder holds an `__init__.py`) is that package's module, so its relative
-  imports (`from ..lib.dims import WIDTH`) work under `python proj/parts/block.py` and
-  `python -m proj.parts.block` alike. An edit to any module it imports is read on the
-  next run.
+  imports (`from ..lib.dims import WIDTH`) work under `cadgen run proj/parts/block.py`.
+  An edit to a project module it imports is read on the next run, including the
+  project's own package, which `cadgen run` installs editable when its `pyproject.toml`
+  has a `[project]` table. No manual reload or engine restart is needed; the worker keeps
+  its kernel and rebuilds affected work. Installed packages are read once, when a worker
+  starts: after a change to the project's declared dependencies, the next `cadgen run`
+  remakes its environment on its own; after installing, upgrading or reinstalling
+  packages in an environment of your own, `cadgen stop` stops the selected engine
+  (whoever started it), then `cadgen server` starts it again, or, with the CAD
+  plugin, its next CAD tool call does (a `python model.py` run only attaches). Restart
+  any long-lived calling Python process, then run the model again on the same
+  `CADGEN_PORT` ([setup](setup.md#after-changing-dependencies)).
 - **`import build123d as bd` costs nothing until it is used.** cadgen makes the import of
   `build123d` (and `OCP`) lazy: the module binds at once and the kernel loads on the
   first attribute anything reads from it, in the worker that builds the model. `from
@@ -294,12 +303,17 @@ script's folder and that name, independent of which file in the folder declares 
 names in one folder are refused with both declaration locations. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
 is the script's folder, with no project detection. Moving a named model to another file of its folder
-keeps its id: run the file it left with `cadgen run` (or delete it) first, since until then the engine
+keeps its id: run the file it left (`cadgen run`) or delete it first, since until then the engine
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
 `/<id>` on the engine's address; `cadgen export`, `snapshot` and `inspect`, and the
 CAD app's tools, take the id and read the document as the engine holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
-it again.
+it again. A live document handle retains its original engine selection. Changing
+`CADGEN_PORT` or `CADGEN_ENGINE_DIR` makes its shape reads, exports and snapshots
+fail instead of redirecting them; restore the selection to use that handle again.
+A raw document id addresses the currently selected engine explicitly. Saved documents,
+cached bytes, Recents and thumbnails are shared across ports, as are preferences and
+the user token. Live workers remain with their engine.
 
 - **Documents outlive their workers.** A document stays held after its script's worker
   retires (`cadgen status`: `live` with its worker, `held` without one, where `made_by`
@@ -311,14 +325,16 @@ it again.
   and `cad_show` alike (`cadgen status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in cadgen's state folder (`documents/<uuid>/document.json`:
-  the script and function that build it (the rebuild command is always `cadgen run` of that script); never
+  the script and function that build it (the rebuild command is `cadgen run` of that script); never
   geometry). The home lists the records, models and files alike, pinned first, then by
   last activity. A record whose
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.
 - **A restart reopens what was built.** The engine keeps each model document's bytes in
-  the platform's cache folder (`~/.cache/cadgen/documents/`), once it is idle, so after a
-  restart its id answers every verb as last built (`cadgen status`: `held`, on `disk`).
+  the shared cache folder's `documents/`, once it is idle, so after a
+  restart its id answers every verb as last built (`cadgen status`: `held`, on `disk`),
+  when its saved format is supported. An unsupported format or failed conversion
+  reports an error while preserving the saved bytes and document record.
   A document is what its last run made: the engine never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
   (`cadgen run /work/arm.py`) to update the document and its open pages.
@@ -334,15 +350,30 @@ it again.
   it again: its record says a program the engine did not run showed it, so run that
   program again. A decorated function in no saved file is refused, with these words.
 - `cadgen status` lists the workers and the documents the engine holds (`--json` as
-  data); `cadgen stop` stops the engine and any older one still running. At most
+  data); `cadgen stop` stops only the selected engine. At most
   `CADGEN_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CADGEN_ENGINE_WORKER_RSS_MB`, never for idleness,
   and its script's next run starts cold. `CADGEN_ENGINE_DIR` moves the
-  engine's door and lock (one engine per folder).
+  private IPC directory. `CADGEN_PORT` selects the engine there (default 3245);
+  callers in different Python environments attach to the same selected engine.
+
+For an explicit offline build, use `bracket.build(daemon=False)` from Python.
+It runs cold in that process, requires no server and serves no live document or URL.
+`export(..., daemon=False)` and `snapshot(..., daemon=False)` likewise operate locally.
+These modes are chosen explicitly; a failed server connection never falls back to them.
+`cadgen run` gives a project's environment the engine's own cadgen. In an environment of
+your own, its cadgen and the selected engine need not be the same release: they must speak
+the same protocol, the engine must read the document format that cadgen writes, and both
+must use the same OCP line (major.minor) on the same OS and architecture. An older cadgen
+there is served, and the engine says once as its worker starts that
+`uv pip install -U cadgen` in that environment updates it; a cadgen newer than the
+engine says to update the engine with the install command
+(`curl -fsSL https://texttocad.dev/install.sh | sh`). A failure names what differs and the fix.
+Project-only Python dependencies may differ and remain in their own environments.
 
 ## Progress and the report
 
-A run says where it is: on a terminal, `python model.py` draws a bar on stderr, and the
+A run says where it is: on a terminal, `cadgen run model.py` draws a bar on stderr, and the
 viewer's page shows the same. Nothing in the model says it: while a body runs, the bar
 names each `@memo` call and each child model it calls, by its function's name, as it
 begins, and counts it when it ends. A long body split into `@memo` stages (`finger`,
@@ -372,8 +403,11 @@ those run or replayed, and `misses` and `hits` the kernel's memo. `assembly.buil
 returns the same report as data, a dict per model in `.models`: `id`, `memo`, `bodies`
 (each `run` or `replayed`), `retention` (each body's
 `fallbacks`, the reasons it runs on every run, and the files it `reads`), `timings` and
-`children`:
+`children`. For example, beside `bracket.py`, run with `cadgen run retention.py`:
 
-```bash
-python -c "import bracket; print(bracket.bracket.build().models[0]['retention'])"
+```python
+# retention.py
+import bracket
+
+print(bracket.bracket.build().models[0]["retention"])
 ```

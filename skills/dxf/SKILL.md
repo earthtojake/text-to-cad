@@ -12,27 +12,23 @@ repository link is only for provenance and release review.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+- `cadgen` below means `~/.local/bin/cadgen +0.8.3`, the registered CLI.
+- Run models with `cadgen run model.py`. It runs the script in a Python environment it makes
+  for the project: the dependencies the project declares (`requirements.txt`,
+  `pyproject.toml` or the script's inline `# /// script` metadata) and the engine's own
+  cadgen. Declare what a model imports; nothing needs installing in the project, and its
+  own `.venv` is never touched. Tests and notebooks in an environment of your own:
+  [setup](references/setup.md#your-own-python-environment).
+- MCP starts or attaches to the engine, and so does `cadgen run`; to keep one running
+  without either, run `cadgen server`. Use the port advertised by MCP, or 3245 by default;
+  set `CADGEN_PORT` (or pass `cadgen run --port N`) for another port. Nothing falls back
+  to a local build.
 
-- `cadgen` below means `cadgen +0.8.2` (`~/.local/bin/cadgen +0.8.2` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.2 run`
+For first-time setup or an update, Windows or a relocated CLI, or an installation/connection
+error, read [Setup and troubleshooting](references/setup.md).
 
-If `cadgen` is not on your PATH, or it says 0.8.2 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
-
-`cadgen doctor <skill-dir>` reports the installation in use and checks that it is
-the one this skill pins, that the CAD kernel loads, and whether the engine every
-build runs in is running, starting it when none is; use it for installation or kernel load errors.
-
-Drawings are build123d geometry, so a drawing builds in the engine's warm worker
-like any model: the first run of a script loads the CAD kernel (a few seconds),
-and later runs reuse it.
+Drawings build in the engine's warm project worker: the first run loads the CAD
+kernel, and later runs reuse it.
 
 ## Purpose
 
@@ -41,7 +37,7 @@ geometry, export validated DXF files, and return checked outputs. A drawing's so
 of truth is a Python file named `<name>.py` defining a parameterless `@model` function
 that returns planar geometry.
 
-**A drawing is a model.** It builds as any `$cad` model does: `python <name>.py`
+**A drawing is a model.** It builds as any `$cad` model does: `cadgen run <name>.py`
 rebuilds it in the engine, prints its document's `id:` and page, and writes nothing.
 The DXF is exported from that document, by build123d's own exporter, once the drawing
 checks pass: `cadgen export <id> drawing.dxf`. A drawing that calls a part model
@@ -75,7 +71,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/gasket.py                       # prints id: and view:
+cadgen run src/gasket.py                   # prints id: and view:
 cadgen export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
 ```
 
@@ -184,7 +180,7 @@ Copy the full template for the applicable workflow from
 
 One model per file is the recommendation, and a drawing gets its own script. A
 file MAY declare several models (two drawings, or a drawing beside a part's
-`@model`): `python <file>.py` builds every one its `__main__` block calls, each with
+`@model`): `cadgen run <file>.py` builds every one its `__main__` block calls, each with
 its own id. A drawing composes models, never the reverse.
 
 ## Use this skill when
@@ -224,18 +220,19 @@ Use these defaults unless the user specifies otherwise:
 ## Tool
 
 ```bash
-python path/to/drawing.py                                   # builds every model its __main__ calls
+cadgen run path/to/drawing.py                               # builds every model its __main__ calls
 cadgen export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
 cadgen snapshot path/to/drawing.dxf review.png              # draws it
 cadgen snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
 ```
 
 **Running the script is the only way to build a drawing, and exporting it the only
-way to write its DXF.** `python <drawing>.py` takes no options and writes nothing; it
-prints each model's report (`built src/gasket.py::gasket cold in 2.29s: ...`), its
-`id:` and its page, and exits 1 when a body raises. `cadgen export` exits 2 when the
-export refuses the drawing (3D, off the plane, a failed drawing check), naming which.
-An imported `.dxf` needs nothing at all: hand it straight to a snapshot or the viewer.
+way to write its DXF.** `cadgen run <drawing>.py` passes the script no options and
+writes nothing; it prints each model's report
+(`built src/gasket.py::gasket cold in 2.29s: ...`), its `id:` and its page, and exits 1
+when a body raises. `cadgen export` exits 2 when the export refuses the drawing (3D,
+off the plane, a failed drawing check), naming which. An imported `.dxf` needs nothing
+at all: hand it straight to a snapshot or the viewer.
 
 Paths on the command line, and those `export` takes from Python, resolve from the
 working directory; anchor them on `__file__` in an `exports.py`. Keep a drawing
@@ -272,10 +269,10 @@ checks; review geometry visually (see [Show the model](#show-the-model)).
 1. Convert the request into a short brief: outline dimensions, holes and slots, layers, units, output path, and validation targets.
 2. Pick the workflow: drafted from scratch, flat pattern of a modelled part (create and validate the 3D geometry with `$cad` first), or flat pattern of an imported STEP.
 3. Write or edit the `<name>.py` source with meaningful dimensions as named constants, reusing the model's geometry helpers instead of duplicating formulas.
-4. Run each drawing script directly (`python <drawing>.py`); do not sweep directories. Then export each drawing to its DXF:
+4. Run each drawing script directly (`cadgen run <drawing>.py`); do not sweep directories. Then export each drawing to its DXF:
 
 ```bash
-python path/to/source.py
+cadgen run path/to/source.py
 cadgen export "$ID" path/to/drawing.dxf
 ```
 
@@ -305,7 +302,7 @@ own work; review with `cadgen snapshot`.
   cadgen viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command attaches to the selected engine, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.

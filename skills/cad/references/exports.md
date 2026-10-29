@@ -91,7 +91,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/exports.py
+cadgen run src/exports.py
 ```
 
 Write `exports.py` only when the person wants files kept current; a one-off file is a
@@ -116,7 +116,7 @@ def arm_folded():
 ```
 
 ```bash
-python src/arm_poses.py                          # prints arm_folded's id
+cadgen run src/arm_poses.py                      # prints arm_folded's id
 cadgen export "$FOLDED_ID" STEP/arm_folded.step
 ```
 

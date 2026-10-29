@@ -17,8 +17,8 @@ prompt names a reference ([Pictures](../SKILL.md#pictures)).
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
-for ones worth keeping); `cadgen inspect` answers what a ref names. A check calls the
-model, so it measures the model as its code is now.
+for ones worth keeping), run with `cadgen run` as models are; `cadgen inspect` answers
+what a ref names. A check calls the model, so it measures the model as its code is now.
 
 A dimension the person gave is checked where the engine already holds the geometry: an
 `assert` inside the model's body, on the shape it is about to return, or `cadgen inspect`

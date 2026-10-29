@@ -20,7 +20,7 @@ You never construct a document, name a file in the model, or think about entitie
   layers must hold closed profiles, and open geometry belongs on a
   bend/engrave/reference-named layer.
 - Decoration only declares: the script's `__main__` block calls the drawing, and
-  `python <name>.py` builds what it calls and prints each drawing's id. Then
+  `cadgen run <name>.py` builds what it calls and prints each drawing's id. Then
   `cadgen export <id> DXF/<name>.dxf` writes the file.
 
 ## 1. Standalone drafting (DXF from scratch)

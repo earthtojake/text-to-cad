@@ -108,13 +108,14 @@ OCCT snapshots retain their documented approximations. Native texture maps survi
 but the viewer, GLB export and snapshots explicitly refuse them until UV mapping is
 supported.
 
-The XBF format is `xbf/9`; `bd_materials` and `threejs_materials` versions join the build
-key. The engine reads `xbf/8` and `xbf/9`. Opening an `xbf/8` file or cached snapshot
-converts its material metadata in memory, without source code or a rebuild. Original
+Native materials entered `xbf/9`, with `bd_materials` and `threejs_materials` versions in
+the build key. The current `xbf/10` also keys the project's dependency fingerprint and
+Python version. The engine reads `xbf/8`, `xbf/9` and `xbf/10`. Opening an `xbf/8` file or
+cached snapshot converts its material metadata in memory, without source code or a rebuild. Original
 source and cache bytes, cache records and revisions, and the build closure and toolchain
 provenance stay unchanged; a separate migration record identifies the conversion.
 
-An explicit `cadgen export saved-v8.xbf upgraded-v9.xbf` saves the complete upgraded XCAF
+An explicit `cadgen export saved-v8.xbf upgraded.xbf` saves the complete upgraded XCAF
 document atomically to a different path. Export back over the source path is refused.
 Exporting a cached document by id to XBF also saves its upgraded form. The viewer's
 original-file download keeps the original XBF bytes, and ordinary current-format

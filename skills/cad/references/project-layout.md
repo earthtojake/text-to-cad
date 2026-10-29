@@ -21,6 +21,7 @@ this is a good default; a one-off part can be one script in a flat folder.
 
 ```
 <project>/
+  requirements.txt        # what the models import, beside cadgen; may be empty
   src/
     plate.py              # one part, or a part's configurations, per script
     standoff.py
@@ -39,6 +40,11 @@ this is a good default; a one-off part can be one script in a flat folder.
   STEP/  STL/  GLB/  3MF/  DXF/   # files written on request, by cadgen export or exports.py
   tmp/                    # ignored scratch: checks, snapshots
 ```
+
+`cadgen run` makes one Python environment per project: the nearest folder, a script's own
+or one above it, with a `requirements.txt`, `pyproject.toml` or `uv.lock`. A root
+`requirements.txt` gives every script under it one environment, with what the file lists,
+instead of one per folder ([setup](setup.md#run-a-model)).
 
 Runs write nothing, so the output folders exist only once someone asks for files.
 `exports.py` ([standing deliverables](exports.md#standing-deliverables-exportspy)) is the
@@ -71,7 +77,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/plate.py
+cadgen run src/plate.py
 ```
 
 and a `.gitignore` beside `src/`:
@@ -91,7 +97,7 @@ A second run replays the model and changes nothing. Then a part with configurati
 `src/assembly.py`, as in [models](model-contract.md#assemblies-call-their-parts):
 
 ```bash
-python src/assembly.py
+cadgen run src/assembly.py
 cadgen inspect "$ID"
 ```
 
@@ -119,14 +125,13 @@ Models use ordinary Python imports. A script's folder is first on the module sea
 path, so flat scripts import their siblings and `lib/` directly. A script inside a
 package (`src/chassis/` holds an `__init__.py`) is that package's module: its relative
 imports work, and the folder above its topmost package is on the path too, so
-`src/chassis/frame.py` imports `lib.holes` as well. Both run alike:
+`src/chassis/frame.py` imports `lib.holes` as well:
 
 ```bash
-python src/chassis/frame.py
-cd src && python -m chassis.frame
+cadgen run src/chassis/frame.py
 ```
 
-Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src python
+Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cadgen run
 src/chassis/frame.py`), a relative entry read from the folder the command runs in, as
 Python reads it; cadgen adds no paths of its own. A module and a same-named
 model function shadow each other on import; an alias separates them.
@@ -139,7 +144,7 @@ that read it, and a comment re-runs nothing
 ## Assemblies and model boundaries
 
 A parent calls its child models inside its body, and each child builds in the same run:
-**running the root is the whole rebuild** (`python src/assembly.py`). Running a child
+**running the root is the whole rebuild** (`cadgen run src/assembly.py`). Running a child
 alone rebuilds the child and leaves the assemblies that use it as they were.
 
 A child model has its own document and page; a helper runs within its caller and is no

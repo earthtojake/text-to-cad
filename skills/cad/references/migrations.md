@@ -24,8 +24,8 @@ Any one of these says the project was written for 0.7:
 
 ## First
 
-1. Run the project's scripts with this skill's `python` and `cadgen`, never the 0.7 command
-   its docs pin (that keeps building on 0.7), with the project's `PYTHONPATH` set.
+1. Run the project's scripts with this skill's `cadgen run`, never the 0.7 command its docs
+   pin (that keeps building on 0.7), with the project's `PYTHONPATH` set.
 2. Keep a STEP the project's 0.7 build wrote, to compare placements part by part at the
    end: a stage that moves parts inside a sub-assembly can build on 0.8 with some parts a few
    millimetres off and nothing said.
@@ -34,6 +34,8 @@ Any one of these says the project was written for 0.7:
 
 ## Open CASCADE 8 and build123d 0.13
 
-cadgen 0.8.1 replaces cadgen materials with native `bd_materials` objects and rebuilds
-earlier XBF documents from source. Models importing OCP directly may also need renamed
-collections, downcasts and bounding-box reads. See [the Open CASCADE 8 migration guide](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-to-opencascade-8.md).
+cadgen 0.8.1 introduced native `bd_materials` objects in place of cadgen materials.
+Current cadgen opens supported saved XBF documents without their source and migrates
+older material metadata in memory, preserving the saved files. Models importing OCP
+directly may also need renamed collections, downcasts and bounding-box reads. See
+[the Open CASCADE 8 migration guide](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-to-opencascade-8.md).
