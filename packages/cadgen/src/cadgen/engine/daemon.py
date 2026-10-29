@@ -2,9 +2,12 @@
 It stops on ``cadgen stop``, a terminate, or when its private door is gone (``tend``).
 Clients attach by port, and meet it by protocol, document format and native line, never by release
 (``runtime.refusal``). Idleness sheds memory instead. A newer release's start retires it once
-nothing uses it (``uses``, ``client.converge``); asked to hand over (``handover``, a page's Restart),
-it starts its successor itself (``SUCCESSOR``), and for a minute its pages, built to reconnect,
-no longer keep it.
+nothing uses it (``uses``, ``client.converge``). Superseded -- the device runs a newer release
+(``SUPERSEDED``) -- it steps aside by itself once nothing holds it, nothing runs and nothing has asked
+it anything for ``QUIET_SECONDS`` (``supersede``): with pages watching, it starts the current
+release's engine (``SUCCESSOR``) and for a minute its pages, built to reconnect, no longer keep it,
+so that start retires it and the pages reload on its successor; with none, it stops, and the next
+client's start brings up the current release's (``client._start``).
 
 It holds a pool of warm workers, one per model script (``Pool``), and hands each build to its
 script's worker: one build at a time per worker, builds of different scripts at once, and at
@@ -89,14 +92,24 @@ HTTP_FACTORY = None  # optional application supplied by the enclosing distributi
 # starts serving: a thread of its own it starts (``cadgen._internal.engine_host``: the self-update).
 # One that raises is said on stderr, and the daemon goes on.
 STARTED: tuple[Callable[[int], Any], ...] = ()
-# What starts this engine's successor when it is asked to hand over (``Daemon.handover``): called with
-# the selected port, it starts the newer release installed beside this one on it -- which retires this
+# Whether the device runs a newer release than this engine's (``Daemon.supersede``), asked each
+# ``TEND_SECONDS`` (``cadgen._internal.engine_host``: ``installations.newer``; a development install
+# never is). None: the enclosing distribution says nothing, and nothing supersedes this engine.
+SUPERSEDED: Callable[[], bool] | None = None
+# What starts this engine's successor when it steps aside with pages watching it (``Daemon.supersede``):
+# called with the selected port, it starts the current release's engine on it -- which retires this
 # engine at its start -- and answers None, or why it could not in one line (``cadgen._internal
 # .engine_host``: the self-update's ``successor``). None: the enclosing distribution has none.
 SUCCESSOR: Callable[[int], str | None] | None = None
 # How long a hand-over lets this engine go with pages still watching it (``Daemon.uses``): its
-# successor's start retires it within that, or the engine serves on as before.
+# successor's start retires it within that, or the engine serves on as before, and tries again.
 HANDOVER_SECONDS = 60.0
+# How long a superseded engine waits after the last request asked of it -- through its door, or an
+# HTTP request that is not a page's watch -- before it steps aside (``Daemon.supersede``).
+QUIET_SECONDS = 30.0
+# The door's requests that are no work asked of the engine: a status or a pid read (a start's
+# convergence asks them), a stop, and a hold, which counts in ``holders``.
+UNASKED = frozenset({"status", "pid", "stop", "hold"})
 
 # How often the daemon tends itself (``Daemon.tend``): its door, its pipes, and the workers'
 # memory against its cap. The server's pressure poller asks the system's signal more often.
@@ -1544,15 +1557,16 @@ class Daemon:
         # did anything: a started engine's stderr is no one's.
         self.identity: dict[str, Any] | None = None
         self.last = time.monotonic()
+        # When the engine was last asked for work through its door (``UNASKED`` aside), for ``supersede``.
+        self.asked = time.monotonic()
         self.busy = 0
         self.busy_lock = threading.Lock()
         self.stopping = threading.Event()
         # The connections that hold MCP sessions while their agent host runs.
         self.holders = 0
         self.hosts: dict[str, int] = {}  # the holders per agent host they serve (``hold``)
-        # When it was last asked to hand over (``handover``, ``time.monotonic``), or None.
+        # When it last started its successor to step aside (``supersede``, ``time.monotonic``), or None.
         self.handing_over: float | None = None
-        self.handover_lock = threading.Lock()
         self.door = None  # on POSIX, the door clients reach it by (``door.Door``)
         # Where clients reach it (its door; on Windows its port file) and that file's identity
         # (``reached_by``): once it is gone or another's, no one can reach this engine, and it stops.
@@ -1939,6 +1953,8 @@ class Daemon:
     def _handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         self.touch()
         op = request.get("op")
+        if op not in UNASKED:
+            self.asked = time.monotonic()
         if op == "shape" or (op == "result" and "execution" in request):
             try:
                 runtime.validate(request.get("execution"), port=self.port)
@@ -2196,13 +2212,11 @@ class Daemon:
             send(self.status())
         elif op == "pid":
             send({"ok": True, "pid": os.getpid()})  # who answers
-        elif op == "handover":
-            send(self.handover())
         elif op == "stop":
             if request.get("idle"):
                 # A retirement's stop (``client.retire_older``): taken only while nothing uses the
-                # engine, as its status says it (``uses``: while it hands over, its pages are not
-                # counted); else refused with what does, and it serves on.
+                # engine, as its status says it (``uses``: while it hands over to its successor, its
+                # pages are not counted); else refused with what does, and it serves on.
                 uses = self.uses()
                 if uses["holders"] or uses["watched"] or uses["busy"] or uses["active"]:
                     send({"failed": "the engine is in use", **uses})
@@ -2292,45 +2306,57 @@ class Daemon:
         """What uses the engine now, as ``status`` says it: its holds (``holders``), the documents pages
         watch (``watched``), its builds, draws and serving requests (``busy``) and HTTP work underway
         (``active``). A newer release's start retires it only when nothing does (``client.retire_older``).
-        While it hands over (``handing``), its pages and their requests are not counted: they reconnect
-        to its successor, and a page's watch outlives its tab by a minute or more."""
+        While it hands over to its successor (``handing``), its pages and their requests are not
+        counted: they reconnect to it, and a page's watch outlives its tab by a minute or more."""
         server = self.server
         pages = server is not None and not self.handing()
         return {"holders": self.holders, "watched": len(server.watched()) if pages else 0,
                 "busy": self.busy, "active": pages and bool(server.clients_active())}
 
     def handing(self) -> bool:
-        """Whether the engine hands over (``handover``): asked to in the last ``HANDOVER_SECONDS``."""
+        """Whether the engine hands over (``supersede``): its successor started in the last
+        ``HANDOVER_SECONDS``."""
         mark = self.handing_over
         return mark is not None and time.monotonic() - mark < HANDOVER_SECONDS
 
-    def handover(self) -> dict[str, Any]:
-        """``{"op": "handover"}``, a CAD Viewer page's Restart once a newer release is installed: this
-        engine's successor started (``SUCCESSOR``), which retires it as it starts, and for
-        ``HANDOVER_SECONDS`` its pages no longer keep it (``uses``): they reload on the successor, which
-        answers on the same port with the same token. Refused while an app server holds it or a build,
-        draw or serving request runs, in a retirement's words for what is in use (``client._uses``);
-        and when no successor can start, in its words. ``{"ok": True}`` (as well while one is starting),
-        else ``{"failed": <why>}``."""
-        from cadgen.engine import client
-
-        with self.handover_lock:
-            uses = self.uses()
-            if uses["holders"] or uses["busy"]:
-                counts = {**uses, "watched": 0, "active": False}
-                return {"failed": f"in use by {' and '.join(client._uses(counts) or [])}: {client._freed(counts)} "
-                                  f"or run `{client.stop_command(self.port)}`"}
-            if self.handing():
-                return {"ok": True}
-            self.handing_over = time.monotonic()
-            try:
-                why = "this engine has nothing to start a successor with" if SUCCESSOR is None else SUCCESSOR(self.port)
-            except Exception as error:  # noqa: BLE001 - a successor that cannot start is the answer
-                why = f"{type(error).__name__}: {error}"
-            if why is not None:
-                self.handing_over = None
-                return {"failed": str(why)}
-            return {"ok": True}
+    def supersede(self) -> str | None:
+        """Each ``tend``: a superseded engine (``SUPERSEDED``) steps aside once nothing holds it (no app
+        server's hold), nothing runs (no build, draw or serving request) and nothing has been asked of
+        it for ``QUIET_SECONDS`` -- through its door, or over HTTP but for a page's watch
+        (``serve.Server.clients_quiet``). With pages watching, it starts its successor (``SUCCESSOR``:
+        the current release's engine on this port, which retires it as it starts) and for
+        ``HANDOVER_SECONDS`` its pages no longer keep it (``uses``), so they reload on the successor,
+        which answers on the same port with the same token; a successor that does not come is tried
+        again after that. With none, it stops as ``stop`` does, and the next client's start brings
+        up the current release's engine. What it did, ``"handing over"`` or ``"stopping"``, a
+        successor's failure in its words, or ``None`` when it serves on."""
+        if SUPERSEDED is None or self.handing() or self.stopping.is_set():
+            return None
+        with self.busy_lock:
+            if self.holders or self.busy:
+                return None
+        server = self.server
+        if time.monotonic() - self.asked < QUIET_SECONDS or (
+                server is not None and not server.clients_quiet(QUIET_SECONDS)):
+            return None
+        try:
+            if not SUPERSEDED():
+                return None
+        except Exception:  # noqa: BLE001 - a pointer that cannot be read supersedes nothing
+            return None
+        if server is None or not server.watched():
+            self.stopping.set()
+            return "stopping"
+        self.handing_over = time.monotonic()
+        try:
+            why = "this engine has nothing to start a successor with" if SUCCESSOR is None else SUCCESSOR(self.port)
+        except Exception as error:  # noqa: BLE001 - a successor that cannot start is said, and tried again
+            why = f"{type(error).__name__}: {error}"
+        if why is not None:
+            self.handing_over = None
+            print(f"cadgen: superseded, but its successor did not start: {why}", file=sys.stderr, flush=True)
+            return str(why)
+        return "handing over"
 
     def watch(self) -> None:
         while not self.stopping.wait(TEND_SECONDS):
@@ -2348,7 +2374,8 @@ class Daemon:
         first, to the cache, as they are loaded (``serve.Server.trim``). The engine stops on ``stop``, a terminate,
         and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
-        what it holds to the cache."""
+        what it holds to the cache; and here when a newer release supersedes it and nothing uses it
+        (``supersede``)."""
         if self.address is not None and _identity(self.address) != self.address_id:
             self.stopping.set()
             return
@@ -2356,6 +2383,7 @@ class Daemon:
             self.door.sweep()
         self.pool.shed(self.pressure.under())
         self.models.prune()
+        self.supersede()
 
     def shutdown(self) -> None:
         # The documents built or read in the last idle window, saved first, best effort (``cache``).

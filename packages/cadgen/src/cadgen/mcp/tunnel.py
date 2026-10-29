@@ -6,9 +6,8 @@ request, for every view of this server -- and returns the status, headers and
 body bytes. There is one backend, not two: the router, its checks and its limits
 are the ones the web app uses, the model library, the home's Open, Reveal, the
 person's analytics answer and language, and the update check included -- whose
-notice names the agent app this server serves (``agent_app``), and whose Update
-and Restart (``POST /__cad/update``, ``/__cad/restart``) a view reaches as any
-other route. The app keeps the server's own library and analytics, so a model a
+Update (``POST /__cad/update``) a view reaches as any other route. The app keeps
+the server's own library and analytics, so a model a
 view opens is counted once, by this process.
 
 A body travels base64 inside the host's JSON, and a JSON body of more than
@@ -131,12 +130,7 @@ class ViewerTunnel:
     """The viewer backend every view of this server shares, made when the first one asks."""
 
     def __init__(self, *, recents=None, analytics=None, clock=time.monotonic, app=None) -> None:
-        # The agent app this server serves, by its id (``cadgen.mcp.host.app_of``), as its server knows
-        # it once the host has greeted it: what the update notice names to restart.
-        self.agent_app = lambda: None
         self._app = app
-        if app is not None:
-            app.agent_app = lambda: self.agent_app()
         self._recents = recents
         self._analytics = analytics
         self._lock = threading.Lock()
@@ -158,7 +152,6 @@ class ViewerTunnel:
                 app.analytics, app.consent_by = self._analytics, "app"
                 app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
                 app.engine_documents.hold_seconds, app.engine_documents.retry_ms = ENGINE_HOLD_SECONDS, ENGINE_RETRY_MS
-                app.agent_app = lambda: self.agent_app()
                 self._app = app
             return self._app
 

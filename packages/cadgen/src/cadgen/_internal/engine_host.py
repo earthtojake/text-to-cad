@@ -6,8 +6,11 @@ It also says where the user's state folder is, which the engine's registry of do
 in (``cadgen.engine.registry.FACTORY``: the state directory, ``cadgen.viewer.recents.state_dir``),
 and the cache folder its documents' bytes are cached in (``cadgen.viewer.recents.cache_dir``). And
 it gives the daemon its background work (``cadgen.engine.daemon.STARTED``): the self-update's
-thread (``cadgen._internal.auto_update``); and what starts its successor when a page asks it to hand
-over to the release installed since (``cadgen.engine.daemon.SUCCESSOR``: ``auto_update.successor``).
+thread (``cadgen._internal.auto_update``). And the release the device runs, which the engine cannot
+read itself (law 3): whether a newer one supersedes this engine (``cadgen.engine.daemon
+.SUPERSEDED``: ``installations.newer``), what starts that release's engine in its place while pages
+watch it (``cadgen.engine.daemon.SUCCESSOR``: ``auto_update.successor``), and the console script a
+client's start brings up instead of its own engine (``cadgen.engine.client.CURRENT``).
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ def http_factory(server, host, port):
 
     app = EngineApp(server, host, session_factory=Sessions)
     server.clients_active = app.active
+    server.clients_quiet = app.quiet
     server.on_close = app.close
     server.on_hold_end = app.hold_ended
     try:
@@ -50,11 +54,26 @@ def auto_update(port):
 
 
 def successor(port):
-    """The installed release's engine started on ``port`` in this one's place, or why not
+    """The current release's engine started on ``port`` in this one's place, or why not
     (``cadgen._internal.auto_update.successor``)."""
     from cadgen._internal.auto_update import successor as start
 
     return start(port)
+
+
+def superseded():
+    """Whether the device runs a release newer than this engine's (``installations.newer``)."""
+    from cadgen._internal.installations import newer
+
+    return newer() is not None
+
+
+def current_script():
+    """The console script of the release the device runs, when it is newer than this process's."""
+    from cadgen._internal.installations import newer
+
+    found = newer()
+    return found["cadgen"] if found else None
 
 
 def diagnostics_inventory():
@@ -76,6 +95,7 @@ def _attach(module):
     if module.__name__ == "cadgen.engine.client":
         module.DAEMON_MODULE = "cadgen._internal.engine_daemon"
         module.SANDBOXES = SANDBOXES
+        module.CURRENT = current_script
     elif module.__name__ == "cadgen.engine.registry":
         module.FACTORY = registry
     elif module.__name__ == "cadgen._internal.diagnostics":
@@ -84,6 +104,7 @@ def _attach(module):
         module.HTTP_FACTORY = http_factory
         module.STARTED = (auto_update,)
         module.SUCCESSOR = successor
+        module.SUPERSEDED = superseded
 
 
 class _Loader:

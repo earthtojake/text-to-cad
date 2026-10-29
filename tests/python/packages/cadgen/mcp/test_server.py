@@ -297,14 +297,12 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_an_update_installed_by_itself_names_codex_to_restart_and_the_card_can_start_one(self) -> None:
+    def test_an_update_installed_by_itself_shows_nothing_and_the_card_can_start_one(self) -> None:
         from cadgen._internal import auto_update
 
         installed_by_itself(self)
-        notice = self.http("GET", "/__cad/version")[1]["notice"]
-        self.assertEqual(notice["auto"]["restart"]["app"], "Codex")
-        self.assertEqual(notice["text"], "Restart Codex to use v99.0.0.")
-        self.assertEqual(self.launch("cad_home")["notice"], notice)
+        self.assertIsNone(self.http("GET", "/__cad/version")[1]["notice"], "the next session runs it")
+        self.assertIsNone(self.launch("cad_home")["notice"])
         with mock.patch.object(auto_update, "run_now", return_value={"started": True}) as run_now:
             self.assertEqual(self.http("POST", "/__cad/update", {}), (200, {"started": True}))
             # The agent reaches none of it: its cad_http is the telemetry route's alone.
@@ -1062,12 +1060,10 @@ class TextServerTest(_Session):
         self.assertIn("`, or install manually (https://www.texttocad.dev/install).", first[-1]["text"])
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 
-    def test_an_update_installing_itself_says_nothing_and_once_installed_names_the_app(self) -> None:
+    def test_an_update_installing_itself_or_installed_says_nothing(self) -> None:
         installed_by_itself(self, receipt="0.0.1")  # pending: the feed's 99.0.0, not attempted yet
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
         installed_by_itself(self)
-        said = self.call("cad_show", {"source": self.bracket})["content"]
-        self.assertEqual(said[-1]["text"], "text-to-cad v99.0.0 is installed; restart your agent app to use it.")
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
@@ -1454,21 +1450,6 @@ class ToolArgumentsTest(unittest.TestCase):
         for words in (instructions, cad_show["description"]):
             self.assertIn("in the user's browser", words)
             self.assertIn(FOLLOWS, words)
-
-
-class AgentAppTest(unittest.TestCase):
-    """The agent app a host's greeting names, as an installed update's notice says to restart it."""
-
-    def test_each_app_s_client_names_its_app(self) -> None:
-        from cadgen._internal.providers import LABELS
-        from cadgen.mcp.host import app_of
-
-        named = {"codex-mcp-client": "codex", "claude-code": "claude", "claude-ai": "claude-desktop",
-                 "cursor-vscode": "cursor", "grok-build": "grok", "gemini-cli-mcp-client": "gemini",
-                 "some-desktop-app": None, "": None}
-        self.assertEqual({name: app_of({"name": name}) for name in named}, named)
-        self.assertLessEqual({app for app in named.values() if app}, set(LABELS))
-        self.assertIsNone(app_of(None))
 
 
 class LocalPathTest(unittest.TestCase):

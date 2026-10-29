@@ -28,22 +28,12 @@ CODEX_CLIENT = "codex-mcp-client"
 # Plugins standard's generic one (``cadgen._internal.channel``): Codex reads the standard's mcp.json rather than
 # its codex.mcp.json, so every Codex session would otherwise count as a generic host.
 CHANNELS = {CODEX_CLIENT: "codex-github"}
-# The agent app a client's handshake names (its ``clientInfo`` name), by cadgen's id for it
-# (``cadgen._internal.providers``: ``LABELS``, ``RESTART``): what an update installed by itself says to
-# restart (``cadgen.updates.notice``). A name these do not know names no app.
-APPS = {CODEX_CLIENT: "codex", "claude-code": "claude", "claude-ai": "claude-desktop"}
-_APP_WORDS = (("cursor", "cursor"), ("gemini", "gemini"), ("grok", "grok"))
 
 
 def channel_for(client: Any) -> str | None:
     """The channel the client's own config would have named (``CHANNELS``), or ``None``."""
     name = client.get("name") if isinstance(client, dict) else None
     return CHANNELS.get(str(name or "").strip().lower())
-
-def app_of(client: Any) -> str | None:
-    """The agent app the client's handshake names (``APPS``), or ``None``."""
-    name = str((client.get("name") if isinstance(client, dict) else None) or "").strip().lower()
-    return APPS.get(name) or next((app for word, app in _APP_WORDS if word in name), None)
 
 
 # Where a Codex call says its turn shows no app: ``codex exec`` (and its ``resume``) runs the turn

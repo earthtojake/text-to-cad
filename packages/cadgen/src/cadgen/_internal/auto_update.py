@@ -16,8 +16,10 @@ when the feed names a release past the receipt's, installs it (``run_once``):
 2. **Applied.** The staged release's own ``cadgen setup`` runs detached, for the receipt's apps,
    with the receipt's PATH before this process's: an engine Claude Desktop started from the Dock has
    launchd's PATH, which finds none of the apps' commands. That setup does what the install command
-   does, and retires this very engine once it is idle: the thread then ends with the process, and
-   the receipt that setup wrote says how it went.
+   does: it refreshes the skills through each app's own plugin command, registers the release and
+   makes it the one the device runs (``<state>/current``, ``cadgen._internal.installations``), and
+   the receipt it writes says how it went. No app's server line is rewritten: each is a floor, and
+   the next session an app starts runs the new release (``installations.defer``).
 
 One attempt per release a day (``RETRY_SECONDS``): a release that fails is tried again the next
 day, and the install command still works by hand. The person can start one at once from the update
@@ -39,14 +41,11 @@ engine on another port, never updates anything. Not whether this process is told
 (``cadgen._internal.channel``): an engine a store's plugin started still keeps the receipt's copies
 current, and the setup never touches a store's copy.
 
-Once a release is installed, an agent app's server runs it after the app restarts; the engine
-itself is replaced by the first start of that release once nothing uses it (``cadgen.engine.client
-.converge``), and a CAD Viewer page left open would keep it. So the page's Restart has the engine
-hand over (the daemon's ``handover``, ``POST /__cad/restart``): with no app server holding it and
-nothing built or drawn, it starts its successor (``successor``, the daemon's ``SUCCESSOR``) -- the
-installed release's ``cadgen server`` on its port, from that release's registered installation, else
-through uvx -- which retires it at its start, its pages no longer counted, and serves the pages as
-they reload.
+Once a release is installed, nothing is restarted and nothing asked of anyone. The engine of the
+release before is superseded (the daemon's ``SUPERSEDED``): once nothing holds or uses it, it steps
+aside by itself, starting its successor first when pages watch it (``successor``, the daemon's
+``SUCCESSOR``) -- the current release's ``cadgen server`` on its port, from its registered
+installation, else through uvx -- which retires it at its start and serves the pages as they reload.
 
 Nothing here raises into the daemon or waits on a request path: the thread logs every failure
 (``cadgen.auto_update``) and goes on, an update started on demand runs in a thread of its own, and
@@ -259,7 +258,11 @@ def describe(port: int | None = None) -> str:
                     f"update with `{command()}`")
         return f"v{latest} is out and installs itself within the hour ({checked})"
     if kept.get("stage") == "done" and kept.get("release") == have:
-        return f"installed v{have} by itself {_when(kept.get('finished'))}; {checked}"
+        return f"installed v{have} by itself {_when(kept.get('finished'))}; new sessions run it; {checked}"
+    from cadgen import __version__
+
+    if _behind(__version__, have):
+        return f"installed v{have}; new sessions run it; {checked}"
     return f"up to date (v{have}), {checked}"
 
 
@@ -482,27 +485,28 @@ def run_now(port: int | None = None) -> dict[str, Any]:
 
 
 def successor(port: int) -> str | None:
-    """The engine of the release the install command installed last, started on ``port`` to take this
-    one's place (the daemon's ``SUCCESSOR``, for its ``handover``): ``None`` once it is started, else
-    why not in one line. The receipt's release must be past this process's; its ``cadgen server`` runs
-    detached, from its registered installation where there is one alive (``installations``), else
-    through uvx on the receipt's PATH, in this process's environment with the receipt's PATH first and
-    no other cadgen (``_environment``), and what it prints goes to the log. It retires this engine as
-    it starts (``cadgen.engine.client.converge``), and serves this one's pages as they reload."""
+    """The engine of the release the device runs, started on ``port`` to take this superseded one's
+    place while pages watch it (the daemon's ``SUCCESSOR``, for its ``supersede``): ``None`` once it is
+    started, else why not in one line. Its ``cadgen server`` runs detached, from the current
+    installation (``installations.newer``), else -- the pointer's installation gone -- through uvx at
+    the receipt's release, past this process's, on the receipt's PATH; in this process's environment
+    with the receipt's PATH first and no other cadgen (``_environment``), told to run as it is
+    (``installations.NO_DEFER_ENV``), and what it prints goes to the log. It retires this engine as it
+    starts (``cadgen.engine.client.converge``), and serves this one's pages as they reload."""
     from cadgen import __version__
     from cadgen._internal import installations, providers
     from cadgen.engine.daemon import detached
 
     found = receipt() or {}
-    release = found.get("release")
-    if not isinstance(release, str) or not _behind(__version__, release):
-        return f"no release newer than v{__version__} is installed"
-    env = _environment(found.get("path"))
-    kept = [record for record in installations.records() if record["version"] == release and installations.alive(record)]
-    if kept:
-        record = max(kept, key=lambda record: str(record.get("registered") or ""))
-        argv = [record["cadgen"], "server", "--port", str(port)]
+    env = {**_environment(found.get("path")), installations.NO_DEFER_ENV: "1"}
+    current = installations.newer()
+    if current is not None:
+        release = current["release"]
+        argv = [current["cadgen"], "server", "--port", str(port)]
     else:
+        release = found.get("release")
+        if not isinstance(release, str) or not _behind(__version__, release):
+            return f"no release newer than v{__version__} is installed"
         uvx = providers.uvx(providers.Machine(Path.home(), env))
         if uvx is None:
             return f"no installation of {release} is registered: run the install command"

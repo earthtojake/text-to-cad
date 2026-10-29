@@ -22,6 +22,13 @@ __all__ = ["converge", "hello", "hold", "holder", "Incompatible", "legacy", "req
            "retired_words", "stop_legacy", "sweep"]
 
 DAEMON_MODULE = "cadgen.engine.daemon"  # the enclosing distribution may supply an application host
+# The console script of the release the device runs, when that is newer than this process's (the
+# enclosing distribution's pointer, ``cadgen._internal.installations.newer``), else None: a start
+# brings up that release's engine (``_start``) rather than this one's. None: the distribution says none.
+CURRENT: Callable[[], str | None] | None = None
+# What the engine started for another release is told so that its command runs as it is, never
+# deferred again (the distribution's ``installations.NO_DEFER_ENV``; law 3: the name, not the import).
+NO_DEFER_ENV = "CADGEN_NO_DEFER"
 
 # The sandboxes known to refuse the loopback port the engine's HTTP server needs, each by a variable
 # and the value it sets in the shells it runs: a daemon started there could never serve a build. The
@@ -187,17 +194,39 @@ def environment() -> dict[str, str]:
     return env
 
 
+def _current() -> str | None:
+    try:
+        return CURRENT() if CURRENT is not None else None
+    except Exception:  # noqa: BLE001 - a pointer that cannot be read: this release's engine starts
+        return None
+
+
 def _start() -> subprocess.Popen:
-    """A daemon started, detached: its process."""
+    """A daemon started, detached: its process. Where the device runs a newer release than this
+    process's (``CURRENT``), that release's engine: its ``cadgen server --port <port>``, in this
+    environment without this installation's folder on ``PYTHONPATH`` or a development name, and told
+    to run as it is (``NO_DEFER_ENV``). This process attaches to it as to any engine, by protocol.
+    Else this installation's daemon module, its folder first on ``PYTHONPATH``."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root = _daemon.engine_root()
     path = env.get("PYTHONPATH", "")
-    if root not in path.split(os.pathsep):
-        env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
-    _daemon.bytecode(env)
-    process = subprocess.Popen([sys.executable, "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=_working_folder(),
-                               **_daemon.detached())
+    script = _current()
+    if script is not None:
+        rest = [item for item in path.split(os.pathsep) if item and item != root]
+        env.pop("PYTHONPATH", None)
+        if rest:
+            env["PYTHONPATH"] = os.pathsep.join(rest)
+        for name in ("PYTHONHOME", "PYTHONPYCACHEPREFIX", _daemon.INSTALLATION_ENV):
+            env.pop(name, None)
+        env[NO_DEFER_ENV] = "1"
+        argv = [script, "server", "--port", str(_daemon.selected_port())]
+    else:
+        if root not in path.split(os.pathsep):
+            env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
+        _daemon.bytecode(env)
+        argv = [sys.executable, "-P", "-m", DAEMON_MODULE]
+    process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               env=env, cwd=_working_folder(), **_daemon.detached())
     # Bootstrap may live as long as the server (MCP, an embedded client or a test). Reap our
     # child when it exits instead of leaving a zombie until another subprocess is started.
     if hasattr(process, "wait"):

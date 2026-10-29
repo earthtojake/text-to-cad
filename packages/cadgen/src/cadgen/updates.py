@@ -25,11 +25,11 @@ v0.9.0 of text-to-cad is available (currently on v0.8.1)``, the command for this
 https://texttocad.dev/install.sh | sh` to update text-to-cad to 0.9.0 (on Windows: `irm
 https://www.texttocad.dev/install.ps1 | iex`)``. Where the engine updates the computer itself, the
 notice says where that stands instead (``auto``: pending, updating -- downloading or installing --,
-updated or failed, ``_AUTO``), and the card can start it at once, as its Try again does after a
-failure (``POST /__cad/update``, ``auto_update.run_now``). Once it is installed, the notice names what to
-restart: the agent app whose server tells it (``host``: ``restart``, its name and how), or, in the
-CAD Viewer's page, the viewer itself (``handover``: its Restart has the engine hand over to the
-installed release's, ``POST /__cad/restart``, ``cadgen.engine.daemon``'s ``handover``).
+or failed, ``_AUTO``), and the card can start it at once, as its Try again does after a failure
+(``POST /__cad/update``, ``auto_update.run_now``). Once it is installed there is no notice at all:
+the next session an agent app starts runs it, and the engine steps aside for it by itself
+(``cadgen._internal.installations``, ``cadgen.engine.daemon``'s ``supersede``); ``cadgen doctor``
+says it is installed.
 The CAD app's blue update button, first in its navbar and on its home, opens a card that shows
 the command to copy and sends the prompt to the chat where the host takes messages; the CAD Viewer's
 copies the command. The card also links to the install instructions (``INSTRUCTIONS``, the docs
@@ -183,20 +183,14 @@ def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
 
 
 # What the notice says where the engine updates the computer itself, by the state of that update
-# (``cadgen._internal.auto_update.status``): the release concerned, this process's version, the
-# failure's words, and what to restart once it is installed (``_restart``). A line (``line``) says the
-# command after a failure's.
+# (``cadgen._internal.auto_update.status``): the release concerned, this process's version and the
+# failure's words. An installed one says nothing. A line (``line``) says the command after a failure's.
 _AUTO = {
-    "updated": "Restart {app} to use v{release}.",
     "updating": "text-to-cad v{release} is installing itself.",
     "failed": "text-to-cad v{release} could not install itself ({error}).",
     "pending": "A new version v{release} of text-to-cad is available (currently on v{version}); it installs "
                "itself within the hour.",
 }
-# The viewer's own words for its Restart (``handover``), and what an agent app no server could name is called.
-VIEWER = "the viewer"
-AGENT_APP = "your agent app"
-RESTART = f"{AGENT_APP}: quit and reopen it, or start a new session"  # an app ``providers.RESTART`` has no note for
 
 
 def _said(release: str, version: str, text: str) -> dict[str, Any]:
@@ -205,24 +199,14 @@ def _said(release: str, version: str, text: str) -> dict[str, Any]:
             "instructions": INSTRUCTIONS}
 
 
-def _restart(host: str | None) -> dict[str, str]:
-    """What to restart for an installed release to be used, by the agent app ``host`` names
-    (an app id of ``cadgen._internal.providers``): its name and how."""
-    from cadgen._internal.providers import LABELS, RESTART as NOTES
-
-    return {"app": LABELS.get(host or "") or AGENT_APP, "note": NOTES.get(host or "") or RESTART}
-
-
-def notice(host: str | None = None, *, handover: bool = False, path: Path | None = None) -> dict[str, Any] | None:
+def notice(*, path: Path | None = None) -> dict[str, Any] | None:
     """``{latest, version, text, command, prompt, instructions}``: what to tell the person, from the
     feed as last read (never read here: ``refresh``), or ``None`` when there is nothing to say, or no
     checking. Where the engine updates the computer itself (``cadgen._internal.auto_update.wanted``),
     ``auto`` is added, ``{state, release}`` with an update's ``stage`` (``downloading``,
     ``installing``) and a failure's ``error``, ``latest`` is the release concerned, and the text is
-    that state's (``_AUTO``); anywhere else there is no ``auto``. Installed, it names what to restart:
-    for an agent app's server, the app ``host`` names (``restart``: ``{app, note}``, ``_restart``,
-    the app's own words where none is named); for the CAD Viewer's page (``handover``), the viewer,
-    whose Restart hands the engine over (``auto.handover``)."""
+    that state's (``_AUTO``); an update installed says nothing (``None``): new sessions run it, and
+    nobody needs to do anything. Anywhere else there is no ``auto``."""
     try:
         if not checking():
             return None
@@ -232,14 +216,9 @@ def notice(host: str | None = None, *, handover: bool = False, path: Path | None
         found = feed(fetch=False, path=path)
         auto = auto_update.status(latest=found["latest"] if found else None, version=__version__)
         if auto is not None:
-            app = None
             if auto["state"] == "updated":
-                if handover:
-                    auto, app = {**auto, "handover": True}, VIEWER
-                else:
-                    restart = _restart(host)
-                    auto, app = {**auto, "restart": restart}, restart["app"]
-            text = _AUTO[auto["state"]].format(version=__version__, app=app, **auto)
+                return None
+            text = _AUTO[auto["state"]].format(version=__version__, **auto)
             return {**_said(auto["release"], __version__, text), "auto": auto}
         latest = offer(found, __version__, told())
         if latest is None:
@@ -252,14 +231,11 @@ def notice(host: str | None = None, *, handover: bool = False, path: Path | None
 
 def line(found: dict[str, Any]) -> str | None:
     """The notice as one line of text, for an agent to pass on: the card's words, its command and its
-    link in place of its buttons; the app to restart for an update installed by itself; nothing
-    (``None``) for one pending or installing itself, which asks nothing of anyone."""
+    link in place of its buttons; nothing (``None``) for an update pending or installing itself,
+    which asks nothing of anyone."""
     auto = found.get("auto") or {}
     if auto.get("state") in ("pending", "updating"):
         return None
-    if auto.get("state") == "updated":
-        app = (auto.get("restart") or {}).get("app") or AGENT_APP
-        return f"text-to-cad v{auto['release']} is installed; restart {app} to use it."
     return (f'{found["text"].rstrip(".")}. Update with this command: `{found["command"]}`, '
             f'or install manually ({found["instructions"]}).')
 

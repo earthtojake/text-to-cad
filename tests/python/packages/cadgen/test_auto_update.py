@@ -1,7 +1,7 @@
 """The engine keeping this computer up to date (`cadgen/_internal/auto_update.py`): the receipt's
 release behind the feed's, the release staged by uvx, then its `cadgen setup` run for the receipt's
 apps with the receipt's PATH, and the notice saying where that stands; the update the person starts from the card
-(`run_now`), and the successor a hand-over starts (`successor`).
+(`run_now`), and the successor a superseded engine starts while pages watch it (`successor`).
 
 uvx is a fake on a PATH of the test's own, which logs its arguments and environment, says a release
 or a failure for `--version`, and as `cadgen setup` writes the new release into the receipt. The state
@@ -159,12 +159,8 @@ class SelfUpdate(Fixture):
         self.assertEqual(apply_["path"].split(os.pathsep)[:2], [str(self.bin), str(self.empty)])
         self.assertIsNone(apply_["pythonpath"], "the engine's own cadgen is never handed to the new release")
         self.assertEqual(auto_update.attempt()["stage"], "done")
-        found = updates.notice()
-        self.assertEqual(found["auto"], {"state": "updated", "release": "0.9.0",
-                                         "restart": {"app": "your agent app", "note": updates.RESTART}})
-        self.assertEqual(found["text"], "Restart your agent app to use v0.9.0.")
-        self.assertEqual(updates.line(found), "text-to-cad v0.9.0 is installed; restart your agent app to use it.")
-        self.assertTrue(auto_update.describe().startswith("installed v0.9.0 by itself"))
+        self.assertIsNone(updates.notice(), "installed: nothing to tell anyone, the next session runs it")
+        self.assertRegex(auto_update.describe(), r"^installed v0\.9\.0 by itself .*; new sessions run it; ")
         # Caught up: nothing more to do, then or tomorrow.
         self.assertIsNone(auto_update.run_once(get=self.get, now=time.time() + auto_update.RETRY_SECONDS + 1))
         self.assertEqual(len(self.calls()), 2)
@@ -275,28 +271,21 @@ class SelfUpdate(Fixture):
         self.assertEqual(self.calls(), [])
         # The setup it ran retired the engine and finished: the receipt says so, and the attempt is done.
         self.receipt("0.9.0")
-        self.assertEqual(self.auto()["state"], "updated")
+        self.assertIsNone(self.auto(), "installed: the notice goes quiet")
         self.assertIsNone(auto_update.run_once(get=self.get))
         self.assertEqual(auto_update.attempt()["stage"], "done")
 
 
 class TheNotice(Fixture):
-    """What the notice says once a release has installed itself, by who shows it: an agent app's server
-    names the app to restart, the CAD Viewer's page offers its own Restart (the hand-over)."""
+    """What the notice says once a release has installed itself: nothing, wherever it shows, since the
+    next session runs it and the engine steps aside for it; the doctor still says it is in."""
 
-    def test_an_installed_release_names_the_app_to_restart_or_the_viewer(self) -> None:
+    def test_an_installed_release_says_nothing_and_the_doctor_says_new_sessions_run_it(self) -> None:
         self.receipt("0.9.0")
         self.read_today()
-        codex = updates.notice("codex")
-        self.assertEqual(codex["auto"]["restart"], {"app": "Codex",
-                                                    "note": "Codex: restart the app, and any terminal or IDE session"})
-        self.assertEqual(codex["text"], "Restart Codex to use v0.9.0.")
-        self.assertEqual(updates.line(codex), "text-to-cad v0.9.0 is installed; restart Codex to use it.")
-        unknown = updates.notice("an-app-of-tomorrow")["auto"]["restart"]
-        self.assertEqual(unknown, {"app": "your agent app", "note": updates.RESTART})
-        viewer = updates.notice(handover=True)
-        self.assertEqual(viewer["auto"], {"state": "updated", "release": "0.9.0", "handover": True})
-        self.assertEqual(viewer["text"], "Restart the viewer to use v0.9.0.")
+        self.assertEqual(auto_update.status(latest="0.9.0"), {"state": "updated", "release": "0.9.0"})
+        self.assertIsNone(updates.notice())
+        self.assertRegex(auto_update.describe(), r"^installed v0\.9\.0; new sessions run it; last checked ")
 
     def test_an_update_under_way_names_its_stage(self) -> None:
         self.receipt()
@@ -308,8 +297,9 @@ class TheNotice(Fixture):
 
 
 class Successor(Fixture):
-    """The engine a hand-over starts in this one's place (the daemon's SUCCESSOR): the installed
-    release's `cadgen server` on the port, from its registered installation, else through uvx."""
+    """The engine a superseded one starts in its place while pages watch it (the daemon's SUCCESSOR):
+    the current release's `cadgen server` on the port, from its registered installation, else through
+    uvx at the receipt's release, told to run as it is."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -341,6 +331,7 @@ class Successor(Fixture):
         self.assertEqual(argv, [console, "server", "--port", str(PORT)])
         self.assertEqual(kwargs["env"]["PATH"].split(os.pathsep)[:2], [str(self.bin), str(self.empty)])
         self.assertNotIn("PYTHONPATH", kwargs["env"])
+        self.assertEqual(kwargs["env"]["CADGEN_NO_DEFER"], "1")
         self.assertIn("server --port", (self.state / auto_update.LOG_FILE).read_text(encoding="utf-8"))
 
     def test_with_no_installation_registered_uvx_runs_the_release(self) -> None:

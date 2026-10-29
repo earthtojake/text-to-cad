@@ -199,7 +199,7 @@ _GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder"
                               "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
                               "/__cad/version"})
 _POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
-                               "/__cad/analytics/activity", "/__cad/update", "/__cad/restart"})
+                               "/__cad/analytics/activity", "/__cad/update"})
 
 
 class CadApp:
@@ -247,10 +247,6 @@ class CadApp:
         # The engine shares one recorder across its page and MCP sessions.
         self.analytics = None
         self.consent_by = "viewer"
-        # The agent app whose CAD card these routes serve (an MCP session's tunnel, ``cadgen.mcp.tunnel``):
-        # a callable giving its id, which the update notice names to restart; None for the viewer's page,
-        # whose notice offers its Restart (``_version``).
-        self.agent_app = None
 
     @property
     def exports(self):
@@ -505,7 +501,7 @@ class CadApp:
 
                     response.send_json(200, language.read())
                 elif pathname == "/__cad/version":
-                    response.send_json(200, self._version(request))
+                    response.send_json(200, self._version())
                 elif pathname in _POST_ONLY_ROUTES:
                     response.send_bytes(405, b'{"ok":false,"error":"Method not allowed"}',
                                         "application/json", [("allow", "POST")])
@@ -560,8 +556,6 @@ class CadApp:
                     self._handle_pick(response)
                 elif pathname == "/__cad/update":
                     response.send_json(200, self._update())
-                elif pathname == "/__cad/restart":
-                    response.send_json(200, self._restart())
                 elif pathname == "/__cad/reveal":
                     from .reveal import reveal_path
                     if int(request.headers.get("content-length") or 0) > 8192:
@@ -746,20 +740,14 @@ class CadApp:
         return {"sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL,
                 **({"saved": bool(changed.get("saved"))} if changed is not None else {})}
 
-    def _version(self, request=None) -> dict:
+    def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from
         the feed as last read. A feed that is due is read in the background: the page never waits.
-        Installed, the notice names what to restart: the agent app a CAD card's session serves
-        (``agent_app``), the viewer itself for its own page (its Restart, ``_restart``), and for a card
-        that reached the engine directly (another origin's request), the agent app it cannot name."""
+        An update installed says nothing: new sessions run it, and the engine steps aside for it."""
         from cadgen import updates
 
         updates.refresh()
-        if self.agent_app is not None:
-            return {"notice": updates.notice(self.agent_app())}
-        origin = request.header("origin") if request is not None else ""
-        card = bool(origin) and origin != f"http://{request.header('host')}"
-        return {"notice": updates.notice(handover=not card)}
+        return {"notice": updates.notice()}
 
     def _update(self) -> dict:
         """``POST /__cad/update``, the card's Update (and Try again): the engine's self-update started
@@ -768,23 +756,6 @@ class CadApp:
         from cadgen._internal import auto_update
 
         return auto_update.run_now(self.port or None)
-
-    def _restart(self) -> dict:
-        """``POST /__cad/restart``, the viewer's Restart once a newer release is installed: the engine
-        asked to hand over to that release's (the daemon's ``handover``), which retires it and serves
-        this page as it reloads. ``{"ok": true}``, or ``{"ok": false, "reason"}`` in the engine's words
-        (an app server that holds it, a build that runs, no successor to start)."""
-        from cadgen.engine import client
-
-        try:
-            answer = client.request({"op": "handover"}, start=False)
-        except (OSError, ValueError) as error:
-            return {"ok": False, "reason": str(error)}
-        if answer is None:
-            return {"ok": False, "reason": "no engine runs on this port"}
-        if answer.get("ok") is True:
-            return {"ok": True}
-        return {"ok": False, "reason": str(answer.get("failed") or answer.get("refused") or "the engine refused")}
 
     def _report_activity(self, payload: dict) -> None:
         """What the page did: a person touched it (``touched``), a Quick Edit was sent (``quickEdit``), used its

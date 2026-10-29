@@ -202,18 +202,17 @@ _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, fr
 _BROWSER_OPEN_ROUTE = "/__cad/browser/open"
 
 
-def _stamped(launch: dict[str, Any], app: str | None = None) -> dict[str, Any]:
+def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
     whether this computer has a file chooser for the home's Open, and the update notice as the
-    server last read it, naming the agent ``app`` it serves (``cadgen/updates.py``; a launch never
-    waits on the feed)."""
+    server last read it (``cadgen/updates.py``; a launch never waits on the feed)."""
     from cadgen import __version__, updates
     from cadgen._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
-    launch["notice"] = updates.notice(app)
+    launch["notice"] = updates.notice()
     updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
     return launch
 
@@ -306,11 +305,6 @@ class Server:
         self._analytics = analytics
         self._app_token = secrets.token_urlsafe(32)
         self._update_told = False
-        # The agent app the host's greeting names (``host.app_of``), which an installed update's notice
-        # says to restart: None until it greets this server, or where it names none cadgen knows.
-        self.agent_app: str | None = None
-        if tunnel is not None:
-            tunnel.agent_app = lambda: self.agent_app
         # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab,
         # and a model cad_show sent it before it opened, shown once it does.
         self._mounting: dict[str, None] = {}
@@ -357,7 +351,6 @@ class Server:
             from .tunnel import ViewerTunnel
 
             self._tunnel = ViewerTunnel(recents=self.recents, analytics=self.analytics)
-            self._tunnel.agent_app = lambda: self.agent_app
         return self._tunnel
 
     # -- the protocol ----------------------------------------------------------
@@ -453,7 +446,6 @@ class Server:
         from cadgen._internal.channel import refine
 
         refine(host.channel_for(client))  # a server told the standard manifest's channel takes its host's own
-        self.agent_app = host.app_of(client)
         offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         transport = meta.get("dev.texttocad/transport") if isinstance(meta.get("dev.texttocad/transport"), dict) else {}
@@ -681,7 +673,7 @@ class Server:
             launch["surface"] = surface
         self._model = model
         self.warm()  # the view's first document meshes on a pool already starting
-        return _stamped(launch, self.agent_app)
+        return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
@@ -695,7 +687,7 @@ class Server:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
         if surface:
             launch["surface"] = surface
-        return _stamped(launch, self.agent_app)
+        return _stamped(launch)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
@@ -995,14 +987,14 @@ class Server:
 
     def _told(self, result: dict[str, Any]) -> dict[str, Any]:
         """A text-only app has no card for the update notice (``cadgen/updates.py``): this process's
-        first result that can carry it does, as a line for the agent to pass on, naming this app to
-        restart once an update installed itself. An update pending or installing itself says
-        nothing (``updates.line``), and leaves the line to a later result."""
+        first result that can carry it does, as a line for the agent to pass on. An update pending,
+        installing itself or installed says nothing (``updates.line``, ``updates.notice``), and leaves
+        the line to a later result."""
         if self._update_told:
             return result
         from cadgen import updates
 
-        found = updates.notice(self.agent_app)
+        found = updates.notice()
         said = None if found is None else updates.line(found)
         if said is not None:
             self._update_told = True

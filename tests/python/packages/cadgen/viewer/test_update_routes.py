@@ -1,7 +1,6 @@
-"""The update card's two actions (``cadgen/updates.py``): ``POST /__cad/update`` starts the engine's
-self-update now (``auto_update.run_now``), ``POST /__cad/restart`` asks the engine to hand over to the
-release installed since (the daemon's ``handover``); each answers JSON, and neither is a GET. The page's
-notice offers that Restart; a CAD card's, from another origin, names its agent app instead."""
+"""The update card's one action (``cadgen/updates.py``): ``POST /__cad/update`` starts the engine's
+self-update now (``auto_update.run_now``), answering JSON, and is no GET. There is nothing to restart:
+no route asks the engine to hand over, and the notice is the same for every page and card."""
 
 from __future__ import annotations
 
@@ -48,36 +47,23 @@ class UpdateRoutesTest(unittest.TestCase):
         self.assertEqual(run_now.call_count, 2)
         self.assertEqual(self.request("GET", "/__cad/update")[0], 405)
 
-    def test_restart_relays_the_hand_over_and_its_refusal(self) -> None:
+    def test_there_is_no_restart_and_every_page_reads_one_notice(self) -> None:
+        from cadgen import updates
         from cadgen.engine import client
 
-        said = [{"ok": True}, {"failed": "in use by 1 app server: quit that app or run `cadgen stop`"}, None]
-        with mock.patch.object(client, "request", side_effect=said) as request:
-            self.assertEqual(self.request("POST", "/__cad/restart"), (200, {"ok": True}))
-            self.assertEqual(self.request("POST", "/__cad/restart"),
-                             (200, {"ok": False, "reason": "in use by 1 app server: quit that app or run `cadgen stop`"}))
-            self.assertEqual(self.request("POST", "/__cad/restart"),
-                             (200, {"ok": False, "reason": "no engine runs on this port"}))
-        request.assert_called_with({"op": "handover"}, start=False)
-        self.assertEqual(self.request("GET", "/__cad/restart")[0], 405)
+        with mock.patch.object(client, "request") as request:
+            self.assertEqual(self.request("POST", "/__cad/restart")[0], 404)
+        self.assertEqual(request.call_count, 0)
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        connection.request("POST", "/__cad/restart", body=b"{}")  # no guard header: a cross-site POST
+        connection.request("POST", "/__cad/update", body=b"{}")  # no guard header: a cross-site POST
         self.assertEqual(connection.getresponse().status, 403)
         connection.close()
-
-    def test_an_installed_release_offers_the_page_its_restart_and_a_card_its_app(self) -> None:
-        from cadgen import updates
-
         notices: list[tuple] = []
         with mock.patch.object(updates, "notice", lambda *args, **kwargs: notices.append((args, kwargs))), \
                 mock.patch.object(updates, "refresh", lambda: None):
             self.request("GET", "/__cad/version")
-            self.request("GET", "/__cad/version", {"origin": f"http://127.0.0.1:{self.port}"})
             self.request("GET", "/__cad/version", {"origin": "https://claude.ai"})
-            self.app.agent_app = lambda: "codex"
-            self.request("GET", "/__cad/version")
-        self.assertEqual(notices, [((), {"handover": True}), ((), {"handover": True}), ((), {"handover": False}),
-                                   (("codex",), {})])
+        self.assertEqual(notices, [((), {}), ((), {})])
 
 
 if __name__ == "__main__":
