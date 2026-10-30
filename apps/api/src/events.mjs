@@ -71,7 +71,7 @@ export const MAX_BYTES = 64 * 1024;
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
 // Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
-  'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
+  'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'qwenpaw-manual', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
 // Who sends, and the formats an event counts: each schema's own (`SCHEMAS`), the later a superset.
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
