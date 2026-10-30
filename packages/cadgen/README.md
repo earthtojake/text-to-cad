@@ -375,7 +375,16 @@ src/cadgen/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
-  eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
+  eng_drawing.py         # @eng_drawing: Sheet, View, part_sheet and assembly_sheets, one PDF
+                         #   projected from a part or an assembly; its engine
+                         #   is _internal/drawing_* (base: sizes, scales, text;
+                         #   sheet: frame, layout, chosen size and scale; views:
+                         #   projection, sections, details, breaks; annotation:
+                         #   dimensions, callouts, hole tables; render: a sheet
+                         #   drawn; report: what is left unstated; features:
+                         #   holes, slots, blends read off the B-rep; assembly:
+                         #   parts list, balloons, the set's sheets; gdt: feature
+                         #   control frames; profile: stages and Profile)
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties
