@@ -894,9 +894,11 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
             requirements = metadata.requires(name) or ()
         except metadata.PackageNotFoundError:
             continue
-        # What it needs to run, not an extra nobody asked for (a test runner, say).
+        # What it needs to run, not an extra nobody asked for (a test runner, say) -- but cadgen's own
+        # kernel, its `kernel` extra, which every environment a model runs in installs.
         todo += [re.split(r"[\s;<>=!~\[(]", requirement, maxsplit=1)[0] for requirement in requirements
-                 if "extra" not in requirement.partition(";")[2]]
+                 if "extra" not in (marker := requirement.partition(";")[2])
+                 or (name == "cadgen" and re.search(r"""extra\s*==\s*["']kernel["']""", marker))]
     ours = frozenset(top for top, owners in metadata.packages_distributions().items()
                      if top != "__pycache__" and any(_distribution(owner) in seen for owner in owners))
     return tuple(sorted(set(places), key=lambda place: len(place[0]), reverse=True)), ours

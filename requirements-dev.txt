@@ -4,8 +4,10 @@
 # resolves to locally: sync-version.mjs stamps packages/cadgen/pyproject.toml from
 # VERSION, so the editable install reports exactly the pinned version. Installing a
 # skill's requirements.txt WITHOUT this file fetches the last published release from
-# PyPI instead of the checkout -- this file is the development door.
---editable ./packages/cadgen
+# PyPI instead of the checkout -- this file is the development door. With its kernel
+# extra: this environment runs models itself, so it is its own base environment and
+# the engine makes none (cadgen/_internal/base.py).
+--editable ./packages/cadgen[kernel]
 
 # pip installs the Python; it cannot build the JavaScript that ships beside it.
 # packages/cadgen/src/cadgen/_runtime is gitignored and produced by
@@ -13,8 +15,9 @@
 # without it the packaged Viewer and the CAD app have no client to serve; cadgen
 # names this command when it finds none.
 
-# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, matplotlib,
-# numpy, pillow, shapely) come with the editable install above.
+# cadgen's own runtime dependencies come with the editable install above: the core's
+# (uv, numpy, ezdxf, pillow) and its kernel extra's (build123d, cadquery-ocp-novtk,
+# bd_materials, threejs-materials, matplotlib, shapely).
 
 # The viewer's browser checks drive a headless Chromium through Python Playwright (the
 # launch smoke test, scripts/test/test-viewer-launch.sh), as does the manual parity bench
