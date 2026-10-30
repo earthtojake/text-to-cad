@@ -95,10 +95,16 @@ def _server(start: bool = True) -> str:
 
 
 def _command_path_hint(path: str) -> str:
-    """How to reach the proxy when PATH does not resolve ``cadgen`` to it."""
+    """How to reach the proxy when PATH does not resolve ``cadgen`` to it. The running
+    interpreter's own environment is left out of the lookup: ``uvx`` puts its ephemeral
+    environment's ``bin`` first on PATH for the command it runs, so inside ``uvx ... cadgen doctor``
+    the environment's own ``cadgen`` script would otherwise read as shadowing the proxy."""
     from shutil import which
 
-    found = which("cadgen")
+    prefix = os.path.realpath(sys.prefix)
+    entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if entry and not os.path.realpath(entry).startswith(prefix + os.sep)]
+    found = which("cadgen", path=os.pathsep.join(entries))
     if found is not None:
         if os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(path)):
             return ""
