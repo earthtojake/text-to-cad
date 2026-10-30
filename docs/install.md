@@ -336,7 +336,7 @@ button, first in CAD's navbar and on its home, whose **Send to agent** posts
 "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
 your chat (the browser viewer's copies it instead), or, in an app that shows CAD's
 replies as text, a line with its reply. Your agent then updates it. The button also
-links to the [install instructions](https://www.texttocad.dev/install), to update by
+links to the [Quickstart](https://github.com/earthtojake/text-to-cad#-quickstart), to update by
 hand. Copies from a plugin directory or the Cursor Marketplace never show it, since
 their store updates them, and neither does Gemini's extension, which Gemini updates:
 for those there is nothing to run.

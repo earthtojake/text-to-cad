@@ -10,7 +10,7 @@ export interface UpdateNotice {
   text: string;
   /** What to ask the person's agent, worded like the install message: `Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad`. */
   prompt: string;
-  /** The full install instructions (`https://www.texttocad.dev/install`), should the agent not manage. */
+  /** The README's Quickstart (`https://github.com/earthtojake/text-to-cad#-quickstart`), should the agent not manage. */
   instructions: string;
 }
 

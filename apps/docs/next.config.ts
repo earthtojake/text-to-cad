@@ -8,8 +8,8 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@text-to-cad/core"],
   images: { remotePatterns: [{ hostname: "www.skills.sh", protocol: "https" }] },
   turbopack: { root: repoRoot },
-  // texttocad.dev/install: the stable link to the install box in the hero (`#install`), which the CAD
-  // app's update card links to (cadgen's `updates.INSTRUCTIONS`). Temporary, so it can move.
+  // texttocad.dev/install: the short link to the install box in the hero (`#install`). Temporary, so
+  // it can move.
   async redirects() {
     return [{ source: "/install", destination: "/#install", permanent: false }];
   },

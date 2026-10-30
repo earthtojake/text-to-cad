@@ -109,12 +109,19 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertIn(f"{label}: [{path}]({path})", readme)
         self.assertTrue((REPO_ROOT / path).is_file(), path)
 
-    def test_the_update_cards_instructions_link_reaches_the_homepage_install_box(self) -> None:
-        # cadgen's update card links to texttocad.dev/install; the docs site redirects that to the
-        # install box in its hero (`#install`), so moving the anchor or dropping the redirect breaks
-        # every card.
+    def test_the_update_cards_instructions_link_reaches_the_readmes_quickstart(self) -> None:
+        # cadgen's update card links to the README's Quickstart on GitHub, by the anchor GitHub makes
+        # from the heading (lowercased; anything but letters, digits, spaces and hyphens dropped; spaces
+        # to hyphens: "🚀 Quickstart" is `-quickstart`), so renaming the heading breaks every card.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        quickstart = next(text for text in re.findall(r"^## (.+)$", readme, re.M) if "Quickstart" in text)
+        anchor = re.sub(r"[^a-z0-9 -]", "", quickstart.lower()).replace(" ", "-")
         updates = (REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "updates.py").read_text(encoding="utf-8")
-        self.assertIn('INSTRUCTIONS = "https://www.texttocad.dev/install"', updates)
+        self.assertIn(f'INSTRUCTIONS = f"{{REPOSITORY}}#{anchor}"', updates)
+
+    def test_the_install_short_link_reaches_the_homepage_install_box(self) -> None:
+        # texttocad.dev/install is the short link to the install box in the hero (`#install`): the docs
+        # site redirects it, so moving the anchor or dropping the redirect breaks the link.
         config = (REPO_ROOT / "apps" / "docs" / "next.config.ts").read_text(encoding="utf-8")
         self.assertIn('{ source: "/install", destination: "/#install"', config)
         hero = (REPO_ROOT / "apps" / "docs" / "src" / "components" / "hero-section.tsx").read_text(encoding="utf-8")
