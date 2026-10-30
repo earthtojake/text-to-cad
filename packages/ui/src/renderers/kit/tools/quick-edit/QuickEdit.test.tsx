@@ -124,6 +124,37 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   expect(used.mock.calls).toEqual([['quickEdit']]);
 });
 
+it('keeps the box open on what the destination answered a Send, until the next send or the close', async () => {
+  const send = vi.fn(async () => ({ status: 'sent' as const, partIds: [], message: 'Recorded P4: hole-pos accepted\nBuilt rychka-v16' }));
+  const clear = vi.fn();
+  const { update } = mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: vi.fn(), send } }), { references: [face], onClear: clear });
+  write('accept');
+  fireEvent.keyDown(field(), { key: 'Enter' });
+  await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+  // The note has gone with what it carried; the answer stays, its lines as written.
+  update({ references: [] });
+  const answer = () => box()?.querySelector('[data-quick-edit-reply]') ?? null;
+  expect([note(), answer()?.getAttribute('role'), answer()?.textContent]).toEqual(['', 'status', 'Recorded P4: hole-pos accepted\nBuilt rychka-v16']);
+  // The next send clears it first; a refusal keeps the note and says why, with no answer under it.
+  send.mockImplementationOnce(async () => ({ status: 'failed', message: 'No feature under the stroke' }) as any);
+  write('reject');
+  fireEvent.keyDown(field(), { key: 'Enter' });
+  await waitFor(() => expect(within(box()!).getByRole('alert').textContent).toBe('No feature under the stroke'));
+  expect([note(), answer()]).toEqual(['reject', null]);
+  // A send without an answer closes the box, as before; the close takes an answer with it.
+  send.mockImplementationOnce(async () => ({ status: 'sent', partIds: [] }));
+  fireEvent.keyDown(field(), { key: 'Enter' });
+  await waitFor(() => expect(box()).toBeNull());
+  update({ references: [face] });
+  write('again');
+  fireEvent.keyDown(field(), { key: 'Enter' });
+  await waitFor(() => expect(answer()).not.toBeNull());
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
+  expect(answer()).toBeNull();
+  update({ references: [] });
+  expect(box()).toBeNull();
+});
+
 it('copies the note with its references by their files\' absolute paths, and its single snapshot by its path, keeping it all in the box', async () => {
   let copied: Promise<string> | string = '';
   const host = testHost({ clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} } });
@@ -392,4 +423,27 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(copied[0]).not.toContain('Snapshot JSON');
   expect(files).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
+});
+
+it('offers the destination\'s phrases as buttons that write into the note and send nothing', () => {
+  const deliver = vi.fn(async () => ({ status: 'added' as const, partIds: [] }));
+  const suggesting = { ...composer, phrases: ['Repair', 'This is a feature'] } as const;
+  const { update } = mount(testHost({ promptContext: { getSnapshot: () => suggesting, subscribe: () => () => {}, deliver } }), { references: [face] });
+  const row = () => within(box()!).queryByRole('group', { name: 'Phrases' });
+  expect(within(row()!).getAllByRole('button').map(button => button.textContent)).toEqual(['Repair', 'This is a feature']);
+  // A press writes the phrase, a space after it, and puts the keyboard in the note; a second goes on from there.
+  fireEvent.click(within(row()!).getByRole('button', { name: 'Repair' }));
+  expect([note(), document.activeElement]).toEqual(['Repair ', field()]);
+  fireEvent.click(within(row()!).getByRole('button', { name: 'This is a feature' }));
+  expect(note()).toBe('Repair This is a feature ');
+  expect(deliver).not.toHaveBeenCalled();
+  // The note is the person's to finish: what they write after stays with it.
+  write('Repair This is a feature on the left.');
+  expect(note()).toBe('Repair This is a feature on the left.');
+  // Disabled with the box (the view is loading), and gone with the suggestions.
+  update({ references: [face], disabled: true });
+  expect(within(row()!).getByRole('button', { name: 'Repair' }).hasAttribute('disabled')).toBe(true);
+  cleanup();
+  mount(testHost(), { references: [face] });
+  expect(row()).toBeNull();
 });

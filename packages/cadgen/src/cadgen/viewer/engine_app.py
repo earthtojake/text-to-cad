@@ -266,6 +266,11 @@ class EngineApp:
             reused = self._default is not None
             app = self.default_app(dist or None)
             app.start = to_posix_path(start)
+            # Quick Edit's phrases are the most recent launch's, as its folder is: a launch without any has none.
+            app.phrases = [str(phrase).strip() for phrase in options.get('phrases') or [] if str(phrase).strip()]
+            # Quick Edit's Send goes to the most recent launch's command, run in its folder: a launch without one has none.
+            from .send_command import SendCommand
+            app.send_command = SendCommand(options.get('send_command') or '', start)
         link = self.link()
         for document in documents:
             document['url'] = f'{self.server.url}/{document["id"]}?token={link}'

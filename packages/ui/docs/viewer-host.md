@@ -308,7 +308,13 @@ files by absolute path, as copied references do (below), and every file is named
 its path, since text carries no file (without `promptFiles`, a prompt carries none). **Queue** is there where the
 destination is a composer (`destination.kind === "composer"`): `deliver`, the
 context for the person's next message. **Send** is there where the prompt port
-has `send`. The context is built at the press, from what is live then; a changed
+has `send`; a `sent` receipt's `message`, where the destination answered (the web viewer's
+`cadgen viewer --send-command`: the command's output), is shown in the box until the next send or
+its close. `phrases`, where the destination state names them, are the words the destination
+suggests for a note (its agent's vocabulary for the file on screen): Quick Edit offers each as a
+button that writes it into the note, and sends nothing itself; the web viewer's are the latest
+launch's (`cadgen viewer --phrase TEXT`, repeatable, read from `/__cad/server`), and a host that
+names none offers none. The context is built at the press, from what is live then; a changed
 document or revision never retargets it. A Quick Edit that reached its destination
 (copied, queued or sent: no `failed` or `cancelled` receipt) tells the host once,
 `usage.used('quickEdit')`, for its count; a host that throws there changes nothing.

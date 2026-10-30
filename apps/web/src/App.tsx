@@ -55,8 +55,11 @@ export default function App({ client, server, tabStore, notice = null, language:
   const source = useMemo(() => createCadFileSource(client), [client]);
   // What the clipboard port says to the person, in the view's language as it is when it speaks.
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
+  // The launch's phrases for Quick Edit (`cadgen viewer --phrase`), as the server reports them.
+  // Its Send, where the launch named a command to send to (`cadgen viewer --send-command`).
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
-    (key, params) => sayRef.current(key, params)), []);
+    (key, params) => sayRef.current(key, params), Array.isArray(server.phrases) ? server.phrases : [],
+    server.send && client.send ? text => client.send!(text) : null), [server.phrases, server.send, client]);
   // The file menu: the file's path to the clipboard, and Reveal in the file manager of the machine the
   // server runs on, labeled for its platform.
   const fileActions = useMemo(() => createCadFileActions({ platform: server.platform, clipboard: browserClipboard,

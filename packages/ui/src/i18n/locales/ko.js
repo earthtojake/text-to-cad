@@ -391,6 +391,7 @@ export default {
   "quickEdit.promptCopied": "프롬프트를 복사함",
   "quickEdit.notSent": "프롬프트를 보내지 못했습니다.",
   "quickEdit.annotation": "주석",
+  "quickEdit.phrases": "자주 쓰는 문구",
   "quickEdit.ref": "참조 {count}개",
   "quickEdit.refs": "참조 {count}개",
   "chip.remove": "{name} 제거",

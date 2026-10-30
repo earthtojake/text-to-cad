@@ -21,6 +21,12 @@ export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';
   available: boolean;
   reason?: string;
+  /**
+   * The words the destination suggests for a note: an agent's vocabulary for the file on screen
+   * ("Repair", "This is a feature"). Quick Edit offers each as a button that writes it into the
+   * note; none of them sends anything. Absent or empty: no suggestions.
+   */
+  phrases?: readonly string[];
   capabilities?: {
     attachments: 'none' | 'png' | 'images-and-text';
     maxParts: number;
@@ -30,7 +36,9 @@ export interface PromptDestinationState {
   };
 }
 export type PromptDeliveryResult =
-  | { status: 'added' | 'copied' | 'sent'; partIds: string[] }
+  | { status: 'added' | 'copied'; partIds: string[] }
+  /** `message`: what the destination answered, where it answers (a command's output), for the person to read. */
+  | { status: 'sent'; partIds: string[]; message?: string }
   | { status: 'partial'; partIds: string[]; message: string }
   | { status: 'deferred' | 'cancelled' | 'failed'; message?: string };
 /**

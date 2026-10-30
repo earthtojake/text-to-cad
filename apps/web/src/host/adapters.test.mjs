@@ -89,3 +89,26 @@ test('viewport PNG copy uses the guarded local endpoint without browser clipboar
     assert.equal(calls[0][1].body, png);
   } finally { restore(); }
 });
+
+test('the launch\'s phrases are the destination\'s, trimmed and without blanks; none without', () => {
+  const clipboard = { writeText: async () => {} };
+  assert.deepEqual(createWebPromptContext(clipboard, false, undefined, ['Repair', ' This is a feature ', ' ']).getSnapshot().phrases, ['Repair', 'This is a feature']);
+  assert.equal('phrases' in createWebPromptContext(clipboard).getSnapshot(), false);
+});
+
+test('send, where the launch named a command, posts the prompt as it is copied and answers what the command printed', async () => {
+  const clipboard = { writeText: async () => {} };
+  assert.equal(typeof createWebPromptContext(clipboard).send, 'undefined');
+  const sent = [];
+  const port = createWebPromptContext(clipboard, false, undefined, [], async text => { sent.push(text); return 'Recorded P4\n'; });
+  const snapshot = { id: 'snapshot', kind: 'attachment', name: 'part.snapshot.json', mimeType: 'application/json', label: 'Snapshot',
+    content: new Blob(['{}']), inlineText: Promise.resolve('Snapshot JSON:\n```json\n{"input":"/models/part.stl"}\n```') };
+  const result = await port.send(context('send', [{ id: 'note', kind: 'text', text: 'repair' }, reference, snapshot]));
+  assert.deepEqual(result, { status: 'sent', partIds: ['note', 'ref', 'snapshot'], message: 'Recorded P4' });
+  assert.deepEqual(sent, ['repair\n\nReferences:\n"/Car project/folder/part.step"#bracket/f:bracket.extrude1.3\nSnapshot JSON:\n```json\n{"input":"/models/part.stl"}\n```']);
+  // What the command refused is the send's failure, said as it said it; a silent command answers nothing.
+  const refusing = createWebPromptContext(clipboard, false, undefined, [], async () => { throw new Error('No feature under the stroke'); });
+  assert.deepEqual(await refusing.send(context('refused', [{ id: 'note', kind: 'text', text: 'accept' }])), { status: 'failed', message: 'No feature under the stroke' });
+  const silent = createWebPromptContext(clipboard, false, undefined, [], async () => '  ');
+  assert.deepEqual(await silent.send(context('silent', [{ id: 'note', kind: 'text', text: 'accept' }])), { status: 'sent', partIds: ['note'] });
+});

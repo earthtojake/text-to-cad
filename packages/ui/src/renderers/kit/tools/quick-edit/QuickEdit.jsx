@@ -56,7 +56,10 @@ export function quickEditReferenceIds(selection) {
  * grammar, is what goes either way). The note is plain text, and a reference pasted into it (a
  * line that is one and nothing else, as Copy References writes it, into this file or any other) is
  * a chip in it, where it was pasted: one piece a Backspace takes whole, which the note carries as
- * that reference's text, in its place (`noteEditor.js`). The file always goes and is not named. The buttons, bottom-right, are the ones this
+ * that reference's text, in its place (`noteEditor.js`). Where the destination suggests phrases
+ * (`phrases` in its state: the words its agent knows for the file on screen), they are a row of small
+ * buttons between the chips and the note, each writing its words into the note at the caret and
+ * handing it the keyboard; they send nothing. The file always goes and is not named. The buttons, bottom-right, are the ones this
  * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
  * Prompt always — the note as text to paste into an agent's prompt box, its references by their
  * files' absolute paths, and the files the host makes for it (`prompt`, `host.promptFiles`) by
@@ -64,7 +67,9 @@ export function quickEditReferenceIds(selection) {
  * it goes carries the same. A displayed unsaved or retained revision instead carries explicit
  * context that the saved file may differ, preserving text and references without replay jobs; Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
- * clear and close the box once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
+ * clear and close the box once the note has gone, except that a Send its destination answered
+ * (`message` in its receipt: a command's output) keeps the box open on that answer, as a status line,
+ * until the next send or the close; Copy Prompt keeps it all (nothing has gone yet),
  * its button showing a tick for a moment. A failure keeps the note and says why. Its corner resizes it for
  * as long as it is open: the size is the box's own, written to it a frame at a time, so a drag
  * renders nothing, and it goes with the box — the next one opens at the default size.
@@ -92,9 +97,12 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const host = useViewerHost();
   const controls = useControlUsage();
   const destination = usePromptDestination();
+  const phrases = destination.phrases ?? EMPTY;
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+  // What the destination answered the last Send, where it answers: shown until the next send or the close.
+  const [reply, setReply] = useState("");
   const field = useRef(null);
   const noteBox = useRef(null);
   const box = useRef(null);
@@ -105,7 +113,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const attached = referenceIds.length > 0 || annotated;
   const written = Boolean(text.trim());
   const replayUnavailable = prompt?.unavailable?.() || "";
-  const open = written || attached;
+  const open = written || attached || Boolean(reply);
   // Docked (a phone's) it is a bottom sheet, opening at a peek of its header and chips; a swipe up,
   // or a tap on its title, brings up the note and its buttons, and a swipe down puts them away again,
   // what is written kept.
@@ -222,7 +230,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const ready = written && !pending && !disabled;
 
   // The note, and everything it would carry: the box goes with them.
-  const clearAll = () => { setText(""); field.current?.replaceChildren(); setError(""); onClear?.(); };
+  const clearAll = () => { setText(""); field.current?.replaceChildren(); setError(""); setReply(""); onClear?.(); };
   // A copied prompt has gone nowhere yet: the box keeps it, and its button says it was copied.
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef(0);
@@ -237,6 +245,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const run = action => {
     if (!actionReady(action)) return;
     setError("");
+    setReply("");
     let outcome;
     try {
       const unavailable = prompt?.unavailable?.() || "";
@@ -255,7 +264,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       try { host.usage?.used("quickEdit"); } catch { /* counting a use never fails it */ }
       controls.used(`quick_edit_${action}`);
       if (action === "copy") showCopied();
-      else clearAll();
+      else {
+        clearAll();
+        if (action === "send" && typeof result?.message === "string" && result.message.trim()) setReply(result.message.trim());
+      }
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setPending(""));
   };
@@ -303,6 +315,26 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     const note = event.currentTarget;
     insertAtCaret(note, pasteNodes(pastedLines(event.clipboardData?.getData("text/plain"), copiedChips.current), note.ownerDocument, nameReference, t("quickEdit.annotation")));
     readNote(note);
+  };
+
+  // A phrase goes into the note at the caret (at its end, while the caret is elsewhere), a space after
+  // it to go on from, and the keyboard goes with it: the note is the person's to finish.
+  const writePhrase = phrase => {
+    const note = field.current;
+    if (!note) return;
+    const document = note.ownerDocument;
+    const words = document.createTextNode(`${phrase} `);
+    insertAtCaret(note, [words]);
+    readNote(note);
+    note.focus({ preventScroll: true });
+    // The caret stays after the phrase: a focus that moved it (to the note's start) is put back.
+    const selection = document.getSelection?.();
+    if (!selection) return;
+    const after = document.createRange();
+    after.setStartAfter(words);
+    after.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(after);
   };
 
   // A click on a pill selects it whole, as a double-click does a word: a Backspace takes it.
@@ -437,6 +469,11 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           the corner gives it a height, and scrolls in the chrome's own ScrollArea past that; its
           placeholder shows while it is empty. */}
       <div ref={compose} className="flex flex-col gap-2" data-quick-edit-compose="" aria-hidden={folded || undefined} inert={folded || undefined}>
+      {/* The destination's phrases, a small outline button each: a press writes it into the note. */}
+      {phrases.length ? <div role="group" aria-label={t("quickEdit.phrases")} className="flex flex-wrap gap-1" data-quick-edit-phrases="">
+        {phrases.map(phrase => <Button key={phrase} type="button" variant="outline" size="sm" disabled={disabled} onClick={() => writePhrase(phrase)}
+          className={cn("rounded-sm px-2 text-tiny font-normal", docked ? "h-8" : "h-6")} data-quick-edit-phrase="">{phrase}</Button>)}
+      </div> : null}
       <ScrollArea ref={noteBox} data-quick-edit-note-box="" data-vaul-no-drag=""
         className={cn(docked ? "min-h-14 flex-1 [&_[data-slot=scroll-area-viewport]>div]:h-full" : "max-h-40 min-h-14", "w-full rounded-md border border-input bg-background/80 transition-[border-color,box-shadow] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:border-blue-400 dark:focus-within:ring-blue-400/20")}>
         <div ref={field} role="textbox" aria-multiline="true" aria-label={t("quickEdit.describeLabel")} tabIndex={0}
@@ -445,6 +482,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
           onInput={event => readNote(event.currentTarget)} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
       </ScrollArea>
       {error ? <p role="alert" className="text-tiny text-destructive">{error}</p> : null}
+      {/* The destination's answer to the last Send, its lines as it wrote them. */}
+      {reply ? <p role="status" className="whitespace-pre-line text-tiny text-muted-foreground" data-quick-edit-reply="">{reply}</p> : null}
       {/* Buttons of the ordinary shape, all solid: the primary in its colour, the others secondary.
           Copy Prompt alone (a host that takes no message) says so in words, its icon first. */}
       <div className="flex items-center justify-end gap-1.5">{ctas()}</div>

@@ -172,7 +172,7 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 
 | Route | Purpose |
 |---|---|
-| `GET /__cad/server` | Server identity: `app` (`cad-viewer`), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`. |
+| `GET /__cad/server` | Server identity: `app` (`cad-viewer`), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `phrases` (the most recent launch's `--phrase` words, Quick Edit's buttons; `[]` without), `send` (whether the most recent launch named a `--send-command`: Quick Edit's Send), `port`, `pid`. |
 | `GET /__cad/catalog?file=...` | One file's catalog row, with its document `id`, and its `revision`. |
 | `GET /__cad/catalog?id=...` | The row of the document of that id, or none and `missing`, with `missingState` (`unsaved`, `detached`) for the page's title. |
 | `GET /__cad/folder?path=...` | One folder's subfolders and CAD files. |
@@ -186,6 +186,7 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 | `POST /__cad/recents` | `{action, path, png?}`: `open` (an existing CAD file on screen, counted for analytics; a model's id, whose record notes the time), `pin`, `unpin`, `remove` (a file's record, the file kept), `delete` (a model's document and record: the engine's `delete`), `thumbnail`; answers the library as it now is. |
 | `GET /__cad/thumbnail?name=...` | A library picture, by its content name. |
 | `POST /__cad/reveal` | `{path}`: show a file in the desktop's file manager. |
+| `POST /__cad/send` | `{text}`: Quick Edit's Send, where the most recent launch named a command (`cadgen viewer --send-command`): runs it once, without a shell, in the launch's folder, with the prompt (as Copy Prompt writes it) on its standard input. Exit 0 answers `200 {ok: true, reply}` (its output); any other exit `200 {ok: false, error}` (its standard error, else its output); `404` without a command, `409` while a send runs, stopped after 900 s. |
 | `POST /__cad/pick` | Open the machine's own file chooser (`cadgen._internal.picker`) and answer the file picked; the home offers it where the server's `pick` says there is one. |
 | `POST /__cad/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
 | `GET`/`POST /__cad/analytics` | Whether the person's usage stats are sent, and why; `{share}` is their answer (the app menu's toggle). Nothing asks. |
