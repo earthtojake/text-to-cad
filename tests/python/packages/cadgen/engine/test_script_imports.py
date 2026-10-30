@@ -6,6 +6,10 @@ an edit to a module it imports re-runs its body. A loose script is the module it
 
 from __future__ import annotations
 
+import importlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import json
 import os
 import shutil
@@ -169,6 +173,174 @@ class PackageScriptTest(unittest.TestCase):
         same_second_edit("proj/tools/plate.py", "bd.Box(10, 10, 2)", "bd.Box(10, 10, 6)")
         self.build(loose)
         self.assertAlmostEqual(read_xbf(plate).bounding_box().size.Z, 6)
+
+    def test_body_only_imports_track_ordinary_and_editable_source_bytes(self) -> None:
+        import py_compile
+
+        helper, editable = self.root / "body_helper.py", self.root / "editable" / "parts.py"
+        editable.parent.mkdir()
+        helper.write_text("WIDTH=1\n", encoding="utf-8")
+        editable.write_text("HEIGHT=1\n", encoding="utf-8")
+        script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
+        script.write_text("import build123d as bd\nfrom cadgen import xbf\n@xbf('XBF/body.xbf')\n"
+                          "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
+                          "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
+
+        class EditableFinder(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                return importlib.util.spec_from_file_location(fullname, editable) if fullname == "body_editable" else None
+
+        with mock.patch.object(sys, "meta_path", [EditableFinder(), *sys.meta_path]):
+            first = self.build(script)
+            self.assertEqual({str(helper), str(editable)} - {
+                path for path, _digest in first["closure"]["modules"]}, set())
+            self.assertTrue(self.build(script)["cache"]["used"])
+            for target, text, expected in ((helper, "WIDTH=2\n", (2, 1, 1)),
+                                           (editable, "HEIGHT=3\n", (2, 3, 1))):
+                stamp = target.stat()
+                py_compile.compile(str(target), doraise=True)
+                target.write_text(text, encoding="utf-8")
+                os.utime(target, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                edited = self.build(script)
+                self.assertEqual(edited["bodies"], {"body.py::body": "run"})
+                bounds = read_xbf(xbf).bounding_box().size
+                self.assertEqual((bounds.X, bounds.Y, bounds.Z), expected)
+            # A body-only import uses the established byte fallback, so comments count too.
+            helper.write_text("# comment\nWIDTH=2\n", encoding="utf-8")
+            commented = self.build(script)
+            self.assertEqual(commented["bodies"], {"body.py::body": "run"})
+            self.assertNotEqual(commented["closure"]["key"], edited["closure"]["key"])
+
+
+class SourceFinderTest(unittest.TestCase):
+    def test_source_hash_and_same_run_guard_detect_restored_timestamps(self) -> None:
+        from cadgen.engine import sources
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "helper.py"
+            source.write_text("VALUE=1\n", encoding="utf-8")
+            stamp = source.stat()
+            # Even file identity and every timestamp can remain identical within one clock tick.
+            with mock.patch.object(os, "stat", return_value=stamp):
+                first, guard = sources.digest(source), engine_build._stat(source)
+                source.write_text("VALUE=2\n", encoding="utf-8")
+                os.utime(source, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                self.assertNotEqual(first, sources.digest(source))
+                self.assertNotEqual(guard, engine_build._stat(source))
+
+    def test_source_resolution_handles_namespaces_and_editable_packages_without_execution(self) -> None:
+        import zipfile
+        from cadgen.engine import sources
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            namespace = root / "cadgen_fixture_namespace" / "nested" / "parts.py"
+            namespace.parent.mkdir(parents=True)
+            namespace.write_text("VALUE=1\n", encoding="utf-8")
+            package = root / "mapped" / "__init__.py"
+            package.parent.mkdir()
+            package.write_text("from .dims import WIDTH\nraise AssertionError('package executed')\n", encoding="utf-8")
+            dimensions = package.parent / "dims.py"
+            dimensions.write_text("WIDTH=2\n", encoding="utf-8")
+            archive = root / "sources.zip"
+            with zipfile.ZipFile(archive, "w") as zipped:
+                zipped.writestr("zip_helper_source.py", "raise AssertionError('zip executed')\n")
+
+            class EditableFinder(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "virtual_helper_source":
+                        return importlib.util.spec_from_file_location(fullname, root / "absent.py")
+                    return importlib.util.spec_from_file_location(fullname, package) if fullname == "mapped_helper_package" else None
+
+            with mock.patch.object(sys, "path", [str(archive), str(root), *sys.path]), \
+                    mock.patch.object(sys, "meta_path", [EditableFinder(), *sys.meta_path]):
+                self.assertEqual(sources._files("cadgen_fixture_namespace.nested.parts"), [
+                    ("cadgen_fixture_namespace.nested.parts", namespace)])
+                self.assertEqual(set(sources.closure_files(package, "mapped_helper_package")), {package, dimensions})
+                self.assertEqual(sources._files("zip_helper_source"), [])
+                self.assertEqual(sources._files("virtual_helper_source"), [])
+            self.assertNotIn("mapped_helper_package", sys.modules)
+            self.assertNotIn("cadgen_fixture_namespace", sys.modules)
+
+    def test_an_editable_hook_imports_current_source_once_after_same_size_edits(self) -> None:
+        import py_compile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            source, script = root / "source" / "editable_helper.py", root / "model.py"
+            source.parent.mkdir()
+            source.write_text("WIDTH=1\nwith open(__file__+'.runs','a') as log: log.write(str(WIDTH)+'\\n')\n", encoding="utf-8")
+            script.write_text("from editable_helper import WIDTH\nVALUE=WIDTH\n", encoding="utf-8")
+            stamp = source.stat()
+            py_compile.compile(str(source), doraise=True)
+
+            class EditableFinder(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "editable_helper":
+                        return importlib.util.spec_from_file_location(fullname, source)
+                    return None
+
+            self.addCleanup(sys.modules.pop, "editable_helper", None)
+            # Hooks installed after an earlier build can precede the existing source finder.
+            engine_build._from_source()
+            with mock.patch.object(sys, "meta_path", [EditableFinder(), *sys.meta_path]):
+                for width in (2, 3):
+                    source.write_text(source.read_text(encoding="utf-8").replace(f"WIDTH={width-1}", f"WIDTH={width}"), encoding="utf-8")
+                    os.utime(source, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                    loaded = engine_build.load_script(script)
+                    self.assertEqual(loaded.VALUE, width)
+                    self.assertIs(type(sys.modules["editable_helper"].__loader__), engine_build._SourceOnlyLoader)
+            self.assertEqual(Path(str(source) + ".runs").read_text(encoding="utf-8").splitlines(), ["2", "3"])
+
+    def test_finder_order_and_library_native_and_custom_loaders_are_preserved(self) -> None:
+        source_finder = engine_build._FirstPartyFromSource()
+
+        class CustomSource(importlib.machinery.SourceFileLoader):
+            pass
+
+        loaders = [importlib.machinery.SourceFileLoader("library", json.__file__),
+                   importlib.machinery.ExtensionFileLoader("native", "native.so"),
+                   CustomSource("custom", __file__), None]
+        for loader in loaders:
+            with self.subTest(loader=type(loader).__name__):
+                spec = importlib.machinery.ModuleSpec("probe", loader, origin=getattr(loader, "path", None))
+                earlier = mock.Mock(find_spec=mock.Mock(return_value=None))
+                selected = mock.Mock(find_spec=mock.Mock(return_value=spec))
+                later = mock.Mock(find_spec=mock.Mock(side_effect=AssertionError("finder precedence changed")))
+                with mock.patch.object(sys, "meta_path", [source_finder, earlier, selected, later]):
+                    self.assertIs(source_finder.find_spec("probe", None), spec)
+                self.assertIs(spec.loader, loader)
+                earlier.find_spec.assert_called_once_with("probe", None, None)
+                selected.find_spec.assert_called_once_with("probe", None, None)
+
+    def test_a_delegating_editable_finder_does_not_recurse_or_execute_twice(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder).resolve() / "delegated_helper.py"
+            source.write_text("VALUE=7\nwith open(__file__+'.runs','a') as log: log.write('run\\n')\n", encoding="utf-8")
+
+            class Delegate(importlib.abc.MetaPathFinder):
+                active = False
+
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname != "delegated_helper" or self.active:
+                        return None
+                    self.active = True
+                    try:
+                        return importlib.util.find_spec(fullname)
+                    finally:
+                        self.active = False
+
+            class Editable(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    return importlib.util.spec_from_file_location(fullname, source) if fullname == "delegated_helper" else None
+
+            self.addCleanup(sys.modules.pop, "delegated_helper", None)
+            source_finder = engine_build._FirstPartyFromSource()
+            with mock.patch.object(sys, "meta_path", [source_finder, Delegate(), Editable(), *sys.meta_path]):
+                module = importlib.import_module("delegated_helper")
+                self.assertEqual(module.VALUE, 7)
+                self.assertIs(type(module.__loader__), engine_build._SourceOnlyLoader)
+                self.assertEqual(Path(str(source) + ".runs").read_text(encoding="utf-8"), "run\n")
 
 
 class PackageScriptRunTest(unittest.TestCase):
