@@ -296,7 +296,7 @@ Each session owns its tool server, view registry and immutable UI resource. `cad
 the page's requests of the viewer's routes, dispatches into the same application in
 process. It is app-only, as `cad_sync` and `cad_capture_reply` are, and absent where
 no page is drawn: no agent reaches a viewer route. Launch results carry the app
-capability in UI-only `_meta["dev.texttocad/httpToken"]`, never content, structured
+capability (the stdio peer's, one for its host, which every session it opens is given) in UI-only `_meta["dev.texttocad/httpToken"]`, never content, structured
 content or the resource. The page sends it in `x-cadgen-app`; the server checks it
 before dispatch and strips it, and refuses a call without it. Authorization precedes
 the range cache. This is an MCP host/model boundary, not a sandbox against the

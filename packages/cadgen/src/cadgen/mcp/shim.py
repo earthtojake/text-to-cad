@@ -28,13 +28,14 @@ from .protocol import Connection, RequestContext, RpcError, claim_stdin, claim_s
 LOG = logging.getLogger('cadgen.mcp')
 
 
-def initialize_params(params, launcher=None, holder=None):
+def initialize_params(params, launcher=None, holder=None, app=None):
     """The host's initialize as the engine is sent it: with what the person said of the host
     (``CADGEN_MCP_PRESENTATION``) as a declaration, ``launcher``, the host that started this
     process (``host.launcher``), for the server to weigh (``host.presentation``), ``holder``,
-    the name of this process's hold (``Holder``), whose end ends the session, and ``browser``:
-    that this process opens the browser a text host's ``cad_show`` asks for (``browser.deliver``),
-    and whether it can here."""
+    the name of this process's hold (``Holder``), whose end ends the session, ``app``, the
+    capability the session hands its views (``Proxy.app``), and ``browser``: that this process
+    opens the browser a text host's ``cad_show`` asks for (``browser.deliver``), and whether it
+    can here."""
     params = copy.deepcopy(params)
     offered = params.setdefault('capabilities', {})
     extensions = offered.setdefault('extensions', {})
@@ -47,7 +48,7 @@ def initialize_params(params, launcher=None, holder=None):
         launcher = {'host': 'CADGEN_MCP_PRESENTATION=text', 'renders': False}
     params.setdefault('_meta', {})['dev.texttocad/transport'] = {
         'appDir': os.environ.get('CADGEN_MCP_APP_DIR', ''), 'cwd': os.getcwd(), 'launcher': launcher,
-        'browser': transport_browser(), **({'holder': holder} if holder else {}),
+        'browser': transport_browser(), **({'holder': holder} if holder else {}), **({'app': app} if app else {}),
     }
     return params
 
@@ -108,7 +109,8 @@ class Proxy:
     can end under it (the engine restarted, or the session's idle hour passed): the shim then opens
     a new one with the host's own initialize and sends the request again, so the host never has to
     reconnect. Only a request the engine never took is sent again: one it refused for an unknown
-    session, or one whose connection was refused."""
+    session, or one whose connection was refused. Each session it opens is given the same app
+    capability (``app``), so the views the host shows keep reaching CAD through the new one."""
 
     def __init__(self, client=None, holder=None, launcher=lambda: None, opener=None):
         self.client = client or EngineClient()
@@ -119,6 +121,9 @@ class Proxy:
         self.protocol = None
         self.initialize = None  # the host's initialize, as the engine was sent it
         self.initialized = False  # whether the host said notifications/initialized
+        # The capability every engine session opened for this host hands its views: a view the host
+        # still shows keeps working when the session under it is replaced.
+        self.app = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
 
     def _send(self, message, session, *, fresh=False):
@@ -193,7 +198,7 @@ class Proxy:
 
     def handle(self, method, params, context: RequestContext):
         if method == 'initialize':
-            params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None)
+            params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None, self.app)
             result, _session = self._open(context.request_id, params)
             with self.lock:
                 self.initialize = params

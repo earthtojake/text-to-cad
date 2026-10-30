@@ -1,5 +1,5 @@
 import { encodeBase64 } from '@text-to-cad/core/client';
-import type { Launch, Server, ViewEvent } from './server';
+import { ServerError, type Launch, type Server, type ViewEvent } from './server';
 
 /** How often a view syncs with nothing happening (the server's `views.POLL_SECONDS`). */
 export const SYNC_MS = 1_000;
@@ -15,9 +15,11 @@ export interface ViewSyncHandlers {
   state(): Record<string, unknown>;
   /**
    * Whether the server still answers: false once `LOST_AFTER` syncs in a row have failed (its process
-   * has gone, and the host does not start it again on its own), true when one succeeds again.
+   * has gone, and the host does not start it again on its own), true when one succeeds again. Where
+   * the server did answer, refusing the view (one from before the host restarted it), `refused` is
+   * what it said.
    */
-  connection?(connected: boolean): void;
+  connection?(connected: boolean, refused?: string): void;
 }
 
 /** What the mounted model view watches, through its client: its file's catalog entry. */
@@ -124,11 +126,11 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
             }
             // Events may have more behind them: ask again at once. Else a second.
             if (!reply.events.length) await pause(SYNC_MS, signal);
-          } catch {
+          } catch (error) {
             if (touched) focused = true;
             if (signal.aborted) return;
             failures += 1;
-            if (failures === LOST_AFTER) handlers.connection?.(false);
+            if (failures === LOST_AFTER) handlers.connection?.(false, error instanceof ServerError ? error.message : undefined);
             await pause(Math.min(30_000, 500 * 2 ** Math.min(failures, 6)), signal);
           }
         }

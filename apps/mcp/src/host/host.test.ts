@@ -4,7 +4,7 @@ import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
-import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
+import { createServer, ServerError, type SyncReply, type SyncRequest, type ViewEvent } from './server';
 import { createViewSync, LOST_AFTER, SYNC_MS } from './sync';
 import { createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
@@ -188,6 +188,25 @@ describe('a view\'s one call each second', () => {
       down = false;
       await vi.advanceTimersByTimeAsync(8_000);
       expect(said).toEqual([false, true]);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // A server that answers, refusing the view (the host restarted it since the view opened), is not
+  // gone: the view says what it said, never to quit and reopen the host (#729).
+  it('says what the server answered when it refuses every sync', async () => {
+    vi.useFakeTimers();
+    try {
+      const refusal = 'This CAD view was opened before CAD restarted: close it and open CAD again.';
+      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal); }), reply: async () => {} };
+      const said: [boolean, string | undefined][] = [];
+      const stop = new AbortController();
+      createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
+        show: () => {}, capture: async () => new Blob(), state: () => ({}),
+        connection: (connected, refused) => said.push([connected, refused]),
+      }).run(stop.signal);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(said).toEqual([[false, refusal]]);
       stop.abort();
     } finally { vi.useRealTimers(); }
   });
