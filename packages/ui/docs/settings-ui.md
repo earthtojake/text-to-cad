@@ -902,6 +902,13 @@ first. While there is no note they are disabled, dimmed but still drawn:
 - **Send** (up arrow), where the host can post a message: the note goes now, as the
   person's message.
 
+Where the destination suggests phrases (`phrases` in its state: the web viewer's are the launch's,
+`cadgen viewer --phrase TEXT`), they are one row between the chips and the note, a small `outline`
+button each, 24px tall in the note's text size, its words as given. A press writes the phrase into
+the note at the caret (at its end while the caret is elsewhere), a space after it, and puts the
+keyboard in the note: it writes and sends nothing, and the note stays the person's to finish or
+undo. The row is disabled with the box and is not there without phrases; nothing counts a press.
+
 Every prompt captures the current view and the recorded views with remaining ink.
 If the current view matches a recorded view, its exact current framing replaces
 that entry for this export; otherwise a `current view` job is appended. Text and

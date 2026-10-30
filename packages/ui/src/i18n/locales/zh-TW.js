@@ -392,6 +392,7 @@ export default {
   "quickEdit.promptCopied": "已複製提示詞",
   "quickEdit.notSent": "提示詞未能傳送。",
   "quickEdit.annotation": "標註",
+  "quickEdit.phrases": "常用語",
   "quickEdit.ref": "{count} 個參照",
   "quickEdit.refs": "{count} 個參照",
   "chip.remove": "移除{name}",

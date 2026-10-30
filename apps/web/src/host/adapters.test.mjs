@@ -89,3 +89,9 @@ test('viewport PNG copy uses the guarded local endpoint without browser clipboar
     assert.equal(calls[0][1].body, png);
   } finally { restore(); }
 });
+
+test('the launch\'s phrases are the destination\'s, trimmed and without blanks; none without', () => {
+  const clipboard = { writeText: async () => {} };
+  assert.deepEqual(createWebPromptContext(clipboard, false, undefined, ['Repair', ' This is a feature ', ' ']).getSnapshot().phrases, ['Repair', 'This is a feature']);
+  assert.equal('phrases' in createWebPromptContext(clipboard).getSnapshot(), false);
+});

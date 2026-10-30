@@ -5,15 +5,19 @@ import { english } from '@text-to-cad/ui/i18n';
 
 /**
  * Prepare portable clipboard content without claiming an external composer pasted it. What it says
- * to the person (busy, a partial copy) is in `t`'s language, read as it speaks.
+ * to the person (busy, a partial copy) is in `t`'s language, read as it speaks. `phrases` are the
+ * words the launch suggested for a note (`cadgen viewer --phrase`, read from the server), which
+ * Quick Edit offers as buttons; none, no buttons.
  */
 export function createWebPromptContext(clipboard: WebClipboard, supportsImages = typeof clipboard.writeImage === 'function',
-  t: (key: string, params?: Record<string, unknown>) => string = english): PromptContextPort {
+  t: (key: string, params?: Record<string, unknown>) => string = english, phrases: readonly string[] = []): PromptContextPort {
   const capabilities: NonNullable<PromptDestinationState['capabilities']> = {
     attachments: supportsImages ? 'png' : 'none', maxParts: 128, maxAttachmentBytes: 20 * 1024 * 1024,
     mixedTextAndImage: supportsImages && clipboard.writeContent ? 'representations' : 'unsupported',
   };
-  const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities });
+  const suggested = phrases.map(phrase => String(phrase).trim()).filter(Boolean);
+  const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities,
+    ...(suggested.length ? { phrases: Object.freeze(suggested) } : {}) });
   // The ledger's refusal while busy is said in the person's language as it is said, not when the port was made.
   const BUSY = 'Wait for pending clipboard operations before copying more.';
   const ledger = createPromptDeliveryLedger({ busyMessage: BUSY });
