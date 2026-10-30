@@ -1407,19 +1407,12 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
 
 
 def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
-    """Render the sheets to one PDF, a page each.
+    """Render the sheets to one PDF, a page each, written whole or not at all
+    (``_internal/pdf_pages.py``: a missing renderer is a failure, not a downgrade)."""
+    from cadgen._internal.pdf_pages import matplotlib_pdf, write_pages
 
-    The PDF is the drawing, so a missing renderer is a failure, not a downgrade:
-    an exit 0 with no document is the one outcome a build cannot recover from.
-    The page carries no creation date, so the bytes are a function of the
-    content, and the render goes to a temporary file that is renamed on success,
-    so a failed run never leaves a half-written document behind.
-    """
+    matplotlib_pdf("@eng_drawing")  # the Agg backend, before ezdxf's backend imports pyplot
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_pdf import PdfPages
         from ezdxf.addons.drawing import Frontend, RenderContext, config
         from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
     except ImportError as exc:
@@ -1427,71 +1420,27 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
             "@eng_drawing writes a PDF and its renderer is missing: "
             f"{exc}. Install cadgen's dependencies (pip install matplotlib pillow)."
         ) from exc
-    from cadgen._internal.atomic_replace import temp_suffix
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # A temp_suffix name, so a model listing this folder leaves it out while it exists.
-    partial = path.with_name(f".{path.name}{temp_suffix()}")
-    try:
-        # CreationDate=None drops the one field matplotlib stamps from the clock.
-        with PdfPages(partial, metadata={"CreationDate": None}) as pdf:
-            for doc, sheet in zip(docs, sheets):
-                fig = plt.figure(figsize=(sheet.width / 25.4, sheet.height / 25.4))
-                ax = fig.add_axes([0, 0, 1, 1])
-                ax.set_xlim(0, sheet.width)
-                ax.set_ylim(0, sheet.height)
-                ctx = RenderContext(doc)
-                ctx.set_current_layout(doc.modelspace())
-                backend = MatplotlibBackend(ax, adjust_figure=False)
-                Frontend(ctx, backend, config=config.Configuration(
-                    background_policy=config.BackgroundPolicy.WHITE,
-                    color_policy=config.ColorPolicy.BLACK if sheet.ink == "mono" else config.ColorPolicy.COLOR,
-                    # Without a floor of its own the matplotlib backend clamps every
-                    # width to 72/dpi, and the sheet printed one width throughout --
-                    # the LAYER table resolves 0.5 for VISIBLE against 0.18 for DIM
-                    # and CENTER, and none of it reached the page. Thick against thin
-                    # is most of what makes a print readable at a glance. The unit is
-                    # 1/300 inch, so this is a floor low enough to be no floor.
-                    min_lineweight=0.05,
-                )).draw_layout(doc.modelspace(), finalize=False)
-                ax.set_xlim(0, sheet.width)
-                ax.set_ylim(0, sheet.height)
-                ax.set_aspect("equal")
-                ax.axis("off")
-                pdf.savefig(fig)
-                plt.close(fig)
-        partial.replace(path)
-    finally:
-        partial.unlink(missing_ok=True)
+    def page(doc, sheet: Sheet):
+        def draw(ax) -> None:
+            ctx = RenderContext(doc)
+            ctx.set_current_layout(doc.modelspace())
+            backend = MatplotlibBackend(ax, adjust_figure=False)
+            Frontend(ctx, backend, config=config.Configuration(
+                background_policy=config.BackgroundPolicy.WHITE,
+                color_policy=config.ColorPolicy.BLACK if sheet.ink == "mono" else config.ColorPolicy.COLOR,
+                # Without a floor of its own the matplotlib backend clamps every
+                # width to 72/dpi, and the sheet printed one width throughout --
+                # the LAYER table resolves 0.5 for VISIBLE against 0.18 for DIM
+                # and CENTER, and none of it reached the page. Thick against thin
+                # is most of what makes a print readable at a glance. The unit is
+                # 1/300 inch, so this is a floor low enough to be no floor.
+                min_lineweight=0.05,
+            )).draw_layout(doc.modelspace(), finalize=False)
 
+        return sheet.width, sheet.height, draw
 
-def _counted(run: Callable[..., list[Path]]) -> Callable[..., list[Path]]:
-    """``run``, counted for telemetry (``cadgen/analytics.py``): a drawing made, or a mistake in
-    cadgen's own code making one. A drawing is made in the script's own process, which sends nothing
-    itself: both are kept with a command's counts (``analytics.hand_over``), and neither ever changes
-    what the drawing does."""
-
-    @functools.wraps(run)
-    def counted(*args: Any, **kwargs: Any) -> list[Path]:
-        try:
-            drawn = run(*args, **kwargs)
-        except Exception as error:
-            try:
-                from cadgen import analytics
-
-                analytics.report(error, "build", bugs_only=True)  # the person's own mistakes are theirs
-            except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
-                pass
-            raise
-        try:
-            from cadgen import analytics
-
-            analytics.hand_over({"features": ["drawing"]})
-        except Exception:  # noqa: BLE001 - a count never fails the drawing it counts
-            pass
-        return drawn
-
-    return counted
+    write_pages(path, [page(doc, sheet) for doc, sheet in zip(docs, sheets)], decorator="@eng_drawing")
 
 
 def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | None = None):
@@ -1549,6 +1498,8 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
             return [target]
 
         run.__cadgen_eng_drawing__ = True  # type: ignore[attr-defined]
-        return _counted(run)
+        from cadgen import analytics
+
+        return analytics.counted(run, "drawing")
 
     return apply(func) if func is not None else apply

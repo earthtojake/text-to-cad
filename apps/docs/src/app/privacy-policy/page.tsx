@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 26, 2026">
+    <LegalPage title="Privacy Policy" updated="October 28, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -73,8 +73,8 @@ export default function PrivacyPolicyPage() {
                 whose code raised it (such as an error in your model’s code, a CAD operation the
                 geometry kernel could not do, a module or file that is not there, a picture that could
                 not be drawn, or a bug in cadgen) -- never the error’s message, your code or the path;
-                how many times assemblies, mesh exports, posed joints, animations, engineering drawings
-                and Quick Edit were used; and how many of the CAD engine’s build workers started,
+                how many times assemblies, mesh exports, posed joints, animations, engineering drawings,
+                work instructions and Quick Edit were used; and how many of the CAD engine’s build workers started,
                 crashed or were retired (and, from earlier releases, how many builds were turned away for
                 want of memory);
               </li>

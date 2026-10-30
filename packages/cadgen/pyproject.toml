@@ -58,7 +58,7 @@ dependencies = [
   # matplotlib backend is the page renderer. The add-on also imports Pillow at
   # module level and ezdxf declares neither, so a cadgen module would otherwise
   # import packages cadgen does not depend on -- and the drawing IS the PDF, so
-  # neither is optional.
+  # neither is optional. @work_instruction draws its pages with matplotlib too.
   "matplotlib",
   # cadgen's meshes are numpy arrays end to end: the engine packs each part's
   # triangles into its wire format, and the STL/3MF/GLB writers read them back

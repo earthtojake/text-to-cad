@@ -212,6 +212,8 @@ class Scene:
         # The instances a picture leaves out (``display.hidden``, ``display.isolated``): not
         # shown, framed, capped or shadowed.
         self.hidden: frozenset[int] = frozenset()
+        # The instances ``display.tint`` names: their faces in its colour, in every look.
+        self.tinted: frozenset[int] = frozenset()
         self.carriers: dict[int, Any] = {}  # each prototype's cap carrier, made on the first clip (``clip.py``)
         self.caps: list[Any] = []  # the carriers shown, each an instance's (``clip.py``)
         self.overlays: list[Any] = []
@@ -315,8 +317,8 @@ class Scene:
         if texture is not None:  # a GLB's base colour texture, over its material's colour
             aspect.SetTextureSet(texture)
             aspect.SetTextureMapOn(True)
-        if look == "hidden":
-            source.SetColor(_color(BACKGROUND))
+        if look == "hidden":  # a tint's fill in its own colour, flat, as the backdrop's is
+            source.SetColor(_color(rgba if fill else BACKGROUND))
             aspect.SetShadingModel(Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Unlit)
         elif look == "xray":
             source.SetTransparency(1 - LOOK.mode("xray").opacity)
@@ -386,9 +388,12 @@ class Scene:
             rgba = tuple(rgba) if rgba else None
             if mode == "parts":
                 rgba = PARTS[instance.get("palette", index) % len(PARTS)]
+            tinted = index in self.tinted
+            if tinted:  # a fill, as Parts' palette is: over the part's colour and every paint of it
+                rgba = display["tint"]["color"]
             if faces:
                 for group in part.faces:
-                    color = rgba if group is None or mode == "parts" else (
+                    color = rgba if group is None or mode == "parts" or tinted else (
                         (group.color if group.color is not None else rgba)
                         if isinstance(group, FaceGroup) else group)
                     connected = AIS_ConnectedInteractive()

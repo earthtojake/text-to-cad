@@ -59,5 +59,14 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_8")
 
 
+class TheFeaturesAreOneVocabulary(unittest.TestCase):
+    def test_cadgen_and_the_receiver_name_the_same_features(self) -> None:
+        # A feature the receiver does not know refuses the whole batch it rides in.
+        cadgen = names(CADGEN, "FEATURES = frozenset({", "})")
+        receiver = names(RECEIVER, "const FEATURES = new Set([", "]);")
+        self.assertIn("work_instruction", cadgen)
+        self.assertEqual(sorted(cadgen), sorted(receiver))
+
+
 if __name__ == "__main__":
     unittest.main()
