@@ -10,14 +10,16 @@ with GLX -- under Xvfb: `xvfb-run -a scripts/test/test-python.sh tests/python/pa
 
 The golden pictures (`render_golden/*.png`) are the material fixture (`test_materials.py`'s bench,
 its pane hinged on the plate for a pose) at 320x240, drawn on macOS: one per display mode, and Explode,
-Clip, a pose, and an annotation with a measurement; and `cap.png`, Clip's cap on a box holding
-another (`CapTest`). A picture matches its golden when at most 1.5%
+Clip, a pose, and an annotation with a measurement; `cap.png`, Clip's cap on a box holding
+another (`CapTest`); and `pmi.png`, a plate's PMI at 1200x900, and `pmi-view.png`, its view A-A
+(`test_render_pmi.py`, which holds them with this file's helpers). A picture matches its golden when at most 1.5%
 of its pixels are more than 32 levels from every golden pixel within one pixel of them (anti-aliasing
 and drivers apart, a line a pixel over still matches). Where a platform's OpenGL draws a row apart,
 the row has a golden of that platform's own (`render_golden/<platform>/<row>.png`), held to the same
 bound; a row missed in CI prints the picture it drew (`GOLDEN <platform>/<row>`, base64), that
 platform's golden once a person has looked at it. A deliberate change to the look makes them
-again: `CADGEN_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/cadgen/engine/test_render.py`.
+again: `CADGEN_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/cadgen/engine/test_render.py`,
+and `pmi.png` and `pmi-view.png` the same with `test_render_pmi.py`.
 """
 
 from __future__ import annotations
@@ -395,8 +397,8 @@ class HeldTest(unittest.TestCase):
                     print(f"GOLDEN {PLATFORM}/{name} {base64.b64encode(data).decode()}")
                 self.assertLessEqual(share, 0.015, f"{name}: {share:.1%} of its pixels are not the golden's")
         if not WRITE:
-            self.assertEqual(sorted(path.stem for path in GOLDEN.glob("*.png")), sorted([*ROWS, "cap"]),
-                             "a golden per row, and the cap's")
+            self.assertEqual(sorted(path.stem for path in GOLDEN.glob("*.png")), sorted([*ROWS, "cap", "pmi", "pmi-view"]),
+                             "a golden per row, the cap's, the PMI's and a view's")
 
     def test_hidden_and_isolated_parts_are_left_out_of_every_look(self) -> None:
         # From one camera: the block isolated and the block hidden together cover what the whole

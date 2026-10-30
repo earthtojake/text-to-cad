@@ -41,6 +41,14 @@ test("a view is the viewer's camera at the prompt's size, its mode and Grid swit
   assert.ok(!sameView(view({ display: { mode: 'solid', grid: false } }), view({ display: hiding.display })));
 });
 
+test("PMI the person turned off is off in the view, as `cadgen snapshot --display` takes it", () => {
+  const view = state => promptView({ camera: camera(), width: 800, height: 600 }, { display: { mode: 'solid' }, state });
+  assert.deepEqual(view({ pmi: false }).display, { mode: 'solid', grid: false, pmi: false });
+  // Shown, as a snapshot draws it by default: nothing to say.
+  assert.deepEqual(view({ pmi: true }).display, { mode: 'solid', grid: false });
+  assert.deepEqual(view({}).display, { mode: 'solid', grid: false });
+});
+
 test("a routine's kept frame is the view's animation, a snapshot job's {clip, time}", () => {
   const made = promptView({ camera: camera(), width: 800, height: 600 }, { state: { animation: { clip: 'swing', time: 1.5 } } });
   assert.deepEqual(made.animation, { clip: 'swing', time: 1.5 });

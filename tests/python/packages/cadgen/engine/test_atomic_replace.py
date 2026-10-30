@@ -139,3 +139,56 @@ class StagingTest(unittest.TestCase):
         self.assertEqual((self.folder / "view.png").read_bytes(), b"\x89PNG\r\n\x1a\nfixture")
         self.assertFalse((self.folder / "view.png").is_symlink())
         self.assertEqual((self.folder / "plan.dxf").read_bytes(), b"0\nEOF\n")
+
+
+class TogetherTest(unittest.TestCase):
+    """Every ``put`` in ``together`` lands with the others or none does (law 17)."""
+
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory(prefix="cadgen-engine-together-")
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+        self.first, self.second, self.third = (self.folder / name for name in ("a.xbf", "b.step", "c.glb"))
+        self.first.write_bytes(b"earlier a")
+        self.second.write_bytes(b"earlier b")
+        self.earlier = {path: os.stat(path).st_mtime_ns for path in (self.first, self.second)}
+
+    def unchanged(self) -> None:
+        self.assertEqual((self.first.read_bytes(), self.second.read_bytes()), (b"earlier a", b"earlier b"))
+        self.assertEqual({path: os.stat(path).st_mtime_ns for path in (self.first, self.second)}, self.earlier)
+        self.assertFalse(self.third.exists())
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["a.xbf", "b.step"])
+
+    def test_the_files_land_only_when_the_block_ends(self) -> None:
+        with atomic_replace.together():
+            for path in (self.first, self.second, self.third):
+                atomic_replace.put(path, lambda temporary, path=path: temporary.write_bytes(b"new " + path.name.encode()))
+            self.assertEqual(self.first.read_bytes(), b"earlier a")
+        self.assertEqual([path.read_bytes() for path in (self.first, self.second, self.third)],
+                         [b"new a.xbf", b"new b.step", b"new c.glb"])
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["a.xbf", "b.step", "c.glb"])
+
+    def test_a_refusal_in_the_block_lands_none(self) -> None:
+        def refused(_temporary: Path) -> None:
+            raise ValueError("refused")
+
+        with self.assertRaisesRegex(ValueError, "refused"), atomic_replace.together():
+            atomic_replace.put(self.first, lambda temporary: temporary.write_bytes(b"new a"))
+            atomic_replace.put(self.third, lambda temporary: temporary.write_bytes(b"new c"))
+            atomic_replace.put(self.second, refused)
+        self.unchanged()
+
+    def test_a_failed_move_puts_every_earlier_file_back(self) -> None:
+        real = os.replace
+
+        def failing(source, target):  # the last staged file's move, after two have landed
+            if Path(target) == self.second and Path(source).name == "b.step":
+                raise OSError(28, "No space left on device")
+            real(source, target)
+
+        with self.assertRaisesRegex(OSError, "No space"), \
+                mock.patch.object(atomic_replace.os, "replace", side_effect=failing), atomic_replace.together():
+            atomic_replace.put(self.third, lambda temporary: temporary.write_bytes(b"new c"))
+            atomic_replace.put(self.first, lambda temporary: temporary.write_bytes(b"new a"))
+            atomic_replace.put(self.second, lambda temporary: temporary.write_bytes(b"new b"))
+        self.unchanged()

@@ -5,9 +5,12 @@ The root exports exactly the engine's surface -- ``model``, the decorators (``xb
 ``glb``, ``stl``, ``threemf``, ``dxf``), ``memo``, face painting (``paint``), the readers (``read_step``, ``read_xbf``, ``read_mesh``) -- its operations on
 documents as functions (``export``, ``snapshot``, ``inspect``) and ``__version__``; process
 control (``cadgen serve``, ``status``, ``stop``, ``server``) is the ``cadgen`` command's alone. Two
-namespaces hold the standards' names: ``cadgen.ap242`` the mechanism's (``mechanism_state``,
+namespaces hold the standards' vocabularies: ``cadgen.ap242`` the mechanism's (``mechanism_state``,
 ``configuration_sequence``, ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``, ``posed``) and
-``cadgen.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cadgen``
+semantic PMI's (``annotate``, ``datum``, ``dimensional_size``, ``dimensional_location``,
+``plus_minus_tolerance``, ``flatness_tolerance``, ``position_tolerance``,
+``surface_profile_tolerance``, ...), with the notes and named views around it (``note``, ``view``:
+the xbf's, in no STEP), and ``cadgen.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cadgen``
 imports no CAD kernel, and ``import build123d`` binds a module the kernel loads into on its
 first attribute (``_internal/lazy_kernel.py``).
 """

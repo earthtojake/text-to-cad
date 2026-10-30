@@ -1,14 +1,14 @@
 /**
  * The views a prompt carries: how the viewer stood when each part of the annotation was drawn. A view is said in a snapshot job's own words (`camera`,
  * `display.mode` and `display.grid`, `display.clip` and `display.exploded`, `display.hidden` and
- * `display.isolated`, `kinematics` or `jointValues`, `animation`, `selection.hide` and
+ * `display.isolated`, `display.pmi`, `kinematics` or `jointValues`, `animation`, `selection.hide` and
  * `selection.focus`, and the picture's `width` and `height`), so the prompt's views file is a job
  * `cadgen snapshot --annotation PACKET --camera authored` draws as it was.
  *
  * @typedef {{
  *   camera: { position: number[], target: number[], up: number[], orthographicHalfHeight: number },
  *   display?: { camera?: { projection: string, focalLength?: number }, mode?: string, grid?: boolean, clip?: object, exploded?: object,
- *     hidden?: string[], isolated?: string[] }, kinematics?: Record<string, unknown>,
+ *     hidden?: string[], isolated?: string[], pmi?: false }, kinematics?: Record<string, unknown>,
  *   jointValues?: Record<string, number>, animation?: { clip: string, time: number },
  *   selection?: { hide?: string[], focus?: string[] },
  *   width: number, height: number
@@ -28,12 +28,13 @@ const filled = value => Boolean(value) && typeof value === "object" && Object.ke
  * routine's kept frame: `{clip, time}`), the parts hidden and isolated. A renderer whose parts are
  * named by refs (an engine document's: as Copy Prompt copies them) gives them as `hidden` and
  * `isolated`, which the view's display says as `cadgen snapshot --display` takes them; one whose
- * parts are not gives `hide` and `focus`, its `selection`.
+ * parts are not gives `hide` and `focus`, its `selection`. A document's PMI turned off (`pmi`
+ * false) is off in the view too (`display.pmi`), as a snapshot draws it otherwise.
  *
  * @param {{ camera: PromptView["camera"], display?: PromptView["display"], width: number, height: number } | null} viewport
  * @param {{ display?: { mode?: string, grid?: boolean, clip?: { enabled?: boolean }, exploded?: { enabled?: boolean } },
  *   state?: { kinematics?: object, jointValues?: object, animation?: { clip: string, time: number } | null,
- *     hidden?: readonly string[], isolated?: readonly string[], hide?: readonly string[], focus?: readonly string[] } | null }} [viewer]
+ *     hidden?: readonly string[], isolated?: readonly string[], hide?: readonly string[], focus?: readonly string[], pmi?: boolean } | null }} [viewer]
  * @returns {PromptView | null}
  */
 export function promptView(viewport, { display = {}, state = null } = {}) {
@@ -50,6 +51,7 @@ export function promptView(viewport, { display = {}, state = null } = {}) {
   // The parts left out of the view, and the ones it alone shows, by their refs.
   if (state?.hidden?.length) placed.hidden = [...state.hidden];
   if (state?.isolated?.length) placed.isolated = [...state.isolated];
+  if (state?.pmi === false) placed.pmi = false;
   if (filled(placed)) view.display = placed;
   if (filled(state?.kinematics)) view.kinematics = state.kinematics;
   if (filled(state?.jointValues)) view.jointValues = state.jointValues;

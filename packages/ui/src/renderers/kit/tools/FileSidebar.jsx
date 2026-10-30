@@ -29,7 +29,8 @@ export const SIDEBAR_SLIDE_CLASS = "transition-[translate,opacity] duration-200 
  * `ToolStackContext`'s `sidebar`): a tree by its name (**Model tree**, **Links**: a tree icon, its
  * filter heading the panel), **Position**
  * for a model's joints, **Animation** for its routines (**Motion** for an engine document's
- * motions), and any other section by its name. None is open as a file opens; a tile
+ * motions), and any other section by its name, its own icon where it gives one (`ToolPanel`'s
+ * `icon`) and a page where it does not. None is open as a file opens; a tile
  * opens its section in a panel under the toolbar, a second press on it closes it, and so does the
  * section's own collapse button; another tile opens its section instead. One section at a time.
  * The panel is read for as long as it is open, so it has its own surface (`FILE_SIDEBAR_SURFACE_CLASS`):
@@ -184,7 +185,8 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
   const [metaTick, setMetaTick] = useState(0);
   const register = useCallback((id, next) => {
     const current = meta.current.get(id);
-    if (current && current.title === next.title && current.fit === next.fit && Boolean(current.changed) === Boolean(next.changed)) return;
+    if (current && current.title === next.title && current.fit === next.fit && current.icon === next.icon
+      && Boolean(current.changed) === Boolean(next.changed)) return;
     meta.current.set(id, next);
     setMetaTick(tick => tick + 1);
   }, []);
@@ -192,6 +194,9 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
   const tabbed = phone && ids.length > 1;
   const sections = useMemo(() => ({
     sidebar: true,
+    // A section brought up by what the person did elsewhere (a menu item of the viewport's that
+    // opens the section it fills): as its tile's press would, but never a second press that closes it.
+    open: id => setOpenId(id),
     openSection: shown,
     closeSection,
     // Whether a section's head carries its X: not under a phone's tabs, whose row has the panel's.
@@ -206,7 +211,8 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
   }), [shown, closeSection, tabbed, register, measured.viewer, layout, settle]);
   const tiles = ids.map(id => {
     const section = meta.current.get(id) || {};
-    const tile = section.fit === "tree" ? { label: section.title || t("sidebar.tree"), Icon: ListTree }
+    const tile = section.icon ? { label: section.title || id, Icon: section.icon }
+      : section.fit === "tree" ? { label: section.title || t("sidebar.tree"), Icon: ListTree }
       : id === "position" ? { label: t("sidebar.position"), Icon: PositionIcon }
         : id === "animation" ? { label: section.title || t("sidebar.animation"), Icon: Clapperboard }
         : { label: section.title || id, Icon: FileText };

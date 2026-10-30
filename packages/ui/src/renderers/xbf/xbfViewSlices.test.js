@@ -44,3 +44,19 @@ test("a document with no mechanism keeps no pose, and a stored slice is read as 
   assert.deepEqual(readXbfView({ tree: { expanded: ["a", 7, "", "a"], hidden: "i1" }, pose: { preset: "open", given: { hinge: "x" } } }),
     { tree: { expanded: ["a", "7"], hidden: [], isolated: [] }, pose: { preset: "open", given: null, couplings: null } });
 });
+
+test("what of a document's PMI is hidden comes back across a rebuild of the same parts, while it has PMI", () => {
+  const annotated = { ...structure, prototypes: [{ name: "base" }, { name: "arm" }, { name: "pin" }], pmi: [{ id: "A", part: 0 }, { id: "top-flat", part: 0 }] };
+  const slices = xbfViewSlices({ tree: {}, pmi: { hidden: ["0:top-flat", "0:top-flat"], off: true } });
+  assert.deepEqual(slices.pmi, { hidden: ["0:top-flat"], off: true });
+  const record = writeFileView({ display: { mode: "solid" }, renderer: slices, signatures: xbfViewSignatures(annotated, null) });
+  // A rebuild that moved the parts keeps it: an annotation is its part's and its author's id.
+  const moved = { ...annotated, instances: [...annotated.instances].reverse() };
+  assert.deepEqual(readXbfView(readFileView(record, xbfViewSignatures(moved, null)).renderer).pmi, { hidden: ["0:top-flat"], off: true });
+  // One that renumbered the parts has other parts under those numbers: what was hidden is not.
+  const renumbered = { ...annotated, prototypes: [...annotated.prototypes].reverse() };
+  assert.equal(readXbfView(readFileView(record, xbfViewSignatures(renumbered, null)).renderer).pmi, undefined);
+  // A document with no PMI has nothing of it to keep.
+  assert.equal(xbfViewSignatures(structure, null).pmi, undefined);
+  assert.equal(readXbfView(readFileView(record, xbfViewSignatures(structure, null)).renderer).pmi, undefined);
+});

@@ -1,8 +1,8 @@
 # examples
 
 Every script of `models/examples/src`, on cadgen 0.8: a `@model` each, writing nothing, but
-the two print parts below, which declare their files, and the import's `__main__`, which
-exports the two STEPs it reads.
+the two print parts below and the two PMI examples, which declare their files, and the import's
+`__main__`, which exports the two STEPs it reads.
 
 | Script | Files | What it is |
 | --- | --- | --- |
@@ -11,6 +11,8 @@ exports the two STEPs it reads.
 | `basic_shape_mating_test_fixture.py` | — | Seven parts and a sub-assembly seated on a base plate by build123d joints |
 | `electronics_enclosure_base_import.py` | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` (its `__main__` exports them) | The enclosure's and the fixture's STEP read back with `read_step` |
 | `electronics_enclosure_base_drawing.py` | `PDF/electronics_enclosure_base_drawing.pdf` | **Engineering drawing** (`@eng_drawing`) of the enclosure, calling its model: three views with hidden lines and centre marks, measured dimensions, hole callouts, title block. Build the enclosure first. |
+| `pmi_plate.py` | `STEP/pmi_plate.step` | **Semantic PMI as a model-based definition**: a plate with a through-hole, datums A/B/C, thickness and hole-diameter dimensions with plus-minus tolerances, flatness, the hole's position to A\|B\|C located by basic dimensions from B and C, profiles on datum features B and C, and a general profile to A\|B\|C (Note 1) on every other face; a general note and a flag note on the hole, their texts the project's notes (`lib/notes.py`), and two views, section A-A through the hole and an iso. Exported as AP242 semantic PMI; the notes and views stay in the document's xbf (tolerance values and note texts illustrative; Aluminum 6061-T6) |
+| `aerospace_avionics_bracket.py` | `STEP/aerospace_avionics_bracket.step` | **Semantic PMI as a model-based definition** on a bracket with a back wall, webs, slots and a locating bore: datums A/B/C, toleranced thickness and bore, flatness, the bore's position located by basic dimensions, profiles on datum features B and C, and a general profile to A\|B\|C (Note 1) on every other face; the same notes as the plate, flagged on the bore, and two views, section A-A through the bore and an iso (geometry, tolerance values and note texts illustrative, not a flight part; Aluminum 7075-T6) |
 | `cam_follower_roller.py` | — | Cam follower roller with central bearing bore and rounded outer profile (Steel 4140) |
 | `centrifugal_impeller.py` | — | Single solid centrifugal impeller (Aluminum 6061-T6) |
 | `circular_flange.py` | — | Circular flange with a six-hole bolt circle (Steel 1018) |
@@ -36,7 +38,7 @@ exports the two STEPs it reads.
 | `stepped_shaft_keyway.py` | — | Stepped shaft with keyway (Steel 4140) |
 | `t_slot_slider_block.py` | — | T-slot slider block with central channel, side relief cuts, and mounting holes (Aluminum 6061-T6) |
 
-The 24 parts after the first five are the old project's, ported as they were: `@step`
+The 24 parts after the first seven are the old project's, ported as they were: `@step`
 became `@model`, `build123d` is imported directly, and the two that also declared STL,
 3MF and GLB keep those decorators, alone: this corpus's example of declared files, a print
 part whose STL, 3MF and GLB every run writes (`../STL/`, `../3MF/`, `../GLB/`, gitignored). Their shared builders are `lib/simple_model_library.py` (the
@@ -54,10 +56,12 @@ assembly, which every part below it takes: bead-blasted Aluminum 6061-T6,
 anodised in each part's own colour (restored after native material assignment).
 The imports read the STEP inputs as they are, without materials.
 
-A run writes nothing, but the mounting plate's and the gear blank's declared files. The
-import script's `__main__` exports the enclosure and the fixture to `../STEP/` (gitignored,
-like every export: Git holds no CAD files) and reads them back; run it before opening either
-import model, which reads those files.
+A run writes nothing, but the mounting plate's and the gear blank's declared files, and the
+two PMI examples' STEP (their PMI as AP242's, the notes and views staying in the document, saved as
+an xbf from the viewer or `cadgen export <id> NAME.xbf`; their notes' texts come from `lib/notes.py`,
+the project's own notes, illustrative). The import script's `__main__` exports the
+enclosure and the fixture to `../STEP/` (gitignored, like every export: Git holds no CAD files)
+and reads them back; run it before opening either import model, which reads those files.
 Build from this folder, in any order: each script builds the models its `__main__` calls, for example
 
 ```

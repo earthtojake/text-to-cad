@@ -1,12 +1,13 @@
 import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
 import type { ExportFormat } from '@text-to-cad/core/client';
-import type { ExportView } from './context.js';
+import type { ExportPmi, ExportView } from './context.js';
 
 /**
- * One item of the Export menu: what the server writes, its name there, the file's extension, and
- * whether the file carries the animations the document's code made (an engine document's GLB).
+ * One item of the Export menu: what the server writes, its name there, the file's extension,
+ * whether the file carries the animations the document's code made (an engine document's GLB), and
+ * what it carries of the document's PMI (a STEP of a document holding PMI: `ExportPmi`).
  */
-export interface ExportChoice { format: ExportFormat; label: string; extension: string; animations?: true }
+export interface ExportChoice { format: ExportFormat; label: string; extension: string; animations?: true; pmi?: ExportPmi }
 
 const STEP: ExportChoice = { format: 'step', label: 'STEP', extension: '.step' };
 const STL: ExportChoice = { format: 'stl', label: 'STL', extension: '.stl' };
@@ -21,14 +22,15 @@ const ORIGINAL: ExportChoice = { format: 'original', label: 'XBF', extension: '.
 /**
  * What the file on screen saves as, from its kind and what the view already holds, so the menu has
  * nothing to wait for: an engine document (a STEP, an xbf, a model held by its id) as STEP, STL,
- * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`); a mesh file as the other two
- * mesh kinds. A format a document cannot be written in is its job's to refuse, saying why. Any
- * other file has none.
+ * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`), its STEP saying what it carries
+ * of the document's PMI (`pmi`); a mesh file as the other two mesh kinds. A format a document cannot
+ * be written in is its job's to refuse, saying why. Any other file has none.
  */
-export function exportChoices({ file, planar }: Pick<ExportView, 'file' | 'planar'>): ExportChoice[] {
+export function exportChoices({ file, planar, pmi }: Pick<ExportView, 'file' | 'planar' | 'pmi'>): ExportChoice[] {
   const drawing = planar ? [DXF] : [];
-  if (isDocumentId(file) || /\.(?:step|stp)$/i.test(file)) return [STEP, STL, THREEMF, ANIMATED_GLB, ...drawing, XBF];
-  if (/\.xbf$/i.test(file)) return [STEP, STL, THREEMF, ANIMATED_GLB, ...drawing, ORIGINAL];
+  const step = pmi ? { ...STEP, pmi } : STEP;
+  if (isDocumentId(file) || /\.(?:step|stp)$/i.test(file)) return [step, STL, THREEMF, ANIMATED_GLB, ...drawing, XBF];
+  if (/\.xbf$/i.test(file)) return [step, STL, THREEMF, ANIMATED_GLB, ...drawing, ORIGINAL];
   if (/\.glb$/i.test(file)) return [STL, THREEMF];
   if (/\.stl$/i.test(file)) return [THREEMF, GLB];
   if (/\.3mf$/i.test(file)) return [STL, GLB];

@@ -393,3 +393,27 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(files).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
 });
+
+it('carries a change the view was asked for as a chip, sent with no note, after the note in the prompt', async () => {
+  const delivered: any[] = [];
+  const deliver = vi.fn(async (context: any) => { delivered.push(context); return { status: 'added' as const, partIds: [] }; });
+  const remove = vi.fn();
+  const request = { key: 'pmi:edit:thickness', label: 'Change thickness', request: 'Change the PMI "thickness": tolerance=plus_minus_tolerance(0.1).', copy: 'x', onRemove: remove };
+  const { update } = mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver } as any }));
+  expect(box()).toBeNull();
+  // Asked for, it opens the box with its chip, and Queue takes it with nothing written.
+  update({ requests: [request] });
+  expect(box()).not.toBeNull();
+  expect(within(box()!).getByRole('button', { name: 'Change thickness' })).toBeTruthy();
+  const queue = within(box()!).getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+  expect(queue.disabled).toBe(false);
+  write('Tighter, please.');
+  fireEvent.click(queue);
+  await waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+  const texts = delivered[0].parts.filter((part: any) => part.kind === 'text').map((part: any) => part.text);
+  expect(texts).toEqual(['Tighter, please.', 'Requested changes:\n\nChange the PMI "thickness": tolerance=plus_minus_tolerance(0.1).']);
+  // Its X drops it.
+  update({ requests: [request] });
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Remove Change thickness' }));
+  expect(remove).toHaveBeenCalledTimes(1);
+});

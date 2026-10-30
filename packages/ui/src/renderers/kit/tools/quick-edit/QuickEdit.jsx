@@ -48,7 +48,9 @@ export function quickEditReferenceIds(selection) {
  * stroke once the pen lifts — never for an agent's selection.
  *
  * Under its header, what goes with the note is chips: first "Annotation" while Annotate has ink (`annotation`:
- * its X wipes the ink), then the selected references,
+ * its X wipes the ink), then each change the renderer was asked for (`requests`: a chip each, its
+ * card what it asks, its `request` what the prompt carries, its X dropping it -- a change asked
+ * for says what it wants, so Queue and Send take one with no note), then the selected references,
  * as the renderer describes them (`chips`,
  * `ReferenceChips.jsx`: a few, then "+N more"; each a card of what it is, its picks lit while the
  * pointer is on it, its X dropping them). A renderer that describes none has its references
@@ -73,6 +75,7 @@ export function quickEditReferenceIds(selection) {
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
  *   chips?: readonly import("./ReferenceChips.jsx").ReferenceChip[] | null,
  *   annotation?: { present: boolean, clear?: () => void } | null,
+ *   requests?: ReadonlyArray<import("./ReferenceChips.jsx").ReferenceChip & { request: string }> | null,
  *   prompt?: { views(): { label: string }[], files(views: { label: string }[]): Promise<object> | null,
  *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@text-to-cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
@@ -86,7 +89,7 @@ export function quickEditReferenceIds(selection) {
  *   with a note keeps it, and Escape only hands the keyboard back to the view. `hidden`: out of
  *   sight with all it holds (the view is loading).
  */
-export default function QuickEdit({ resource, references = EMPTY, chips = null, annotation = null, prompt = null, nameReference = null, onCopy, onEscape, onClear, disabled = false,
+export default function QuickEdit({ resource, references = EMPTY, chips = null, annotation = null, requests = null, prompt = null, nameReference = null, onCopy, onEscape, onClear, disabled = false,
   hidden = false, docked = false, className, style }) {
   const { t } = useI18n();
   const host = useViewerHost();
@@ -102,7 +105,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const selection = useMemo(() => quickEditSelection(references), [references]);
   const referenceIds = useMemo(() => quickEditReferenceIds(selection), [selection]);
   const annotated = Boolean(annotation?.present);
-  const attached = referenceIds.length > 0 || annotated;
+  const requested = Boolean(requests?.length);
+  const attached = referenceIds.length > 0 || annotated || requested;
   const written = Boolean(text.trim());
   const replayUnavailable = prompt?.unavailable?.() || "";
   const open = written || attached;
@@ -219,7 +223,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
 
   const canQueue = destination.kind === "composer" && destination.available;
   const canSend = typeof host.promptContext.send === "function";
-  const ready = written && !pending && !disabled;
+  // A requested change says what it wants on its own: it goes with or without a note.
+  const ready = (written || requested) && !pending && !disabled;
 
   // The note, and everything it would carry: the box goes with them.
   const clearAll = () => { setText(""); field.current?.replaceChildren(); setError(""); onClear?.(); };
@@ -243,7 +248,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       const views = unavailable ? [] : prompt?.views() ?? [];
       const files = views.length ? prompt.files(views) : null;
       void files?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable });
+      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable,
+        requests: (requests || EMPTY).map(item => item.request).filter(Boolean) });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else outcome = host.clipboard.writeText(copiedQuickEdit(context)).then(() => ({ status: "copied" }));
@@ -385,7 +391,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   const order = useRef(new Map());
   const copiedChips = useRef(new Map());
   const shownChips = useMemo(() => {
-    const all = [annotationChip, ...(chips || EMPTY)].filter(Boolean);
+    const all = [annotationChip, ...(requests || EMPTY), ...(chips || EMPTY)].filter(Boolean);
     const seen = order.current;
     const keys = new Set(all.map(chip => chip.key));
     for (const key of [...seen.keys()]) if (!keys.has(key)) seen.delete(key);
@@ -396,7 +402,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       if (value) copiedChips.current.set(String(value).trim(), chip);
       return value;
     } } : chip));
-  }, [annotationChip, chips]);
+  }, [annotationChip, requests, chips]);
   const section = open ? <section ref={bindBox} aria-label={t("quickEdit.title")} data-quick-edit-box=""
       // The side column caps the box on a narrow view, clear of the toolbar and sidebar.
       // It opens in 150ms, animate-in's own: a `duration-*` class would also ease every width a drag

@@ -1,4 +1,5 @@
-"""Read real published xbf/8 bytes without source, preserving their saved meaning."""
+"""Read real published xbf/8 bytes, and xbf/9 ones, without source, preserving their saved meaning;
+write xbf/10, and refuse a later format with its bytes untouched."""
 from __future__ import annotations
 
 import hashlib
@@ -6,6 +7,7 @@ import json
 import shutil
 import struct
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,7 +22,7 @@ from OCP.TDF import TDF_ChildIterator
 from OCP.XCAFDoc import XCAFDoc, XCAFDoc_DocumentTool, XCAFDoc_Material
 from OCP.collections import Sequence_TDF_Label
 
-from cadgen.engine import build, document, document_migrations, export, mesh
+from cadgen.engine import build, document, document_migrations, export, mesh, previous, reader
 from cadgen.engine.colors import srgb_to_linear
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -147,7 +149,9 @@ class DocumentMigrationsTest(unittest.TestCase):
             self.assertEqual(loaded.closure, EXPECTED["closure"])
             self.assertEqual(loaded.migration["from"], "xbf/8")
             self.assertEqual(loaded.migration["writer"], EXPECTED["writer"])
-            self.assertEqual(document.written_format(loaded.writer), "xbf/9")
+            self.assertEqual(document.written_format(loaded.writer), "xbf/10")
+            self.assertEqual((loaded.migration["to"], [(step["from"], step["to"]) for step in loaded.migration["steps"]]),
+                             ("xbf/10", [("xbf/8", "xbf/9"), ("xbf/9", "xbf/10")]))
             self.assertAlmostEqual(sum(bd.Compound(p.shape).volume for p in loaded.prototypes),
                                    EXPECTED["total_volume"], places=7)
             for prototype in loaded.prototypes:
@@ -300,6 +304,138 @@ class DocumentMigrationsTest(unittest.TestCase):
         self.assertEqual(target.read_bytes(), before)
         self.assertFalse(list(self.folder.glob(".*.tmp")))
         self.assert_original_untouched()
+
+
+PLATE = """
+import build123d as bd
+from cadgen import step, xbf
+
+
+@xbf("plate.xbf")
+@step("plate.step")
+def plate():
+    body = bd.Box(40, 20, 4) - bd.Cylinder(3, 4)
+    body.label = "plate"
+    body.color = bd.Color("steelblue")
+    return body
+
+
+if __name__ == "__main__":
+    plate()
+"""
+
+
+def relabelled(data, format):
+    """A document this engine wrote, its writer and its closure's format another's: the bytes an
+    engine writing ``format`` made of it. Good for xbf/9, whose representation xbf/10 keeps whole
+    (an xbf/8, read by another OCCT, needs its published fixture)."""
+    doc = document.read_bytes(data)
+    closure = json.loads(document._label_text(doc.Main(), document.CLOSURE_GUID))
+    closure["engine"]["format"] = format
+    for guid, text in ((document.WRITER_GUID, f"cadgen.engine {format} (cadgen 0.8.2)"),
+                       (document.CLOSURE_GUID, json.dumps(closure, separators=(",", ":")))):
+        TDataStd_AsciiString.Set_s(doc.Main(), Standard_GUID(guid), TCollection_AsciiString(text))
+    return document.to_bytes(doc)
+
+
+class DocumentFormatTest(unittest.TestCase):
+    """xbf/10 is what every document is written as; xbf/9 opens as it was saved, and a later
+    format is refused, its bytes as they were."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory(prefix="document-format-")
+        cls.folder = Path(cls.temp.name)
+        script = cls.folder / "plate.py"
+        script.write_text(textwrap.dedent(PLATE), encoding="utf-8")
+        (report,) = build.build(script, ["plate"], cwd=cls.folder)
+        assert report["ok"], report.get("error")
+        cls.current = (cls.folder / "plate.xbf").read_bytes()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def saved(self, format):
+        """The plate's document as ``format`` wrote it, in a folder of its own with no source."""
+        folder = Path(tempfile.mkdtemp(prefix=format.replace("/", "") + "-", dir=self.folder))
+        path = folder / "plate.xbf"
+        path.write_bytes(relabelled(self.current, format))
+        return path, path.read_bytes(), path.stat().st_mtime_ns
+
+    def assert_untouched(self, path, data, mtime):
+        self.assertEqual(path.read_bytes(), data)
+        self.assertEqual(path.stat().st_mtime_ns, mtime)
+
+    def test_a_new_document_is_xbf10(self):
+        self.assertEqual(previous.FORMAT, "xbf/10")
+        loaded = document.Loaded(self.folder / "plate.xbf")
+        self.assertRegex(loaded.writer, r"^cadgen\.engine xbf/10 \(cadgen .+\)$")
+        self.assertEqual(loaded.closure["engine"]["format"], "xbf/10")
+        self.assertIsNone(loaded.migration, "the current format converts nothing")
+        self.assertIn(b"cadgen.engine xbf/10 ", self.current)
+
+    def test_an_xbf9_without_pmi_opens_views_and_exports_without_source(self):
+        path, data, mtime = self.saved("xbf/9")
+        closure = previous.read_record(document.read_bytes(data))[1]
+        current = document.Loaded(self.folder / "plate.xbf").structure()
+        with mock.patch.object(build, "build", side_effect=AssertionError("saved source must not run")):
+            loaded = document.Loaded(path)
+            self.assertEqual(loaded.migration, {"from": "xbf/9", "to": "xbf/10", "materials": 0,
+                                                "writer": "cadgen.engine xbf/9 (cadgen 0.8.2)",
+                                                "by": document._writer()})
+            self.assertEqual(previous.read_record(loaded.doc)[1], closure, "its build provenance unchanged")
+            self.assertEqual(loaded.closure["engine"]["format"], "xbf/9")
+            shown = loaded.structure()
+            self.assertNotIn("pmi", shown)
+            for key in ("name", "units", "tree", "instances"):
+                self.assertEqual(shown[key], current[key], key)
+            for old, new in zip(current["prototypes"], shown["prototypes"]):
+                for key in ("name", "key", "color", "faceNames", "edgeNames", "vertexNames"):
+                    self.assertEqual(new[key], old[key], key)
+            # As the engine's cache holds it too: read from its bytes, converted the same way.
+            self.assertEqual(build.held_source(data, "plate").migration["from"], "xbf/9")
+            for kind in ("step", "glb", "stl"):
+                target = path.parent / f"plate.{kind}"
+                export.translate(export.Source.read(path), kind, target)
+                self.assertGreater(target.stat().st_size, 0, kind)
+            self.assertIn("PRODUCT('plate'", (path.parent / "plate.step").read_text(encoding="utf-8"))
+            from tests.python.support import opengl
+            from cadgen.engine.render import context
+
+            if opengl.draws(context.available()):
+                from cadgen.engine.snapshot import snapshot
+
+                snapshot(path, path.parent / "plate.png", size=(120, 90), daemon=False)
+                self.assertGreater((path.parent / "plate.png").stat().st_size, 0)
+            source = export.Source.read(path)
+            with self.assertRaisesRegex(export.ExportRefused, "different XBF path"):
+                export.translate(source, "xbf", path)
+            upgraded = path.parent / "upgraded.xbf"
+            export.translate(source, "xbf", upgraded)
+        reloaded = document.Loaded(upgraded)
+        self.assertEqual(document.written_format(reloaded.writer), "xbf/10")
+        self.assertIsNone(reloaded.migration)
+        self.assertEqual(reloaded.closure, loaded.closure)
+        self.assertEqual(document_migrations.provenance(reloaded.doc)["from"], "xbf/9")
+        self.assert_untouched(path, data, mtime)
+
+    def test_a_later_format_is_refused_its_bytes_untouched(self):
+        path, data, mtime = self.saved("xbf/11")
+        expected = "unsupported document format xbf/11; expected xbf/10"
+        for read in (document.Loaded, export.Source.read, reader.read_xbf):
+            with self.subTest(read=read.__qualname__):
+                with self.assertRaisesRegex(ValueError, expected):
+                    read(path)
+        with mock.patch.dict(build._HELD, clear=True):
+            with self.assertRaisesRegex(document_migrations.DocumentCompatibilityError, expected):
+                build.held_source(data, "plate")
+            self.assertEqual(build._HELD, {})
+        target = path.parent / "plate.step"
+        with self.assertRaisesRegex(ValueError, expected):
+            export.translate(path, "step", target)
+        self.assertFalse(target.exists())
+        self.assert_untouched(path, data, mtime)
 
 
 if __name__ == "__main__":

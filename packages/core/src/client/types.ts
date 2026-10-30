@@ -270,6 +270,8 @@ export interface ExportJob {
   bytes?: number; error?: string;
   /** Expired because the browser fetched the whole file (it is deleted then), not by its window. */
   fetched?: boolean;
+  /** A STEP's PMI, checked in the file as written (none where the format carries none). */
+  pmiVerification?: { matched: number; total: number; problems: string[]; sha256: string } | null;
 }
 export interface ExportService {
   /** The session's epoch, which a request names so that a server restarted since refuses it. */

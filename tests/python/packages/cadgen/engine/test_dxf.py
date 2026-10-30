@@ -276,7 +276,12 @@ class RefusedTest(unittest.TestCase):
 
     def test_a_3d_document_is_refused_by_the_build_and_the_export(self) -> None:
         self.assertIn("solid is 3D: a DXF is drawn from 2D geometry a model returns", self.refused("solid"))
-        # The xbf, written first, is no planar document either.
+        # Its xbf is not written either: a run's declared files land together (law 17).
+        self.assertFalse((self.folder / "XBF/solid.xbf").exists())
+        # The same model declaring its xbf alone writes it, and that is no planar document either.
+        script = _write(self.folder / "solid.py", REFUSED.split("\n\n\n@dxf(\"lifted.dxf\")")[0]
+                        .replace('@dxf("solid.dxf")\n', ""))
+        self.assertTrue(_built(script, "solid")["solid"]["ok"])
         with self.assertRaisesRegex(ExportRefused, "solid.xbf is 3D"):
             translate(self.folder / "XBF/solid.xbf", None, self.folder / "solid.dxf")
 

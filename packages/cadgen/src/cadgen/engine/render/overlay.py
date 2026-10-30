@@ -82,7 +82,7 @@ class Painter:
         a = cover[..., None] * alpha
         self.frame[where] = np.rint(np.asarray(color, float) * a + patch * (1 - a)).astype(np.uint8)
 
-    def line(self, a: tuple[float, float], b: tuple[float, float], width: float, color: Any) -> None:
+    def line(self, a: tuple[float, float], b: tuple[float, float], width: float, color: Any, alpha: float = 1.0) -> None:
         """A round-capped segment ``width`` viewer pixels wide (a capsule): sampled only on the
         pixels whose centre is within reach of it, not over its whole box (a long diagonal's box
         is mostly empty)."""
@@ -131,10 +131,10 @@ class Painter:
         sy = (ys[:, None, None] + offsets[None, :, None]).repeat(s, 2)
         cover = (distance(sx, sy) <= half).mean(axis=(1, 2))
         patch = self.frame[ys, xs].astype(np.float64)
-        alpha = cover[:, None]
-        self.frame[ys, xs] = np.rint(np.asarray(color, float) * alpha + patch * (1 - alpha)).astype(np.uint8)
+        weight = cover[:, None] * alpha
+        self.frame[ys, xs] = np.rint(np.asarray(color, float) * weight + patch * (1 - weight)).astype(np.uint8)
 
-    def triangle(self, p: Any, q: Any, r: Any, color: Any) -> None:
+    def triangle(self, p: Any, q: Any, r: Any, color: Any, alpha: float = 1.0) -> None:
         k = self.scale
         p, q, r = [(v[0] * k, v[1] * k) for v in (p, q, r)]
         grid = self._grid((min(p[0], q[0], r[0]) - 1, min(p[1], q[1], r[1]) - 1, max(p[0], q[0], r[0]) + 1,
@@ -148,9 +148,9 @@ class Painter:
 
         s1, s2, s3 = side(p, q), side(q, r), side(r, p)
         inside = ((s1 >= 0) & (s2 >= 0) & (s3 >= 0)) | ((s1 <= 0) & (s2 <= 0) & (s3 <= 0))
-        self._over(where, inside, color)
+        self._over(where, inside, color, alpha)
 
-    def disc(self, centre: Any, radius: float, color: Any, ring: float = 0.0) -> None:
+    def disc(self, centre: Any, radius: float, color: Any, ring: float = 0.0, alpha: float = 1.0) -> None:
         """A filled disc of ``radius``, or (``ring`` > 0) the stroke of that width round it."""
         k = self.scale
         c, r, half = (centre[0] * k, centre[1] * k), radius * k, ring * k / 2
@@ -161,7 +161,7 @@ class Painter:
         where, xs, ys = grid
         d = np.hypot(xs - c[0], ys - c[1])
         inside = (np.abs(d - r) <= half) if ring else (d <= r)
-        self._over(where, inside, color)
+        self._over(where, inside, color, alpha)
 
     def rounded_box(self, x: float, y: float, w: float, h: float, radius: float, color: Any, alpha: float = 1.0,
                     stroke: float = 0.0) -> None:
@@ -179,6 +179,23 @@ class Painter:
         inside = (np.abs(outside) <= half) if stroke else (outside <= 0)
         self._over(where, inside, color, alpha)
 
+    def words(self, text: str, face: Any, x: float, middle: float, color: Any, align: str = "left") -> None:
+        """Words in ``face`` (``text.face``) with their em box's middle on ``middle`` (``textBaseline``
+        "middle"), from ``x`` (``align`` "center": centred on it), in viewer pixels."""
+        from cadgen.engine.render.text import coverage
+
+        k = self.scale
+        left, top = x * k, middle * k - face.size * k / 2  # the em box is the font size tall
+        width = face.width(text) * k
+        start = left - width / 2 if align == "center" else left
+        box = (int(max(math.floor(start - 2), 0)), int(max(math.floor(top - 4), 0)))
+        size = (min(int(math.ceil(width)) + 5, self.width - box[0]),
+                min(int(math.ceil(face.size * k)) + 9, self.height - box[1]))
+        if size[0] <= 0 or size[1] <= 0:
+            return
+        cover = coverage([text], face, size, (left - box[0], top - box[1]), 0, scale=k, align=align)
+        self.coverage((slice(box[1], box[1] + size[1]), slice(box[0], box[0] + size[0])), cover, color)
+
 
 def _rgb(color: str) -> tuple[int, int, int]:
     color = color.lstrip("#")
@@ -188,7 +205,7 @@ def _rgb(color: str) -> tuple[int, int, int]:
 def paint_measurements(frame: np.ndarray, marks: list[dict[str, Any]], project: Any) -> None:
     """Measure's marks painted over ``frame`` (sRGB bytes, (h, w, 3), changed in place) as the
     snapshot page paints them: ``project`` maps world points to output pixels (x right, y down)."""
-    from cadgen.engine.render.text import coverage, face as text_face
+    from cadgen.engine.render.text import face as text_face
 
     height, width = frame.shape[:2]
     scale = height / REFERENCE_HEIGHT
@@ -218,11 +235,4 @@ def paint_measurements(frame: np.ndarray, marks: list[dict[str, Any]], project: 
         painter.rounded_box(x, y, chip_w, chip_h, LABEL_RADIUS, LABEL_BACKGROUND[:3], LABEL_BACKGROUND[3])
         painter.rounded_box(x, y, chip_w, chip_h, LABEL_RADIUS, color, stroke=1.0)
         # textBaseline "middle": the em box's middle on the chip's; textAlign "center".
-        middle_x, middle_y = (x + chip_w / 2) * scale, (y + chip_h / 2) * scale
-        top = middle_y - face.size * scale / 2  # the em box is the font size tall
-        box = (int(max(math.floor(middle_x - face.width(label) * scale / 2 - 2), 0)), int(max(math.floor(top - 4), 0)))
-        size = (min(int(math.ceil(face.width(label) * scale)) + 5, width - box[0]), min(int(math.ceil(face.size * scale)) + 9, height - box[1]))
-        if size[0] <= 0 or size[1] <= 0:
-            continue
-        cover = coverage([label], face, size, (middle_x - box[0], top - box[1]), 0, scale=scale, align="center")
-        painter.coverage((slice(box[1], box[1] + size[1]), slice(box[0], box[0] + size[0])), cover, (255, 255, 255))
+        painter.words(label, face, x + chip_w / 2, y + chip_h / 2, (255, 255, 255), align="center")

@@ -177,7 +177,7 @@ class ExportJobs(Jobs):
             if job["cancel"]:
                 return {}
         target = directory / filename
-        self.run(job["spec"], target, progress)
+        result = self.run(job["spec"], target, progress)
         with self.changed:
             if job["cancel"]:
                 return {}
@@ -185,7 +185,10 @@ class ExportJobs(Jobs):
             retained = sum(j.get("bytes", 0) for j in self.jobs.values() if j["state"] == "ready")
             if size + retained > MAX_RETAINED_BYTES:
                 raise ExportError("Export exceeded the temporary storage limit.")
-            return {"state": "ready", "stage": "Ready to save", "bytes": size,
+            # A STEP's PMI, checked in the written file by a reader of no OCCT (``engine/export/ap242.py``).
+            verified = next((row["pmiVerification"] for row in (result or {}).get("files", [])
+                             if row.get("path") == str(target) and "pmiVerification" in row), None)
+            return {"state": "ready", "stage": "Ready to save", "bytes": size, "pmiVerification": verified,
                     "expiresAt": self.clock() + ARTIFACT_SECONDS}
 
     def _finished(self, job):
@@ -209,7 +212,7 @@ class ExportJobs(Jobs):
 
     def public(self, job):
         fields = ("id", "requestId", "filename", "state", "stage", "sequence", "createdAt", "finishedAt", "expiresAt", "bytes",
-                  "error", "fetched")
+                  "error", "fetched", "pmiVerification")
         return {**{k: job[k] for k in fields if k in job}, "epoch": self.epoch}
 
     def get(self, ident, after=None, wait=0):

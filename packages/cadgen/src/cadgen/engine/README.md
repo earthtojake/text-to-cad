@@ -349,18 +349,19 @@ only, and a file's id is derived again from its path after a restart.
 | `build.py` | one build: load the script afresh (as Python imports it: a package's module by its dotted name), one memo run, document, element names, files: every model's that ran |
 | `delta.py` | the line under the run line: a built tree's facts (`facts`: its occurrences, its world bounds -- each part's box, kept by its geometry key, measured where it decides the model's -- its parts' geometry keys and looks, and its joints, configuration sequences and warnings), worked out in the worker, and the daemon's delta of them against the build before (`delta`), kept beside each record and in the registry's |
 | `previous.py` | the model's build closure on its xbf's main label (`manifest`), the release from the version beside the code and the platform, the closure made again before the body runs (`again`) |
-| `document_migrations.py` | supported persisted `xbf/8` to `xbf/9` material conversion in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes |
+| `document_migrations.py` | supported persisted `xbf/8` to `xbf/9` material conversion and `xbf/9` to `xbf/10` (nothing to convert) in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes |
 | `document.py` | result to XCAF (prototypes, instances, names, colours, materials, element names; a mesh face refused, `mesh_faces`), a warm build's patch of the document it kept, atomic BinXCAF save, read-back of an xbf or a foreign STEP, and a saved document's main-label strings rewritten in its bytes (`relabel`) |
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
+| `pmi.py` | semantic PMI: datums, dimensions and geometric tolerances on a part's faces (`annotate`, `cadgen.ap242`'s calls defined here), resolved each build (ok, missing, ambiguous, invalid), written as XCAF's GD&T objects, read back as the structure's `pmi`; its notes and named views (`pmi_views`), the xbf's alone; each part's faces no requirement is on and its requirements that cannot both hold (`pmi_coverage`), warned of; another system's GD&T listed as read, and copied into an xbf of its STEP (**PMI**) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
-| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
+| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); a STEP's semantic PMI read back without OCCT and checked against the document's (`ap242`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance, element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py`, `page/` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes; a minimal three.js page |
 | `snapshot.py` | `cadgen snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
-| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
+| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); the camera presets' one table, which `snapshot.py` and `pmi.py`'s `view` read too (`presets.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a document's PMI drawn as the viewer shows it, its layout ported (`pmi.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon per installation, one warm worker per model script, at most one per core alive (`Pool`), connect-or-start, a hold; a worker's memory cap |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
@@ -378,7 +379,7 @@ python SCRIPT.py                             the models the script explicitly ca
 cadgen export SRC DST [DST ...] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
                                              (.glb, .stl, .3mf: to the other two mesh kinds)
-cadgen snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
+cadgen snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored | --view NAME]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
 cadgen snapshot --job PACKET [SRC] [the same flags, each over every job]
@@ -972,7 +973,7 @@ document does; no worker of its script starts and nothing runs. Loaded, it is un
 budget like any document, and leaves memory for its file again when the budget needs the room. The
 record is authoritative: a cache file missing, or not the size its record says, is not cached.
 
-A cached `xbf/8` snapshot is converted in memory when read, just like an explicit file
+A cached `xbf/8` or `xbf/9` snapshot is converted in memory when read, just like an explicit file
 (**Document compatibility**). Viewing, inspection, snapshots, imports and exports require no
 model source or execution. The original cache bytes, record and revision remain unchanged;
 loading a conversion does not schedule a cache rewrite. Unsupported or failed format conversion
@@ -1294,9 +1295,35 @@ it); a ref that names nothing is refused by name); `--json` reports what was dra
 and each stage's milliseconds (`serveMs`, `meshMs`, `sceneMs` when a scene is made, `presentMs`,
 `frameMs`, `drawMs`, `renderMs`, `totalMs`; a file no document: `readMs` its reader, `openMs` its
 render process opening it). `parts` and `exploded` for a document that places one
-part are refused by name before anything renders. `--annotation FILE` draws the viewer's annotation over the
-model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
-annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
+part are refused by name before anything renders. A document's PMI (**PMI**) is drawn
+as the viewer shows it: each callout's words, leader and dimension at its placement, at its part's
+first placement the picture shows (a dimension given its limits says them alone, stacked upper over
+lower; a surface profile's frame has its symbol; a flag note is its flag and its number, out from
+its first face), every label over every line, a callout whose reference broke at
+its code placement in its status's colour, a leader to a feature the model hides faint (what a clip
+cut away hides nothing); the camera's
+fit takes in the callouts drawn, and `--json` reports how many were drawn (`pmi`) and each
+annotation left out, with why (`pmiLeftOut`, `{id, part, status, reason}`, each a warning on
+stderr): one the viewer does not draw, a note (a general note, the part's general profile, a flag
+note on annotations alone: the viewer lists it in its notes, a still does not draw it), one whose
+part the picture hides, or a broken one its code never placed.
+`pmi=off` (`display.pmi` false) draws none. PMI is shown only on the parts as made, as the viewer
+shows it: an exploded or posed picture draws none, and asking for it there (`pmi` or
+`pmi=on`, `display.pmi` true), or of a document that carries none, is refused by name. `--view
+NAME` (`PART/NAME` where two parts have one; every job's, in a `--job`) draws a part's named view (**PMI**, Views) as the viewer applies it
+(`snapshot.view_of`, `render/pmi.py`'s `view_at`): its camera's direction and up placed by its
+part's first placement the picture shows, fitted as any camera object is; its section as the clip,
+along the world axis that placement turns the section's own onto; and only the PMI it shows, at its
+own placements (what it does not show is no part of it, and not left out); `--json` reports
+`view`. Refused by name before anything renders: an unknown view (the document's views listed),
+one with `--camera` (a view has its own) or with `display.clip` beside its section, one the viewer
+cannot apply, one whose part the picture hides, one whose section that placement turns off every
+world axis (a still cuts only square to a world axis, never along another, so never cuts wrong),
+a view of a document with PMI exploded or posed (with `pmi=off` it draws its camera and
+section alone), and a view with a section on an exploded picture, whatever `pmi` is (the section is
+placed on the parts as made, which Explode moves). `--annotation FILE` draws the viewer's
+annotation over the model -- each mark on the part it was drawn on, wherever the picture places
+that part -- from an annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
 and `--measurements FILE` Measure's dimensions (`[{start, end, label, color}]`). A camera object's
 lengths (`position`, `target`, `orthographicHalfHeight`), a measurement's points and the ink are in
 the viewer's scene coordinates, as a Quick Edit packet carries them -- a document's and a GLB's
@@ -1317,7 +1344,8 @@ separator -- and the picture is then `<SRC's stem>_<UTC time>.png` in it (a mode
 of jobs, or `{"input", "jobs": [...], "annotation", "measurements"}` -- in one call
 (`snapshot.job_pictures`, `api.snapshot(job=)`), on the machinery above: each job is a view, drawn with
 its own `camera` (an output's own `camera` over it), its `display` (its `hidden` and `isolated` parts
-among it; the packet's top-level copies are `--annotation`'s), its pose (`jointValues`, as `--pose`
+among it; the packet's top-level copies are `--annotation`'s; a `view` in it draws the job as that
+view, and its own camera beside one is refused), its pose (`jointValues`, as `--pose`
 takes it), and -- a robot's -- the visuals its `selection.hide` names by the viewer's ids
 (`link:v1`, each robot instance carrying its visual's), the packet's ink and dimensions over each
 (a job's own `annotation` and `measurements` over the packet's); and each of its `outputs` (`path`,
@@ -1336,8 +1364,8 @@ Measure, the grid -- is as heavy against the picture at any scale, while OCCT's 
 drawing's hairlines) stay one pixel of the larger frame and read finer: OCCT's core profile draws no
 line wider than a pixel, and this is that, not a bug; `sizeProfile` sizes an output that gives no
 size. SRC, given, is drawn in place of every job's input, and a flag given overrides every job: the
-display, the grid, the camera, the pose, the ink, the dimensions, the size of every
-output; an OUT is refused. Every job is checked before anything renders (an unknown key, a setting
+display, the grid, the camera (`--view` too, in place of each job's camera), the pose, the
+ink, the dimensions, the size of every output; an OUT is refused. Every job is checked before anything renders (an unknown key, a setting
 out of range, two outputs at one path, a file that is not there: refused by name, every file left as
 it was), and a picture that fails writes none of the job's: every picture is staged beside its
 output and moved into place only when all are drawn, and a failed snapshot leaves every existing picture as it was. Through the daemon each picture is a frame
@@ -1347,8 +1375,9 @@ of the file's warm render process; `daemon=False` serves each file once for all 
 **The OCCT stills.** A document is drawn by OCCT's own OpenGL renderer from the engine's meshes
 (`render/`): one presentation per part and look, each
 instance a connected object of it; the modes, the camera fit, clip, grid and Preview are the
-page's, Explode is the viewer's layout ported to Python (held to the viewer by one golden its own
-scene made), and the annotation's ink and the measurements are drawn over the picture. Through the daemon, a served document a snapshot asks
+page's, Explode and PMI are the viewer's layouts ported to Python (`render/explode.py`,
+`render/pmi.py`: each held to the viewer by one golden its own code made), and the PMI, the
+annotation's ink and the measurements are drawn over the picture. Through the daemon, a served document a snapshot asks
 for gets a render process of its own, started on its first picture and holding the document --
 each part's buffer from the daemon's one mesh cache (nothing meshed again), its OCCT shapes, a
 scene and its presentations on a hidden OpenGL context: a picture of it is a frame of that
@@ -1429,7 +1458,7 @@ Preview -- is an input. A posed or partial file is a function in the model's cod
 
 The page offers what the file's kind writes, and nothing is inspected first: an engine document
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
-download returns its original bytes (`original`), including an `xbf/8` file converted in
+download returns its original bytes (`original`), including an `xbf/8` or `xbf/9` file converted in
 memory for viewing. Use
 `cadgen export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
@@ -1460,10 +1489,10 @@ changed or new one fails in one line naming the folder and its mode.
   what it would write however the script has changed since, and nothing is built); from Python, a
   `Model` (called first, as the program's own call of it is: taken from its key or the engine's
   cache, or replayed, when nothing changed; then exported by its handle) too. An xbf is written from a
-  STEP. An ordinary current-format xbf is not written from another xbf, which already is the
-  document. A loaded `xbf/8` converted in memory is the exception: export to a different XBF
-  path serializes the complete upgraded XCAF document atomically; the source path is refused
-  (**Document compatibility**). Several destinations read the document
+  STEP (its GD&T copied as read, **PMI**). An ordinary current-format xbf is not written from another
+  xbf, which already is the document. A loaded `xbf/8` or `xbf/9` converted in memory is the exception: export
+  to a different XBF path serializes the complete upgraded XCAF document atomically; the source path
+  is refused (**Document compatibility**). Several destinations read the document
   once, and every destination is checked before any is written; an export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
@@ -1502,7 +1531,11 @@ changed or new one fails in one line naming the folder and its mode.
   faces. Import converts that standard specular/gloss appearance back to metallic/roughness;
   it is an approximation based on the [Khronos specular/gloss conversion](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Archived/KHR_materials_pbrSpecularGlossiness), especially for third-party Phong materials. STEP does not retain the
   original advanced PBR properties, textures, emission, physical fields beyond name and density,
-  mechanism, configurations, model key or provenance. Use XBF or GLB for full PBR looks. The writer's run-dependent choices are settled: the
+  mechanism, configurations, model key or provenance. Use XBF or GLB for full PBR looks.
+  The parts' semantic PMI is written as AP242's (**PMI**),
+  the code's whole or refused: a STEP that would drop an annotation the code made (one linked to
+  no geometry) is refused by name; a document another system wrote is written, what it leaves
+  out said. The writer's run-dependent choices are settled: the
   header's time stamp is `step.WRITTEN_STAMP` (the xbf's date); the colour presentations, which
   it keeps in a map keyed by shape, are put in the order of the shapes they style; the assembly
   occurrences, which it numbers on from every STEP the process wrote, are numbered from 1; and
@@ -1615,8 +1648,10 @@ child whose file cannot be written fails the build. A part is written free
 (`document.unchecked`): OCCT marks a shape put in a compound as no longer free, which would
 make a child's part, placed in its caller's assembly, other bytes than its own build's.
 
-The xbf is saved first, then each derived file. Nothing of them is sent to a page: one serving
-a declared file follows that file's bytes (**Document lifetime**).
+The xbf is made first, then each derived file, each staged beside its target; they land together
+(`atomic_replace.together`, law 17): one refused or failed, none of them is written and every
+earlier one keeps its bytes. Nothing of them is sent to a page: one serving a declared file
+follows that file's bytes (**Document lifetime**), so it moves once every declared file has landed.
 
 **Functions** (`api`, also `cadgen.export`, `cadgen.snapshot` and `cadgen.inspect`; `serve`,
 `status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
@@ -1932,6 +1967,315 @@ path where the old one wrote 6 to 11. The parts of one reference move as one bod
 channels' keys are the same bytes and share one sampler, as a motion's do. The GLB writes every
 channel but a STEP one as LINEAR keys within a tenth of a millimetre and of a degree of this bake
 (**GLB keys**).
+
+## PMI
+
+A part's manufacturing requirements, on its own faces (`pmi.py`): datums, measured dimensions
+with explicit tolerances, basic dimensions and geometric tolerances, a general profile for every
+face nothing else controls, numbered notes and named views -- a model-based definition, authored
+in the model and kept in its document. The functions that author them are `cadgen.ap242`'s, beside
+the mechanism's (the root and `cadgen.engine` hold none of them): AP242's semantic PMI, which a STEP
+carries with each annotation's placement (AP242's presentation of it), and the notes and named
+views around it, which the xbf keeps and a STEP does not. Those that write an AP242 entity are named after it; those that write no entity of their
+own keep plain names: `limits` (a dimension's 'lower limit' and 'upper limit' values),
+`general_profile`, `note` and `view` (with `camera` and `section`), and `place`. `pmi.read` returns them as the structure's
+`pmi`, the contract a viewer and a downstream reader build on, served with each part's views
+(`pmi_views`) and coverage (`pmi_coverage`):
+
+```python
+from cadgen.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+                          limits, note, place, plus_minus_tolerance, position_tolerance, section,
+                          surface_profile_tolerance, view)
+from my_project.notes import NOTES  # the project's notes by name, its own module: cadgen ships none
+
+# bottom, top, front, left: the plate's faces; hole: its bore, on the origin. Values illustrative.
+return annotate(body,
+    datum("A", bottom), datum("B", front), datum("C", left),
+    dimensional_location("thickness", bottom, top, tolerance=plus_minus_tolerance(0.2)),
+    dimensional_size("hole", hole, tolerance=limits(10.0, 10.05)),   # its least and greatest size
+    flatness_tolerance("top-flat", top, 0.05),
+    position_tolerance("hole-pos", hole, 0.1, datums=["A", "B", "C"]),
+    dimensional_location("hole-from-B", front, hole, basic=True),  # the true position: basic, no tolerance
+    dimensional_location("hole-from-C", left, hole, basic=True),
+    surface_profile_tolerance("B-and-C", [front, left], 0.1, datums=["A"]),  # one requirement on both faces
+    general_profile("general", 0.5, datums=["A", "B", "C"]),       # Note 1: every face left over
+    note("edges", NOTES["edges"]),                                 # a general note: Note 2
+    note("mask", NOTES["primer-mask"], faces=[hole], annotations=["hole"]),  # a flag note
+    view("A-A", camera="front", shows=["hole", "hole-pos", "mask"],
+         section=section("y", 0, invert=True),  # keeps y > 0: its cut faces the front
+         place={"hole": place((5, 0, 0), (15, 0, 10))}),
+    view("iso", camera="iso"))                                     # shows everything
+```
+
+- **Authoring.** `annotate` takes one part (an annotated assembly is refused: annotate its
+  parts) and returns it; a `Face` given as a ref is numbered against it at once (a face of another
+  shape is refused, by its annotation's id), so annotations
+  given to a shape a later operation replaces never reach the result, so the build fails, naming
+  them (`pmi.unattached`): no file would carry them. Its body's run, and a @memo function's that
+  annotated, keeps the annotations it gave (`memo.annotated`), so a replay of it gives them again
+  and fails as its run did, or passes with the same PMI. Each annotation is a dict as its function
+  makes it, its keys closed (law 16): `annotate` refuses one of another kind, a key beyond its
+  function's or one missing, naming the set, and checks a tolerance and a presentation again as
+  `plus_minus_tolerance`, `limits` and `place` check theirs. Ids are the author's, unique on a part, a note's with the rest; a datum's id
+  is its letter, and a datum holds one place in every frame that names it (XCAF holds one
+  position per datum). A ref is a `Face` or a ref of the grammar (**References**). A nominal is
+  measured from the geometry: a cylinder's diameter, or a distance between parallel planes, from
+  a plane to a hole's axis, or between parallel axes. A tolerance is held only where the code
+  gives one: `plus_minus_tolerance(upper, lower=None)`, signed deviations, or `limits(lower,
+  upper)`, the least and the greatest size, absolute (`limits(10.0, 10.05)` is 10.00–10.05). A
+  basic dimension (`dimensional_location(..., basic=True)`) has none, and a tolerance on one is
+  refused; a diameter is never basic. `presentation=place(anchor, offset)` (millimetres, the
+  part's frame) is where a viewer draws the callout, never a requirement. A STEP draws it there:
+  its text point, an annotation plane through it, and a leader from the anchor (a callout named by
+  the id), which OCCT reads back as the same place; one with no offset has no leader to draw and is
+  written without one.
+- **Surface profiles.** `surface_profile_tolerance(id, refs, value, datums=())` is one
+  requirement on a face or on a list of faces, of any kind, to up to three datums or none; its
+  zone is a width about the true profile (no diametral one), and a profile on no face is refused.
+  The general profile (`general_profile(id, value, datums=())`, one per part: a second is refused by
+  name) is ASME Y14.5's "unless otherwise noted, all surfaces": a surface profile of every face of
+  the part that nothing else controls, the code naming none of them. A face is otherwise
+  controlled when it has a size or location requirement of its own
+  (`pmi.otherwise_controlled(entries)`, over structure entries): a ref of a plus-minus or limits
+  dimension, or the feature of a position or of a profile not general (a basic dimension locates
+  that feature, and leaves the datum it starts from to it). A form control alone (flatness) and a
+  datum leave a face to it, but the datum features it names are controlled on their own and left
+  out of it: no face is profiled relative to itself. It is not XCAF's `All_Over` modifier, which
+  in ASME means every surface beside any other requirement.
+- **General tolerances.** `general_tolerance(id, standard)` states ISO 2768's general
+  tolerances, as a drawing does: `"ISO 2768-m"` (part 1's class, f, m, c or v, for every size
+  nothing else tolerances), or `"ISO 2768-mK"` with part 2's class (H, K or L) for general
+  geometrical tolerances; another standard is refused by name (`PMIUnsupported`). It is a general
+  note ("General tolerances ISO 2768-mK", numbered as any note is, its `note` block's
+  `general_tolerance` the standard) that covers every face nothing else does, datum features too,
+  and the one note a STEP carries: the CAx-IF PMI practice's `'default tolerances'` property of
+  the part's `PRODUCT_DEFINITION_SHAPE`, its `'tolerance class'` the standard, which the export
+  check matches as any requirement. One per part.
+- **Notes.** `note(id, text, faces=(), annotations=())` says what to do in the code's words:
+  a general note where it names no face and no annotation, a flag note on its faces (of any
+  kind) and on the annotations of the same `annotate` call it names by id (an id no annotation of
+  the call has, or a note's, is refused by name, as is an empty text). Notes are numbered per
+  part: the general profile is Note 1 where the part has one, then each note in the order the
+  code gives them. The text is the code's: a project keeps its notes in a module of its own
+  (cadgen ships no note text).
+- **Views.** `view(name, camera=..., shows=None, section=None, place=None, label=None)` is a
+  named view of the part, given among its annotations, seen orthographically down `camera` (as a
+  still draws it; a viewer keeps the person's projection): a preset's name (`iso`, `front`,
+  `back`, `left`, `right`, `top`, `bottom`: `cadgen snapshot --camera`'s, one table,
+  `render/presets.py`) or `camera(direction, up)`, whose `direction` means what a preset's
+  does, the way from the part toward the eye (`front` is `(0, -1, 0)`), both made unit vectors
+  (an `up` along the direction is refused). Where it has one, it is cut by
+  `section=section(axis, at, invert=False)`, the viewer's Clip: one plane across `x`, `y` or
+  `z` at `at`, keeping the lower side, `invert` the upper (a front view, its eye toward -y, sees
+  its cut where it keeps the far side, y above `at`: `invert=True`). It shows the ids of the same
+  call `shows` names, annotations and notes (None: every one, as an iso view does), and draws
+  each id it `place`s (`{id: place(...)}`) there in that view, as its own presentation says
+  elsewhere. All in the part's frame. A view's name is unique among its part's views; an id the
+  call does not have, and a placement of one the view does not show, are refused by name. A view
+  is no annotation: the report counts none and a note names none. `cadgen snapshot --view NAME`
+  draws it as the viewer applies it (**The viewer and the snapshot**).
+- **Resolution.** Each build resolves every ref against the part as built: `ok`, `missing` (it
+  names no face; the problem gives the name's atom now, where there is one), `ambiguous`
+  (several: `candidates` lists them) or `invalid` (a face the annotation cannot stand on: a
+  diameter on a plane, a flatness on a cylinder, a datum on neither, a face a profile names
+  twice). A geometric tolerance whose frame names a datum that is not `ok` takes the worst such
+  datum's status, its problem naming the datum (`datum A is missing: ...`): it is measured from
+  nothing the part has, so it covers no face. An annotation that is not `ok` is kept in the
+  document with its values, linked to no geometry, and a STEP export refuses to drop it, naming
+  each one. A general profile's faces are
+  resolved with the rest: every face of the part as built that the part's other `ok` annotations
+  leave, but the datum features it names, from this build's annotations and geometry alone. It
+  has no ref to break, so it is `ok` (`invalid` where its frame names a datum the part lacks, then
+  covering nothing); one that covers no face is `ok`, linked to nothing, and no STEP refuses it. A
+  note's faces resolve as any ref does: one whose face an edit removed keeps its number and its
+  text and is `missing` (a note with no face is `ok`); the build reports it, and no STEP refuses
+  it. A build resolves against its own geometry alone and reads nothing of an earlier one (law 5:
+  a declared xbf is never a source): a ref written as text names whatever face holds that name
+  now, measured as it now is. The build report's `pmi` is `{"annotations", "problems"}`, with
+  `"coverage"` where there is any, each logged.
+- **Suggestions.** What a part's requirements leave unsaid is asked, each with the answer a
+  standard gives (`pmi.suggestions(entries, faces, material=)`, pure; served in `pmi_coverage`
+  and logged by the build as `pmi: PART: ask: QUESTION Suggest ANSWER (WHY)`), never applied: the
+  part's material where it has none; datum A on its largest flat face where it has no datum; a
+  general requirement (`general_tolerance("general", "ISO 2768-mK")`) where faces are uncovered and
+  none is given; and each hole no size is on, by its diameter, from the tables in `pmi.py`: an ISO
+  273 clearance hole (its series' H class, ISO 286, and a position by the floating-fastener formula,
+  hole less fastener), a coarse thread's tap drill (a thread note, 6H, and a position by the
+  fixed-fastener formula, half the mating medium clearance hole less the fastener), else a bore
+  (H7). Each is `{"kind", "faces", "question", "answer", "why"}`, its answer the call that says it
+  on the face's canonical ref; the viewer lists them under the part's coverage.
+- **Coverage.** Every face of a part is to have a requirement, most of them through its general
+  profile, and what is not is said (`pmi.coverage(entries, faces)`, pure, of one part's
+  structure entries and the canonical refs of all its faces). A face is covered by an `ok`
+  toleranced dimension (plus-minus or limits) or geometric tolerance whose refs name it, the
+  general profile by the faces it covers, and every face by a general tolerance (ISO 2768); another system's annotation listed `unsupported` covers
+  its faces as any does, but a datum or a basic dimension. A basic dimension covers nothing: it is
+  no requirement, but locates the feature a position or a profile controls, which covers it. A
+  datum and a note cover nothing, and the datum features a general profile names are left out of
+  it: such a face (a datum a basic dimension starts from too) is uncovered until it has a control
+  of its own (datum A's flatness). The conflicts, each `{"kind", "ids", "problem"}`, in this
+  order: `unused_datum`, a datum no tolerance's frame names; `unlinked_note`, a flag note every
+  face and annotation of which is broken (one link that holds keeps it linked; a general note has
+  none to break); `apart`, two toleranced dimensions of one type on the same faces whose zones do not meet; and
+  `form_over_profile`, a flatness wider than a surface profile on its face, its own or the
+  general one. It is derived where the document is served, never held: the structure's
+  `pmi_coverage` is `[{"part", "uncovered": [refs, sorted], "conflicts": [...]}]`, one per part
+  carrying PMI (a part given views alone carries none), served wherever `pmi` is;
+  the build report's `coverage` is the same of each part with something to say, by its name,
+  each logged as `warning: pmi: PART: N faces have no requirement: REF, ...` and `warning: pmi:
+  PART: IDS: PROBLEM`. It warns: it never fails a build.
+- **The document** holds what the code says and what this build's geometry resolves, and
+  nothing of a previous build: the same code and closure make the same xbf whatever was built
+  before. The values, units, kinds and face links are XCAF's `XCAFDimTolObjects` on the GD&T
+  tool, linked to the faces' sub-shape labels (the STEP writer's input); beside each, a
+  `TDF_Reference` to its part's shape label and one cadgen attribute (JSON, schema
+  `cadgen.pmi/1`) holding what XCAF has no place for: the id, the label, the kind, the refs as
+  the code wrote them, the presentation, and a general profile's flag (`"general": true`, its
+  faces linked in XCAF, none written in the refs); an unlinked annotation's values too, since
+  XCAF gives values meaning only through geometry. The id and the kind are also XCAF's (the
+  object's semantic name and its type). No status and no problem are held: they are derived
+  where the document is served (`pmi.records_of_document`), from the refs as written, the
+  document's names and geometry and each kind's faces, as the build derives them, a general
+  profile's faces with them (kinematics derives its loop where it serves its block). A note is an
+  XCAF comment in the notes tool (`XCAFDoc_NotesTool`), by one fixed user (`cadgen`) with no
+  timestamp, so the same code makes the same bytes, with the same reference and cadgen attribute
+  beside it (the id, label, presentation, refs and the ids it names as written; its text is
+  XCAF's). A general note is attached to its part's shape label; a flag note, where it is `ok`,
+  to each of its faces (`AddNoteToSubshape`, the sub-shape index the face's ordinal in its part's
+  face map), and to the GD&T label of each annotation it names. A view is an XCAF view in the views tool (`XCAFDoc_ViewTool`):
+  parallel, its view direction the served direction reversed (XCAF's is the one looked along),
+  its up, its eye the part's box centre moved toward the eye by the box's diagonal, its window
+  that diagonal and its zoom 1; linked to its part's shape label and the GD&T labels it shows,
+  its section an XCAF clipping plane (`XCAFDoc_ClippingPlaneTool`) named for the view, its normal
+  into the half the Clip keeps, capped; beside it the same reference and a cadgen attribute
+  (`kind` `view`, the name, label, camera as written, shows, section and placements), which the
+  structure is served from. The notes a view shows are that attribute's alone: OCCT's `SetView`
+  files a view's notes under its clipping-plane link. A document without PMI holds nothing new.
+  A document holding PMI is converted whole on a warm build (GD&T labels link the sub-shape
+  labels a patch remakes).
+- **An entry** of `pmi.read` (an xbf or a STEP): `id`, `kind` (`datum`, `dimension`,
+  `geometric_tolerance`, `note`, or `unsupported`), `label`, `status`, `problem`, `part` (the
+  structure's prototype index, linked or
+  not), `refs` (each `role`, the canonical `ref` when resolved, `written`, `status`,
+  `candidates`, `problem`), `presentation`, `xcaf_type`, and one of `datum` (`letter`),
+  `dimension` (`type` `diameter` or `distance`, `basic`, `nominal` `{value, unit, source}`,
+  `tolerance`: `{type: "plus_minus", upper, lower}`, `{type: "limits", lower, upper}` or null),
+  `geometric_tolerance` (`characteristic` `flatness`, `position` or `surface_profile`, `value`,
+  `unit`, `zone`, `datums` in order, and `general`, false for a tolerance on the faces the code
+  names, true for the part's general profile) or `note` (`number`, `text`, `general`: it names no
+  face and no annotation, and the `annotations` it names; its `xcaf_type`
+  `XCAFDoc_NoteComment`). A surface profile's `refs` are its faces, each of role `feature`; a
+  general profile's are the faces it covers this build, in the part's order, each `written` null
+  and `status` `ok`, and none where it covers none; a note's are its faces, each of role
+  `feature`. A nominal's `source` is `geometry`, measured, where the code made the annotation,
+  and `file` where another system did. XCAF holds limits in place of a nominal (its value is then
+  their midpoint): a nominal of the code's beside limits is measured where the document is read,
+  and a dimension read from a file with limits has none (`nominal` is null): the file states
+  limits, and the midpoint XCAF rebuilds is no fact of it. Beside `pmi`, the structure's
+  `pmi_views` lists each part's views, by part, in the code's order:
+  `{"part", "name", "label", "camera": {"preset", "direction", "up", "projection":
+  "orthographic"}, "section": {"axis", "at", "invert"} or null, "shows": [ids] or null (every
+  one), "place": {id: {"anchor", "offset"}}}`, the camera's direction and up unit vectors, the
+  direction from the part toward the eye (a preset's from the stills' table, `preset` its name;
+  null for `camera`'s), and all of it in the part's frame, which a viewer places through the
+  part's placement (empty where none); served wherever `pmi` is, as `pmi_coverage` is
+  (**Coverage**).
+- **A document another system wrote** (a vendor's STEP, or an xbf converted from one) lists its
+  GD&T as XCAF reads it, and never blocks a conversion or an export. What this does not hold
+  whole is `unsupported`, with its `xcaf_type`, its values and a `reason`: another
+  characteristic or dimension type, a fit, a qualifier, modifiers, limits beside any of these or
+  on a basic dimension (XCAF holds limits or deviations, never both), a zone modifier, a maximum
+  value, a surface profile's diametral zone, a datum target or modified datum, a note other than
+  a basic one's, and a link to an edge or a point (kept, its refs spelled as the grammar spells
+  an edge or a vertex, never drawn). A note or a view another system wrote is not read. It is
+  listed, never read as less than it says (law 13: left out with a word, never patched). An xbf
+  of such a STEP copies its GD&T as read (`pmi.copy`), each object linked to the same elements.
+
+Verified, and nothing else written: datums on planes and cylinders; diameter and linear-distance
+dimensions with plus-minus tolerances or limits; basic distances, marked 'theoretical' as AP242
+marks them (CAx-IF PMI Recommended Practices 5.3, a dimensional note on the dimension's
+representation); flatness; position with an ordered datum frame of up to three and a diametral
+zone; a surface profile on one face or several, of any kind, with a frame of up to three datums
+or none; a part's general profile, on the faces nothing else controls; and, in the xbf alone,
+general and flag notes and a part's named views. Every other characteristic,
+dimension type, tolerance form (fits, modifiers), a basic diameter or angle, and assembly-level
+PMI is refused by name (`PMIUnsupported`), never approximated.
+
+**The STEP.** A STEP of a document holding PMI -- `export.translate`'s, whether `cadgen export`
+asks for it or a decorator declares it -- carries it as AP242's semantic PMI: `DATUM` and
+`DATUM_FEATURE`; `DIMENSIONAL_SIZE('diameter')` and `DIMENSIONAL_LOCATION('linear distance')`
+with their `SHAPE_DIMENSION_REPRESENTATION` and `PLUS_MINUS_TOLERANCE`, or, given limits, the
+representation's `'lower limit'` and `'upper limit'` items (CAx-IF's) and no tolerance, its
+nominal value their midpoint (XCAF holds the limits alone); `FLATNESS_TOLERANCE`;
+`POSITION_TOLERANCE` with its `DATUM_SYSTEM` of ordered compartments and a
+`TOLERANCE_ZONE_FORM('cylindrical or circular')`; `SURFACE_PROFILE_TOLERANCE`, with its
+`DATUM_SYSTEM` where it names datums (then the complex entity of
+`GEOMETRIC_TOLERANCE_WITH_DATUM_REFERENCE`); each on its `ADVANCED_FACE` (named with the
+element's name) through a `GEOMETRIC_ITEM_SPECIFIC_USAGE` of its `SHAPE_ASPECT` -- a tolerance
+on several faces on a `COMPOSITE_SHAPE_ASPECT` that a `SHAPE_ASPECT_RELATIONSHIP` per face
+relates to that face's aspect -- every measure in millimetres. A general profile is a
+`SURFACE_PROFILE_TOLERANCE` on exactly the faces it covers, so a reader gets an explicit face set
+(the file says nothing of "general"); one that covers no face is written as nothing. A STEP
+carries no annotation id (the writer leaves every name empty), no graphical PMI, no note and no
+view (OCCT's writer writes neither): **notes and views stay in the document** and
+its xbf, and no STEP is refused for one. No export poses a document or takes a part out of it (law 22): a posed
+file and a part's own file are models of their own. An xbf that `export.translate` writes of a
+document this engine made and holds (`cadgen export ID out.xbf`, the viewer's XBF of a held model)
+is that document's own bytes, the ones its declared `@xbf` holds, and carries its PMI whole
+(`export/tree.py`); only a document held without its XCAF document is made again from its view,
+which carries none. Every export that would not carry the PMI the
+code made whole is refused by name (`pmi.refuse_dropped`, in `export.translate`: a STEP held to
+the GD&T, an xbf made again to the notes and the views as well, a part given views alone
+included, each named, a STEP's by each annotation's id and the ref
+that holds no geometry: `a STEP would drop PMI linked to no geometry: ID (ref 'REF': WHY). Fix the
+refs in the model, or remove the annotations`); one of a document another system wrote is
+written, and what it leaves out is said (`pmi.dropped`: `warning: pmi: FILE: ID is not carried
+whole: WHY` in the export's log). OCCT's writer gets three PMI records wrong, and the STEP export
+puts them right (`export/step.py`, `_pmi_records`; found and checked by the AP242 reader below):
+a plus-minus tolerance's bounds untyped (`MEASURE_WITH_UNIT(0.2,#u)`); a two-attribute
+`RUNOUT_ZONE_DEFINITION` beside every diametral zone; and, in a document with no dimension, every
+tolerance magnitude in a bare metre while its value is millimetres. OCCT's own reader finds a
+datum only through a tolerance that names it.
+
+**The check in the written file.** Every STEP written of a document that holds PMI a STEP
+carries is checked in the file (`pmi.checked`): a build's declared one, `cadgen
+export`'s and `api.export()`'s (the worker's `export`), and the viewer's, which offers STEP as it
+offers every format of the document's kind, nothing inspected first (**Viewer exports**), one the
+PMI refuses (above) failing with its reason. After writing the file the engine reads it back with
+`export/ap242.py` -- a Part 21 reader of AP242's PMI entities with no OCCT in it -- and matches
+every entry but the notes, which it neither expects nor counts (nor the views, which are no
+entries), to one record of the file by face name, kind, values, units, datum order, zone and a
+basic dimension's note (`ap242.check`), each part to its own product's records alone: the reader
+gives each record the product it, its faces and every datum its frame names are of (its shape
+aspects' `of_shape`, the faces' representation's product), and a part is its product by its name,
+so face names and datum letters need be unique only within a part. Each face is held to the
+document's own face of that name too (`pmi.step_surfaces`, in the part's frame, where the STEP
+writes it): a plane by its normal (either sense) and its offset, a cylinder by its radius and its
+axis, within a millionth of the part's size and 1e-9 of parallel, so a right name on the wrong
+surface matches nothing (a face of another kind, a profile's, by its name); a limit dimension by
+its two limits, in its nominal's unit (millimetres where it has none, as a file's has not), the
+file's nominal value their midpoint; a tolerance on several faces by the same faces, in any order;
+a general profile that covers no face by no record, none being left over. The result,
+`{"matched", "total", "problems", "sha256"}` (the digest of the bytes checked), is the file's
+`pmiVerification`: on the build report's `files` row, the export's answer, and the viewer's export
+job. Every file is checked staged, before it lands (`export.translate`'s `check`), whoever asked
+for it: for a document the code made, a check that finds any problem refuses the file (`FILE not
+written: the PMI in the STEP written does not match the model's document, or could not be checked
+against it (M of N matched): ...`), so no file is written and one there keeps its bytes (law 17),
+a build's other declared files, its xbf too, with it (`atomic_replace.together`):
+a record that does not match, and a check that could not be made alike -- a file the reader cannot
+read, an entity it does not read, a schema other than AP242, a face name a part's geometry holds
+twice, a datum letter a part's records repeat, two products of one name. Nothing is guessed. The
+viewer's refusal is its export job's error, the person's toast. OCCT's writer writes one `DATUM`
+of a letter per file, the frames of every part on it: two parts defining the same letter verify
+neither, and the check says so (`Datum A is defined on 2 parts: ...`). A STEP of a document another
+system wrote is checked of what it carries (each annotation `ok`; the rest are said as left out),
+and refused alike where every face those are on carries a name -- a STEP this engine wrote, read
+back, and its xbf -- so a round trip carries all it read or writes nothing. OCCT's STEP reader
+gives each frame that names a datum a label of its own; a document read lists each datum once (by
+its letter and the faces it is on). One whose faces carry no names (`face 7`) verifies nothing: it
+is written, and what the check found is warned of in the log, `warning: pmi: FILE: the PMI in the
+written file is not verified (M of N matched): ...`.
 
 ## Materials
 
@@ -2664,14 +3008,14 @@ The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf
 A model's document is its own cache, as a FreeCAD document is: opened, it is what was last
 computed, and only what changed is computed again. It is kept in the engine's cache (**The
 cache**), and written as the model's xbf where one is declared, the same bytes. Its main label names what
-wrote it (`cadgen.engine xbf/9 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
+wrote it (`cadgen.engine xbf/10 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
 closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cadgen.engine
 closure/2`), pointers and digests only (law 1), and nothing of a version control's -- the engine calls
 no git. It names what the document was built from and what built it, the toolchain:
 
 ```
 schema    "cadgen.engine closure/2"
-engine    {"release": "cadgen 0.8.1", "format": "xbf/9", "digest": ...}   the format (keyed); the release and
+engine    {"release": "cadgen <VERSION>", "format": "xbf/10", "digest": ...}  the format (keyed); the release and
                                                                      the engine's code digest (information only)
 libs      {"build123d": "0.13.0", "OCP": "8.0.1.1",                   geometry and materials libraries (keyed);
            "bd_materials": "...", "threejs_materials": "..."}         OCP leads with the OCCT it wraps
@@ -2722,14 +3066,19 @@ animations, and a document with any was not taken; `xbf/7`, the compiled animati
 record on the main label, the closure counts none, and an animated document is taken like any
 (**Animations**); `xbf/8`, the closure names its toolchain (`closure/2`: system and architecture
 join the key; release and Python are recorded); `xbf/9`, materials use native bd_materials
-physics and `PbrProperties`, and both material libraries join the key.
+physics and `PbrProperties`, and both material libraries join the key; `xbf/10`, a part's
+semantic PMI, notes and named views (**PMI**), so an engine that reads `xbf/9` alone refuses the
+document instead of dropping them from what it exports. Every document is written `xbf/10`, PMI
+or none: the format is the engine's one marker, written and keyed alike.
 
-**Document compatibility.** The engine reads `xbf/8` and `xbf/9`. Loading an `xbf/8`
+**Document compatibility.** The engine reads `xbf/8`, `xbf/9` and `xbf/10`. Loading an `xbf/8`
 document converts its persisted material metadata to native material data in memory before
-viewing, inspection, snapshots, import or export. No model source is needed or executed.
-Geometry, placements, names, appearance, physical meaning, painted faces, mechanism and animation
-data remain the saved document's. Reading a current `xbf/9` is unchanged; formats outside this
-supported set are refused with a clear error.
+viewing, inspection, snapshots, import or export; loading an `xbf/9` one converts no data,
+`xbf/10` holding everything `xbf/9` does as `xbf/9` holds it: only its writer and the migration
+record say `xbf/10`. No model source is
+needed or executed. Geometry, placements, names, appearance, physical meaning, painted faces,
+mechanism and animation data remain the saved document's. Reading a current `xbf/10` is
+unchanged; formats outside this supported set are refused with a clear error.
 
 The conversion is idempotent. It leaves the original build closure and toolchain provenance
 unchanged: metadata conversion does not mean the geometry was built by the current kernel.
@@ -2741,7 +3090,7 @@ An unsupported or failed conversion preserves the original bytes and cache recor
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cadgen export saved-v8.xbf upgraded-v9.xbf
+cadgen export saved-v8.xbf upgraded-v10.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,

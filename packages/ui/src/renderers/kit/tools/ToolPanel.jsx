@@ -78,8 +78,11 @@ const REVEAL_CLASS = "animate-in fade-in-0 zoom-in-75 duration-150 motion-reduce
  * panel that gives way. `lead`: the panel of the tool in hand, drawn at the top of the stack above every kept
  * panel, wherever it sits among them.
  *
+ * In the file sidebar a section's tile is its `title` and its `icon` (a component drawn as lucide's
+ * are), where it gives one; otherwise the sidebar's own for its kind (`FileSidebar.jsx`).
+ *
  * @param {{ id: string, title?: import("react").ReactNode, name?: string, label: string, summary?: import("react").ReactNode,
- *   actions?: import("react").ReactNode,
+ *   actions?: import("react").ReactNode, icon?: import("react").ComponentType<{ className?: string }> | null,
  *   header?: import("react").ReactNode, collapsible?: boolean, onClose?: (() => void) | null, closeLabel?: string,
  *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
  *   lead?: boolean, children?: import("react").ReactNode }} props
@@ -100,7 +103,7 @@ export function ToolPanelHeadAction({ children }) {
 }
 
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, collapsible = true, onClose = null, closeLabel = "", changed = false,
-  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, lead = false, children }) {
+  icon = null, fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, lead = false, children }) {
   const { t } = useI18n();
   const [headSlot, setHeadSlot] = useState(null);
   const stack = useContext(ToolStackContext);
@@ -117,7 +120,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const closedInSidebar = inSidebar && stack.openSection !== id;
   const register = inSidebar ? stack.register : null;
   const tileTitle = typeof title === "string" ? title : name || label;
-  useLayoutEffect(() => { if (register && id && !hidden) register(id, { title: tileTitle, fit, changed }); }, [register, id, hidden, tileTitle, fit, changed]);
+  useLayoutEffect(() => { if (register && id && !hidden) register(id, { title: tileTitle, fit, changed, icon }); }, [register, id, hidden, tileTitle, fit, changed, icon]);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
   const [ownCollapsed, setOwnCollapsed] = useState(defaultCollapsed);
   const collapsed = collapsible && (kept ? stack.collapsed(id, defaultCollapsed) : ownCollapsed);

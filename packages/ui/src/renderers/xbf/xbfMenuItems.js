@@ -123,6 +123,18 @@ export function viewportMenuEntries(menu, options) {
   return menu.global === true ? modelMenuEntries(menu, options) : assemblyPartMenuEntries(menu, options);
 }
 
+/**
+ * What a face's menu ends in where PMI can be asked for: an "Add datum", "Add distance"... for each
+ * kind the faces picked can carry (`pmi/pmiCreate.js`'s options that stand on them, `onFaces`: a
+ * note is a flag note on them; the general profile and a view, of the part, are New's), after a
+ * separator. `actions.onAdd` takes the option; each item is said in the language of `t`, as the
+ * options' labels are (`pmiCreateOptions`'s `t`).
+ */
+export function pmiMenuEntries(options, { actions = {}, t = english } = {}) {
+  return options.filter(option => option.available && option.onFaces).map((option, index) =>
+    entry(`pmi-${option.kind}`, t("pmi.add", { name: option.label.toLowerCase() }), false, () => actions.onAdd?.(option), index === 0));
+}
+
 /** That same list as the items of a menu primitive (the Features tree's context menu). */
 export function AssemblyPartMenuItems({ menu, Item, Separator, itemClassName = "text-xs", disabled = false, actions = {} }) {
   const { t } = useI18n();

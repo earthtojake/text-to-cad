@@ -4,7 +4,8 @@ document held without its XCAF document, and for an xbf written from a STEP.
 Every prototype the view places is a part with the document's name, colour, face colours,
 materials and element names; every assembly node of the view's tree is an assembly of its
 own here, each component placed in its parent's frame. A part read from a STEP this engine
-did not write takes the geometry key a build would give it, so an xbf of it caches like any.
+did not write takes the geometry key a build would give it, so an xbf of it caches like any,
+and its GD&T is copied into the xbf as read (``pmi.copy``).
 The mechanism is the document's, whole, and so are its animations (``animations.record``): the
 tree's occurrences are the view's, so their paths are the ones the tracks name.
 """
@@ -110,18 +111,35 @@ def tree_of(view: Any) -> Any:
     tree = document.Tree(root, order, list(parts.values()), ("exported", view.name))
     tree.mechanism = source.mechanism
     tree.animations = source.animations
+    if source.foreign and source.structure.get("pmi"):
+        # A STEP another system wrote: its GD&T copied as read (``pmi.copy``).
+        tree.pmi_source = (document.load(source.path), parts)
     return tree
 
 
-def write_xbf(view: Any, path: Path) -> None:
-    """The view as an xbf of its own, saved atomically (``document.save``)."""
+def write_xbf(view: Any, path: Path) -> int:
+    """The view as an xbf of its own, saved atomically. A document this engine wrote, held with its
+    XCAF document -- a model's as built, or read from the bytes the engine keeps (``Source.data``,
+    written as they are) -- is that document's own bytes (``document.to_bytes``), the ones its
+    declared xbf and the engine's cache hold: every attribute it holds kept, its PMI -- annotations,
+    notes and views -- with them, and the same bytes from a live worker and after a
+    restart. Any other (a STEP another system wrote) is made a document again (``tree_of``), its
+    GD&T copied as read (``pmi.copy``). Returns its size."""
     from cadgen.engine import document
 
-    # A migration edits metadata on the original XCAF tree. Reconstructing it from the
-    # viewer tree would discard its build provenance and preserved legacy attributes.
-    doc = view.source.xcaf if view.source.migration is not None else document.to_xcaf(tree_of(view))
-    if view.source.migration is not None:
+    source = view.source
+    if source.migration is not None:
+        # A migration edits metadata on the original XCAF tree; its bytes as read predate that.
+        # Reconstructing it from the viewer tree would discard its build provenance and preserved
+        # legacy attributes.
         from cadgen.engine.document_migrations import set_origin
 
-        set_origin(doc, view.source.origin or {"kind": "bytes", "closure_base": None})
-    document.save(doc, Path(path), compare=True)
+        doc = source.xcaf
+        set_origin(doc, source.origin or {"kind": "bytes", "closure_base": None})
+    elif source.xcaf is not None and not source.foreign:
+        data = source.data if source.data is not None else \
+            document.to_bytes(source.xcaf, source.shapes.values() if source.live else None)
+        return document.write_bytes(Path(path), data)[1]
+    else:
+        doc = document.to_xcaf(tree_of(view))
+    return document.save(doc, Path(path), compare=True)[1]

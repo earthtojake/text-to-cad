@@ -26,7 +26,8 @@ import numpy as np
 __all__ = ["Held", "paint_ink", "plan_view", "refusals"]
 
 REFUSED = {"mode": "display.mode", "grid": "the grid", "clip": "Clip", "exploded": "Explode",
-           "camera": "display.camera (a lens)", "hidden": "display.hidden", "isolated": "display.isolated"}
+           "camera": "display.camera (a lens)", "hidden": "display.hidden", "isolated": "display.isolated",
+           "pmi": "display.pmi (a document's PMI)"}
 PLAN_KEYS = frozenset({"position", "target", "up", "orthographicHalfHeight"})
 PLAN_TOLERANCE = 1e-6  # how far off straight down, or off +Y up, a plan view may be: rounding, never a tilt
 TEXT_LINE_HEIGHT = 1.25  # a text mark's line pitch, of its words' size (``marks.js``)
@@ -65,7 +66,8 @@ def refusals(still: Any, name: str) -> None:
     if still.camera is not None:
         plan_view(still.camera, name)
     asked = [key for key in REFUSED if still.display.get(key) not in (None, False)]
-    for flag, given in (("--preview", still.preview), ("--pose", still.pose is not None)):
+    for flag, given in (("--preview", still.preview), ("--pose", still.pose is not None),
+                        ("--view", still.view is not None)):
         if given:
             asked.append(flag)
     if asked:

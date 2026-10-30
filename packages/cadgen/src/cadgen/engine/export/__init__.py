@@ -47,7 +47,8 @@ class ExportRefused(ValueError):
 class Kind:
     """One file kind: its name, the suffixes its files end in (the first is its own), the
     writer (``module:function``, loaded on first use: ``write(view, path)``), and whether
-    the kind is written atomically here (an xbf saves itself atomically)."""
+    the kind is written atomically here (an xbf saves itself atomically, and returns the size it
+    wrote, as a drawing does: inside ``atomic_replace.together`` the file lands later)."""
 
     name: str
     suffixes: tuple[str, ...]
@@ -58,9 +59,9 @@ class Kind:
     def suffix(self) -> str:
         return self.suffixes[0]
 
-    def write(self, view: "View", path: Path) -> None:
+    def write(self, view: "View", path: Path) -> Any:
         module, _sep, function = self.writer.partition(":")
-        getattr(importlib.import_module(module), function)(view, path)
+        return getattr(importlib.import_module(module), function)(view, path)
 
 
 KINDS: dict[str, Kind] = {
@@ -125,7 +126,7 @@ class Source:
     def __init__(self, structure: dict[str, Any], shapes: dict[str, Any], *, live: bool, xcaf: Any = None,
                  world: Callable[[tuple[int, ...]], Any] | None = None, mechanism: Any = None,
                  foreign: bool = False, path: Path | None = None, animations: Any = None,
-                 meshes: dict[str, Any] | None = None, mesh: str | None = None,
+                 meshes: dict[str, Any] | None = None, mesh: str | None = None, data: bytes | None = None,
                  local: Callable[[tuple[int, ...]], Any] | None = None,
                  local_placements: dict[tuple[int, ...], Any] | None = None,
                  migration: dict[str, Any] | None = None,
@@ -153,6 +154,9 @@ class Source:
         self.path = path
         self.meshes = meshes
         self.mesh = mesh
+        # The document's own xbf bytes, for one read from them (a retired worker's, the engine's
+        # cache's: ``build.held_source``): what an xbf of it is (``tree.write_xbf``).
+        self.data = data
         self._bytes: dict[str, bytes] = {}
         self._lock = threading.Lock()
 
@@ -390,12 +394,18 @@ def _instances(node: dict[str, Any]) -> list[int]:
 # --- the one call ------------------------------------------------------------------------------
 
 
-def translate(document: Any, kind: str | None, path: Any) -> int:
+def translate(document: Any, kind: str | None, path: Any, *, log: Callable[[str], None] | None = None,
+              check: Callable[[Path], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
     as ``kind`` (from the suffix when None); returns the file's size. The translation lands only where
     the file does not hold its bytes already (``put``): a file written again the same is left as it
     is. Every declared file is written this way too, after the build or the take-up that made its
-    document (``build``)."""
+    document (``build``). A file that would not carry whole the PMI the code made is refused by name
+    (``pmi.refuse_dropped``); what one of a document another system wrote leaves out is said to
+    ``log``. ``check`` reads the file staged before it lands (an atomic kind's, a STEP's): one it
+    refuses (raises) is not written, and the file there keeps its bytes."""
+    from cadgen.engine import pmi
+
     path = Path(path)
     kind = kind or kind_of(path)
     if kind not in KINDS:
@@ -416,10 +426,18 @@ def translate(document: Any, kind: str | None, path: Any) -> int:
         if path.resolve() == source.path.resolve():
             raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
     view = source.view()
+    pmi.refuse_dropped(view, kind)
+    for entry, why in pmi.dropped(view, kind) if log is not None else ():
+        log(f"warning: pmi: {path.name}: {entry['id']} is not carried whole: {why}")
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     if not spec.atomic:
-        spec.write(view, path)
-        return path.stat().st_size
-    _written, size = put(path, lambda temporary: spec.write(view, temporary))
+        return spec.write(view, path)
+
+    def write(temporary: Path) -> None:
+        spec.write(view, temporary)
+        if check is not None:
+            check(temporary)
+
+    _written, size = put(path, write)
     return size
