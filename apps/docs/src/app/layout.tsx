@@ -13,37 +13,28 @@ const socialPreview = {
   alt: "text-to-cad: Design physical products with AI. Colorful planetary gears rendered from editable CAD geometry.",
 };
 
+// The site follows the system's light or dark theme, on load and whenever it changes; it has no
+// toggle. The choice an earlier toggle stored is removed once.
 const themeScript = `
 (() => {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   const storageKey = "cad-skills-theme-v2";
-  const applyTheme = (theme) => {
+  const applyTheme = () => {
+    const theme = media.matches ? "dark" : "light";
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.style.colorScheme = theme;
   };
-  const getStoredTheme = () => {
-    try {
-      const storedTheme = window.localStorage.getItem(storageKey);
-      return storedTheme === "dark" || storedTheme === "light"
-        ? storedTheme
-        : null;
-    } catch {
-      return null;
-    }
-  };
-
-  applyTheme(getStoredTheme() ?? "dark");
-
-  const handleSystemThemeChange = () => {
-    if (!getStoredTheme()) {
-      applyTheme("dark");
-    }
-  };
 
   try {
-    media.addEventListener("change", handleSystemThemeChange);
+    window.localStorage.removeItem(storageKey);
+  } catch {}
+
+  applyTheme();
+
+  try {
+    media.addEventListener("change", applyTheme);
   } catch {
-    media.addListener(handleSystemThemeChange);
+    media.addListener(applyTheme);
   }
 })();
 `;

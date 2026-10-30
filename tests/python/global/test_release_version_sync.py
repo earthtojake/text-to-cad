@@ -154,9 +154,17 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn("`cadgen +9.9.9`", skill)
             self.assertIn("`python` below means `cadgen +9.9.9 run`", skill)
             self.assertIn("it says 9.9.9 is not installed", skill)
-            # So does the turn-off command the README and the docs site print.
-            for page in ("README.md", "apps/docs/src/lib/content.ts", "apps/docs/src/app/privacy-policy/page.tsx"):
-                self.assertIn("--from cadgen==9.9.9 cadgen telemetry off", (root / page).read_text(encoding="utf-8"))
+            # So does the turn-off command the privacy policy prints.
+            self.assertIn("--from cadgen==9.9.9 cadgen telemetry off",
+                          (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
+            # The README and the docs site's homepage are prose and no pin target: a pin there would
+            # never be stamped.
+            for page in ("README.md", "apps/docs/src/lib/content.ts"):
+                self.assertNotIn("cadgen==", repo_path(page).read_text(encoding="utf-8"), page)
+            # And the install page's Claude Desktop config and the installer it says the command runs.
+            page = (root / "docs/install.md").read_text(encoding="utf-8")
+            self.assertIn('"--from", "cadgen==9.9.9", "cadgen", "mcp"', page)
+            self.assertIn("--from cadgen==9.9.9 cadgen setup", page)
 
     def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
         """check-version.sh refuses an installer script that would fall back to another release."""

@@ -63,11 +63,10 @@ scripts/         # loading-icon export and verification
 
 ## Brand and loading icon
 
-The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
-hero builds the TEXTTOCAD wordmark in with its animated SVG (sketch, extrude, cut, chamfer,
-render), and the repository README shows the same animated SVG. The header slides the CAD wordmark
-in at its left once the homepage's TEXTTOCAD has scrolled out of sight (a page without one shows it
-throughout), pushing right what follows it: a desktop's section links, a phone's burger. `/icon` plays each
+The header always shows the C mark (`public/brand/logo-c.svg`) and the name, text-to-cad, at its
+left, one link home, and favicons use C, both with soft relief shading.
+The homepage hero builds the TEXTTOCAD wordmark in with its animated SVG (sketch, extrude, cut,
+chamfer, render), and the repository README shows the same animated SVG. `/icon` plays each
 mark's build, with Replay, and provides downloadable C, CAD, TEXTTOCAD and stacked TEXT TO CAD
 SVGs, PNGs and animated SVGs, followed by the original animated loading-icon playground.
 `LogoBuild` (`src/components/logo-build.tsx`) shows a build: a plain `<img>`, since the animation
@@ -109,45 +108,56 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. Every Copy is a plain icon button, one size with the buttons beside the install
-message that open it in an app, and each icon button has a tooltip. Install in Codex, the official listing, is
-the one blue button. Every button shows a pointer. Every section title
-shares one heading scale. Each title, a section's or an install's, links to its
-own anchor (`#install`, `#cursor`), as GitHub's headings do, so following it puts
-that address in the bar. The header lists Overview, Install, Skills and
-Contributing, the active link following the visible section; a phone's header has
-a burger that drops them down. The header shows the version as its release tag
-names it (`v<VERSION>`), on a phone 360px or wider too. Overview opens with Available for
-these agents, first so a phone shows it on load: the agents' logos scrolling as
-skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from
-Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
-A logo leads to its install. Then the plugin's description, which every manifest
-and the README's Overview say word for word (`test_plugin_manifests.py` holds
-them to one text), and How it works: three steps from a model's script to the CAD viewer
-(`howItWorks`), the README's How it works. Install
-leads with the message to send to an agent, monospace like the commands, with buttons that open it
-in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; under it, one
-sentence says what text-to-cad sends and how to turn it off, with the privacy policy (`telemetryNote`:
-only what holds for every release that sends anything by default, since a copy that has not updated
-reads it too); then a sub-section per agent app, its update
-and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
-Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
-(the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
-content width. Command text remains monospace.
+pale highlight on charcoal. Every Copy is a plain icon button, and each icon button has a tooltip.
+Every button shows a pointer. Every section title
+shares one heading scale. Each section title links to its
+own anchor (`#skills`), as GitHub's headings do, so following it puts
+that address in the bar. The header is bare: at the left the C mark and "text-to-cad" set as a
+title (semibold), one link home, on every size and always shown; at the right the version as its
+release tag names it (`v<VERSION>`, on a phone 360px or wider) and GitHub with its star count, the
+two at one size and weight (text-sm, medium). It has no
+section links, no burger, no Discord link and no theme toggle: the site follows the system's light
+or dark theme, on load and as it changes (`layout.tsx`'s theme script sets the `.dark` class).
+
+The hero is centred: the TEXTTOCAD wordmark at full size (up to 800px), the tagline, then the two
+calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
+star count, Join Discord; `src/components/hero-section.tsx`, the links and the star count from
+`src/lib/github.ts`, which the header shares). Then the one-line install box, which is the page's
+Install and carries its stable address, `#install` (`src/components/install-box.tsx`: the ONE-LINE
+INSTALL label, a macOS / Linux | Windows toggle over `installCommands`, the command with Copy; a
+Windows browser has Windows preselected), with nothing under it: what the command does
+(`installSummary`) and the link to installing by hand, app by app, and updates, the repository's
+`docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
+homepage. Then the framed CAD demo, then a small
+uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos
+scrolling as skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
+Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
+links; under them one line asks for a plugin request (a new GitHub issue). Overview has the
+plugin's description, which every manifest and the README's Overview say word for word
+(`test_plugin_manifests.py` holds them to one text), and How it works: three steps from a model's
+script to the CAD viewer (`howItWorks`), the README's How it works. Then Skills. The site has no
+Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
+from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
+the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
+part, bugs and plugin requests, questions and ideas, and code, skills and models, with
+its links. The footer links the privacy policy and the terms of service, then Made by @earthtojake.
+Explanatory
+text fill the content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, how it works, the install message and what
-it sends, each install's commands (to install, update and remove it), the skills and
-Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
-and the README says more: numbered steps to install it yourself and fuller notes
-under each install. The site has the
-hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
+together: the plugin's description, how it works, the install commands, what they
+do, the link to installing by hand, the skills and Contributing. Updates are on
+`docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
+the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
+`src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
-`/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
-of the full install instructions, which the CAD app's update button links to.
+`/install` redirects to the hero's install box (`/#install`, `next.config.ts`): the stable address
+of the install instructions, which the CAD app's update card links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
-message, what it sends and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
-sit above the independently framed CAD demo. “100% open source and free.” follows
+commands, what they do and the link to installing by hand to one text, and holds the `#install`
+anchor to the hero. The unboxed
+wordmark and one prominent tagline, centred, sit above the two calls to action, the install box and the
+independently framed CAD demo. “100% open source and free.” follows
 “Design physical products with AI.” in blue, using a lighter brand shade on dark
 surfaces. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,

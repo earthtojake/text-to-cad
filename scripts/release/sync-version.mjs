@@ -43,18 +43,19 @@ function skillLaunchTargets() {
 }
 
 // Files that pin the cadgen runtime by a requirement string rather than a version field: the
-// commands the agent apps run to start CAD's MCP server, the README's Claude Desktop config,
-// and every cadgen skill's install command and `cadgen +<version>`. A file may also be a JSON target (the Gemini
-// extension carries both); its pin is stamped on top of that change, not over it.
+// commands the agent apps run to start CAD's MCP server, the install page's Claude Desktop config
+// and the command it says the installer runs, and every cadgen skill's install command and
+// `cadgen +<version>`. A file may also be a JSON target (the Gemini extension carries both); its pin
+// is stamped on top of that change, not over it.
 export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",
   "mcp.json",
   "gemini-extension.json",
-  "README.md",
-  // The turn-off command the README and the docs site print, the plugin's own launch line.
-  "apps/docs/src/lib/content.ts",
+  "docs/install.md",
+  // The turn-off command the privacy policy prints, the plugin's own launch line. The README and
+  // the docs site's homepage pin nothing: a target without a pin is refused.
   "apps/docs/src/app/privacy-policy/page.tsx",
   ...skillLaunchTargets(),
 ];
