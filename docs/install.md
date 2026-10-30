@@ -40,9 +40,14 @@ checksum. It:
    server for this release, with a `.bak` of the file kept beside it.
 6. Registers the release and writes the `cadgen` command (`~/.local/bin/cadgen`; on
    Windows `%USERPROFILE%\.local\bin\cadgen.cmd`), as the CAD server does when it
-   starts, writes a receipt of everything it changed in cadgen's state folder, says
-   what each app has now, and lists the apps to restart to load what it installed
-   or updated.
+   starts.
+7. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
+   build123d and what they need, about 220 MB the first time) on the same Python,
+   in cadgen's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
+   first model builds without a download.
+8. Writes a receipt of everything it changed in cadgen's state folder, says what
+   each app has now, and lists the apps to restart to load what it installed or
+   updated.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
 to see the plan before anything changes. Run it again to update: an app that is up
@@ -352,6 +357,22 @@ says what the install command and the new engine do with it.
 A CAD project written for cadgen 0.7 needs porting to 0.8:
 [the migration guide](migrations/migrating-0.7-to-0.8.md) takes one across, step by
 step, and an agent with the CAD skill can follow it.
+
+## What a model runs in
+
+The release the install command runs, and each app's CAD server, is cadgen's core:
+the engine, the `cadgen` command, the CAD Viewer's server and CAD's MCP server,
+without the CAD kernel. A model runs where the kernel is: in one environment cadgen
+makes with uv in its cache folder and keeps, the release with its kernel
+(`cadgen[kernel]`) on the engine's Python, 3.14. Every model runs there, and so do
+the engine's own kernel processes: exports, snapshots and the meshes the viewer
+shows. The install command makes it; otherwise the first model or the first view
+does. A model imports what that environment holds: cadgen, build123d and what they
+bring.
+
+To run models with a Python of your own instead, install cadgen with its kernel
+into it: `pip install 'cadgen[kernel]'` (`pip install cadgen` is the core alone, and
+`import build123d` fails there). That environment is then the one models run in.
 
 ## Windows 11: Smart App Control
 

@@ -23,7 +23,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python arm.py                                 # builds it in the engine's warm worker
+cadgen run arm.py                             # builds it in the engine's warm worker
 cadgen export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
 cadgen snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
 cadgen serve XBF/arm.xbf                      # the document on a local page
@@ -39,6 +39,12 @@ engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cadgen`) and the bundled runtime. Never app code, never JavaScript source at runtime.
+Its required dependencies are the core's -- uv, numpy, ezdxf and Pillow: the engine's server, the
+`cadgen` command, the viewer's server and the MCP shim, none of which imports the CAD kernel --
+and the kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its
+`kernel` extra, which the engine installs into the environments models run in (the engine's
+**Running a model**). A person who installs cadgen by hand to run models with their own Python
+installs `cadgen[kernel]`.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The CAD Viewer is not a
 dependent but a part: the engine serves `cadgen.viewer`’s client, HTTP application and
@@ -78,9 +84,11 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    nowhere else there, each model document's bytes as it last built them: its own file, never a
    declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
-   restart opens every project at once; and under `pycache/` the bytecode its own processes compile of the libraries they load
+   restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model. The code stays the only source of truth: a document is what its
+   beside a library or a model; and under `base/` the environment models and the engine's kernel
+   processes run in, an installation's base, `cadgen[kernel]` at its release, made by uv from its
+   cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document, and no derived file
@@ -387,7 +395,9 @@ src/cadgen/
   assets.py              # where the bundled runtime is
   check_fonts.py         # `python -m cadgen.check_fonts`: the font that breaks
                          #   `import build123d`
-  _internal/             # the launch command, the installations' registry and the proxy
+  _internal/             # the environment models run in (base: the installation's base,
+                         #   cadgen[kernel], made by uv),
+                         #   the launch command, the installations' registry and the proxy
                          #   it writes (installations: ~/.local/bin/cadgen, which the
                          #   skills run as `cadgen +<version>`; written as `cadgen mcp`
                          #   starts and by `cadgen doctor`, never by another command), the
@@ -405,15 +415,18 @@ src/cadgen/
 Commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and
 `server` are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
 robot among them); `cadgen urdf|sdf|srdf validate` the validators; `cadgen
-doctor` the setup (the installation registered, the `cadgen` command written, the engine started),
-a skill's pin and what cadgen left behind that nothing needs, which `cadgen doctor --prune` removes
-(`_internal/leftovers.py`: engine records of an older format, the bytecode of installations no longer
-registered, cache folders no record names; none written in the last seven days); `cadgen run` a model script by the installation's python; `cadgen viewer` the engine page launcher;
+doctor` the setup (the installation registered, the `cadgen` command written, the CAD kernel
+environment made, the engine started), a skill's pin and what cadgen left behind that nothing needs,
+which `cadgen doctor --prune` removes (`_internal/leftovers.py`: engine records of an older format,
+the bytecode of installations no longer registered, cache folders no record names; none written in
+the last seven days); `cadgen run` a model script in the CAD kernel environment (the base:
+`_internal/base.py`); `cadgen viewer` the engine page launcher;
 `cadgen mcp` the stateless proxy an agent host starts; `cadgen setup` (also `cadgen update`), which
 the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets up or updates
-text-to-cad in every agent app it finds, each by its own command (`_internal/providers.py`), and
-`cadgen uninstall` takes it out; and `cadgen telemetry` the person's answer. A
-model builds by running its script: `python model.py`, or `cadgen +<version> run model.py` through
+text-to-cad in every agent app it finds, each by its own command (`_internal/providers.py`), and makes
+the CAD kernel environment models run in; `cadgen uninstall` takes text-to-cad out; and `cadgen
+telemetry` the person's answer. A
+model builds by running its script: `cadgen run model.py`, or `cadgen +<version> run model.py` through
 the `cadgen` command, which picks the installation by the first that names one, in this order
 (`_internal/proxy.py`): `+<version>`, `CADGEN_VERSION`, the engine held by this shell's host,
 any running engine (the newest version first), and the newest installation registered.

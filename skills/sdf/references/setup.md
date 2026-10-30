@@ -25,10 +25,10 @@ a sandbox that refuses either, or with that sandbox's permission.
 If `cadgen` is not on your PATH, or it says 0.8.4 is not installed, run
 `uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen doctor` once,
 outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
+`cadgen` command, makes the CAD kernel environment models run in and starts the engine.
+With the CAD app's server running, nothing else needs the sandbox's permission: it starts
+the engine and holds it. Without it, a sandboxed shell cannot start the engine; when a
+command says no engine is running, run `cadgen server` outside the sandbox once.
 
 The `cadgen` command lives in `~/.local/bin` (on Windows, `%USERPROFILE%\.local\bin`,
 where it is run as `cadgen.cmd +0.8.4`); `CADGEN_LAUNCHER_DIR` moves the folder. A

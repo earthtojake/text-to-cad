@@ -57,7 +57,10 @@ plugin in every agent app on the device (the skills alone, through the Skills CL
 agents without a plugin), asking nothing, and, run again, updates them. cadgen itself
 installs as ONE uvx command, `uvx --no-config --managed-python --python
 3.14 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
-plugin server configs run. That installation registers itself and writes the
+plugin server configs run: the wheel's core (engine, command, viewer server, MCP
+shim). The CAD kernel is its `kernel` extra, which the engine installs with uv into
+one base environment per installation that every model and kernel process runs in
+(`cadgen._internal.base`). That installation registers itself and writes the
 `cadgen` command, `~/.local/bin/cadgen`; every cadgen skill's SKILL.md runs
 `cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
 command can). The release stamps every pin and `+<VERSION>` (`sync-version.mjs`),
@@ -65,7 +68,7 @@ with the installer's fallback release, and `scripts/release/check-version.sh` an
 tests assert they all equal `VERSION`. One installation is one engine: the server, every thread and every
 skill command share one daemon ([CONTRIBUTING.md, "Development
 dependencies"](CONTRIBUTING.md#development-dependencies)). In a checkout, install
-`requirements-dev.txt` (the editable cadgen) and test in agent apps with
+`requirements-dev.txt` (the editable cadgen with its kernel extra: its own base) and test in agent apps with
 `scripts/install/dev_install.py`, which points both at the checkout.
 
 ## Repo Map

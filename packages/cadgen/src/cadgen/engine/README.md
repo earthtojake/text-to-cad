@@ -150,10 +150,14 @@ threejs_materials and numpy it imports Pillow
 checks a drawing with), and a test holds that list (law 3). The application serves the built
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
 process, with no network relay. Kernel reads, topology, poses and meshes run in
-reader/mesh subprocesses; even an inline-mesh request stays outside the daemon.
-If Python cannot start those processes (on Windows, a loader refusing `_multiprocessing.pyd`),
-the request fails with `serve.KernelProcessesUnavailable`, which carries the loader's words. The engine
-has no fallback and remembers nothing, so the next request tries again.
+reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. The daemon's own
+process imports no kernel: its installation may have none (the wheel's core), and every process
+of the engine's that loads the kernel -- a model's worker, the documents worker, the standby, the
+meshing and reading pools, the render processes -- runs in an environment that has it (**Running a
+model**). If Python cannot start those processes (on Windows, a loader refusing
+`_multiprocessing.pyd`), or the environment they run in cannot be made, the request fails with
+`serve.KernelProcessesUnavailable`, which carries the loader's (or the environment's) words. The
+engine has no fallback and remembers nothing, so the next request tries again.
 
 Every document has one id (law 6), a lower-case UUID string ([ids.py](ids.py)), by one formula
 (`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a model's scope is its script
@@ -337,6 +341,43 @@ Development client reload remains a browser concern; Python changes take effect 
 installation's engine is explicitly restarted. What the page knows by id is memory
 only, and a file's id is derived again from its path after a restart.
 
+
+## Running a model
+
+A model runs where the CAD kernel is. The `cadgen` wheel's required dependencies are the core --
+the engine's server, the `cadgen` command, the viewer's server, the MCP shim, and the numpy, ezdxf
+and Pillow they read meshes, drawings and pictures with -- and the CAD kernel (OCP, build123d and
+the rest) is its `kernel` extra. So the installation the plugin's server runs (the core, as uvx
+installs it) runs no model itself: it makes one environment, **the base**, and every process that
+loads the kernel starts from it (`cadgen._internal.base`).
+
+The base is `cadgen[kernel]` at the engine's own release -- or the source tree, or the wheel, the
+installation was made from -- on the engine's own Python, made by uv at `base/<key>` in the cache
+folder, its files hard links into uv's cache; uv is asked `--offline` first and goes to the network
+only for what its cache lacks, saying so first. One per installation, keyed by it (its environment,
+the version it runs as, its release and source), its Python and the architecture, so an upgrade
+makes a base of its own. Its marker, `cadgen-env.json`, written last, makes it complete, so a later
+use reads the marker and resolves nothing; a lock beside it makes one process make it while another
+waits. An installation whose own environment carries the kernel (installed with the extra, `pip
+install 'cadgen[kernel]'`) is its own base, and none is made.
+
+`cadgen run SCRIPT.py` (`-m`, `-c`) makes the base the first time it is asked for -- a line says so
+while uv works -- and runs the arguments with the base's Python, in the caller's folder and
+environment. The marker names the installation the base belongs to, which the distribution hands
+the engine as `daemon.HOME`: a process there reaches that installation's engine (`daemon._tag`) and
+starts it with that installation's Python (`client._start`), so the script, its worker and every
+other client share one engine. The project's own files and `.venv` are not read: the base is what
+the script imports.
+
+Every process of the engine's that loads the kernel runs the base's Python (`daemon.kernel`, which the
+distribution makes as `daemon.KERNEL`): a model's worker, the documents worker, the standby, the
+render processes, and the meshing and reading pools, whose spawned processes start on the base's own
+import path, which the marker records (`serve._spawn_in`). The engine starts and serves with no base
+made -- pages, the home, documents held in the cache, `status` -- and its start never makes one: the
+standby waits for it. The first kernel process asked for makes it, while its request waits;
+`cadgen setup` and `cadgen doctor` make it at install time, so the first build waits on nothing. A
+base that cannot be made fails the request that needed it in one line
+(`serve.KernelProcessesUnavailable`), and nothing remembers the failure.
 
 ## Layout
 
@@ -601,8 +642,9 @@ tessellations, is under one memory budget: **Document lifetime**.)
 - **The cap never retires a watched worker.** When every idle worker has a document a page
   watches, the new worker starts past the cap. The memory cap may still retire a watched one.
 - **A standby.** One worker stands by with the kernel loaded and no script (`Pool.stand`): started
-  with the daemon, and again each time a build takes it or starts a worker of its own, while the
-  pool has a slot for it under the cap and room for it under the memory cap. A build for a script
+  with the daemon once the base is made (a start never makes it: **Running a model**), and again each
+  time a build takes it or starts a worker of its own, while the pool has a slot for it under the cap
+  and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the
   standby's does (`daemon.RESTARTS`), and starts a fresh worker otherwise -- after which the
   standby, of another interpreter, is replaced by one of the build's. Taken, it is that script's
@@ -681,7 +723,8 @@ between requests: an idle worker holds no project folder (on Windows, one a proc
 cannot be renamed or deleted). A meshing or reading pool's processes exit with the process that
 started them, however it ends.
 
-A worker is an interpreter; a run is the script in its caller's environment. A build goes to its
+A worker is an interpreter -- the base's Python, the one `cadgen run` ran the script with
+(**Running a model**) --; a run is the script in its caller's environment. A build goes to its
 script's live worker whatever the caller's environment but for what shapes the interpreter's
 import system (`daemon.RESTARTS`): `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
 `PYTHONNOUSERSITE`, `PYTHONUSERBASE` and `PYTHONPLATLIBDIR`. A relative `PYTHONPATH` entry is the
@@ -692,8 +735,8 @@ memo goes with it. Everything else the
 run adopts (`worker.adopt`): before the body runs, the caller's environment replaces the worker's
 `os.environ`, keeping only those variables and what the worker set for itself
 (`CADGEN_ENGINE_WORKER`, and the daemon's bytecode setting, `daemon.BYTECODE`). `PATH` and `VIRTUAL_ENV` are adopted, not
-restarts: neither changes a running interpreter's `sys.path` (the worker is the daemon's
-interpreter, started with `-P`, and `site` finds a virtual environment by the interpreter's own
+restarts: neither changes a running interpreter's `sys.path` (the worker is started with `-P`,
+and `site` finds a virtual environment by the interpreter's own
 `pyvenv.cfg`, never by `VIRTUAL_ENV`, which only activation scripts and installers read), and
 the kernel reads neither; a model that starts a program finds it on its caller's `PATH`. An
 agent's shell may give each turn its own `PATH` (Codex puts a temporary folder of its own on it,

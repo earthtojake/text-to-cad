@@ -36,10 +36,10 @@ DEFINITIONS = ("- `cadgen` below means `cadgen +{version}` (`~/.local/bin/cadgen
                "`~/.local/bin` is not on your PATH)\n- `python` below means `cadgen +{version} run`\n")
 INSTALL = ("If `cadgen` is not on your PATH, or it says {version} is not installed, run\n"
            "`{command}` once,\noutside any sandbox or with its permission: it installs cadgen, registers it, "
-           "writes the\n`cadgen` command and starts the engine. With the CAD app's server running, nothing else\n"
-           "needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed\n"
-           "shell cannot start the engine; when a command says no engine is running, run `cadgen server`\n"
-           "outside the sandbox once.\n")
+           "writes the\n`cadgen` command, makes the CAD kernel environment models run in and starts the engine.\n"
+           "With the CAD app's server running, nothing else needs the sandbox's permission: it starts\n"
+           "the engine and holds it. Without it, a sandboxed shell cannot start the engine; when a\n"
+           "command says no engine is running, run `cadgen server` outside the sandbox once.\n")
 
 
 _HANDOFF_MARKER = re.compile(r"\$(?P<name>[a-z0-9-]+)")

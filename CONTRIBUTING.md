@@ -104,6 +104,10 @@ focused test, so the file builds on an engine daemon of its own:
 
 `requirements-dev.txt` installs the source packages from `packages/` and the
 small set of Python extras mirrored from skill runtime requirements. Its editable
+cadgen comes with its `kernel` extra (OCP, build123d and the rest; the wheel's
+required dependencies are only the core), so the checkout's `.venv` carries the CAD
+kernel and is its own base environment: the engine makes no base for it
+(`cadgen/_internal/base.py`). Its editable
 cadgen installs `cadgen-lazy-kernel.pth` into the venv's site-packages as the wheel
 does (`packages/cadgen/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
