@@ -1,0 +1,4 @@
+interface:
+  display_name: "STEP diff"
+  short_description: "Say what changed between two STEP revisions."
+  default_prompt: "Use $step-diff to tell me what changed between these two STEP files."
