@@ -6,7 +6,7 @@
         "--no-config",
         "--managed-python",
         "--python",
-        "3.13",
+        "3.14",
         "--from",
         "cadgen==0.8.4",
         "cadgen",

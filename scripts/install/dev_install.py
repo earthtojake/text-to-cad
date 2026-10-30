@@ -70,7 +70,7 @@ def _shared_providers():
 providers = _shared_providers()
 # cadgen._internal.launch.LAUNCHER, repeated because this script runs on any Python 3 and must
 # not import cadgen, whose floor is newer; test_dev_install holds the two equal.
-LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
+LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.14", "--from")
 # cadgen.updates.INSTALL and INSTALL_WINDOWS, the install command, repeated for the same reason: a
 # development install's skills never send an agent to the release's installer, which would put the
 # published release over this checkout's engine.

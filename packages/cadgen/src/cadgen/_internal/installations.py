@@ -45,7 +45,7 @@ WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
 MARK = "cadgen proxy: "
-REVISION = 3
+REVISION = 4
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # A release's version, as a wheel reports it of itself (``cadgen.__version__``). Any other version a
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
@@ -338,7 +338,7 @@ for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cadgen._internal.proxy "$@"
 done
 case $1 in +?*) version=${{1#+}} ;; *) version= ;; esac
-echo "cadgen${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python 3.13 \\
+echo "cadgen${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python {python} \\
 --from cadgen${{version:+==$version}} cadgen doctor\\` once, outside any sandbox or with its permission" >&2
 exit 1
 """
@@ -363,7 +363,7 @@ for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') 
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-echo cadgen is not installed: run `uvx --no-config --managed-python --python 3.13 --from cadgen cadgen doctor` once, outside any sandbox or with its permission 1>&2\r
+echo cadgen is not installed: run `uvx --no-config --managed-python --python {python} --from cadgen cadgen doctor` once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
 endlocal & "%python%" -P -m cadgen._internal.proxy %*\r
@@ -373,7 +373,9 @@ exit /b %errorlevel%\r
 
 def script(windows: bool = WINDOWS) -> str:
     """The proxy's text: the same from every version of this revision."""
-    return (_CMD if windows else _SH).format(mark=MARK, revision=REVISION)
+    from cadgen._internal.launch import PYTHON
+
+    return (_CMD if windows else _SH).format(mark=MARK, revision=REVISION, python=PYTHON)
 
 
 def _revision(path: str) -> int | None:

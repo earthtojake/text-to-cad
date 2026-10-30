@@ -313,7 +313,7 @@ class Home:
         return skill
 
 
-ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.13", "--from",
+ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.14", "--from",
                                           f"cadgen=={RELEASE}", "cadgen", "mcp"],
          "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}}
 

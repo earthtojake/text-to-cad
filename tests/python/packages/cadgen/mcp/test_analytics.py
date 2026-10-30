@@ -938,7 +938,7 @@ class NoticeTest(_Tmp):
         from cadgen._internal import installations
         from cadgen.analytics import off_command
 
-        uvx = "uvx --no-config --managed-python --python 3.13 --from"
+        uvx = "uvx --no-config --managed-python --python 3.14 --from"
         script = self.tmp / "bin" / ("cadgen.exe" if os.name == "nt" else "cadgen")
         script.parent.mkdir()
         script.write_text("#!/bin/sh\n", encoding="utf-8")

@@ -203,8 +203,8 @@ main() {
 
   say "text-to-cad: cadgen $version ($origin). The first run downloads it, which takes a minute."
   # cadgen asks nothing, so it reads no terminal. $refresh is two words or none.
-  say "Running: $uvx --no-config --managed-python --python 3.13 ${refresh:+$refresh }--from $requirement cadgen $verb${*:+ $*}"
-  exec "$uvx" --no-config --managed-python --python 3.13 $refresh --from "$requirement" cadgen "$verb" "$@"
+  say "Running: $uvx --no-config --managed-python --python 3.14 ${refresh:+$refresh }--from $requirement cadgen $verb${*:+ $*}"
+  exec "$uvx" --no-config --managed-python --python 3.14 $refresh --from "$requirement" cadgen "$verb" "$@"
 }
 
 main "$@"

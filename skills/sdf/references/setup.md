@@ -23,7 +23,7 @@ a sandbox that refuses either, or with that sandbox's permission.
 ## Register this skill's release
 
 If `cadgen` is not on your PATH, or it says 0.8.4 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.4 cadgen doctor` once,
+`uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen doctor` once,
 outside any sandbox or with its permission: it installs cadgen, registers it, writes the
 `cadgen` command and starts the engine. With the CAD app's server running, nothing else
 needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed

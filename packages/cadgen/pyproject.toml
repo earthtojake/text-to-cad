@@ -9,7 +9,7 @@ description = "CAD models as Python, built by a warm engine into documents (.xbf
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 authors = [{ name = "earthtojake" }]
 keywords = ["cad", "step", "glb", "build123d", "parametric", "agent-skills"]
 classifiers = [
@@ -17,8 +17,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Manufacturing",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Graphics :: 3D Modeling",
   "Topic :: Scientific/Engineering",
 ]

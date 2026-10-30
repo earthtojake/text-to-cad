@@ -24,8 +24,8 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cadgen setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.4 cadgen setup`.
-   Its first run downloads the release, and Python 3.13 for it.
+   `uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen setup`.
+   Its first run downloads the release, and Python 3.14 for it.
 3. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
@@ -89,7 +89,7 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
-The runtime supports Python 3.11+; the launch commands use uv-managed Python 3.13.
+The runtime supports Python 3.14+; the launch commands use uv-managed Python 3.14.
 
 The commands below take the `latest` branch: it holds the plugin alone and gets
 each release once it is on PyPI. `main`, where development happens, installs too,
@@ -147,7 +147,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.8.4", "cadgen", "mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cadgen==0.8.4", "cadgen", "mcp"],
       "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
     }
   }

@@ -200,7 +200,7 @@ class ProxyFileTests(Fixture):
         with self.assertRaises(proxy.Refused) as refused:
             proxy.choose(None, [], list, None)
         self.assertEqual(str(refused.exception), "cadgen is not installed: run `uvx --no-config --managed-python "
-                                                 "--python 3.13 --from cadgen cadgen doctor` once, outside any "
+                                                 "--python 3.14 --from cadgen cadgen doctor` once, outside any "
                                                  "sandbox or with its permission")
         for version in ("1.0.0", "2.0.0"):
             record = self.registered(version)
@@ -306,7 +306,7 @@ class ResolutionTests(Fixture):
         with self.assertRaises(proxy.Refused) as refused:
             self.choose(["+1.0.0", "status"])
         self.assertEqual(str(refused.exception),
-                         "cadgen 1.0.0 is not installed: run `uvx --no-config --managed-python --python 3.13 --from "
+                         "cadgen 1.0.0 is not installed: run `uvx --no-config --managed-python --python 3.14 --from "
                          "cadgen==1.0.0 cadgen doctor` once, outside any sandbox or with its permission")
         os.unlink(self.old["python"])
         with self.assertRaisesRegex(proxy.Refused, r"^cadgen 0\.8\.0 is not installed"):

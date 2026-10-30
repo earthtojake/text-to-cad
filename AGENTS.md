@@ -56,7 +56,7 @@ People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/i
 plugin in every agent app on the device (the skills alone, through the Skills CLI, for the
 agents without a plugin), asking nothing, and, run again, updates them. cadgen itself
 installs as ONE uvx command, `uvx --no-config --managed-python --python
-3.13 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
+3.14 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
 plugin server configs run. That installation registers itself and writes the
 `cadgen` command, `~/.local/bin/cadgen`; every cadgen skill's SKILL.md runs
 `cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the

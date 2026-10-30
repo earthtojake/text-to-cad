@@ -158,7 +158,7 @@ function Install-TextToCad {
     $env:Path = "$(Split-Path $uvx);$env:Path"
 
     # cadgen asks nothing: every other argument goes to it as given.
-    $arguments = @('--no-config', '--managed-python', '--python', '3.13') + $refresh + @('--from', $requirement, 'cadgen', $verb) + $rest
+    $arguments = @('--no-config', '--managed-python', '--python', '3.14') + $refresh + @('--from', $requirement, 'cadgen', $verb) + $rest
     Write-Host "text-to-cad: cadgen $version ($origin). The first run downloads it, which takes a minute."
     Write-Host "Running: $uvx $($arguments -join ' ')"
     & $uvx @arguments

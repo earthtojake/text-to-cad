@@ -2,7 +2,7 @@
 pinned to this release.
 
 The CAD plugin's server is one command,
-`uvx --no-config --managed-python --python 3.13 --from cadgen==<release> cadgen mcp`
+`uvx --no-config --managed-python --python 3.14 --from cadgen==<release> cadgen mcp`
 (cadgen._internal.launch): uv keeps one installation per requirement, and that installation
 registers itself and writes the `cadgen` command, `~/.local/bin/cadgen`
 (cadgen._internal.installations), which every skill runs as `cadgen +<release>` -- uvx cannot start
@@ -31,7 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-LAUNCH = "uvx --no-config --managed-python --python 3.13 --from cadgen=={version} {tool}"
+LAUNCH = "uvx --no-config --managed-python --python 3.14 --from cadgen=={version} {tool}"
 DEFINITIONS = ("- `cadgen` below means `cadgen +{version}` (`~/.local/bin/cadgen +{version}` where "
                "`~/.local/bin` is not on your PATH)\n- `python` below means `cadgen +{version} run`\n")
 INSTALL = ("If `cadgen` is not on your PATH, or it says {version} is not installed, run\n"

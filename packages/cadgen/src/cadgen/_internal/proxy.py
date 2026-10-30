@@ -32,11 +32,13 @@ from __future__ import annotations
 import os
 import sys
 
+from cadgen._internal.launch import LAUNCHER
+
 ASK_SECONDS = 0.5
-NOT_INSTALLED = ("cadgen {version} is not installed: run `uvx --no-config --managed-python --python 3.13 "
-                 "--from cadgen=={version} cadgen doctor` once, outside any sandbox or with its permission")
+NOT_INSTALLED = ("cadgen {version} is not installed: run `" + " ".join(LAUNCHER) + " "
+                 "cadgen=={version} cadgen doctor` once, outside any sandbox or with its permission")
 # The ``cadgen`` command's own words (``installations._SH``) when no installation is registered.
-NONE_INSTALLED = ("cadgen is not installed: run `uvx --no-config --managed-python --python 3.13 --from cadgen "
+NONE_INSTALLED = ("cadgen is not installed: run `" + " ".join(LAUNCHER) + " cadgen "
                   "cadgen doctor` once, outside any sandbox or with its permission")
 
 

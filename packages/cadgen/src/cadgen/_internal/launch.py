@@ -4,7 +4,7 @@ An agent app starts cadgen's MCP server with ``uvx`` and the exact requirement, 
 sandbox. uv keeps one installation per requirement and reuses it, so the same command means the
 same installation -- and cadgen keeps one engine daemon per installation. ``--no-config`` keeps
 the user's own uv settings (an index, a cache policy) from resolving it differently, and
-``--managed-python --python 3.13`` makes the installation the first command creates the same on
+``--managed-python --python 3.14`` (``PYTHON``) makes the installation the first command creates the same on
 every machine, whatever interpreter a GUI app's PATH happens to find first.
 
 The skills cannot run ``uvx``: an agent's shell is often a sandbox, and uv writes its cache before
@@ -20,7 +20,10 @@ skills carry the same strings, stamped by the release and held to these by a rep
 
 from __future__ import annotations
 
-LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
+# The one Python line cadgen runs on: the installation uvx makes runs it, so the engine does. The
+# plugin's server configs, the install scripts and the skills' setup pages carry the same line as text.
+PYTHON = "3.14"
+LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")
 
 
 def launch_command(tool: str = "cadgen", version: str | None = None) -> str:

@@ -22,7 +22,7 @@ runs:
       if: inputs.python == 'true'
       uses: actions/setup-python@v7
       with:
-        python-version: "3.12"
+        python-version: "3.14"
 
     # uv installs requirements-dev.txt into that interpreter: pip took 99 s of every
     # Windows job even from its cache. uv's own cache is keyed on the same file.
