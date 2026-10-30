@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/55d7f7cfc597608b8aa21bf5993b1170b20c59b0/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/e4e6e8375d0e8fe7180c275082a9f260e436543e/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -51,7 +51,7 @@ Install text-to-cad from https://github.com/earthtojake/text-to-cad
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts; turn them off with
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
+`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
 the rest.
 
 The runtime supports Python 3.11+; the launch commands use uv-managed Python 3.13.
@@ -120,7 +120,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.8.2", "cadgen", "mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.8.3", "cadgen", "mcp"],
       "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -294,7 +294,7 @@ one anonymous request, with no ID, path or anything about you, never in CI and
 never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it off.
 
 A CAD project written for cadgen 0.7 needs porting to 0.8:
-[the migration guide](https://github.com/earthtojake/text-to-cad/blob/55d7f7cfc597608b8aa21bf5993b1170b20c59b0/docs/migrations/migrating-0.7-to-0.8.md) takes one across, step by
+[the migration guide](https://github.com/earthtojake/text-to-cad/blob/e4e6e8375d0e8fe7180c275082a9f260e436543e/docs/migrations/migrating-0.7-to-0.8.md) takes one across, step by
 step, and an agent with the CAD skill can follow it.
 
 ### Telemetry
@@ -313,7 +313,7 @@ code fails, they also send a crash report: the error's type and where in cadgen 
 dependencies) it failed, never its message, and with any of your own code a bare placeholder. Our server adds the country each request
 comes from (worked out from its IP address, which it doesn't keep) and stores it all with PostHog. Never file names,
 paths, contents or prompts. The first `cadgen` command says so once, and sending starts then. Turn it off, which
-also deletes what was sent, with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen telemetry off`, **Telemetry** in either app's menu (the logo at
+also deletes what was sent, with `uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen telemetry off`, **Telemetry** in either app's menu (the logo at
 the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` turns it off for
 one process, and `CADGEN_TELEMETRY=1` on, without changing your setting; nothing is sent by default in CI or from a
 development install. Nothing waits to send: a command or a model script sends nothing itself, and what it counted,
@@ -364,9 +364,9 @@ robot description files, simulation, and local review.
 ## 🛠️ Contributing
 
 Branch from `main` and open PRs against `main`. For the local workflow, testing in
-agent apps and validation, see [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/55d7f7cfc597608b8aa21bf5993b1170b20c59b0/CONTRIBUTING.md); an agent working in
-the repository starts at [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/55d7f7cfc597608b8aa21bf5993b1170b20c59b0/AGENTS.md). A security problem is reported privately,
-as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/55d7f7cfc597608b8aa21bf5993b1170b20c59b0/SECURITY.md) says.
+agent apps and validation, see [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/e4e6e8375d0e8fe7180c275082a9f260e436543e/CONTRIBUTING.md); an agent working in
+the repository starts at [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/e4e6e8375d0e8fe7180c275082a9f260e436543e/AGENTS.md). A security problem is reported privately,
+as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/e4e6e8375d0e8fe7180c275082a9f260e436543e/SECURITY.md) says.
 
 
 <a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>
