@@ -222,6 +222,13 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
+    # T3 Code with this plugin is its own repository, pinned as a submodule that no job checks out.
+    # The text-bytes contract reads .gitmodules to leave a local checkout of it alone, and the
+    # submodules contract holds every entry out of a recursive clone.
+    Rule(("apps/t3code",), NOTHING, final=True),
+    Rule((".gitmodules",), select(policy=[f"{POLICY_SUITE}/{name}" for name in (
+        "test_source_text_bytes.py", "test_submodules.py")]), final=True),
+
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole

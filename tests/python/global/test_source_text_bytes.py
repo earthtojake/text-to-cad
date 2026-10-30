@@ -21,6 +21,7 @@ pick a sentinel that is not a control character.
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -41,7 +42,16 @@ TEXT_SUFFIXES = {
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", ".vite", "dist", "build"}
 
 
+def _submodules() -> tuple[str, ...]:
+    """Other repositories checked out inside this one (``.gitmodules``): their files are not ours."""
+    gitmodules = REPO_ROOT / ".gitmodules"
+    if not gitmodules.is_file():
+        return ()
+    return tuple(re.findall(r"^\s*path\s*=\s*(\S+)\s*$", gitmodules.read_text(encoding="utf-8"), re.M))
+
+
 def _sources() -> list[Path]:
+    submodules = _submodules()
     found: list[Path] = []
     for root in ROOTS:
         base = REPO_ROOT / root
@@ -51,6 +61,9 @@ def _sources() -> list[Path]:
             if path.suffix.lower() not in TEXT_SUFFIXES:
                 continue
             if SKIP_DIRS.intersection(path.parts):
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            if any(relative.startswith(f"{submodule}/") for submodule in submodules):
                 continue
             if path.is_file():
                 found.append(path)

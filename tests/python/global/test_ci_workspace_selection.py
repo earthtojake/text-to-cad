@@ -214,7 +214,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "skills/step-parts/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",
                      ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
-                     "scripts/release/bump-version.sh", "scripts/release/plugin_branch.py"):
+                     "scripts/release/bump-version.sh", "scripts/release/plugin_branch.py",
+                     ".gitmodules", "apps/t3code"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path) - {"skills"}, set())
                 self.assertEqual(route(path)["skills_runtime"], "false")
