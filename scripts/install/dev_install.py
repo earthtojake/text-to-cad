@@ -14,7 +14,9 @@ install the skills alone from the checkout with the Skills CLI: `npx skills add 
 One copy per app: a host that already loads another copy (the published plugin, this one through
 another host, or this repository's skills installed loose) is refused, because two copies means
 every skill twice. Cursor and Grok Build both load the plugins Claude Code installed, so `claude`
-covers all three.
+covers all three. How each app is read -- its commands, its config files, every copy of the plugin
+it loads -- is cadgen's own (cadgen/_internal/providers.py, loaded by its path), which `cadgen
+setup` reads the apps with too.
 
     scripts/install/dev_install.py claude              # Claude Code (and so Cursor and Grok Build)
     scripts/install/dev_install.py codex [--restart]   # the Codex app, CLI and IDE extension
@@ -41,28 +43,47 @@ Environment:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _shared_providers():
+    """cadgen's agent-app providers (``cadgen._internal.providers``), loaded by its path: this script
+    runs on any Python 3 and must not import cadgen, whose floor is newer, and that module imports
+    nothing of cadgen, so both installers read the apps one way."""
+    path = REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "providers.py"
+    spec = importlib.util.spec_from_file_location("text_to_cad_providers", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # its dataclasses look their module up by name
+    spec.loader.exec_module(module)
+    return module
+
+
+providers = _shared_providers()
 # cadgen._internal.launch.LAUNCHER, repeated because this script runs on any Python 3 and must
 # not import cadgen, whose floor is newer; test_dev_install holds the two equal.
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
-MARKETPLACE = "earthtojake-dev"
+# cadgen.updates.INSTALL and INSTALL_WINDOWS, the install command, repeated for the same reason: a
+# development install's skills never send an agent to the release's installer, which would put the
+# published release over this checkout's engine.
+INSTALL_COMMANDS = ("curl -fsSL https://texttocad.dev/install.sh | sh", "irm https://www.texttocad.dev/install.ps1 | iex")
+MARKETPLACE = providers.DEV_MARKETPLACE
 PLUGIN_HOSTS = ("claude", "codex", "cursor", "grok", "gemini")
 HOSTS = (*PLUGIN_HOSTS, "claude-desktop")
 DESKTOP_SERVER = "cad-dev"
-CURSOR_PLUGINS = Path.home() / ".cursor" / "plugins" / "local"
+CURSOR_PLUGINS = providers.cursor_plugins()
 # Written into the Cursor plugin folder, so --uninstall and a reinstall only ever touch our own.
-OWNER_MARK = ".text-to-cad-dev"
+OWNER_MARK = providers.DEV_MARK
 # Every SKILL.md of this repository's says where it is maintained; a loose skill saying so is ours.
-PROVENANCE = "earthtojake/text-to-cad"
+PROVENANCE = providers.PROVENANCE
 IGNORED = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 # A Codex thread waits this long for the server's first start, which may build the page's data.
 CODEX_STARTUP_SECONDS = 30
@@ -160,14 +181,19 @@ def unregister(host: str) -> None:
 
 def skill_rewrites(released: str, version: str, python: str | None = None, wheel: Path | None = None) -> dict:
     """What a development install changes in its skills' text, ``{release's: this install's}``: the
-    version they run (``cadgen +<version>``) is this install's, the `cadgen` command's folder is
-    CADGEN_LAUNCHER_DIR's, and the install command becomes the checkout's interpreter (the .venv
-    shape) or the wheel through uvx (--wheel), told that version so its `cadgen doctor` registers it
-    (Windows shells take no such prefix)."""
+    version they run (``cadgen +<version>``, ``cadgen.cmd +<version>``) is this install's, the `cadgen`
+    command's folder is CADGEN_LAUNCHER_DIR's, the install command becomes the checkout's interpreter
+    (the .venv shape) or the wheel through uvx (--wheel), told that version so its `cadgen doctor`
+    registers it (Windows shells take no such prefix), and the one-line installer
+    (``INSTALL_COMMANDS``) becomes a note that this is a development install."""
     named = "" if os.name == "nt" else f"{VERSION_ENV}={version} "
     command = " ".join((*LAUNCHER, str(wheel), "cadgen")) if wheel is not None else f"{python} -m cadgen.cli"
     rewrites = {launch("cadgen", released): f"{named}{command}", f"cadgen +{released}": f"cadgen +{version}",
+                f"cadgen.cmd +{released}": f"cadgen.cmd +{version}",
                 f"it says {released} is not installed": f"it says {version} is not installed"}
+    note = f"This is a development install of {REPO_ROOT}; do not run the install command here"
+    # The macOS and Linux command stands alone in a shell block: there the note is a comment.
+    rewrites.update({INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note})
     if launcher_dir() != "~/.local/bin":
         rewrites["~/.local/bin"] = launcher_dir()
     return rewrites
@@ -185,11 +211,16 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
+    # A skill's main file and its setup guide carry the runtime; a migration reference may name an
+    # old release on purpose, and is copied as it is.
     for skill in plugin_dir.glob("skills/*/SKILL.md"):
-        text = skill.read_text(encoding="utf-8")
-        for released, ours in (rewrites or {}).items():
-            text = text.replace(released, ours)
-        skill.write_text(text, encoding="utf-8")
+        for document in (skill, skill.parent / "references" / "setup.md"):
+            if not document.is_file():
+                continue
+            text = document.read_text(encoding="utf-8")
+            for released, ours in (rewrites or {}).items():
+                text = text.replace(released, ours)
+            document.write_text(text, encoding="utf-8")
     if host == "gemini":
         manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
         manifest["version"] = version
@@ -216,43 +247,15 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     return manifest
 
 
-def loose_skills(folders: list[Path]) -> list[Path]:
-    """This repository's skills installed loose in `folders` (by the Skills CLI, or linked by hand)."""
-    found = []
-    for folder in folders:
-        for skill in sorted(folder.glob("*/SKILL.md")) if folder.is_dir() else []:
-            try:
-                if PROVENANCE in skill.read_text(encoding="utf-8", errors="replace"):
-                    found.append(skill.parent)
-            except OSError:
-                continue
-    return found
+# This repository's skills installed loose (by the Skills CLI, or linked by hand), the folders each
+# host loads skills from, and the atomic JSON write: the providers'.
+loose_skills = providers.loose_skills
+write_json = providers.write_json
 
 
 def skill_folders(host: str) -> list[Path]:
     """The user-level skill folders `host` loads skills from, as each app was seen to."""
-    home = Path.home()
-    claude = Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")
-    return {
-        # Cursor and Grok Build load Claude Code's plugins, so a Claude Code install reaches theirs too.
-        "claude": [claude / "skills", home / ".cursor" / "skills", home / ".grok" / "skills"],
-        "codex": [Path(os.environ.get("CODEX_HOME") or home / ".codex") / "skills"],
-        "cursor": [home / ".cursor" / "skills"],
-        "grok": [home / ".grok" / "skills", claude / "skills"],
-        "gemini": [home / ".gemini" / "skills", home / ".agents" / "skills"],
-    }[host]
-
-
-def write_json(path: Path, value: dict) -> None:
-    """Replace `path` whole, keeping its mode (a config may hold another server's secrets)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
-    handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    with os.fdopen(handle, "w", encoding="utf-8") as out:
-        json.dump(value, out, indent=2)
-        out.write("\n")
-    os.chmod(temporary, mode)
-    os.replace(temporary, path)
+    return providers.skill_folders(host)
 
 
 def run(*command: str, capture: bool = False, answer: str | None = None) -> str:
@@ -263,33 +266,19 @@ def run(*command: str, capture: bool = False, answer: str | None = None) -> str:
 
 
 def cli(name: str, hint: str = "") -> str:
-    found = os.environ.get(f"{name.upper()}_CLI") or shutil.which(name)
+    found = providers.find_cli(name)
     if not found:
         raise Refused(f"No `{name}` on PATH{hint}.")
     return found
 
 
 def codex_cli() -> str:
-    """CODEX_CLI, else the newer of `codex` on PATH and the one the Codex app bundles.
-
-    Both write the same ~/.codex, which the app, the terminal CLI and the IDE extension share,
-    so the install must come from a CLI at least as new as the app that reads it.
-    """
-    if os.environ.get("CODEX_CLI"):
-        candidates = [os.environ["CODEX_CLI"]]
-    else:
-        candidates = [path for path in (shutil.which("codex"), "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex")
-                      if path and os.access(path, os.X_OK)]
-    versions = {}
-    for path in candidates:
-        try:
-            output = subprocess.run([path, "--version"], capture_output=True, text=True, check=True).stdout
-            versions[path] = tuple(int(part) for part in output.split()[-1].split(".")[:3])
-        except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
-            continue
-    if not versions:
+    """CODEX_CLI, else the newer of `codex` on PATH and the one the Codex app bundles
+    (``providers.codex_cli``): the install must come from a CLI at least as new as the app."""
+    found = providers.codex_cli()
+    if not found:
         raise Refused("No working codex CLI; install Codex or set CODEX_CLI.")
-    return max(versions, key=versions.get)
+    return found
 
 
 def interpreter() -> str:
@@ -382,45 +371,22 @@ def dev_version() -> str:
 
 def claude_installed() -> list[str]:
     """The plugin ids Claude Code has installed for this plugin, any marketplace."""
-    if not shutil.which("claude"):
-        return []
-    plugins = json.loads(run("claude", "plugin", "list", "--json", capture=True) or "[]")
-    return [plugin["id"] for plugin in plugins if plugin.get("id", "").split("@")[0] == plugin_name()]
+    return providers.claude_installed(name=plugin_name())
 
 
 def grok_installed() -> list[str]:
     """Where each of Grok Build's installs of this plugin came from."""
-    if not shutil.which("grok"):
-        return []
-    plugins = json.loads(run("grok", "plugin", "list", "--json", capture=True) or "[]")
-    return [plugin.get("source") or plugin.get("path", "") for plugin in plugins if plugin.get("name") == plugin_name()]
+    return providers.grok_installed(name=plugin_name())
 
 
 def gemini_installed(gemini: str) -> list[str]:
     """Where each of Gemini CLI's installs of this extension came from (`Source:` in its list)."""
-    sources, current = [], None
-    # Gemini prints the list on stderr.
-    listing = subprocess.run([gemini, "extensions", "list"], capture_output=True, text=True, check=True)
-    for line in (listing.stdout + listing.stderr).splitlines():
-        if line[:1] in ("✓", "✗"):
-            current = line[1:].strip().split(" ")[0]
-        elif current == plugin_name() and line.strip().startswith("Source:"):
-            sources.append(line.split("Source:", 1)[1].rsplit(" (Type:", 1)[0].strip())
-    return sources
+    return providers.gemini_installed(gemini, name=plugin_name())
 
 
 def cursor_installed() -> list[Path]:
     """Cursor's local plugin folders that hold this plugin."""
-    found = []
-    for folder in sorted(CURSOR_PLUGINS.glob("*")) if CURSOR_PLUGINS.is_dir() else []:
-        for manifest in (folder / ".cursor-plugin" / "plugin.json", folder / "plugin.json"):
-            try:
-                if json.loads(manifest.read_text(encoding="utf-8")).get("name") == plugin_name():
-                    found.append(folder)
-                    break
-            except (OSError, ValueError):
-                continue
-    return found
+    return providers.cursor_installed(name=plugin_name())
 
 
 def refuse_other_copies(host: str) -> None:
@@ -597,13 +563,8 @@ def install_gemini(args: argparse.Namespace) -> str:
 
 
 def desktop_config() -> Path:
-    if os.environ.get("CLAUDE_DESKTOP_CONFIG"):
-        return Path(os.environ["CLAUDE_DESKTOP_CONFIG"])
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-    if os.name == "nt":
-        return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Claude" / "claude_desktop_config.json"
-    return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+    """Claude Desktop's config file: CLAUDE_DESKTOP_CONFIG, else its own, per platform."""
+    return providers.desktop_config()
 
 
 def install_claude_desktop(args: argparse.Namespace) -> str:

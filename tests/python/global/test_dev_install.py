@@ -56,10 +56,14 @@ class DevPluginTests(unittest.TestCase):
             plugin = Path(scratch) / "claude"
             dev_install.assemble("claude", plugin, "1.2.3-dev.1", {"command": "x"}, rewrites=rewrites)
             for skill in plugin.glob("skills/*/SKILL.md"):
-                text = skill.read_text(encoding="utf-8")
+                setup = skill.parent / "references" / "setup.md"
+                text = skill.read_text(encoding="utf-8") + (setup.read_text(encoding="utf-8") if setup.is_file() else "")
                 with self.subTest(skill=skill.parent.name):
                     self.assertNotIn("--from cadgen==", text)
                     self.assertNotIn(f"+{released}`", text)
+                    # Never the release's installer over this checkout's engine.
+                    for command in dev_install.INSTALL_COMMANDS:
+                        self.assertNotIn(command, text)
                     if "below means" in text:
                         self.assertIn("`cadgen` below means `cadgen +1.2.3-dev.1`", text)
                         self.assertIn("`python` below means `cadgen +1.2.3-dev.1 run`", text)
@@ -88,13 +92,53 @@ class DevPluginTests(unittest.TestCase):
         self.assertEqual(rewrites[f"cadgen +{released}"], "cadgen +v")
         self.assertIsNone(page, "a wheel serves the page it was built with")
 
-    def test_this_scripts_launcher_is_cadgens(self) -> None:
+    def test_the_install_command_becomes_a_note_in_the_setup_guide_and_history_is_left(self) -> None:
+        released, named = "1.2.3", "1.2.3-dev.1"
+        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CADGEN_LAUNCHER_DIR": ""}):
+            root = Path(scratch) / "source"
+            skill = root / "skills/fixture"
+            (skill / "references").mkdir(parents=True)
+            (root / ".claude-plugin").mkdir()
+            (root / ".claude-plugin/plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": released}),
+                                                            encoding="utf-8")
+            main = ("---\nname: fixture\ndescription: fixture\n---\n"
+                    f"`cadgen` below means `cadgen +{released}`. [Setup](references/setup.md)\n")
+            guide = ("```bash\n" + dev_install.INSTALL_COMMANDS[0] + "\n```\n"
+                     + f"On Windows, in PowerShell: `{dev_install.INSTALL_COMMANDS[1]}`. Restart the\n"
+                     + dev_install.launch("cadgen", released) + " doctor\n"
+                     + rf"%USERPROFILE%\.local\bin\cadgen.cmd +{released}" + "\n")
+            (skill / "SKILL.md").write_text(main, encoding="utf-8")
+            (skill / "references/setup.md").write_text(guide, encoding="utf-8")
+            (skill / "references/migrations.md").write_text(guide, encoding="utf-8")
+            rewrites = dev_install.skill_rewrites(released, named, python="/w/python")
+            plugin = Path(scratch) / "plugin"
+            dev_install.assemble("claude", plugin, named, {"command": "x"}, root=root, rewrites=rewrites)
+            copied = (plugin / "skills/fixture/references/setup.md").read_text(encoding="utf-8")
+            note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
+            self.assertIn(f"```bash\n# {note}\n```\n", copied)
+            self.assertIn(f"On Windows, in PowerShell: `{note}`. Restart the\n", copied)
+            self.assertIn("/w/python -m cadgen.cli doctor", copied)
+            self.assertIn(f"cadgen.cmd +{named}", copied)
+            self.assertIn(f"`cadgen +{named}`", (plugin / "skills/fixture/SKILL.md").read_text(encoding="utf-8"))
+            # A migration reference may name an old release on purpose: copied as it is.
+            self.assertEqual((plugin / "skills/fixture/references/migrations.md").read_text(encoding="utf-8"), guide)
+
+    def test_this_scripts_launcher_and_install_command_are_cadgens(self) -> None:
         import sys
 
         sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
         from cadgen._internal.launch import LAUNCHER
+        from cadgen.updates import INSTALL, INSTALL_WINDOWS
 
         self.assertEqual(dev_install.LAUNCHER, LAUNCHER)
+        self.assertEqual(dev_install.INSTALL_COMMANDS, (INSTALL, INSTALL_WINDOWS))
+
+    def test_it_reads_the_apps_through_cadgens_providers(self) -> None:
+        # One reading of the agent apps for both installers: the development one loads cadgen's by path.
+        self.assertEqual(Path(dev_install.providers.__file__).resolve(),
+                         REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "providers.py")
+        self.assertIs(dev_install.loose_skills, dev_install.providers.loose_skills)
+        self.assertEqual(dev_install.skill_folders("codex"), dev_install.providers.skill_folders("codex"))
 
     def test_this_repositorys_skills_installed_loose_are_found_and_others_are_not(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

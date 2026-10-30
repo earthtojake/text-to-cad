@@ -19,6 +19,8 @@ class CompactStdoutTests(unittest.TestCase):
     # Every source that writes JSON to stdout. `cad artifact` and `dxf artifact` were
     # missed by the first pass of this test and were still pretty-printing.
     STDOUT_JSON_SOURCES = (
+        # The installer's --json: its plan and what it did.
+        "packages/cadgen/src/cadgen/cli/setup.py",
         # The validators' Result dataclasses.
         "packages/cadgen/src/cadgen/results.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result

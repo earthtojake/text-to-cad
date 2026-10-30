@@ -26,6 +26,10 @@ manage. The button stays while the install is behind: nothing the person does wi
 text-only app gets the same as one line (``line``) with its first ``cad_show`` result. A skill's
 ``cadgen`` command says nothing: it cannot tell which plugin, if any, it came with.
 
+The install command (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's) installs or
+updates text-to-cad in every agent app on the computer (``cadgen setup``); ``cadgen setup`` names it
+when a step fails.
+
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
 the background (``refresh``), so no start, request or tool call waits on it -- what is told comes
 from the feed as last read. Each day's attempt is spent before it is made, so a feed that cannot be
@@ -50,6 +54,8 @@ from cadgen._internal.channel import told
 LOG = logging.getLogger("cadgen.updates")
 
 REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
+INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
+INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
 INSTRUCTIONS = "https://www.texttocad.dev/install"  # the full install instructions: the docs site's Install section
 FILE = "versions.json"  # the feed as last read, in the state directory
 CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again
@@ -142,6 +148,12 @@ def feed(*, fetch: bool = True, now: float | None = None, path: Path | None = No
             known = fresh
             _save(path, now, fresh)
     return known
+
+
+def command(system: str | None = None) -> str:
+    """The install command for this computer (or for ``system``, an ``os.name``), which updates
+    text-to-cad when run again (``cadgen setup``, ``cadgen.cli.setup``)."""
+    return INSTALL_WINDOWS if (system or os.name) == "nt" else INSTALL
 
 
 def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
