@@ -2418,7 +2418,11 @@ arguments -- is one coarse entry above its calls, kept in the worker's memory
   arrays, first-party dataclass and class instances. Each global binding the
   code reads counts as what it is bound to, by the module that holds it, so
   rebinding a name is an edit. The walk stops at what is not first-party (the
-  standard library, build123d, OCP, numpy): the engine's own code covers those;
+  standard library, build123d, OCP, numpy): the engine's own code covers those.
+  Library code is what lies in the interpreter's library folders
+  (`trace._library_roots`), never its whole prefix: a project inside its own
+  virtual environment's folder is first-party, and a model script that does lie
+  in a library folder is said on the build's log, since its edits rebuild nothing;
 - every file it reads through the engine, by its bytes: `read_step`, `read_xbf`, `read_mesh`,
   and build123d's importers (`import_step`, `import_brep`, `import_stl`), which the memo keys
   as it keys the engine's readers;

@@ -408,6 +408,13 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     determinism.install()
     memo.install()
     shown = _shown(script, cwd)
+    from cadgen.engine.kernel.trace import _library_roots
+
+    library = next((root for root in _library_roots() if root in script.parents), None)
+    if library is not None:
+        # Never right for a model's own script: its edits, and its modules', would rebuild nothing.
+        log(f"cadgen: {shown} lies in a library folder, {library}: edits to it and to what it imports "
+            "rebuild nothing; keep the project outside the interpreter's library folders")
     reports: list[dict[str, Any]] = []
     started = time.perf_counter()
     # Per target: the model, its result (None: it wrote nothing), its body's seconds, and the

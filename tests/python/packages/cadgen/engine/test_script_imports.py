@@ -16,6 +16,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cadgen.engine import build as engine_build
 from cadgen.engine import previous, read_xbf
@@ -224,6 +225,54 @@ class LibraryRootsTest(unittest.TestCase):
                               capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.split(), ["False", "True"])
+
+    def test_a_project_inside_its_own_virtual_environment_is_the_model_s_and_its_edits_rebuild(self) -> None:
+        # The worker runs the project's Python, so its prefix is the project's venv: a venv at proj
+        # with the project in proj/work (or `python -m venv .`) holds the model's own code. Only the
+        # venv's library folders are library code; a script that does lie in one is said.
+        from cadgen.engine.kernel import trace
+
+        root = Path(tempfile.mkdtemp(prefix="engine-venv-project-")).resolve()
+        self.addCleanup(shutil.rmtree, root, True)
+        prefix, site = root / "proj", root / "proj" / "lib" / "python3" / "site-packages"
+        write(root, {"proj/pyvenv.cfg": "include-system-site-packages = false\n", "proj/work/helpers.py": "WIDTH = 3\n",
+                     "proj/lib/python3/site-packages/installed.py": "",
+                     "proj/lib/python3/site-packages/shipped.py": "import build123d as bd\nfrom cadgen import model\n"
+                                                                  "@model\ndef shipped():\n    return bd.Box(1, 1, 1)\n",
+                     "proj/work/block.py": """
+            import build123d as bd
+            from cadgen import model
+
+            import helpers
+
+
+            @model
+            def block():
+                return bd.Box(helpers.WIDTH, 2, 1)
+        """})
+
+        def forget() -> None:
+            for cache in (trace._library_roots, trace._first_party, trace.first_party_file):
+                cache.cache_clear()
+
+        forget()
+        self.addCleanup(forget)
+        script, lines = prefix / "work" / "block.py", []
+        with mock.patch.object(sys, "prefix", str(prefix)), mock.patch.object(sys, "exec_prefix", str(prefix)), \
+                mock.patch.object(sys, "path", [*sys.path, str(site)]):
+            self.assertEqual([trace.first_party_file(str(path)) for path in (script, prefix / "work" / "helpers.py",
+                                                                             site / "installed.py")], [True, True, False])
+            [cold] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            self.assertTrue(cold["ok"], cold.get("error"))
+            write(root, {"proj/work/helpers.py": "WIDTH = 5\n"})
+            [edited] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            self.assertEqual(edited["bodies"], {"block.py::block": "run"})
+            self.assertIn("helpers.py: WIDTH changed", edited["cache"]["changed"])
+            self.assertEqual(lines, [], "the project's own script is no library's")
+            [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+        self.assertTrue(shipped["ok"], shipped.get("error"))
+        self.assertEqual(lines, [f"cadgen: shipped.py lies in a library folder, {site}: edits to it and to what it "
+                                 "imports rebuild nothing; keep the project outside the interpreter's library folders"])
 
 
 def setUpModule() -> None:
