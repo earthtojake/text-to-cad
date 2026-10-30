@@ -15,7 +15,7 @@
 function Install-TextToCad {
     $ErrorActionPreference = 'Stop'
     # The release this script was published with, installed when the version feed cannot be read.
-    $CadgenVersion = "0.8.3"
+    $CadgenVersion = "0.8.4"
     $VersionFeed = 'https://api.texttocad.dev/v1/versions'
     $Releases = 'https://github.com/earthtojake/text-to-cad/releases/download'
 

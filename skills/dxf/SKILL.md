@@ -15,8 +15,8 @@ repository link is only for provenance and release review.
 Run cadgen through the `cadgen` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.3` (`~/.local/bin/cadgen +0.8.3` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.3 run`
+- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
+- `python` below means `cadgen +0.8.4 run`
 
 For first-time setup or an update, a missing `cadgen` command, a release it says is not
 installed, an engine that is not running, or an installation or kernel load error, read

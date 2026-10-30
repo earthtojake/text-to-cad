@@ -12,7 +12,7 @@
 set -eu
 
 # The release this script was published with, installed when the version feed cannot be read.
-CADGEN_VERSION="0.8.3"
+CADGEN_VERSION="0.8.4"
 VERSION_FEED="https://api.texttocad.dev/v1/versions"
 RELEASES="https://github.com/earthtojake/text-to-cad/releases/download"
 
