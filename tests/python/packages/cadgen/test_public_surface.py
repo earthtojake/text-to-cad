@@ -38,6 +38,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cadgen.urdf": ("validate",),
     "cadgen.srdf": ("validate",),
     "cadgen.sdf": ("validate",),
+    # Not a format: a part goes in, a result GLB comes out.
+    "cadgen.fea": ("faces", "parts", "solve"),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
@@ -45,6 +47,9 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.sdf", "validate"),
     "srdf validate": ("cadgen.srdf", "validate"),
+    "fea faces": ("cadgen.fea", "faces"),
+    "fea parts": ("cadgen.fea", "parts"),
+    "fea solve": ("cadgen.fea", "solve"),
 }
 
 # The engine snapshot's options (``cadgen.engine.snapshot``).

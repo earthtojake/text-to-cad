@@ -3,12 +3,12 @@ import test from 'node:test';
 import * as THREE from 'three';
 import { interactiveCameraFrameForBounds, interactiveFitPadding, interactiveViewportFitScale } from './viewportCameraFit.js';
 
-function frameBounds(bounds, aspect, orthographic, padding = undefined) {
+function frameBounds(bounds, aspect, orthographic, padding = undefined, insetLeft = 0, insetBottom = 0) {
   const camera = orthographic ? new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10000) : new THREE.PerspectiveCamera(48, aspect, 0.01, 10000);
   camera.position.set(2.1, -1.65, 1.08);
   camera.up.set(0, 0, 1);
   const controls = { target: new THREE.Vector3() };
-  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect, padding });
+  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect, padding, insetLeft, insetBottom });
   camera.position.copy(frame.position); camera.up.copy(frame.up); camera.lookAt(frame.target);
   if (orthographic) {
     camera.top = frame.halfHeight; camera.bottom = -frame.halfHeight;
@@ -153,5 +153,38 @@ for (const orthographic of [false, true]) {
     assert.deepEqual(after.target.toArray(), before.target.toArray());
     assert.equal(after.halfHeight, before.halfHeight);
     assert.equal(after.distance, before.distance);
+  });
+}
+
+// An FEA result's Study panel covers the viewport's left: the model is framed in the width it leaves,
+// its box's centre at the middle of that, wholly right of the panel.
+for (const orthographic of [false, true]) {
+  test(`${orthographic ? 'orthographic' : 'perspective'} frames into the width right of chrome covering the left`, () => {
+    const bounds = { min: [0, 0, 0], max: [200, 60, 40] };
+    const covered = 0.15;
+    const { projected, frame } = frameBounds(bounds, 1440 / 860, orthographic, undefined, covered);
+    const xs = projected.map(point => point.x);
+    // NDC runs -1..1 across: the panel's right edge is at -1 + 2 * 0.15.
+    assert.ok(Math.min(...xs) > -1 + 2 * covered, `left edge ${Math.min(...xs)}`);
+    assert.ok(Math.max(...xs) < 1, `right edge ${Math.max(...xs)}`);
+    const { camera } = frameBounds(bounds, 1440 / 860, orthographic, undefined, covered);
+    assert.ok(Math.abs(new THREE.Vector3(100, 30, 20).project(camera).x - covered) < 1e-6);
+    // It orbits about a point beside the model's centre, as a pan leaves it; with nothing covered, about the centre.
+    assert.ok(frame.target.distanceTo(new THREE.Vector3(100, 30, 20)) > 1);
+    assert.ok(frameBounds(bounds, 1440 / 860, orthographic).frame.target.distanceTo(new THREE.Vector3(100, 30, 20)) < 1e-9);
+  });
+}
+
+// A colour bar at the foot: the model is framed above it, its centre at the middle of what is left.
+for (const orthographic of [false, true]) {
+  test(`${orthographic ? 'orthographic' : 'perspective'} frames above chrome covering the foot, and right of the left`, () => {
+    const bounds = { min: [0, 0, 0], max: [60, 60, 200] };
+    const [left, below] = [0.12, 0.08];
+    const { projected, camera } = frameBounds(bounds, 1440 / 860, orthographic, undefined, left, below);
+    assert.ok(Math.min(...projected.map(point => point.y)) > -1 + 2 * below, 'above the bar');
+    assert.ok(Math.max(...projected.map(point => point.y)) < 1, 'under the top');
+    assert.ok(Math.min(...projected.map(point => point.x)) > -1 + 2 * left, 'right of the panel');
+    const centre = new THREE.Vector3(30, 30, 100).project(camera);
+    assert.ok(Math.abs(centre.y - below) < 1e-6 && Math.abs(centre.x - left) < 1e-6, `${centre.x}, ${centre.y}`);
   });
 }

@@ -225,6 +225,24 @@ class LibraryRootsTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.split(), ["False", "True"])
 
+    def test_a_library_folder_of_no_module_leaves_a_model_s_namespace_package_its_own(self) -> None:
+        # netgen's Linux wheel installs top-level `lib/` and `include/` of CMake files and headers
+        # into site-packages: a model's own `lib/` namespace package then spans it, and stays the
+        # model's. One spanning a library folder that holds a module is not.
+        root = Path(tempfile.mkdtemp(prefix="engine-roots-")).resolve()
+        self.addCleanup(shutil.rmtree, root, True)
+        lent = root / "lent" / "lib" / "python3" / "site-packages"
+        write(root, {"lent/lib/python3/site-packages/lib/cmake/netgen/NetgenConfig.cmake": "",
+                     "lent/lib/python3/site-packages/shared/vendored.py": "",
+                     "model/lib/empennage.py": "", "model/shared/dims.py": ""})
+        probe = ("import importlib; from cadgen.engine.build import _first_party_namespace; "
+                 "print(*(_first_party_namespace(importlib.import_module(name)) for name in ('lib', 'shared')))")
+        done = subprocess.run([sys.executable, "-c", probe],
+                              env={**os.environ, "PYTHONPATH": os.pathsep.join([str(SRC), str(root / "model"), str(lent)])},
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.split(), ["True", "False"])
+
 
 def setUpModule() -> None:
     # The registry and cache of every engine this module starts are its own, never the developer's

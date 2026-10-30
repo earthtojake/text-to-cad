@@ -136,20 +136,27 @@ def _uncached_said(call: str, count: int) -> str:
 
 
 def _first_party_namespace(module: Any) -> bool:
-    """Whether ``module`` is a namespace package whose every folder is the model's own: under no
-    library root (``trace._library_roots``)."""
+    """Whether ``module`` is a namespace package of the model's own: a folder of it is under no
+    library root (``trace._library_roots``), and none that is holds a module. A library's folder
+    of none gives the package nothing to import: netgen's Linux wheel installs top-level ``lib/``
+    and ``include/`` of CMake files and headers into site-packages, which a model's ``lib/`` spans."""
     if getattr(module, "__file__", None) is not None:
         return False
     try:
         folders = [Path(folder).resolve() for folder in getattr(module, "__path__", None) or ()]
     except (OSError, RuntimeError, TypeError):
         return False
-    if not folders:
-        return False
     from cadgen.engine.kernel.trace import _library_roots
 
     roots = _library_roots()
-    return all(not any(root == folder or root in folder.parents for root in roots) for folder in folders)
+    library = [folder for folder in folders if any(root == folder or root in folder.parents for root in roots)]
+    return len(library) < len(folders) and not any(_holds_module(folder) for folder in library)
+
+
+def _holds_module(folder: Path) -> bool:
+    """Whether any file under ``folder`` is one Python imports (``importlib.machinery.all_suffixes``)."""
+    suffixes = tuple(importlib.machinery.all_suffixes())
+    return any(name.endswith(suffixes) for _here, _folders, names in os.walk(folder) for name in names)
 
 
 class _SourceOnlyLoader(importlib.machinery.SourceFileLoader):

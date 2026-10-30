@@ -44,6 +44,12 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # Finite element analysis. `faces` lists a part's faces with the refs a
+    # study names; `solve` runs one study and writes the result
+    # GLB (a von Mises colour map on the deformed shape) where it is told to.
+    "fea faces": ("cadgen.cli.fea_faces", "list a part's faces with the refs a study names"),
+    "fea parts": ("cadgen.cli.fea_parts", "list an assembly's parts and the pairs that touch"),
+    "fea solve": ("cadgen.cli.fea_solve", "run a static stress study on a part or a bonded assembly"),
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),
