@@ -32,7 +32,7 @@ cadgen inspect XBF/arm.xbf                    # what it holds, then its build cl
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
-materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cadgen viewer [FILE]`: a
+materials, references to geometry, implicit solids (a field made B-rep), snapshots drawn by OCCT; the CAD Viewer (`cadgen viewer [FILE]`: a
 launcher for the installation’s engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cadgen mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
 engineering drawings (`@eng_drawing`).
@@ -349,6 +349,8 @@ src/cadgen/
                          #   screw_pair (product and manufacturing information to join them)
   gltf.py                # animation: the document records its compiled tracks, and only a
                          #   GLB reads them (an exported GLB's clips)
+  implicit.py            # implicit solids: solid(field, bounds, cell), a field the model's own
+                         #   code writes, made B-rep in the worker (the engine's Implicit solids)
   engine/                # the engine: models, the server and its workers, documents,
                          #   exports, the mesh, references, the OCCT stills (its README)
   cli/                   # the `cadgen` command: a module per command, each a shell over

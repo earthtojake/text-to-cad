@@ -352,6 +352,7 @@ only, and a file's id is derived again from its path after a restart.
 | `document_migrations.py` | supported persisted `xbf/8` to `xbf/9` material conversion in memory (`upgrade`), a separate migration record with original build provenance retained, and unsupported/failed conversion errors that preserve saved bytes |
 | `document.py` | result to XCAF (prototypes, instances, names, colours, materials, element names; a mesh face refused, `mesh_faces`), a warm build's patch of the document it kept, atomic BinXCAF save, read-back of an xbf or a foreign STEP, and a saved document's main-label strings rewritten in its bytes (`relabel`) |
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
+| `implicit.py` | implicit solids (`cadgen.implicit.solid`): a field of the model's own code sampled on a grid, its refusals, the contour (marching tetrahedra, crossings refined on the field, slivers collapsed) and its B-rep of planar triangles, one memo operation keyed by the surface (**Implicit solids**) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
@@ -2063,6 +2064,91 @@ anywhere by an absolute path -- and add to the document as the STEP's own. Every
 (`read_step`'s reader process, and the read behind the viewer, an export and a snapshot) checks
 the parsed file before it transfers it and refuses one that names another file
 (`document.refuse_external_files`).
+
+## Implicit solids
+
+A part can be made of a field: a function of points, negative inside, whose zero set is the
+part's surface. Blends, constant walls that follow them, lattices and gyroids are a line each in a
+field, where OCCT's fillet and shell refuse them. `cadgen.implicit.solid(field, bounds, cell)`
+(`implicit.py`) is geometry a body makes, as `bd.Box` is, and hands back a build123d `Solid` -- a
+`Compound` of solids for a field of several bodies -- that the body colours, places, labels,
+returns or composes with any other part:
+
+```python
+import numpy as np
+from cadgen import xbf
+from cadgen.implicit import solid
+
+def bead(points):                       # (N, 3) millimetres -> N values, negative inside
+    return np.linalg.norm(points, axis=1) - 10
+
+@xbf("XBF/bead.xbf")
+def bead_part():
+    return solid(bead, bounds=((-12, -12, -12), (12, 12, 12)), cell=0.5)
+```
+
+**The field is the author's code; the engine imports no field kernel** (law 3). `field(points)`
+takes an `(N, 3)` float64 array and answers `N` numbers in anything `numpy.asarray` reads: numpy, a
+JAX or PyTorch array on the CPU, a library's distance function -- whatever the model's
+environment holds. It is called in the process that runs the body, the model's warm worker, with
+`CHUNK` points at a time (fewer only when there are fewer in all, the last chunk padded with its own
+last point), so a tracing kernel traces it once. Its value is a sign before it is a distance:
+the contour reads where it crosses zero, so a field that is no true distance (a gyroid's
+trigonometry) contours as well.
+
+**A grid of samples, contoured.** The field is sampled at every point `bounds.min + (i, j, k) *
+cell` (the grid reaches past `bounds.max` by less than a cell). The contour is marching tetrahedra
+on the grid's Freudenthal split -- six tetrahedra a cell, every cell split alike, so neighbours share
+their faces' diagonals -- so its surface is closed and manifold by construction, every triangle edge
+two triangles', and no two triangles cross, each a section of its own tetrahedron. A sample of zero
+is outside. Each vertex is then moved along its grid edge to where the field itself crosses zero
+(`refine`: eight steps of the Illinois method, every step one evaluation at every edge), not where
+the line between the edge's two samples does: a blend, or a thin wall's middle, bends the field
+inside an edge, and the line can be most of the edge off. The surface's vertices are on the field's
+zero set; between them, detail finer than the cell that changes no sign the samples see is not
+in the B-rep: the cell is the resolution the author asked for. The slivers a surface passing at a
+sample leaves around it, whose normals are the grid's and not the surface's, are collapsed
+(`collapse`: an edge shorter than 5 % of the cell, where the two ends' neighbours allow it and no
+triangle turns over).
+
+**The B-rep is planar triangles.** A document holds B-rep alone (**Imports**), and a triangle with a
+plane under it is B-rep: one face a triangle, one shell each connected surface -- a shell of
+positive volume bounds a body, one of negative volume is a void, given to the innermost body around
+it -- sewn by construction (`BRepBuilderAPI_MakeShapeOnMesh`, edges shared). An edge where two
+triangles meet within the mesher's angular deflection (28.5 degrees, **Mesh**) is coded G1, as an
+edge inside one smooth surface: its class is tangent, a pick grows across it as a tangent group,
+and the viewer and the stills draw it as they draw a tangent edge. A sharper edge -- a crease the
+field makes with a hard `min` or `max` -- stays a feature edge. So a field part is a part like any
+other: its document is an xbf, it composes with B-rep parts in an assembly, and every verb takes
+it -- `cadgen export` to STEP (faceted: a plane per triangle), STL, 3MF and GLB (the triangles as
+they are), `cadgen snapshot` (its clipped views too, as any part's), `cadgen inspect` (its bounds, volume
+and mass, measured on the B-rep; a face's area and centroid). Nothing of the field is kept in the
+document: a field part opened with no worker is its triangles.
+
+**What it refuses** (law 17), by name and with what to change, before any B-rep: a `field` that is
+not callable; bounds that are not two points or a `BoundBox`, inverted, or under two cells on an
+axis; a cell that is not a positive length; a grid past `MAX_SAMPLES` samples; a field answering
+another shape than one value a point, or a value that is not finite (with the point); a sample on
+the grid's boundary inside (the bounds cut the part: its surface would be open there); a field
+nowhere inside; a feature or a gap thinner than the cell -- the field is sampled again at every
+cell's centre, and a centre whose sign differs from all eight corners of its cell is a wall or a
+gap the samples step over, which the contour would drop; and a surface the field's crossings fold
+over inside a tetrahedron. Raised in the body, each fails the build as any body's error does: no
+document, no file written.
+
+**Memo and names.** The B-rep is one operation of the memo (`implicit_solid`), keyed by the surface
+it is made of -- its vertices' and triangles' digest -- so a body run again whose field makes the
+same surface (an edit of a colour, or of another part in the body) makes no B-rep and keeps every
+element's name; the field is code the body reaches, and the body's key covers it (**Body
+retention**). Its faces are named by the feature the call is, in triangle order, which the
+samples decide: `body = solid(...)` in `bead` names them `f:bead.body.1`, `f:bead.body.2`, ... A library the field calls (JAX, a field kernel) is not first-party
+and its version is in no key: the closure keys the geometry libraries alone (**Build closure**).
+
+**What it costs.** Measured on a 60 mm space-frame node (six blended tubes, a 2 mm wall following
+the blends, a ball cut opening them) at a 1.25 mm cell, arm64: 49,000 triangles; the body 2.2 s
+(sampling, contour and B-rep), names 3.7 s; its xbf 31 MB, its STEP 113 MB (11.5 s), its STL
+2.3 MB (7.5 s). Faces grow with the surface's area over the cell's square: halving the cell
+quadruples every figure.
 
 ## Placements
 

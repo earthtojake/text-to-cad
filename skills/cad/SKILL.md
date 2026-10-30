@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that cadgen's engine builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
+description: Creates and edits parametric CAD parts and assemblies as Python build123d models that cadgen's engine builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, articulates or animates assemblies, and makes parts of implicit (signed-distance) fields: blended unions, constant walls, lattices. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
 license: MIT
 ---
 
@@ -20,6 +20,7 @@ page the person has open updates. Files are exports, made when asked.
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
 | **Export STEP, STL, 3MF, GLB or xbf** | `cadgen export <id> <file>`. | [Exports](references/exports.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
+| **Blends, constant walls, lattices, gyroids: a part made of a field** | `cadgen.implicit.solid(field, bounds, cell)` in the body. | [Implicit solids](references/implicit.md) |
 | **Resolve a reference from a prompt** | `cadgen inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cadgen snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |

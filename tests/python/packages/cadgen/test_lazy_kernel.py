@@ -152,9 +152,9 @@ class PthTest(unittest.TestCase):
         none of the module's own imports, while the kernel and the engine's model stay unloaded."""
         found = self.run_python(textwrap.dedent("""
             import json, sys
-            import cadgen, cadgen.ap242, cadgen.engine, cadgen.gltf
+            import cadgen, cadgen.ap242, cadgen.engine, cadgen.gltf, cadgen.implicit
             seen = {module.__name__: [name for name in dir(module) if not name.startswith("_")]
-                    for module in (cadgen, cadgen.ap242, cadgen.engine, cadgen.gltf)}
+                    for module in (cadgen, cadgen.ap242, cadgen.engine, cadgen.gltf, cadgen.implicit)}
             print(json.dumps([seen, [name for name in ("OCP", "build123d", "cadgen.engine.model")
                                      if name in sys.modules and type(sys.modules[name]) is type(sys)]]))
         """))
@@ -170,7 +170,8 @@ class PthTest(unittest.TestCase):
         self.assertEqual(seen["cadgen.ap242"], sorted(cadgen.ap242.__all__))
         self.assertEqual(seen["cadgen.gltf"], ["animation"])
         self.assertEqual(seen["cadgen.engine"], sorted(cadgen.engine.__all__))
-        self.assertEqual(seen["cadgen"], sorted({*cadgen.__all__, "ap242", "engine", "gltf"} - {"__version__"}))
+        self.assertEqual(seen["cadgen.implicit"], ["solid"])
+        self.assertEqual(seen["cadgen"], sorted({*cadgen.__all__, "ap242", "engine", "gltf", "implicit"} - {"__version__"}))
 
 
 if __name__ == "__main__":
