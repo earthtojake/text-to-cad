@@ -53,6 +53,11 @@ class DevPluginTests(unittest.TestCase):
         released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CADGEN_LAUNCHER_DIR": ""}):
             rewrites = dev_install.skill_rewrites(released, "1.2.3-dev.1", python="/w/.venv/bin/python")
+            # Every rewrite matches text in the documents it rewrites: one that matches nothing is dead.
+            documents = "".join(path.read_text(encoding="utf-8") for skill in (REPO_ROOT / "skills").glob("*/SKILL.md")
+                                for path in (skill, skill.parent / "references" / "setup.md") if path.is_file())
+            for released_text in rewrites:
+                self.assertIn(released_text, documents, "a rewrite that matches nothing in the skills")
             plugin = Path(scratch) / "claude"
             dev_install.assemble("claude", plugin, "1.2.3-dev.1", {"command": "x"}, rewrites=rewrites)
             for skill in plugin.glob("skills/*/SKILL.md"):

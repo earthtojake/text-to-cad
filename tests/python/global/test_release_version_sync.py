@@ -147,13 +147,16 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn("--from cadgen==9.9.9 cadgen doctor", guide)
             self.assertIn("cadgen.cmd +9.9.9", guide)
             self.assertEqual((fixture / "references/migrations.md").read_text(encoding="utf-8"), historical)
-            # Every cadgen skill's launch command moves with the server's, so they stay one installation.
+            # Every cadgen skill's launch command moves with the server's, so they stay one installation:
+            # the version it runs by the `cadgen` command in its main file, and in its setup guide the
+            # command that installs it and the refusal it names.
             skill = (root / "skills/cad/SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("--from cadgen==9.9.9 cadgen doctor`", skill)
-            # And so does the version it runs by the `cadgen` command, and the refusal it names.
             self.assertIn("`cadgen +9.9.9`", skill)
             self.assertIn("`python` below means `cadgen +9.9.9 run`", skill)
-            self.assertIn("it says 9.9.9 is not installed", skill)
+            guide = (root / "skills/cad/references/setup.md").read_text(encoding="utf-8")
+            self.assertIn("--from cadgen==9.9.9 cadgen doctor`", guide)
+            self.assertIn("it says 9.9.9 is not installed", guide)
+            self.assertIn("`cadgen.cmd +9.9.9`", guide)
             # So does the turn-off command the privacy policy prints.
             self.assertIn("--from cadgen==9.9.9 cadgen telemetry off",
                           (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
