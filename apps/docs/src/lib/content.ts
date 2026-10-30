@@ -103,6 +103,12 @@ export const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports.",
   },
   {
+    name: "cadjoint",
+    path: "skills/cadjoint",
+    summary:
+      "Implicit (SDF) modeling with smooth blends, shells and sketch-based solids in a differentiable JAX kernel; meshes the field to STL, OBJ or faceted STEP and draws slices of the field.",
+  },
+  {
     name: "step.parts",
     path: "skills/step-parts",
     summary:

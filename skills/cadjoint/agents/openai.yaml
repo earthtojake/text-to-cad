@@ -1,0 +1,4 @@
+interface:
+  display_name: "cadjoint"
+  short_description: "Implicit (SDF) CAD: smooth blends, shells and sketch-based solids, meshed to STL, OBJ or STEP."
+  default_prompt: "Use $cadjoint to model this part as an implicit solid and export it as STL."

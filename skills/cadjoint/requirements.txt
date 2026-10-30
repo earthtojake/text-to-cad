@@ -1,0 +1,2 @@
+# Exact pin: cadjoint's API is pre-1.0. Python 3.11 or newer (current JAX).
+cadjoint==0.1.1
