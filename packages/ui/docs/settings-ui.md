@@ -250,7 +250,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | --- | --- |
 | STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, Display and Preview |
 | URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
-| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, Display and Preview |
+| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw; never a [CAM result](#cam-results)), Clip, Display and Preview |
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
@@ -484,11 +484,12 @@ assembly's **Model tree** (a part file, whose tree would be its one row, has non
 **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**, where a joint can be driven; a drawing's **Layers**, where it has four or more
 layers or any block reference (a flat pattern's CUT and BEND has none): each layer's pen, name,
-entity count and eye, its block references under it; and, after them, the shell's own **Animation** for a
+entity count and eye, its block references under it; a CAM result's **Job** (see
+[CAM results](#cam-results)); and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
-section, a tree's a tree icon named for it (Model tree, Links), Position's a spline, Animation's a
+section, a tree's a tree icon named for it (Model tree, Links, Job), Position's a spline, Animation's a
 clapperboard, any other section's a page named for it. Preview has no file sidebar: every
 section stays mounted, out of sight, and a routine plays from Preview's playbar.
 
@@ -1053,6 +1054,71 @@ setting. Render's studio code and environment are prepared a moment after a mode
 entering Preview has less to do — on a GPU. On a software renderer (SwiftShader, llvmpipe:
 the viewport's `softwareRendering`), where that compile would hold the page for seconds unasked,
 nothing is prepared ahead: Preview prepares as it is entered, under its cover.
+
+## CAM results
+
+A GLB written by `cadgen cam plan` carries its job in the scene's extras (`cam`). The GLB
+renderer loads the CAM viewer (`renderers/glb/camView.jsx`, a chunk of its own that a plain
+GLB never fetches) and draws the toolpaths, the tool, the stock box and the part. The plan is
+3-axis milling and drilling (FreeCAD plans it, cadgen checks it): each setup's tool comes from
++Z or -Z. Its strip is a GLB's (Select, Pencil, Shapes, Measure, Clip), with no Explode: the part,
+the stock and the paths mean nothing pulled apart. What there is to read of the job is
+**Job**, a section of the [file sidebar](#the-file-sidebar-and-the-tool-stack): its tile a
+tree's, named Job, there whatever tool is in hand, and closed as the result opens, as every
+section is. The verdict is the status: Job has no findings card. Findings go to the agent,
+through the GLB's extras and the CLI's JSON; the section shows only the errors, as rows under
+the verdict.
+
+- **Verdict.** First, in the theme's status tones: green "Ready to cut · 42 min · 3 tools",
+  or red "2 to fix". Under it, what the job takes: its tool changes ("No tool changes",
+  "1 tool change", "3 tool changes", counted from the operations in program order) and the
+  controller its G-code is for
+  ("grbl controller"); then, muted, whether G-code was written and how many warnings went to
+  the agent; then each error in plain words, a row that chooses the operations it is about.
+- **Setups and operations.** Each setup is a parent row (its name, how many operations, its
+  time), its operations under it in the job's order: a swatch in the operation's own path
+  colour, its plain word, its tool and its time. An operation row's eye floats over its right
+  end as an assembly row's does, on hover and kept while it is on: **Hide** puts that
+  operation's paths away (feed moves and rapids), **Reveal** brings them back. Any number can be
+  hidden; hiding is not choosing.
+- **Tools.** Under a muted **Tools** heading, each tool once, in the order the program first
+  uses it: how the machine names it and what it is ("T1 6 mm flat"), then the spindle speed
+  and feed its operations run it at ("12,000 rpm · 1,440 mm/min"), a range where they differ.
+  Its hint adds the operations that use it.
+- **Show.** Under a muted **Show** heading, a row for each thing the file draws beyond its
+  surfaces, each only where the file has it, its words on hover and its eye as a layer's is
+  (on hover, kept while it is put away): **Toolpaths** (each operation in its own colour),
+  **Rapids** (moves between cuts, dashed), **Tool** (the tool on the path while Simulate
+  plays), **Stock** (the see-through block the part is cut from; put away by default) and
+  **Part**. These were Display's gates; Display is a mode and the grid, and a file's own
+  drawing is its section's. The rows and the hidden operations are the file's view (the
+  renderer's `cam` slice), kept with it as the camera and Display are.
+- **Safety.** At the section's foot, always shown in small muted type, the sentence every
+  result carries (`cam.safety`): what the plan is not, and what to check before cutting.
+- **Choosing.** Every setup, operation, tool and error row is a choice: a press chooses it, a
+  second press, Escape or its chip's X lets go. The choice isolates its operations (the rest
+  of the paths dimmed, not hidden) and is Quick Edit's chip beside any picked nodes, named for
+  its row ("Pocket", "Top setup", "T1 6 mm flat"), a face's glyph where it names faces (in
+  the operation's colour, for an operation), else the part's; its card the row's sentence, the
+  part and how many faces. What Quick Edit carries is the part the job was planned from, the
+  faces the operations name (the whole part where they name none), and the row's sentence. A
+  setup chooses its operations, a tool every operation that runs it, an error the operations
+  it is about. A plain pick of a node lets go of the choice, as it does of a measurement.
+
+**Simulate.** A result's routines are the file's, in the sidebar's **Animation** section:
+**Simulate** plays the whole program, and a job with more than one setup adds **Simulate
+<setup>** for each, showing that setup's paths alone. The program plays at one pace for every
+routine, the whole job in at most 30 seconds; the paths are drawn up to the moment and the tool
+rides them, standing along its setup's axis. With reduced motion (the system's `prefers-reduced-motion` or
+the host's `reducedMotion`) nothing sweeps: a routine steps one operation a second, each drawn
+whole with the tool at its end. While one plays, a small readout sits at the view's bottom
+centre (above Quick Edit's sheet on a phone): the operation under way, the program's time over
+its whole ("1:32 / 3:38") and how fast it plays ("12× speed", "Real time", or "One operation a
+second"). It takes no pointer and is not read out as it changes. There is no Time row in Job:
+the Animation section is the one way to move through the program. As every routine, Simulate
+is one motion: playing it puts Clip back, and Clip set lets go of it. Preview draws the part
+as the tools view had it, its stock as shown, with none of the job's drawing and no CAM
+routine: the paths are the tools view's alone.
 
 ## Keyboard
 

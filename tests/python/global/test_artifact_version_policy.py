@@ -32,8 +32,8 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     def test_the_glb_container_is_declared_once(self) -> None:
         # The container's magic, version and chunk types are the glTF 2.0 spec's, not ours
         # to bump, and two copies of an external constant is two places to get it wrong:
-        # the one GLB cadgen writes outside the engine (a robot primitive's mesh) is framed in
-        # cadgen._internal.primitive_mesh. cadgen.engine is the one exception: it is standalone
+        # the GLBs cadgen writes outside the engine (a robot primitive's mesh, a CAM result) are
+        # framed by cadgen._internal.primitive_mesh's. cadgen.engine is the one exception: it is standalone
         # by law (it imports nothing of cadgen outside itself) and writes its own GLB, so it
         # declares the container once more, in its GLB writer.
         package = ROOT / "packages/cadgen/src/cadgen"

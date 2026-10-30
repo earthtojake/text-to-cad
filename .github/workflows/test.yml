@@ -62,6 +62,7 @@ jobs:
     outputs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
+      cam: ${{ steps.select.outputs.cam }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -230,6 +231,46 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
+        shell: bash
+
+  # `cadgen cam plan` needs FreeCAD, which no other job installs: without it every plan in the
+  # cam suites skips. Linux only: FreeCAD plans the same paths everywhere.
+  cam:
+    name: cam
+    needs: changes
+    if: needs.changes.outputs.cam == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      # FreeCAD is installed as a person on Linux installs it: the release's AppImage, checked and
+      # unpacked, its freecadcmd named by CADGEN_FREECAD. A missing or broken one fails here by
+      # name rather than as every plan skipped.
+      - name: Install FreeCAD
+        run: |
+          mkdir -p "$RUNNER_TEMP/freecad" && cd "$RUNNER_TEMP/freecad"
+          curl -fsSL -o FreeCAD.AppImage \
+            https://github.com/FreeCAD/FreeCAD/releases/download/1.1.4/FreeCAD_1.1.4-Linux-x86_64-py311.AppImage
+          echo "f6dc6ba676e5ac96a565ebc8d657232f94c6158e85b4352141bd1a46f6b43434  FreeCAD.AppImage" | sha256sum -c -
+          chmod +x FreeCAD.AppImage
+          ./FreeCAD.AppImage --appimage-extract > /dev/null
+          rm FreeCAD.AppImage
+          echo "CADGEN_FREECAD=$RUNNER_TEMP/freecad/squashfs-root/usr/bin/freecadcmd" >> "$GITHUB_ENV"
+          squashfs-root/usr/bin/freecadcmd --version
+
+      - name: Run the cam tests
+        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/cam
         shell: bash
 
   core-js:
