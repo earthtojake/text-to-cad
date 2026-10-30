@@ -138,14 +138,20 @@ def environment() -> dict[str, str]:
 
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process, whose ``pid`` says whether the daemon that answers
-    is the one this process started (``_told_started``)."""
+    is the one this process started (``_told_started``). It runs the installation's Python: this
+    process's, or, in the base the installation made (``daemon.HOME``), the installation's. The
+    engine's folder goes first on its ``PYTHONPATH`` only where that Python's environment would not
+    find it -- a source tree --, so no process the daemon starts in the base inherits it."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
-    root = _daemon.engine_root()
+    home = _daemon.HOME
+    python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
+                            else (sys.executable, _daemon.engine_root(), sys.prefix))
     path = env.get("PYTHONPATH", "")
-    if root not in path.split(os.pathsep):
+    inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
+    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
         env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     _daemon.bytecode(env)
-    return subprocess.Popen([sys.executable, "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
+    return subprocess.Popen([python, "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=_working_folder(),
                             **_daemon.detached())
 

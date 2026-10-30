@@ -326,19 +326,21 @@ class ResolutionTests(Fixture):
                     self.assertNotIn("\x1b", said)
                     self.assertIn("names no cadgen version", said)
 
-    def test_run_execs_the_installations_python_and_anything_else_its_cadgen(self) -> None:
-        self.assertEqual(proxy.command(self.old, ["run", "model.py", "--force"]), [self.old["python"], "model.py", "--force"])
+    def test_every_verb_run_too_execs_the_installations_cadgen(self) -> None:
+        # ``cadgen run`` is the installation's verb: it runs the script in the project's environment.
+        self.assertEqual(proxy.command(self.old, ["run", "model.py", "--force"]),
+                         [self.old["cadgen"], "run", "model.py", "--force"])
         self.assertEqual(proxy.command(self.old, ["export", "a.xbf"]), [self.old["cadgen"], "export", "a.xbf"])
-        run = [self.old["python"], "model.py", "a"]
+        run = [self.old["cadgen"], "run", "model.py", "a"]
         with mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": str(self.root / "state"), "CADGEN_VERSION": ""}), \
                 mock.patch.object(proxy, "engines", return_value=[]), mock.patch.object(proxy.os, "execve") as execve, \
                 mock.patch("subprocess.call", return_value=3) as call:
             code = proxy.main(["+0.8.0", "run", "model.py", "a"])
-        if os.name == "nt":  # no exec on Windows: the installation's python is a child, its exit code the proxy's
+        if os.name == "nt":  # no exec on Windows: the installation's cadgen is a child, its exit code the proxy's
             call.assert_called_once_with(run, env=mock.ANY)
             self.assertEqual((code, execve.call_count), (3, 0))
         else:
-            execve.assert_called_once_with(self.old["python"], run, mock.ANY)
+            execve.assert_called_once_with(self.old["cadgen"], run, mock.ANY)
             self.assertEqual(call.call_count, 0)
 
     def test_a_development_installation_is_told_its_version_and_a_release_is_not(self) -> None:

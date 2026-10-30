@@ -481,16 +481,60 @@ class KernelProcessesUnavailable(RuntimeError):
 
 
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
-    """A spawn pool of ``workers`` kernel processes, or ``KernelProcessesUnavailable``. On Windows
-    the attribute read below is what imports ``multiprocessing.connection`` (and so
-    ``_multiprocessing``), which is why it sits inside the ``try``."""
+    """A spawn pool of ``workers`` kernel processes, or ``KernelProcessesUnavailable``. Its processes run
+    the engine's kernel environment (``daemon.kernel``: the base, made first when it is not): this
+    interpreter, or another environment's Python (``_spawn_in``). On Windows the attribute read below is
+    what imports ``multiprocessing.connection`` (and so ``_multiprocessing``), which is why it sits
+    inside the ``try``."""
+    from cadgen.engine.daemon import kernel
+
+    found = kernel()
+    assert found is not None  # made, or refused
     try:
         import multiprocessing
 
-        return concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn"), **options)
-    except (ImportError, OSError, NotImplementedError) as error:
+        context = multiprocessing.get_context("spawn")
+        if not found["own"]:
+            _spawn_in(context, found["python"], found["path"])
+        return concurrent.futures.ProcessPoolExecutor(workers, mp_context=context, **options)
+    except (ImportError, OSError, NotImplementedError, ValueError) as error:
+        where = "" if found["own"] else f" in {found['python']}"
         raise KernelProcessesUnavailable(
-            f"The CAD engine could not start its kernel processes ({type(error).__name__}: {error})") from error
+            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})") from error
+
+
+# The import path the pool's processes start with when they run another environment's Python than this
+# one (``_spawn_in``): that environment's own, as its marker records it.
+_SPAWN_PATH: list[str] | None = None
+_PREPARATION: Callable[[str], dict[str, Any]] | None = None
+
+
+def _spawn_in(context: Any, python: str, path: Any) -> None:
+    """The spawn pools' processes started with ``python``, another environment's (the base), importing
+    from that environment's ``path``. ``multiprocessing`` hands a spawned process its parent's import
+    path (``spawn.get_preparation_data``), which here is the engine's, not the kernel environment's: the
+    path it is handed is the environment's own. Both are the process's for every spawn pool: the
+    engine's spawned processes are all kernel processes."""
+    global _SPAWN_PATH, _PREPARATION
+    import multiprocessing.spawn as spawn
+
+    if not isinstance(path, list) or not all(isinstance(item, str) for item in path):
+        raise ValueError(f"the kernel environment of {python} names no import path: make it again")
+    context.set_executable(python)
+    _SPAWN_PATH = list(path)
+    if _PREPARATION is None:
+        _PREPARATION = spawn.get_preparation_data
+        spawn.get_preparation_data = _prepared
+
+
+def _prepared(name: str) -> dict[str, Any]:
+    """What a spawned process is handed (``multiprocessing.spawn.get_preparation_data``), its import path
+    the kernel environment's (``_SPAWN_PATH``)."""
+    assert _PREPARATION is not None
+    data = _PREPARATION(name)
+    if _SPAWN_PATH is not None:
+        data["sys_path"] = list(_SPAWN_PATH)
+    return data
 
 
 def _timed(shape: Any, parallel: bool) -> tuple[bytes, dict[int, str], float]:

@@ -28,8 +28,8 @@ import sys
 # Two-word names are intentional where a noun has several verbs. Dispatch joins
 # argv[0:2] before argv[0], so the two-word form wins where it exists.
 #
-# A model script builds by running it (``python <model>.py``, or ``cadgen run <model>.py`` with this
-# installation's python): no command takes its place.
+# A model script builds by running it (``cadgen run <model>.py``: the CAD kernel environment's
+# ``python <model>.py``): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # The engine (cadgen.engine): documents exported, drawn and served, its server.
     "export": ("cadgen.cli.export", "write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf"),
@@ -45,7 +45,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
-    "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
+    "run": ("cadgen.cli.run", "run a model script (or -m, -c) in the CAD kernel environment"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),
     # text-to-cad in every agent app here, and the cadgen command with it; again to update.
     # `uninstall` is the same module's uninstall path, with a parser of its own.

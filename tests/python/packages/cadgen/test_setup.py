@@ -354,6 +354,34 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(code, 0, out)
         self.assertIn(f"cadgen 99.0.0's engine (pid 9) on port {PORT}: newer than {RELEASE}, left alone", out)
 
+    def test_the_cad_kernel_environment_is_planned_and_made_once(self) -> None:
+        from cadgen._internal import base
+
+        core = base.Installation(**{**base.dataclasses.asdict(base.Installation.here()), "kernel": False})
+        made: dict = {}
+
+        def ensure(installation=None, *, make=True, told=None):
+            if make and "env" not in made:
+                told("making the CAD kernel environment, once: cadgen[kernel] in the cache folder")
+                made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
+            return made.get("env")
+
+        where = providers.shown(str(base.where(core)), self.machine)
+        with mock.patch.object(base.Installation, "here", return_value=core), \
+                mock.patch.object(base, "ensure", side_effect=ensure):
+            planned = self.run_setup("--dry-run")
+            first = self.run_setup()
+            again = self.run_setup()
+        self.assertEqual(planned[0], 0)
+        self.assertRegex(planned[1], rf"\n  CAD kernel\s+make\s+cadgen\[kernel\] {re.escape(core.release)} in "
+                                     rf"{re.escape(where)}, once\n")
+        self.assertNotIn("making", planned[1], "a dry run makes nothing")
+        self.assertEqual(first[0], 0, first[1])
+        self.assertIn("kernel   making the CAD kernel environment, once: cadgen[kernel] in the cache folder\n", first[1])
+        self.assertEqual(again[0], 0)
+        self.assertNotIn("making", again[1])
+        self.assertRegex(again[1], r"CAD kernel\s+leave\s+cadgen\[kernel\] ")
+
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'install'] else 0)\n")
         self.desktop_with({})

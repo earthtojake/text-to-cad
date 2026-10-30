@@ -26,11 +26,15 @@ the session it starts after its plugin is updated. In order, each step said as i
    the other apps go on; the exit status is then 1.
 4. **The cadgen command.** This installation registered and ``~/.local/bin/cadgen`` written, as
    ``cadgen doctor`` and the CAD app's server do it (``installations.setup``).
-5. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take
+5. **The CAD kernel.** The environment every build and the engine's own kernel processes start
+   from, ``cadgen[kernel]`` at this release (``cadgen._internal.base``), made now when it is
+   not, so the first build after an install waits on nothing: its line said while uv works, and a
+   step that fails when it cannot be made. An installation that carries the kernel itself makes none.
+6. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take
    back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
    which release (``skills``), since that CLI keeps no versions: the next run adds them again for an
    agent that got them from another release or has lost one of them.
-6. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
+7. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cadgen telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
    and changed nothing.
@@ -356,6 +360,38 @@ class Installer:
         return {**row, "action": "stop", "release": name, "pid": status.get("pid"), "record": record,
                 "subject": f"{who}, idle: stopped by its own `cadgen stop`"}
 
+    def _kernel(self) -> dict[str, Any] | None:
+        """The CAD kernel environment, the base every build and the engine's own kernel processes start
+        from (``cadgen._internal.base``): made by this run when it is not, so the first build
+        after an install waits on nothing. None for an installation that carries the kernel itself."""
+        from cadgen._internal import base
+
+        row: dict[str, Any] = {"app": "kernel", "label": "CAD kernel", "action": "leave"}
+        try:
+            installation = base.Installation.here()
+            if installation.kernel:
+                return None
+            found = base.ensure(installation, make=False)
+            folder = base.where(installation)
+        except (base.Refused, OSError) as error:
+            return {**row, "subject": f"unknown ({error})"}
+        shown = self.providers.shown(str(folder), self.machine)
+        if found is not None:
+            return {**row, "subject": f"cadgen[kernel] {installation.release} in {shown}"}
+        return {**row, "action": "make", "subject": f"cadgen[kernel] {installation.release} in {shown}, once"}
+
+    def _make_kernel(self) -> bool:
+        """The CAD kernel environment made (``_kernel``'s ``make``), each line uv's work says as it goes;
+        False, said in its line, when it cannot be."""
+        from cadgen._internal import base
+
+        try:
+            base.ensure(told=lambda line: self.say(f"kernel   {line}"))
+        except base.Refused as refused:
+            self.say(f"kernel   {refused}")
+            return False
+        return True
+
     def _stop_older(self, engine: dict[str, Any]) -> None:
         """An older, idle engine on the port stopped by its installation's own ``cadgen stop``."""
         ok, said = stop_installation(engine["record"])
@@ -489,7 +525,8 @@ class Installer:
             apps = providers.detect(self.machine)
             steps = providers.plan(apps, release=self.release, desktop_entry=self._desktop_entry(), only=self.only,
                                    machine=self.machine, skills=(self._receipt() or {}).get("skills"))
-            extra = [self._public(self._engine())]
+            kernel = self._kernel()
+            extra = [self._public(self._engine()), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -504,7 +541,8 @@ class Installer:
                                    machine=self.machine, skills=receipt.get("skills"))
             self.fed = providers.feeds(apps, self.only or providers.APPS)
             engine = self._engine()
-            extra = [self._public(engine)]
+            kernel = self._kernel()
+            extra = [self._public(engine), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             work = [step for step in steps if step.changes]
             if engine["action"] == "stop":
@@ -537,6 +575,9 @@ class Installer:
                                       "at": providers.stamp()}
                     receipt["skills"] = got
             registered = self._register()
+            made = kernel is not None and kernel["action"] == "make"
+            if made:
+                failed = not self._make_kernel() or failed
             launcher = registered["launcher"]
             if self.actions or self.stopped or registered["record_written"] or launcher["written"]:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
@@ -546,7 +587,7 @@ class Installer:
                 if launcher["written"]:
                     receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
                 self._keep(receipt)
-            else:
+            elif not made:
                 self.say(f"text-to-cad {self.release} is already up to date here.")
         verified = self._verify()
         self._telemetry_into(verified)

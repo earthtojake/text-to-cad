@@ -618,15 +618,20 @@ class RenderProcess:
     first snapshot; the version it holds and the parts whose meshes it was sent."""
 
     def __init__(self, path: Path, environment: dict[str, str]) -> None:
-        from cadgen.engine.daemon import engine_root, windowless
+        from cadgen.engine.daemon import engine_root, kernel, windowless
 
         env = dict(environment)
+        # The engine's kernel environment's Python (the base, made first when it is not); the daemon's own
+        # environment's imports the engine the daemon runs, its folder first on the path.
+        found = kernel()
+        assert found is not None  # made, or refused
+        python = found["python"]
         root = engine_root()
-        if root not in env.get("PYTHONPATH", "").split(os.pathsep):
+        if found["own"] and root not in env.get("PYTHONPATH", "").split(os.pathsep):
             env["PYTHONPATH"] = os.pathsep.join(item for item in (root, env.get("PYTHONPATH", "")) if item)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         self.path = Path(path)
-        self.process = subprocess.Popen([sys.executable, "-P", "-m", "cadgen.engine.render.service"],
+        self.process = subprocess.Popen([python, "-P", "-m", "cadgen.engine.render.service"],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                                         **windowless())
         self.lock = threading.Lock()

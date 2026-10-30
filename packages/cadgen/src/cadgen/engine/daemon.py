@@ -118,10 +118,23 @@ RETIRED_KEPT = 12
 # collection waits as long (``worker.COLLECT_IDLE``).
 MEASURE_IDLE = 0.5
 # What a worker's environment must share with a request's for the request to use it: what shapes
-# the import system of the interpreter it started (the interpreter itself is the daemon's). A run
-# adopts the rest of its caller's environment (``worker.adopt``), so a caller whose PATH changes
-# from one run to the next (an agent's shell) keeps its warm worker and its memo.
+# the import system of the interpreter it started (the interpreter itself is the engine's kernel
+# environment's, ``kernel``). A run adopts the rest of its caller's environment (``worker.adopt``), so a
+# caller whose PATH changes from one run to the next (an agent's shell) keeps its warm worker and its memo.
 RESTARTS = ("PYTHONPATH", "PYTHONHOME", "PYTHONSAFEPATH", "PYTHONNOUSERSITE", "PYTHONUSERBASE", "PYTHONPLATLIBDIR")
+# The installation this process belongs to when it runs in the base that installation made, as the
+# distribution reads it from the base's marker (``cadgen._internal.base.home``): ``{"executable",
+# "prefix", "root", ...}``; None in the installation's own environment. A process there -- a model's
+# script ``cadgen run`` runs, its worker -- reaches its installation's engine (``_tag``) and starts it
+# with its installation's Python (``client._start``).
+HOME: dict[str, Any] | None = None
+# The environment every process of the engine's that loads the kernel runs in -- a model's worker, the
+# standby, the documents worker, the meshing and reading pools, the render processes -- as the
+# distribution makes it (``cadgen._internal.base.kernel``: the installation's base): ``KERNEL(make)``
+# answers ``{"python", "path", "own"}``, or None when it is not made and ``make`` is false, and raises,
+# saying why, when it cannot be made. None (no distribution): this interpreter's own, a standalone
+# engine's (``kernel``).
+KERNEL: Callable[[bool], dict[str, Any] | None] | None = None
 # How the engine's processes treat bytecode (``bytecode``): one of the two, never a run's to change.
 BYTECODE = ("PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE")
 # The folder of the engine's bytecode in the cache folder the distribution names (``registry``):
@@ -207,6 +220,32 @@ def standby() -> bool:
     return os.environ.get("CADGEN_ENGINE_STANDBY", "").strip() != "0"
 
 
+def kernel(make: bool = True) -> dict[str, Any] | None:
+    """The environment the engine's kernel processes run in (``KERNEL``): ``{"python", "path", "own"}``
+    -- ``own``: this interpreter's environment, whose engine folder a process started there is given and
+    whose import path a spawned process is handed as it is -- or None when it is not made and ``make``
+    is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying why: no kernel process
+    starts without it, and nothing remembers the failure."""
+    if KERNEL is None:
+        return {"python": sys.executable, "path": None, "own": True}
+    try:
+        return KERNEL(make)
+    except Exception as error:  # noqa: BLE001 - the distribution's refusal, carried in one line
+        from cadgen.engine.serve import KernelProcessesUnavailable
+
+        raise KernelProcessesUnavailable(f"cadgen has no CAD kernel environment: {error}") from error
+
+
+def _home_prefix() -> str:
+    """The environment of the installation this process belongs to (``HOME``), else its own."""
+    return HOME["prefix"] if HOME else sys.prefix
+
+
+def _engine_folder() -> Path:
+    """The installation's engine, as its tag names it (``_tag``): this one's, or ``HOME``'s."""
+    return Path(HOME["root"]) / "cadgen" / "engine" if HOME else Path(__file__).resolve().parent
+
+
 def worker_cap() -> int:
     """The live workers' cap: ``CADGEN_ENGINE_WORKERS``, else the machine's cores."""
     try:
@@ -276,9 +315,11 @@ def _tag(protocol: int | None = None, *, versioned: bool = True) -> str:
     upgrade``, a development install made again) has a door, lock and port file of its own: its
     clients start its engine, never dial the old one still running there, and that start retires
     the old one when nothing uses it (``retire_older``). ``versioned=False``: the environment alone,
-    which keys what outlives an upgrade in it -- its engine record, the port it rolled to (``bind``)."""
-    prefix = os.path.normcase(os.path.realpath(sys.prefix))
-    material = (f"{prefix}|{sys.implementation.cache_tag}|{Path(__file__).resolve().parent}|"
+    which keys what outlives an upgrade in it -- its engine record, the port it rolled to (``bind``).
+    A process in the base its installation made (``HOME``) is that installation's: its tag is the
+    installation's, and so is the engine it reaches."""
+    prefix = os.path.normcase(os.path.realpath(_home_prefix()))
+    material = (f"{prefix}|{sys.implementation.cache_tag}|{_engine_folder()}|"
                 f"{PROTOCOL if protocol is None else protocol}" + (f"|{installation()}" if versioned else ""))
     return hashlib.sha256(material.encode()).hexdigest()[:12]
 
@@ -420,25 +461,33 @@ reads on a handle of its own; its standard input is the null device, so nothing 
 or reads ever touches the request pipe (on Windows a DLL's C runtime would wait on it).
 
 A ``standby`` worker loads the kernel before it says it is ready (``worker.load_kernel``) and
-builds no script until a build takes it (``adopt``)."""
+builds no script until a build takes it (``adopt``).
+
+Every worker runs the engine's kernel environment's Python (``kernel``, ``found`` when the caller has it
+already): the base, made first when it is not. One of the daemon's own environment imports the engine
+the daemon runs, its folder first on its path; one of the base imports the base's cadgen."""
 
     def __init__(self, script: str, environment: dict[str, str], cwd: str | None = None,
                  on_progress: Callable[["Worker", dict[str, Any]], None] = lambda _worker, _frame: None,
                  on_saved: Callable[["Worker", dict[str, Any], bytes], None] = lambda _worker, _header, _payload: None,
-                 standby: bool = False) -> None:
+                 standby: bool = False, found: dict[str, Any] | None = None) -> None:
         self.script = script
         self.environment = environment
         env = dict(environment)
-        path = env.get("PYTHONPATH", "")
-        root = engine_root()
-        if root not in path.split(os.pathsep):
-            env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
+        found = found or kernel()
+        assert found is not None  # made, or refused
+        self.python = found["python"]
+        if found["own"]:
+            path = env.get("PYTHONPATH", "")
+            root = engine_root()
+            if root not in path.split(os.pathsep):
+                env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
         # The daemon's bytecode, whoever's run starts the worker: it serves every later run too.
         own = {name: os.environ[name] for name in BYTECODE if name in os.environ}
         env = {name: value for name, value in env.items() if name not in BYTECODE}
         env.update(own or bytecode({}))
         env["CADGEN_ENGINE_WORKER"] = "1"
-        self.process = subprocess.Popen([sys.executable, "-X", "faulthandler", "-P", "-m", "cadgen.engine.worker",
+        self.process = subprocess.Popen([self.python, "-X", "faulthandler", "-P", "-m", "cadgen.engine.worker",
                                          *(["--standby"] if standby else [])], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                                         cwd=cwd or str(Path(script).parent), **windowless())
@@ -1153,7 +1202,7 @@ def installation() -> str:
 
 
 def registered() -> str | None:
-    """The version this environment (``sys.prefix``) is registered as in the user's state folder
+    """The version this environment (``sys.prefix``, or ``HOME``'s) is registered as in the user's state folder
     (``installations/<version>.json``, the distribution's records: ``cadgen._internal.installations``),
     when one names its release: the one registered last. None with no state folder, or no such record
     -- and for a record of another release, left from before an upgrade into this environment
@@ -1164,7 +1213,7 @@ def registered() -> str | None:
     held = registry.current()
     if held is None:
         return None
-    return _registered(str(held.state.root), os.path.normcase(os.path.realpath(sys.prefix)), version())
+    return _registered(str(held.state.root), os.path.normcase(os.path.realpath(_home_prefix())), version())
 
 
 @functools.cache
@@ -1681,7 +1730,9 @@ class Daemon:
         installation, the operating system's first look at its native libraries (macOS checks each
         once: 43 s measured on a new uvx environment, against 2.5 s loaded again), which the standby
         pays while nobody waits. Started in the environment of the client that started the daemon
-        (``environment``); each standby after it in that of the build that took the last one. And
+        (``environment``), in the engine's kernel environment, the base, once that is made -- a start
+        never makes it, so it never waits on, or asks, the network (``_spare``) --; each standby after
+        it in that of the build that took the last one. And
         the bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in
         the background (``prune_bytecode``). With ``CADGEN_ENGINE_STANDBY=0`` (``standby``) the pool
         is given no standby to start: none stands by, and none replaces one."""
@@ -1706,9 +1757,14 @@ class Daemon:
         return env
 
     def _spare(self, environment: dict[str, str]) -> Worker:
-        """A standby (``Pool.stand``): a worker of no script yet, standing in the daemon's folder."""
+        """A standby (``Pool.stand``): a worker of no script yet, standing in the daemon's folder, in the
+        engine's kernel environment as it is: none while the base is not made, for a standby never
+        makes it (the build that needs a worker does)."""
+        found = kernel(make=False)
+        if found is None:
+            raise WorkerGone("no standby: the CAD kernel environment is not made yet")
         return Worker(STANDBY, environment, cwd=os.getcwd(), on_progress=self.progressed,
-                      on_saved=self.models.cache.saved, standby=True)
+                      on_saved=self.models.cache.saved, standby=True, found=found)
 
     def hold(self, reader: Any, send: Callable[[dict[str, Any]], None], host: Any = None, holder: Any = None) -> None:
         """A hold on the engine (``{"op": "hold", "host": ..., "holder": ...}``): answered, then kept until
@@ -2035,6 +2091,11 @@ class Daemon:
                             self._built(worker, failed, verb=True)
                         send(failed)
                         return
+                except RuntimeError as error:
+                    if not _no_kernel(error):
+                        raise
+                    send({"failed": str(error)})  # no kernel environment to start the worker in: its line
+                    return
                 finally:
                     if worker is not None:
                         self.release(worker)
@@ -2240,6 +2301,11 @@ class Daemon:
                                 self._built(worker, failed)
                             send(failed)
                             return
+                    except RuntimeError as error:
+                        if not _no_kernel(error):
+                            raise
+                        send({"failed": str(error)})  # no kernel environment to start the worker in: its line
+                        return
                     finally:
                         if worker is not None:
                             self.release(worker)
@@ -2418,6 +2484,14 @@ class Daemon:
             self.renders.stop()
         if self.server is not None:
             self.server.stop()
+
+
+def _no_kernel(error: BaseException) -> bool:
+    """Whether ``error`` is the engine having no kernel environment to start a process in
+    (``serve.KernelProcessesUnavailable``): a request's answer, in its one line."""
+    from cadgen.engine.serve import KernelProcessesUnavailable
+
+    return isinstance(error, KernelProcessesUnavailable)
 
 
 # How long a connection to the Windows loopback port has to show its token: anyone on the machine can

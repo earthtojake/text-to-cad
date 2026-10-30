@@ -16,23 +16,27 @@ proxy (``installations.prune_legacy``) and those leftovers, but any written in t
 a line for each kind; ``--all-versions`` with it removes 0.7's however recently written. Nothing is
 removed without ``--prune``. Then it starts the engine
 when none runs (``cadgen.engine.client``): in a sandbox that cannot start one it says so in its usual
-line. ``--no-server`` does all of it but start the engine, saying whether one runs: a CI job's
-smoke check, which must leave no engine behind. Run pointed at a skill (its directory or SKILL.md), it also says whether this is the cadgen the
+line. ``--no-server`` does all of it but start the engine and make the CAD kernel environment, saying
+whether each is there: a CI job's smoke check, which must leave no engine behind. Run pointed at a skill (its directory or SKILL.md), it also says whether this is the cadgen the
 skill's docs were written against: the version its install command pins.
 
-It also proves the CAD kernel loads. ``OCP`` is imported in a fresh interpreter
-(never in this one, so the report itself stays stdlib-only and fast to reach),
-and a refused load is named for what it is: on Windows 11 that is Smart App
+It makes the CAD kernel environment, the base every build and the engine's own kernel
+processes start from (``cadgen._internal.base``: ``cadgen[kernel]`` at this release),
+when it is not made -- an installation that carries the kernel itself is its own -- saying what uv
+does as it works, so the first build after an install waits on nothing; ``--no-server`` says only
+whether it is made. Then it proves the CAD kernel loads there. ``OCP`` is imported in a fresh
+interpreter of that environment (never in this one, so the report itself stays stdlib-only and
+fast to reach), and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
 says (``cadgen._internal.kernel_load_hint``). And it says where the engine's server,
 where every build runs, keeps its door, and whether it was running or was started.
 
 Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
 3 = pin mismatch; 4 = the kernel is installed but cannot be loaded (the report
-says why when it can tell). A kernel that is simply not installed is reported,
-not failed: a no-deps install of the wheel (what the release workflow
-smoke-tests) has no OCP and is still a correct install, and the launch command
-is what brings the kernel.
+says why when it can tell). A kernel environment that is not made, or cannot be
+made here (no uv, no network), is reported, not failed: a no-deps install of the
+wheel (what the release workflow smoke-tests) is still a correct install, and the
+first build makes it.
 
 A mismatch has TWO fixes and they are not interchangeable, so the report picks
 one by asking the install what KIND it is (:func:`_editable_source`). An
@@ -153,8 +157,30 @@ KERNEL_MISSING = "missing"
 KERNEL_FAILED = "failed"
 
 
-def _probe_kernel() -> tuple[str, str]:
-    """Import OCP in a fresh interpreter: ``(state, detail)``.
+def _kernel_environment(make: bool) -> tuple[str | None, str]:
+    """The CAD kernel environment (``cadgen._internal.base``), made first when it is not and
+    ``make``, each line of uv's work said as it goes: ``(its Python, where it is)``, or ``(None, why there
+    is none)``."""
+    from cadgen._internal import base
+
+    def say(line: str) -> None:
+        sys.stdout.write(f"  kernel   {line}\n")
+        sys.stdout.flush()
+
+    try:
+        installation = base.Installation.here()
+        found = base.ensure(installation, make=make, told=say)
+        if found is None:
+            return None, f"{base.where(installation)}, not made: cadgen doctor, or the first build, makes it"
+    except base.Refused as refused:
+        return None, str(refused)
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return None, f"{type(error).__name__}: {error}"
+    return found.python, ("this installation carries it" if found.own else f"the CAD kernel environment, {found.prefix}")
+
+
+def _probe_kernel(python: str | None = None) -> tuple[str, str]:
+    """Import OCP in a fresh interpreter (``python``'s, else this one's): ``(state, detail)``.
 
     ``state`` is ``KERNEL_OK`` (``detail`` is the module's path),
     ``KERNEL_MISSING`` (no OCP installed: ``ModuleNotFoundError``), or
@@ -172,7 +198,7 @@ def _probe_kernel() -> tuple[str, str]:
         # ``-P``, as every child cadgen starts: the kernel the installation imports, never a
         # module of that name in the folder the command was run from.
         result = subprocess.run(
-            [sys.executable, "-P", "-c", "import OCP; print(OCP.__file__)"],
+            [python or sys.executable, "-P", "-c", "import OCP; print(OCP.__file__)"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -376,7 +402,7 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     parser.add_argument(
         "--no-server",
         action="store_true",
-        help="Do everything but start the engine: say only whether one is running.",
+        help="Do everything but start the engine and make the CAD kernel environment: say only whether each is there.",
     )
     args = parser.parse_args(argv)
     if args.all_versions and not args.prune:
@@ -417,31 +443,34 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     # What --prune would remove: nothing is removed without it.
     for line in _report_leftovers():
         sys.stdout.write(f"  {line}\n")
+
+    from cadgen._internal.kernel_load_hint import kernel_load_hint
+
+    # The CAD kernel environment, made here when it is not (but with --no-server), and its kernel loaded
+    # there, before the engine starts: an engine that finds it made starts its standby there, which
+    # loads the kernel while nobody waits.
+    python, where = _kernel_environment(make=not args.no_server)
+    kernel_state, detail = _probe_kernel(python) if python is not None else (KERNEL_MISSING, where)
+    kernel_loaded = kernel_state != KERNEL_FAILED
+    status = 0 if kernel_loaded else 4
+    if kernel_state == KERNEL_OK:
+        sys.stdout.write(f"  kernel   OK — OCP at {detail} ({where})\n")
+    elif python is None:
+        # Not a failure: the first build makes it, and a wheel installed --no-deps (the release smoke
+        # test) is still a correct install.
+        sys.stdout.write(f"  kernel   not made — {detail}\n")
+    elif kernel_state == KERNEL_MISSING:
+        sys.stdout.write(f"  kernel   not installed — OCP is absent from {python} ({where})\n")
+    else:
+        sys.stderr.write(f"  kernel   FAILED — {detail}\n")
+        for hint in kernel_load_hint(detail) or ():
+            sys.stderr.write(f"           {hint}\n")
     # One per installation: the same door means the same warm daemon. Started here when none runs.
     sys.stdout.write(f"  server   {_server(start=not args.no_server)}\n")
     sharing = _sharing()
     if sharing:
         # Whether CAD's apps send usage stats, as `cadgen telemetry` says it.
         sys.stdout.write(f"  sharing  {sharing}\n")
-
-    from cadgen._internal.kernel_load_hint import kernel_load_hint
-
-    kernel_state, detail = _probe_kernel()
-    kernel_loaded = kernel_state != KERNEL_FAILED
-    status = 0 if kernel_loaded else 4
-    if kernel_state == KERNEL_OK:
-        sys.stdout.write(f"  kernel   OK — OCP at {detail}\n")
-    elif kernel_state == KERNEL_MISSING:
-        # Not a failure: the launch command brings the kernel, and a wheel
-        # installed --no-deps (the release smoke test) legitimately has none.
-        sys.stdout.write(
-            "  kernel   not installed — OCP is absent from this interpreter "
-            f"(run cadgen as the skills do, {launch_command()}, and it is there)\n"
-        )
-    else:
-        sys.stderr.write(f"  kernel   FAILED — {detail}\n")
-        for hint in kernel_load_hint(detail) or ():
-            sys.stderr.write(f"           {hint}\n")
 
     skill = _resolve_skill(args.skill)
     if skill is None:

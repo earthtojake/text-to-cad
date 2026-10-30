@@ -5,6 +5,9 @@ launcher when the engine's client/daemon modules are imported; model workers loa
 It also says where the user's state folder is, which the engine's registry of documents lives
 in (``cadgen.engine.registry.FACTORY``: the state directory, ``cadgen.viewer.recents.state_dir``),
 and the cache folder its documents' bytes are cached in (``cadgen.viewer.recents.cache_dir``).
+And it makes the environment the engine's kernel processes run in (``cadgen.engine.daemon.KERNEL``:
+the installation's base, ``cadgen._internal.base``), and tells a process that runs in a base an
+installation made which installation that is (``cadgen.engine.daemon.HOME``).
 """
 from __future__ import annotations
 
@@ -64,6 +67,13 @@ def shell(environ=None) -> str | None:
     return None
 
 
+def kernel(make):
+    """The environment the engine's kernel processes run in (``cadgen._internal.base.kernel``)."""
+    from cadgen._internal.base import kernel as made
+
+    return made(make)
+
+
 def _attach(module):
     if module.__name__ == "cadgen.engine.client":
         module.DAEMON_MODULE = "cadgen._internal.engine_daemon"
@@ -72,6 +82,12 @@ def _attach(module):
         module.FACTORY = registry
     else:
         module.HTTP_FACTORY = http_factory
+        # The base the engine's kernel processes run in, and, in a base an installation made, that
+        # installation: its engine is this process's.
+        from cadgen._internal.base import home
+
+        module.KERNEL = kernel
+        module.HOME = home()
 
 
 class _Loader:

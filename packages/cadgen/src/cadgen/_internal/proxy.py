@@ -17,10 +17,11 @@ options -- is refused without building a command of it. The engines are found by
 the engine folder, each asked its ``status`` at once and waited for ``ASK_SECONDS`` at most:
 only (c) and (d) ask.
 
-Then ``cadgen [+V] run ARGS`` runs that installation's ``python ARGS`` (a model script, ``-m``,
-``-c``), and anything else its ``cadgen`` console script with the arguments: by ``exec``, so the
-proxy adds no process and no output of its own -- or, when the installation chosen is the one this
-interpreter is (the usual case: one installation), as its console script would, in this process.
+Then it runs that installation's ``cadgen`` console script with the arguments -- ``cadgen run ARGS``
+too, which runs ``python ARGS`` in the project's environment the installation makes
+(``cadgen.cli.run``) --: by ``exec``, so the proxy adds no process and no output of its own -- or, when
+the installation chosen is the one this interpreter is (the usual case: one installation), as its
+console script would, in this process.
 A development or source registration cannot know the version it is registered as (it reports its
 release's), so it runs with ``CADGEN_INSTALLATION_VERSION`` set to its record's
 (``installations.named``): its ``doctor``, its records and its engine name it rightly, and the
@@ -147,9 +148,7 @@ def engines() -> list[dict]:
 
 
 def command(record: dict, args: list[str]) -> list[str]:
-    """What runs: the installation's python for ``run``, else its console script."""
-    if args[:1] == ["run"]:
-        return [record["python"], *args[1:]]
+    """What runs: the installation's console script."""
     return [record["cadgen"], *args]
 
 

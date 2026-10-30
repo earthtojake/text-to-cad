@@ -20,8 +20,10 @@ skills carry the same strings, stamped by the release and held to these by a rep
 
 from __future__ import annotations
 
-# The one Python line cadgen runs on: the installation uvx makes runs it, so the engine does. The
-# plugin's server configs, the install scripts and the skills' setup pages carry the same line as text.
+# The one Python line cadgen runs on: the installation uvx makes runs it, so the engine does, and the
+# environment every model and kernel process runs in (``base``) is made with the engine's own
+# interpreter. The plugin's server configs, the install scripts and the skills' setup pages carry the
+# same line as text.
 PYTHON = "3.14"
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")
 

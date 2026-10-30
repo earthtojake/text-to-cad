@@ -1,0 +1,449 @@
+"""The base: the one environment models and the engine's kernel processes run in.
+
+The ``cadgen`` wheel's required dependencies are the core -- the engine's server, the ``cadgen``
+command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
+its ``kernel`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
+itself: the engine makes one environment per installation, the base, and every process that loads
+the kernel starts from it -- the script ``cadgen run`` runs, its worker, and the engine's own kernel
+processes (the standby, the documents worker, the meshing and reading pools, the render processes:
+``kernel``, which the engine is handed as ``cadgen.engine.daemon.KERNEL``).
+
+- **What it is**: ``cadgen[kernel]`` at the installation's own release -- or the source tree, or the
+  wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
+  Python (the line ``cadgen._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
+  base are one Python. uv makes it at ``base/<key>`` in the cache folder, its files hard links into
+  uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
+  extra: ``pip install 'cadgen[kernel]'``, a checkout's development environment) is its own base, and
+  none is made.
+- **The key** digests the installation (its environment, the version it runs as, its release and
+  where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
+  own, from uv's cache, and nothing is made twice.
+- **The marker**, ``cadgen-env.json``, written last, makes it complete: a later use reads the marker
+  and resolves nothing. It names the installation the base belongs to (``home``), so a process
+  running there reaches that installation's engine and starts it with that installation's Python, and
+  it records the base's own import path, which the engine's spawned kernel processes start with.
+- **One maker**: a lock beside it, so a process that finds another making it waits for it.
+- **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
+  online only for what the cache does not hold, said in a line before it starts.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import functools
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+__all__ = ["BASE", "Environment", "Installation", "MARKER", "Refused", "SCHEMA", "complete", "ensure", "failure",
+           "find_uv", "home", "interpreter", "kernel", "where"]
+
+# The bases' folder in the cache folder, and the marker that makes one complete, written last.
+BASE = "base"
+MARKER = "cadgen-env.json"
+SCHEMA = "cadgen env/2"
+# The modules whose presence makes an environment carry the CAD kernel.
+KERNEL_MODULES = ("OCP", "build123d")
+# How the base's installed files are made from uv's cache: hard links, as uv makes them on Linux and
+# Windows anyway. On macOS uv clones them, new files each, and the system looks at each native library
+# a process first loads once per file: a new environment's first kernel load measured 44 s with clones,
+# against 32 s for the first environment of hard links and 7.6 s for each one after it (one-box model's
+# imports, OCP 8.0, Apple silicon). Nothing writes into an environment's installed files.
+LINK = "hardlink"
+# The waits between the tries at removing an environment on Windows, where a scanner reading a file just
+# written refuses its removal for a moment (``_remove``): the test suite's cleanup ladder's first six.
+REMOVE_DELAYS = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6)
+# What uv says when it cannot reach an index or a download: the network, not the installation.
+NETWORK = re.compile(r"error sending request|network was disabled|dns error|tcp connect error|failed to lookup address"
+                     r"|Connection refused|Network is unreachable|timed out|Could not connect", re.I)
+# What uv says when the system refuses it a file it writes (its cache, the environment): a sandbox's.
+DENIED = re.compile(r"Operation not permitted|Permission denied|Access is denied|os error (?:1|13)\)")
+WHAT = "the CAD kernel environment"
+
+
+class Refused(Exception):
+    """Why the base cannot be made: one line."""
+
+
+# --- the installation ------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Installation:
+    """The installation whose engine the base serves: what it installs and belongs to."""
+
+    release: str  # cadgen's release, as its metadata says it
+    name: str  # the version it runs as (``cadgen.engine.daemon.installation``)
+    python: str  # its Python's version, ``3.14.0``
+    executable: str  # its Python, as its environment names it (never resolved: that reaches the base interpreter)
+    prefix: str  # its environment
+    root: str  # the folder its cadgen is imported from
+    source: str | None  # its source tree, or the wheel it was installed from (a URL); None: its release on the index
+    arch: str
+    kernel: bool  # whether its own environment carries the kernel: then it is its own base
+
+    @classmethod
+    def here(cls) -> "Installation":
+        """This process's installation: the one the environment it runs in belongs to (``home``), else
+        its own environment's."""
+        found = home()
+        if found is not None:
+            try:
+                return cls(**{name.name: found[name.name] for name in dataclasses.fields(cls)})
+            except (KeyError, TypeError):
+                pass
+        return _own()
+
+    def requirement(self) -> list[str]:
+        """What installs this installation's cadgen with its kernel: its source tree editable, the wheel it
+        was installed from, or its release."""
+        if self.source is None:
+            return [f"cadgen[kernel]=={self.release}"]
+        if os.path.isdir(self.source):
+            return ["-e", f"{self.source}[kernel]"]
+        return [f"cadgen[kernel] @ {self.source}"]
+
+
+@functools.cache
+def _own() -> Installation:
+    """This environment's installation, read once a process."""
+    import cadgen
+    from cadgen.engine import daemon
+    from cadgen.engine.previous import version
+
+    package = Path(cadgen.__file__).resolve().parent
+    prefix = os.path.abspath(sys.prefix)
+    return Installation(release=version(), name=daemon.installation(), python=platform.python_version(),
+                        executable=os.path.abspath(sys.executable), prefix=prefix, root=str(package.parent),
+                        source=_source(package, prefix), arch=platform.machine(), kernel=_carries_kernel())
+
+
+def _carries_kernel() -> bool:
+    """Whether this environment has the kernel installed (its modules found, none of them loaded)."""
+    import importlib.util
+
+    try:
+        return all(importlib.util.find_spec(name) is not None for name in KERNEL_MODULES)
+    except (ImportError, ValueError):
+        return False
+
+
+def _source(package: Path, prefix: str) -> str | None:
+    """Where this cadgen installs from: the source tree it is imported from when that lies outside its
+    environment (an editable install, or a path on ``PYTHONPATH``), else the archive it was installed from
+    (``direct_url.json``, PEP 610: a wheel's file, a URL), else None: its release, from the index."""
+    here = os.path.normcase(os.path.realpath(package))
+    inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
+    if not here.startswith(inside):
+        tree = package.parent.parent
+        return str(tree) if (tree / "pyproject.toml").is_file() else None
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        recorded = json.loads(distribution("cadgen").read_text("direct_url.json") or "null")
+    except (PackageNotFoundError, OSError, ValueError):
+        return None
+    if isinstance(recorded, dict) and isinstance(recorded.get("archive_info"), dict) \
+            and isinstance(recorded.get("url"), str) and recorded["url"]:
+        return recorded["url"]
+    return None
+
+
+def home(prefix: str | None = None) -> dict[str, Any] | None:
+    """The installation the environment at ``prefix`` (this process's, ``sys.prefix``) belongs to, as its
+    marker names it -- ``executable``, ``prefix``, ``root`` and the rest of its ``Installation`` -- or None
+    for an environment this module did not make."""
+    try:
+        marker = json.loads((Path(prefix or sys.prefix) / MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    found = marker.get("installation") if isinstance(marker, dict) and marker.get("schema") == SCHEMA else None
+    if not isinstance(found, dict) or not all(isinstance(found.get(name), str) for name in ("executable", "prefix", "root")):
+        return None
+    return found
+
+
+# --- the base --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Environment:
+    """The base as a process is started in it: its Python, its folder, whether it is the installation's
+    own, and the import path its interpreter starts with (None for the installation's own: it is this
+    process's)."""
+
+    python: str
+    prefix: str
+    own: bool
+    path: tuple[str, ...] | None = None
+
+
+def interpreter(env: Path) -> Path:
+    """The environment's Python."""
+    return env / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def _inputs(installation: Installation) -> dict[str, Any]:
+    """What makes the base, which its key digests and its marker holds."""
+    return {"schema": SCHEMA, "installation": installation.name, "release": installation.release,
+            "prefix": os.path.normcase(os.path.realpath(installation.prefix)), "source": installation.source,
+            "python": installation.python, "arch": installation.arch}
+
+
+def where(installation: Installation | None = None) -> Path:
+    """The folder of the installation's base, made or not: ``base/<key>`` in the cache folder."""
+    from cadgen.viewer.recents import cache_dir
+
+    found = installation or Installation.here()
+    return cache_dir() / BASE / hashlib.sha256(json.dumps(_inputs(found), sort_keys=True).encode("utf-8")).hexdigest()[:16]
+
+
+def complete(env: Path) -> dict[str, Any] | None:
+    """The marker of the base at ``env`` when it is complete -- written last, of its key, and its Python
+    there -- else None."""
+    try:
+        marker = json.loads((env / MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name
+            and interpreter(env).exists()):
+        return marker
+    return None
+
+
+def _found(env: Path, marker: dict[str, Any]) -> Environment:
+    path = marker.get("path")
+    return Environment(str(interpreter(env)), str(env), False,
+                       tuple(path) if isinstance(path, list) and all(isinstance(item, str) for item in path) else None)
+
+
+def ensure(installation: Installation | None = None, *, make: bool = True,
+           told: Callable[[str], None] | None = None) -> Environment | None:
+    """The installation's base (see the module): the installation's own environment when it carries the
+    kernel; else ``base/<key>`` in the cache folder, made first when it is not complete and ``make``
+    (None when it is not, and ``make`` is false), each line of the making said to ``told``. ``Refused``
+    in one line when it cannot be made."""
+    installation = installation or Installation.here()
+    if installation.kernel:
+        return Environment(installation.executable, installation.prefix, True)
+    env = where(installation)
+    marker = complete(env)
+    if marker is not None:
+        return _found(env, marker)
+    if not make:
+        return None
+    return _found(env, _make(env, installation, told or _say))
+
+
+def kernel(make: bool = True) -> dict[str, Any] | None:
+    """The environment the engine's kernel processes run in, as the engine is handed it
+    (``cadgen.engine.daemon.KERNEL``): the base's Python, its import path and whether it is this
+    installation's own; None when it is not made and ``make`` is false. ``Refused`` when it cannot be."""
+    found = ensure(make=make, told=lambda _line: None)
+    if found is None:
+        return None
+    return {"python": found.python, "path": None if found.path is None else list(found.path), "own": found.own}
+
+
+# --- making it -------------------------------------------------------------------------------------
+
+
+def find_uv() -> str:
+    """uv: the one on ``PATH``, else the one cadgen's ``uv`` dependency carries."""
+    found = shutil.which("uv")
+    if found:
+        return found
+    try:
+        from uv import find_uv_bin
+
+        return find_uv_bin()
+    except (ImportError, FileNotFoundError):
+        pass
+    from cadgen.updates import command
+
+    raise Refused("cadgen makes its CAD kernel environment with uv, and finds none: cadgen depends on the uv "
+                  f"package, which carries it; install cadgen again: run `{command()}`")
+
+
+def commands(uv: str, env: Path, installation: Installation) -> list[list[str]]:
+    """The uv commands that make the base: a virtual environment of the installation's own Python, then
+    its cadgen with the kernel, the files hard links to uv's cache (``LINK``)."""
+    return [[uv, "venv", "--no-project", "--python", installation.executable, str(env)],
+            [uv, "pip", "install", "--python", str(interpreter(env)), "--link-mode", LINK, *installation.requirement()]]
+
+
+def _say(line: str) -> None:
+    print(f"cadgen: {line}", file=sys.stderr, flush=True)
+
+
+def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
+    """The base at ``env`` made (``commands``): what was there removed, uv's commands run, the import path
+    its Python starts with asked of it, and the marker written last. One process makes it while another
+    waits (a lock beside it). Its marker; ``Refused`` in one line when uv cannot make it (``failure``),
+    or a file of it cannot be removed or written (``_cannot``)."""
+    import contextlib
+
+    from cadgen._internal.file_lock import exclusive
+
+    def waiting() -> None:
+        told(f"waiting for another process that is making {WHAT}")
+
+    with contextlib.ExitStack() as held:
+        try:
+            env.parent.mkdir(parents=True, exist_ok=True)
+            held.enter_context(exclusive(env.parent / f"{env.name}.lock", waiting=waiting))
+        except OSError as error:
+            raise Refused(_cannot(f"the folder {env.parent}", error)) from None
+        marker = complete(env)
+        if marker is not None:
+            return marker  # made meanwhile, by the process this one waited for
+        _remove(env)
+        steps = commands(find_uv(), env, installation)
+        told(f"making {WHAT}, once: cadgen[kernel] {installation.release} on Python {installation.python}, in {env}")
+        started = time.monotonic()
+        venv, install = steps
+        done = _uv(venv, env.parent)
+        if done.returncode == 0:
+            done = _uv([*install, "--offline"], env.parent)
+            if done.returncode != 0:
+                # uv's cache did not hold all of it: from the network, once.
+                told("downloading the CAD kernel (about 220 MB) and what it needs, once")
+                done = _uv(install, env.parent)
+                if done.returncode != 0 and installation.source is None and _unlisted(done, installation):
+                    # uv reads an index page it cached (ten minutes, PyPI's): one from before the engine's
+                    # release was listed says there is none. Asked again, that page alone fetched anew.
+                    steps[1] = install = [*install, "--refresh-package", "cadgen"]
+                    done = _uv(install, env.parent)
+            step = install
+        else:
+            step = venv
+        if done.returncode != 0:
+            raise Refused(failure(step, done.stderr or done.stdout, installation))
+        path = _path(env)
+        from cadgen._internal.atomic_replace import write_bytes_atomic
+
+        marker = {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
+                  "installation": dataclasses.asdict(installation), "path": path, "commands": steps,
+                  "seconds": round(time.monotonic() - started, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        try:
+            write_bytes_atomic(env / MARKER, (json.dumps(marker, indent=1) + "\n").encode("utf-8"))
+        except OSError as error:
+            raise Refused(_cannot(str(env / MARKER), error)) from None
+    return marker
+
+
+def _path(env: Path) -> list[str]:
+    """The import path the base's Python starts with: what a process of the engine's pools, started in
+    it, imports from (``cadgen.engine.serve``'s spawn pools take it from the marker)."""
+    try:
+        done = subprocess.run([str(interpreter(env)), "-I", "-c", "import json, sys; print(json.dumps(sys.path))"],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=120)
+        found = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else None
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
+        raise Refused(f"{WHAT} made at {env} does not run: {error}") from None
+    if not isinstance(found, list) or not all(isinstance(item, str) for item in found):
+        said = (done.stderr or done.stdout).strip().splitlines()
+        raise Refused(f"{WHAT} made at {env} does not run: {said[-1] if said else 'it said nothing'}")
+    return found
+
+
+def _cannot(what: str, error: OSError) -> str:
+    """That ``what`` (a file or folder of the base) cannot be written, in one line: a denial as a
+    sandbox's, which this once outside it, or with its permission, makes."""
+    if isinstance(error, PermissionError):
+        return (f"the system denies cadgen {what} ({error.strerror or error}); a sandbox that forbids it does: "
+                "run this once outside it, or with its permission")
+    return f"cannot write {what}: {error.strerror or error}"
+
+
+def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
+    """A uv command run in the bases' folder, where no project's uv settings are read."""
+    try:
+        return subprocess.run(step, cwd=folder, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
+
+
+def _unlisted(done: subprocess.CompletedProcess, installation: Installation) -> bool:
+    """Whether uv found no ``cadgen==<release>`` of the engine's on its index."""
+    said = " ".join((done.stderr or done.stdout or "").split())
+    return any(f"no version of {name}=={installation.release}" in said for name in ("cadgen", "cadgen[kernel]"))
+
+
+def _remove(env: Path) -> None:
+    """What is at ``env`` removed, before the base is made there. On Windows a file another process reads
+    a moment (a scanner, an indexer) refuses its removal (``WinError 32``, ``5``): the removal goes on
+    after a wait (``REMOVE_DELAYS``), from where it stopped."""
+    for delay in (*REMOVE_DELAYS, None):
+        if not os.path.lexists(env):
+            return
+        try:
+            if env.is_dir() and not env.is_symlink():
+                shutil.rmtree(env)
+            else:
+                env.unlink()
+            return
+        except OSError as error:
+            if delay is None or getattr(error, "winerror", None) not in (5, 32):
+                if isinstance(error, PermissionError) and getattr(error, "winerror", None) is None:
+                    raise Refused(_cannot(f"{WHAT} at {env}", error)) from None
+                raise Refused(f"cannot remove {WHAT} at {env} to make it again: {error.strerror or error}") from None
+            time.sleep(delay)
+
+
+def _explained(said: str) -> str:
+    """uv's resolver explanation (the lines after ``╰─▶``), unwrapped into one line; else ''."""
+    lines = said.splitlines()
+    at = next((index for index, line in enumerate(lines) if "╰─▶" in line), None)
+    if at is None:
+        return ""
+    found = [lines[at].split("╰─▶", 1)[1].strip()]
+    for line in lines[at + 1:]:
+        if not line.strip() or line.lstrip().startswith("hint:"):
+            break
+        found.append(line.strip())
+    return " ".join(found)
+
+
+def _last(said: str) -> str:
+    """uv's error in one line: its ``error:`` line, and the last ``Caused by:`` beneath it or else its
+    hint; else its last line."""
+    lines = [line.strip() for line in said.splitlines() if line.strip()]
+    errors = [line for line in lines if line.startswith("error:")]
+    causes = [line.removeprefix("Caused by:").strip() for line in lines if line.startswith("Caused by:")]
+    hints = [line for line in lines if line.startswith("hint:")]
+    if errors:
+        words = errors[0].removeprefix("error:").strip()
+        return f"{words} ({causes[-1]})" if causes else f"{words} ({hints[0]})" if hints else words
+    return lines[-1] if lines else "uv said nothing"
+
+
+def failure(step: list[str], said: str, installation: Installation) -> str:
+    """Why uv could not make the base, in one line of cadgen's: a file the system denies it (a sandbox's);
+    the network it needs once; a Python it cannot use; a release no index it reads has; else uv's own
+    words."""
+    explained = _explained(said)
+    words = explained or _last(said)
+    if DENIED.search(said) and not explained:
+        return (f"the system denies uv what {WHAT} needs ({_last(said)}); a sandbox that forbids it does: run this "
+                "once outside it, or with its permission")
+    if NETWORK.search(said):
+        return f"{WHAT} needs the network once: {_last(said)}"
+    if step[1] == "venv":
+        return f"uv cannot make {WHAT} on Python {installation.python}: {words}"
+    release = installation.release
+    if installation.source is None and any(f"no version of {name}=={release}" in explained
+                                           for name in ("cadgen", "cadgen[kernel]")):
+        return f"cadgen {release}, the engine's, is on no package index uv reads: {explained}"
+    return f"uv could not make {WHAT}: {words}"

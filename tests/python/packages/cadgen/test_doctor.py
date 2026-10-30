@@ -264,17 +264,38 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("kernel   OK", out)
         self.assertIn("/site/OCP.pyd", out)
 
-    def test_a_missing_kernel_is_reported_and_is_not_a_failure(self) -> None:
-        # The release workflow installs the wheel --no-deps and runs doctor: no OCP
-        # there is a correct install, and the pin is what brings the kernel.
-        missing = "ModuleNotFoundError: No module named 'OCP'"
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_MISSING, missing)), \
-                TemporaryDirectory() as tmp:
+    def test_a_kernel_environment_not_made_is_reported_and_is_not_a_failure(self) -> None:
+        # The release workflow installs the wheel --no-deps and runs doctor: no kernel environment
+        # there (no uv, no network) is a correct install, and the first build makes it.
+        from cadgen._internal import base
+
+        refused = base.Refused("the CAD kernel environment needs the network once: dns error")
+        with mock.patch.object(base, "ensure", side_effect=refused), TemporaryDirectory() as tmp:
             code, out, err = _run([tmp])
         self.assertEqual(code, 0)
-        self.assertIn("kernel   not installed", out)
-        self.assertIn("uvx --no-config", out, "the launch command is what brings the kernel")
+        self.assertIn("  kernel   not made — the CAD kernel environment needs the network once: dns error\n", out)
         self.assertNotIn("FAILED", err)
+
+    def test_the_report_makes_the_kernel_environment_and_loads_the_kernel_there(self) -> None:
+        from cadgen._internal import base
+
+        made = base.Environment("/cache/base/k/bin/python", "/cache/base/k", False, ("/cache/base/k/site",))
+
+        def ensure(installation=None, *, make=True, told=None):
+            told("making the CAD kernel environment, once: cadgen[kernel] 9.9.9 on Python 3.14.0, in /cache/base/k")
+            return made
+
+        with mock.patch.object(base, "ensure", side_effect=ensure) as asked, TemporaryDirectory() as tmp:
+            code, out, _err = _run([tmp])
+            _code, quiet, _err = _run(["--no-server", tmp])
+        self.assertEqual(code, 0)
+        self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [True, False],
+                         "--no-server makes nothing: it says whether it is there")
+        self.assertIn("  kernel   making the CAD kernel environment, once: cadgen[kernel] 9.9.9 on Python 3.14.0, in "
+                      "/cache/base/k\n  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n",
+                      out)
+        doctor._probe_kernel.assert_called_with("/cache/base/k/bin/python")
+        self.assertIn("kernel   OK", quiet)
 
     def test_a_kernel_that_will_not_load_exits_4(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
