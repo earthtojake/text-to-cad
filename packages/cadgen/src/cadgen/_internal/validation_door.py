@@ -81,8 +81,8 @@ def display_path(path: Path) -> str:
 
 def resolved_target(target: Path, *, label: str) -> Path:
     """The absolute path of a validation target, or raise for a non-path."""
-    value = str(target or "").strip()
-    if not value:
+    value = str(target or "")
+    if not value.strip():
         raise ValueError(f"{label} target must be a non-empty path")
     path = Path(value).expanduser()
     path = path.resolve() if path.is_absolute() else (Path.cwd() / path).resolve()
