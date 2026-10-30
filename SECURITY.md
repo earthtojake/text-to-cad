@@ -71,7 +71,7 @@ can reach the port.
 
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
-per-session capability. The server delivers it in tool-result metadata, which
+capability, one for each host connection. The server delivers it in tool-result metadata, which
 MCP Apps hosts keep out of the model's context, and refuses a call without it
 before anything routes the request. Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.

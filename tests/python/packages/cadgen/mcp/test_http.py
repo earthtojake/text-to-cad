@@ -184,6 +184,9 @@ class HttpSessionsTest(unittest.TestCase):
                   'state': {'selection': ['part#f1']}, 'focused': True, 'app': token})
         self.assertEqual(self.tool(first, 'cad_view')['structuredContent']['views'][0]['selection'], ['part#f1'])
         self.assertEqual(self.tool(second, 'cad_view')['structuredContent']['views'], [])
+        # Each host connection has its own capability: another's view reaches nothing here.
+        self.assertNotEqual(self.tool(second, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
+        self.assertTrue(self.tool(second, 'cad_sync', {'view': 'one', 'surface': 'agent', 'app': token})['isError'])
         reply = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/__cad/server', 'headers': {'x-cadgen-app': token}})['structuredContent']
         self.assertEqual(reply['status'], 200)
         self.assertEqual(json.loads(base64.b64decode(reply['body']))['pid'], info['pid'])
@@ -261,14 +264,25 @@ class HttpSessionsTest(unittest.TestCase):
     def test_shim_opens_a_new_session_when_the_engine_session_ends(self):
         # A host initializes once: an expired session or a restarted engine must not leave the
         # server answering every later call with an error until the host reconnects it.
+        # Nor may it leave the views the host still shows refused as from before a restart (#729): each new
+        # session takes the capability their launch gave them, and they sync on through it.
         proxy = self.proxy()
         proxy.notify('notifications/initialized', {})
         first = proxy.session
+        token = self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken']
+
+        def view_syncs():
+            synced = self.tool(proxy, 'cad_sync', {'view': 'kept', 'surface': 'agent', 'model': str(self.model), 'app': token})
+            self.assertFalse(synced.get('isError'), synced)
+            self.assertEqual([view['view'] for view in self.tool(proxy, 'cad_view')['structuredContent']['views']], ['kept'])
+
+        view_syncs()
         self.assertEqual(EngineClient().call('DELETE', '/mcp', headers={'Mcp-Session-Id': first})[0], 200)
         views = self.tool(proxy, 'cad_view')
         self.assertEqual(views['structuredContent'], {'views': []})
         second = proxy.session
         self.assertNotEqual(second, first)
+        view_syncs()
         from cadgen.engine.api import stop
         pid = request({'op': 'status'})['pid']
         self.assertTrue(stop())
@@ -276,6 +290,8 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertNotEqual(proxy.session, second)
         self.assertNotEqual(request({'op': 'status'})['pid'], pid)
         self.assertIn('cad_open', [tool['name'] for tool in self.call(proxy, 'tools/list')['tools']])
+        view_syncs()
+        self.assertEqual(self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
 
     def test_stdio_shim_serves_resource_and_exits_without_stopping_engine(self):
         process = subprocess.Popen([sys.executable, '-m', 'cadgen.cli', 'mcp'],

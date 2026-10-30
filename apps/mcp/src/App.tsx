@@ -214,8 +214,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
   const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
-  // The server stopped answering (its process has gone): the view keeps its model, and says so.
-  const [lost, setLost] = useState(false);
+  // The server stopped answering (its process has gone), or answers refusing this view (what it said):
+  // the view keeps its model, and says so.
+  const [lost, setLost] = useState<boolean | string>(false);
   const shown = useRef<string | null>(null);
   // What the view shows, for its page in the browser: the launch's until the view says.
   const [showingModel, setShowingModel] = useState<string | null>(() => initial.model ? normalizePath(initial.model) : null);
@@ -235,7 +236,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     },
     capture: async () => fitCapture(await captureSettled(live, () => asked.current ?? shown.current)),
     state: () => describeView(live.current(), shown.current),
-    connection: connected => setLost(!connected),
+    connection: (connected, refused) => setLost(connected ? false : refused || true),
   }), [server, view, surface, alone, live]);
   const reporter = useMemo<ViewReporter>(() => ({
     showing(model) {
@@ -314,7 +315,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
-    overlay={lost ? <Banner message={lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
+    overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       update={!updateNotice ? null : !alone ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)} onLink={openLink} />

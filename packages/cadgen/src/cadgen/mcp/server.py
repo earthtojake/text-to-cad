@@ -263,7 +263,8 @@ def local_path(value: str, *, windows: bool = os.name == "nt") -> str:
 class Server:
     def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
-                 in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None) -> None:
+                 in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
+                 app_token: str | None = None) -> None:
         self.page = page or AppPage()
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
@@ -303,7 +304,9 @@ class Server:
         self._asked_lock = threading.Lock()
         self._order = itertools.count(1)
         self._analytics = analytics
-        self._app_token = secrets.token_urlsafe(32)
+        # The capability a page's launch delivers it (``_call``): the stdio peer's for its host where it
+        # sends one, so it outlives this session (``shim.Proxy.app``), else this session's own.
+        self._app_token = app_token or secrets.token_urlsafe(32)
         self._update_told = False
         # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab,
         # and a model cad_show sent it before it opened, shown once it does.

@@ -98,7 +98,11 @@ class Sessions:
             if 'failed' in answer:
                 raise ViewerUnavailable(answer['failed'])
             return answer['url']
-        server = Server(page=page, tunnel=ViewerTunnel(app=app), analytics=self.engine.analytics,
+        # The capability the stdio peer holds for its host (``shim.Proxy.app``): a session opened again
+        # under the same host gives the views it already shows the one they carry.
+        token = options.get('app')
+        token = token if isinstance(token, str) and 32 <= len(token) <= 256 else None
+        server = Server(page=page, tunnel=ViewerTunnel(app=app), analytics=self.engine.analytics, app_token=token,
                         sidebar_views=SidebarViews(self.sidebar), viewer_url=viewer_url,
                         sync_document=self.engine.server.sync, warm=self.engine.server.warm,
                         in_browser=self.engine.server.in_page, browser_opened=self.engine.server.page_opening,
