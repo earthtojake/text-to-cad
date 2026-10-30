@@ -37,27 +37,12 @@ Use the corresponding robot-description skill for URDF, SRDF or SDF.
 Run cadgen through the `cadgen` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.3` (`~/.local/bin/cadgen +0.8.3` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.3 run`
+- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
+- `python` below means `cadgen +0.8.4 run`
 
-If `cadgen` is not on your PATH, or it says 0.8.3 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
-
-`cadgen doctor <skill-dir>` reports the installation in use, whether it is the one
-this skill pins, whether the CAD kernel loads, and whether the engine is running, starting
-it when none is. Each
-command's `--help` lists its flags. The first launch downloads cadgen and may outlast a
-host's server start timeout (Claude Code: 30 s by default, raised by setting `MCP_TIMEOUT` in
-milliseconds; Codex: the plugin asks for 300 s); a restart resumes the download.
-
-A project venv can put its own `cadgen` ahead of the launcher on PATH, even when
-`~/.local/bin` is on PATH. Run `~/.local/bin/cadgen +0.8.3 doctor` to diagnose that
-case and use that full launcher path for commands until PATH is corrected.
+For first-time setup or an update, a missing `cadgen` command, a release it says is not
+installed, an engine that is not running, or an installation or kernel load error, read
+[Setup and troubleshooting](references/setup.md).
 
 One engine serves the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cadgen status` lists its workers
@@ -65,9 +50,8 @@ and the documents it holds; `cadgen stop` stops it, and any older one left runni
 A build cut off by the shell's time limit keeps running in the engine; run the same
 command again and it waits for that build and replays it (`cadgen status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
-background. A refused folder is another case: if a command ends with 'the system denies
-cadgen's local engine', this shell's sandbox forbids the engine's folder itself: rerun it
-with the sandbox's permission (in Codex, escalated permissions) rather than retrying.
+background. A command that ends with 'the system denies cadgen's local engine' is
+another case: [Setup and troubleshooting](references/setup.md#diagnose-a-failure).
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
