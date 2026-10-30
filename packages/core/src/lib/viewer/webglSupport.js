@@ -26,6 +26,14 @@ export function isSoftwareWebGlRenderer(renderer) {
   return SOFTWARE_WEBGL_RENDERER_PATTERN.test(rendererName);
 }
 
+// The card shows an alert's `recovery` under its message, and files its `details` with a report: what
+// the renderer said, and the browser or app the view runs in (an agent app's names it), which is most
+// of what tells one WebGL failure from another.
+function runtimeDetails(message) {
+  const agent = String(globalThis.navigator?.userAgent || "");
+  return [message, agent && `User agent: ${agent}`].filter(Boolean).join("\n");
+}
+
 export function buildRuntimeInitializationAlert(error) {
   const message = runtimeErrorMessage(error).trim();
 
@@ -34,9 +42,11 @@ export function buildRuntimeInitializationAlert(error) {
       severity: "error",
       blocking: true,
       summary: "WebGL unavailable",
-      title: "Browser WebGL is unavailable",
-      message: "CAD Viewer needs browser WebGL to render 3D models, but this browser could not create a WebGL context.",
-      resolution: "Enable hardware acceleration or software WebGL in the browser, update the graphics or Mesa drivers, then reload CAD Viewer. In Chrome, check chrome://gpu for the WebGL status."
+      title: "WebGL is unavailable",
+      message: "CAD Viewer needs WebGL to draw 3D models, but the browser or app it runs in could not create a WebGL context.",
+      // A Chromium browser or app whose GPU process crashed can keep WebGL off until it restarts.
+      recovery: "Quit and reopen the browser or app this view runs in: after a graphics crash, it can keep WebGL off until it restarts. If WebGL stays unavailable, turn on hardware acceleration or update the graphics drivers. In Chrome, chrome://gpu shows WebGL's status.",
+      details: runtimeDetails(message)
     };
   }
 
@@ -46,6 +56,7 @@ export function buildRuntimeInitializationAlert(error) {
     summary: "CAD Viewer startup failed",
     title: "CAD Viewer could not start",
     message: message || "The 3D renderer failed before CAD Viewer finished starting.",
-    resolution: "Reload CAD Viewer. If the problem persists, check the browser console for the renderer startup error."
+    recovery: "Reload or reopen CAD Viewer. If it fails again, report it with the details below.",
+    details: runtimeDetails(message)
   };
 }
