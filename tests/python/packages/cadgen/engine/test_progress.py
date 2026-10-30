@@ -428,10 +428,18 @@ class DaemonProgressTest(unittest.TestCase):
     def test_a_slow_build_s_frames_reach_status_in_order_and_its_report_holds_the_last(self) -> None:
         self.write()
         building = self.start()
+
+        def frame_named(name: str) -> dict | None:
+            if building.poll() is not None:
+                out, err = engine_daemon.communicate(building, self.env)
+                self.fail(f"build exited with {building.returncode} before the frame naming {name}\n"
+                          f"stdout:\n{out}\nstderr:\n{err}")
+            frame = self.busy()
+            return frame if frame and frame["detail"] == name else None
+
         seen = []
         for name, done in (("one", 0), ("two", 1), ("three", 2)):
-            frame = await_(lambda: (lambda f: f if f and f["detail"] == name else None)(self.busy()),
-                           f"the frame naming {name}")
+            frame = await_(lambda: frame_named(name), f"the frame naming {name}")
             seen.append((frame["stage"], frame["done"], frame["total"], frame["detail"]))
             if name == "two":
                 text = self.cli("status").stdout
