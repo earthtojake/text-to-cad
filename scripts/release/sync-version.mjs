@@ -26,8 +26,9 @@ const tomlTargets = [
 
 // Every skill that runs cadgen names the version the server's installation registers as
 // (`cadgen +<version>`, run by the `cadgen` command it writes, and "it says <version> is not
-// installed") and the command that installs it (`uvx ... --from cadgen==<version> cadgen doctor`) in
-// its SKILL.md, pinned like the server's so the two share one installation.
+// installed") and the command that installs it (`uvx ... --from cadgen==<version> cadgen doctor`),
+// pinned like the server's so the two share one installation: in its SKILL.md and in its setup
+// guide (references/setup.md). Its other references are history, and keep the releases they name.
 function skillLaunchTargets() {
   const skills = path.join(repoRoot, "skills");
   if (!existsSync(skills)) {
@@ -35,9 +36,9 @@ function skillLaunchTargets() {
   }
   return readdirSync(skills, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => `skills/${entry.name}/SKILL.md`)
+    .flatMap((entry) => ["SKILL.md", "references/setup.md"].map((file) => `skills/${entry.name}/${file}`))
     .filter((relative) => existsSync(path.join(repoRoot, relative)))
-    .filter((relative) => readFileSync(path.join(repoRoot, relative), "utf8").includes("--from cadgen=="))
+    .filter((relative) => /cadgen(?:\[[a-z0-9_,.-]+\])?==|cadgen(?:\.cmd)? \+\d/.test(readFileSync(path.join(repoRoot, relative), "utf8")))
     .sort();
 }
 
@@ -56,6 +57,14 @@ export const pinTargets = [
   "apps/docs/src/lib/content.ts",
   "apps/docs/src/app/privacy-policy/page.tsx",
   ...skillLaunchTargets(),
+];
+
+// The one-line installer's scripts carry the release they were published with, which each installs
+// when the version feed cannot be read. Neither is a pin target: each runs `cadgen==$version`, a
+// variable a pin's stamp would overwrite.
+export const bootstrapTargets = [
+  { path: "scripts/install/install.sh", pattern: /^(CADGEN_VERSION=")([^"\n]*)(")$/m },
+  { path: "scripts/install/install.ps1", pattern: /^([ \t]*\$CadgenVersion = ")([^"\n]*)(")$/m },
 ];
 
 function usage() {
@@ -208,15 +217,15 @@ function syncTomlTarget(relativePath, version) {
 
 // A skill runs its version by the `cadgen` command (`cadgen +0.8.0`), and says it in the
 // command's refusal ("it says 0.8.0 is not installed").
-export const skillVersionPattern = /(cadgen \+|it says )(\d[^\s`"'\\)]*)/g;
+export const skillVersionPattern = /(cadgen(?:\.cmd)? \+|it says )(\d[^\s`"'\\)]*)/g;
 
 function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
-  const pin = /(cadgen(?:\[[a-z0-9_,.-]+\])?==)([^"\s]+)/g;
+  const pin = /(cadgen(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
   const matches = [...text.matchAll(pin)];
-  if (matches.length === 0) {
-    throw new Error(`${relativePath} must pin cadgen==<version>`);
-  }
   const named = [...text.matchAll(skillVersionPattern)];
+  if (matches.length === 0 && named.length === 0) {
+    throw new Error(`${relativePath} must pin cadgen==<version> or cadgen +<version>`);
+  }
   const labels = [];
   if (!matches.every((match) => match[2] === version)) {
     labels.push("cadgen pin");
@@ -233,6 +242,22 @@ function syncPinTarget(relativePath, version, text = readRequiredText(relativePa
     text: text
       .replace(pin, (_, prefix) => `${prefix}${version}`)
       .replace(skillVersionPattern, (_, prefix) => `${prefix}${version}`),
+  };
+}
+
+function syncBootstrapTarget(target, version) {
+  const text = readRequiredText(target.path);
+  const matches = [...text.matchAll(new RegExp(target.pattern.source, "gm"))];
+  if (matches.length !== 1) {
+    throw new Error(`${target.path} must stamp exactly one fallback version (${target.pattern.source})`);
+  }
+  if (matches[0][2] === version) {
+    return null;
+  }
+  return {
+    path: target.path,
+    labels: ["fallback version"],
+    text: text.replace(target.pattern, (_, before, _stale, after) => `${before}${version}${after}`),
   };
 }
 
@@ -294,6 +319,12 @@ function main() {
   }
   for (const target of tomlTargets) {
     const change = syncTomlTarget(target, version);
+    if (change) {
+      changes.push(change);
+    }
+  }
+  for (const target of bootstrapTargets) {
+    const change = syncBootstrapTarget(target, version);
     if (change) {
       changes.push(change);
     }
