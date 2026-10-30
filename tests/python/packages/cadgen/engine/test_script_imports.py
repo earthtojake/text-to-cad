@@ -443,8 +443,16 @@ class LibraryRootsTest(unittest.TestCase):
             self.assertEqual(lines, [], "the project's own script is no library's")
             [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
         self.assertTrue(shipped["ok"], shipped.get("error"))
-        self.assertEqual(lines, [f"cadgen: shipped.py lies in a library folder, {site}: edits to it and to what it "
-                                 "imports rebuild nothing; keep the project outside the interpreter's library folders"])
+        said = (f"cadgen: shipped.py lies in a library folder, {site}: edits to it and to what it "
+                "imports rebuild nothing; keep the project outside the interpreter's library folders")
+        self.assertEqual(lines, [said])
+        # On Windows the venv's standard library folder (proj\Lib) holds its site-packages too: the
+        # deepest folder is named, whichever order the roots come in.
+        for roots in ((prefix / "lib", site), (site, prefix / "lib")):
+            lines.clear()
+            with mock.patch.object(trace, "_library_roots", lambda roots=roots: roots):
+                engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+            self.assertEqual(lines, [said], roots)
 
 
 def setUpModule() -> None:
