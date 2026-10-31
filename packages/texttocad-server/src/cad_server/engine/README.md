@@ -832,7 +832,9 @@ while it loads the kernel); it counts toward the workers' count (`with the stand
 the header gives against the cap (`--json`: `standby`, `rssMb`, `rssCapMb`). A retirement's reason is
 `LRU` (room at the cap), `RSS` (over the workers' memory cap), `pressure` (the system's memory pressure),
 `environment` (a build asked for the script with another `PYTHONPATH`, or another of the variables
-that shape the interpreter's import system: its worker is replaced in its slot) or `exited` (it died). The `documents:` lines are each model
+that shape the interpreter's import system: its worker is replaced in its slot) or `exited` (it died).
+A render process's retirement is listed too, by its document (`--json`: `document` where a worker's
+row says `script`; `retired: part.xbf's renderer (RSS) 2m ago`). The `documents:` lines are each model
 document, its state and, for one not held, the command that builds it again (**Document
 lifetime**), and a held one where it is held: in memory, on disk (the cache), or both. The
 `cache` line is the cache folder, the documents and bytes in it -- no cap: they stay until a person

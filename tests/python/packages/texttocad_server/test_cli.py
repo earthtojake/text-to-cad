@@ -103,6 +103,17 @@ class Dispatch(unittest.TestCase):
         text = status_text({"pid": 7, "up": 5, "workers": [], "installation": "0.8.0-dev.20261025032350"})
         self.assertTrue(text.startswith("engine server 7 (text-to-cad 0.8.0-dev.20261025032350), up "), text)
 
+    def test_status_says_a_worker_s_retirement_by_its_script_and_a_render_process_s_by_its_document(self):
+        import time
+
+        from cad_server.engine.cli import status_text
+
+        now = time.time()
+        text = status_text({"pid": 7, "up": 5, "workers": [], "retired": [
+            {"document": "/w/part.xbf", "pid": 9, "requests": 3, "reason": "RSS", "at": now},
+            {"script": "/w/tube.py", "pid": 8, "builds": 2, "reason": "LRU", "at": now}]})
+        self.assertRegex(text, r"retired: part\.xbf's renderer \(RSS\) \d+s ago · tube\.py \(LRU\) \d+s ago")
+
     def test_unknown_command_exits_two_and_names_it_on_stderr(self):
         code, _, err = self._run(["nope"])
         self.assertEqual(code, 2)

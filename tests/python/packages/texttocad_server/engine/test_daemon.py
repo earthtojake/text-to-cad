@@ -1267,8 +1267,9 @@ class DaemonTest(unittest.TestCase):
         self.state, self.env = self.engine(self.addCleanup, **extra)
 
     def mine(self, rows: list[dict]) -> list[dict]:
-        """The rows of ``status``'s ``workers`` or ``retired`` that are this test's scripts'."""
-        return [row for row in rows if Path(row["script"]).parent == self.folder]
+        """The rows of ``status``'s ``workers`` or ``retired`` that are this test's scripts' (a render
+        process's retirement names a document)."""
+        return [row for row in rows if "script" in row and Path(row["script"]).parent == self.folder]
 
     @staticmethod
     def stopped(state: Path, env: dict) -> None:

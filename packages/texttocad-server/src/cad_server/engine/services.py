@@ -12,8 +12,8 @@ log. It counts toward the count cap, is drained of its documents before it stops
 ``RENDER``: a served document's render process (``cad.engine.render.service``), one per document by
 its id on the server (and per file no document, ``file:`` and its path: ``renders``), in the base,
 with the daemon's environment and no bytecode written, standing where the daemon does; its stderr
-kept, its last lines said when it is gone. It does not count toward the count cap, and is retired for
-memory before any worker.
+kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
+memory before any worker, and its retirements are listed in ``status`` by its document.
 
 Their ranks give the order memory is shed in, today's: the standby (0), then render processes (1),
 then the workers no page watches (2), and a watched worker (3) only when no other is left.
@@ -69,6 +69,7 @@ RENDER = Service(
                 broken="the renderer for {name} is gone ({error})"),
     counted=False,
     rank=1,
+    noted=("document", "requests"),
     ready_seconds=120.0,
 )
 
