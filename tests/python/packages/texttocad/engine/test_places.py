@@ -94,6 +94,17 @@ class AdoptEarlierTest(Folders):
             self.assertEqual(places.adopt_earlier(), [], "this release's folder has it: never again")
         self.assertFalse((self.folder / "installations" / "0.8.5.json").exists())
 
+    def test_what_earlier_releases_left_is_looked_for_in_their_own_folders_or_the_ones_named(self) -> None:
+        with mock.patch.object(places, "_platform_state", side_effect=self.platform), \
+                mock.patch.dict(os.environ, {"CAD_STATE_DIR": "", "CAD_CACHE_DIR": "", "XDG_CACHE_HOME": str(self.root),
+                                             "LOCALAPPDATA": str(self.root)}):
+            self.assertEqual(places.earlier_state_dir(), self.earlier)
+            self.assertEqual(places.earlier_cache_dir(), self.root / "cadgen")
+            self.assertEqual(places.cache_dir(), self.root / "texttocad")
+        named = {"CAD_STATE_DIR": str(self.root / "s"), "CAD_CACHE_DIR": str(self.root / "c")}
+        with mock.patch.dict(os.environ, named):
+            self.assertEqual((places.earlier_state_dir(), places.earlier_cache_dir()), (self.root / "s", self.root / "c"))
+
     def test_a_named_state_folder_adopts_nothing(self) -> None:
         named = self.root / "named"
         with mock.patch.object(places, "_platform_state", side_effect=self.platform), \

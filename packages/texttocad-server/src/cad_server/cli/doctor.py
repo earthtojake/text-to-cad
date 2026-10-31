@@ -319,16 +319,20 @@ def _cache() -> str:
 
 
 def _leftovers():
-    """What cadgen left behind that no cadgen running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders, and each class found in them."""
+    """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
+    the state and cache folders, and each class found in them. What 0.8 and 0.7 kept outside what 0.9
+    moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for cadgen
+    (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
+    ``CAD_CACHE_DIR`` name them)."""
     from cad_server._internal import installations, leftovers
-    from cad.engine.places import cache_dir, engine_dir, state_dir
+    from cad.engine.places import cache_dir, earlier_cache_dir, earlier_state_dir, engine_dir, state_dir
 
     state, cache = state_dir(), cache_dir()
+    before, before_cache = earlier_state_dir(), earlier_cache_dir()
     prefixes = [record["prefix"] for record in installations.records()]
     return (state, cache, leftovers.engine_records(state),
             leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
-            leftovers.earlier(state), leftovers.seven(state, cache))
+            leftovers.earlier(before), leftovers.seven(before, before_cache))
 
 
 def _leftover_words(records, bytecode, cached, earlier) -> list[str]:

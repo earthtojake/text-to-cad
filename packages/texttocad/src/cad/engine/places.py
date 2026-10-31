@@ -33,9 +33,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 __all__ = ["BYTECODE", "HOME", "KERNEL", "NAME", "RESTARTS", "WINDOWS", "Endpoint", "address", "alive", "bytecode",
-           "bytecode_tag", "cache_dir", "current", "detached", "door_path", "endpoints", "engine", "engine_dir",
-           "engine_root", "failure_path", "folder_refusal", "home", "installation", "kernel", "lock", "lock_path",
-           "port_path", "registered", "state_dir", "windowless"]
+           "bytecode_tag", "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir",
+           "endpoints", "engine", "engine_dir", "engine_root", "failure_path", "folder_refusal", "home", "installation",
+           "kernel", "lock", "lock_path", "port_path", "registered", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -80,7 +80,7 @@ STATE = ("texttocad", "texttocad-state")
 EARLIER_STATE = ("cadgen", "cadgen-state")
 ADOPTED = ("settings.json", INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
            "install-channels.json")
-CACHE = "texttocad"
+CACHE, EARLIER_CACHE = "texttocad", "cadgen"
 
 
 def _platform_state(names: tuple[str, str]) -> Path:
@@ -99,6 +99,13 @@ def state_dir() -> Path:
     if override:
         return Path(override)
     return _platform_state(STATE)
+
+
+def earlier_state_dir() -> Path:
+    """Where the releases before 0.9 kept their state (``EARLIER_STATE``), or the folder ``CAD_STATE_DIR`` names:
+    where what they left behind is looked for (``cad doctor``)."""
+    override = os.environ.get("CAD_STATE_DIR")
+    return Path(override) if override else _platform_state(EARLIER_STATE)
 
 
 def adopt_earlier() -> list[str]:
@@ -144,6 +151,16 @@ def cache_dir() -> Path:
     absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
     ``$XDG_CACHE_HOME/texttocad`` on POSIX or ``%LOCALAPPDATA%\\texttocad`` on Windows when set, else
     ``~/.cache/texttocad``. An earlier release's cache (named for cadgen) is not read: it is a cache."""
+    return _cache_dir(CACHE)
+
+
+def earlier_cache_dir() -> Path:
+    """Where the releases before 0.9 kept their cache (``EARLIER_CACHE``, by ``cache_dir``'s rule), or the folder
+    ``CAD_CACHE_DIR`` names: where what they left behind is looked for (``cad doctor``)."""
+    return _cache_dir(EARLIER_CACHE)
+
+
+def _cache_dir(name: str) -> Path:
     override = os.environ.get("CAD_CACHE_DIR", "").strip()
     if override:
         root = Path(override).expanduser()
@@ -154,12 +171,12 @@ def cache_dir() -> Path:
     if os.name == "nt":
         local = os.environ.get("LOCALAPPDATA", "").strip()
         if local:
-            return Path(local) / CACHE
+            return Path(local) / name
     else:
         xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
         if xdg:
-            return Path(xdg) / CACHE
-    return Path.home() / ".cache" / CACHE
+            return Path(xdg) / name
+    return Path.home() / ".cache" / name
 
 
 # --- the engine folder -----------------------------------------------------------------------------
