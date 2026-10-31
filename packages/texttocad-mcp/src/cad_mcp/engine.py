@@ -461,13 +461,28 @@ def _not_started(code: int) -> ConnectionError:
     return ConnectionError(f"the engine server did not start: {reason}")
 
 
+# One start at a time in this process: the hold (``shim.Holder``) and the host's first request both find no
+# server on a device's first start, and two starts would register two installations at once.
+_STARTING = threading.Lock()
+
+
 def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
-    """A connection to the server, started when ``start`` and none answers."""
+    """A connection to the server, started when ``start`` and none answers: by one thread of this process
+    at a time, a thread that waited for another's start taking the server it started."""
     found = _connect()
     if found is not None or not start:
         return found
     if any(os.environ.get(name) == value for name, value in SANDBOXES):
         raise ConnectionError(SANDBOXED)
+    with _STARTING:
+        found = _connect()
+        if found is not None:
+            return found
+        return _started(timeout)
+
+
+def _started(timeout: float) -> Connection:
+    """The server started (``_start``) and a connection to it once it answers."""
     try:
         engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
     except PermissionError as error:

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -84,6 +85,38 @@ class StartTest(unittest.TestCase):
                                                  "-P", "-m", engine.REGISTER])
         for name in ("stdin", "stdout", "stderr"):
             self.assertEqual(ran.call_args.kwargs[name], subprocess.DEVNULL, "its words are nobody's here")
+
+    def test_two_threads_that_find_no_server_start_and_register_one(self) -> None:
+        # The hold and the host's first request both find no server on a device's first start: the
+        # second waits for the first one's start and takes its server, so one registration runs.
+        up = threading.Event()
+        looked = threading.Barrier(2, timeout=30)
+        answers = iter(range(2))  # the first look of each thread meets the other before either starts
+
+        def connected(where=None):
+            if next(answers, None) is not None:
+                looked.wait()
+            return "connection" if up.is_set() else None
+
+        class Process:
+            def poll(self):
+                return None
+
+        def started(*_args, **_kwargs):
+            up.set()
+            return Process()
+
+        found: list = []
+        with mock.patch.object(engine, "_connect", side_effect=connected), \
+                mock.patch.object(engine, "register", side_effect=lambda: self.installed("1.2.3")) as registered, \
+                mock.patch.object(subprocess, "Popen", side_effect=started) as popen:
+            threads = [threading.Thread(target=lambda: found.append(engine.connect(timeout=30))) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(60)
+        self.assertEqual(found, ["connection", "connection"])
+        self.assertEqual((registered.call_count, popen.call_count), (1, 1))
 
     def test_with_no_server_anywhere_it_says_how_to_install_one(self) -> None:
         with mock.patch.object(engine, "register"), \
