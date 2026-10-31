@@ -40,11 +40,14 @@ checksum. It:
    (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
    own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
-6. Installs or updates text-to-cad in each app with the app's own commands, the
-   ones below, and removes duplicate copies. A copy that a plugin store manages is
-   reported, never removed. The agents without a plugin get the skills alone, through
-   the Skills CLI ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's
-   server for this release, with a `.bak` of the file kept beside it.
+6. Writes the plugin, this release's, into a folder of text-to-cad's state folder
+   (`plugin`), and points each app at that folder with the app's own commands
+   ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
+   one an earlier release installed from GitHub. A copy that a plugin store manages is
+   reported, never removed. The agents without a plugin get the skills alone, copied
+   from the folder through the Skills CLI ([Other Agents](#other-agents)). Claude
+   Desktop's config gets CAD's server for this release, with a `.bak` of the file kept
+   beside it.
 7. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
    Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
    starts.
@@ -92,6 +95,33 @@ On Windows, `irm https://www.texttocad.dev/install.ps1 -OutFile install.ps1` dow
 it, and `powershell -ExecutionPolicy Bypass -File install.ps1 --dry-run` runs it
 with the same options.
 
+## What each app gets
+
+The install command gives every app the same plugin, from one folder on your computer
+that the release writes: `plugin` in text-to-cad's state folder
+(`~/Library/Application Support/texttocad/plugin` on macOS,
+`~/.local/state/texttocad/plugin` on Linux, `%LOCALAPPDATA%\texttocad-state\plugin` on
+Windows); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
+-- each app's manifest, its config for CAD's server, and the skills -- at the release
+your computer runs, and is written again in place when an update moves your computer to
+another release. Each app takes it the way it takes a local plugin:
+
+| App | What it gets | After an update |
+| --- | --- | --- |
+| Claude Code | the folder added as a local catalog, `texttocad`, and its plugin installed, `text-to-cad@texttocad`; Claude Code reads the folder in place | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
+| Codex | the same catalog and plugin; Codex copies the plugin when it is added | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
+| Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
+| Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad` | the update copies the folder again |
+| Grok Build | the plugin loaded with Claude Code's; without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
+| Claude Desktop (Chat tab) | CAD's server in its config | the update moves the server to the new release |
+| Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
+
+Nothing of it updates by itself: the folder and the copies move when you update
+([Updates](#updates)). Leave the folder where it is: Claude Code and Gemini read it in
+place. `cad doctor` says where each app's plugin comes from, and writes the folder
+again if it is gone. The install command with `--uninstall` takes all of it out, the
+folder too.
+
 ## App by app
 
 1. CAD runs through [uv](https://docs.astral.sh/uv/): check that it is installed
@@ -112,7 +142,8 @@ The commands below take the `latest` branch: it holds the plugin alone and gets
 each release once it is on PyPI. `main`, where development happens, installs too,
 but can hold changes that aren't released yet. Each app names the branch in its
 own way (`#latest`, `--ref latest`, `@latest` or `--branch latest`); leave it out
-and the app installs `main`.
+and the app installs `main`. The install command, run later, replaces a copy
+installed this way with the plugin folder's ([What each app gets](#what-each-app-gets)).
 
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new
@@ -289,15 +320,16 @@ core CAD workflows and let you view CAD files in a localhost web app. The instal
 command gives them to the agents it knows when they are installed: GitHub Copilot
 (VS Code's agent too), Windsurf, Cline, Amp, Antigravity, OpenClaw, Droid, Goose,
 Kilo Code, Kiro CLI, Hermes Agent, OpenCode, Roo Code, Trae and Zed. It copies them
-into each one's own skills folder with the [Skills CLI](https://skills.sh), which
-needs Node (`npx`), in one command:
-`npx -y skills@latest add earthtojake/text-to-cad#latest -g -a <agent> ... -s '*' -y --copy --json`.
-It never does this for an app with a plugin, and moves a loose copy of the skills
-out of such an app's skills folder. Cline and Zed keep skills in `~/.agents/skills`,
-which Codex and Gemini CLI read too: there, those apps list the skills beside their
-plugin's. Its receipt records which skills each agent got, from which release; running
-it again adds them again after a new release or when one of them is gone, and
-`--uninstall` removes them.
+from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) into each
+one's own skills folder with the [Skills CLI](https://skills.sh), which needs Node
+(`npx`), in one command:
+`npx --prefer-offline -y skills@latest add <plugin folder>/skills -g -a <agent> ... -s '*' -y --copy --json`.
+It names each agent: it never does this for an app with a plugin, and moves a loose
+copy of the skills out of such an app's skills folder. Cline and Zed keep skills in
+`~/.agents/skills`, which Codex and Gemini CLI read too: there, those apps list the
+skills beside their plugin's. Its receipt records which skills each agent got, from which
+release; running it again, or an update, adds them again after a new release or when
+one of them is gone, and `--uninstall` removes them.
 
 For any other agent, install them with the Skills CLI yourself:
 
@@ -343,14 +375,20 @@ terminal: each installs the newest release, updates every app, moves the server 
 it and lists the apps to restart. To update one app by hand, run the update
 commands under its heading, then restart it.
 
+An update writes the plugin folder again for the new release
+([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
+read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
+the skills alone) get it again. Should the new release's server not start, the release
+before comes back, and its plugin with it.
+
 Your computer runs one CAD server, the current release's, whatever release each
 app's plugin names: an app whose plugin is behind or ahead uses that server all the
 same. An app runs its updated plugin from the session it starts after the update.
 Each release is kept in a folder of its own in text-to-cad's state folder
 (`releases/<release>`): the one before the current stays, to go back to should the
 new one not start, and older ones go at the next update. `cad doctor` says
-which releases are there, which one is current, the release the server runs, and
-each app's plugin's.
+which releases are there, which one is current, the release the server runs, the
+plugin folder's, and where each app's plugin comes from and its release.
 
 Copies from a plugin directory or the Cursor Marketplace are not told of a release
 from the feed, since their store updates their plugin. Once the store has moved an

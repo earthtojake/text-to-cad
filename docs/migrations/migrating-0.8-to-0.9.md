@@ -21,6 +21,16 @@ run the stop command the installer names for it (0.8's own `cadgen stop`, by its
 restart your computer. The next time 0.9's server starts (after `cad stop`, an update or a
 restart), it is back on 3245.
 
+Each app's plugin now comes from a folder on your computer that the release writes,
+`plugin` in the new state folder (step 5), rather than from GitHub: the installer takes out
+the copy 0.8's put in each app -- Claude Code's and Codex's `earthtojake` catalog with its
+plugin, Gemini's extension, Cursor's clone -- and puts the folder's in its place: a local
+catalog, `texttocad` (`text-to-cad@texttocad`), in Claude Code and Codex, the folder
+linked in Gemini, a copy of it in Cursor ([What each app gets](../install.md#what-each-app-gets)).
+Codex no longer fetches the repository each time it starts, and no app updates its plugin by
+itself. A plugin you installed by hand from GitHub goes the same way the next time the
+installer runs.
+
 **2. `cadgen` is `cad` in commands**, with the same verbs and options:
 `cadgen export <id> part.step` is `cad export <id> part.step`, `~/.local/bin/cadgen` is
 `~/.local/bin/cad` (on Windows `cad.cmd`), and a skill's

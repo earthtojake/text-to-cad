@@ -197,9 +197,12 @@ the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Wind
 `irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and
 `install.ps1`, which run the newest release's `cad setup` through uvx
 (`cad_server.cli.setup`; `cad uninstall` takes it out). It reads the apps through
-`cad_server._internal.providers`, as the development installer below does, and takes a
-development install out of an app as a second copy (its plan, or `--dry-run`, says so
-first).
+`cad_server._internal.providers`, as the development installer below does, points each at
+the plugin folder the release writes (`cad plugin` prints its path; `docs/install.md`, "What
+each app gets"), and takes a development install out of an app as a second copy (its plan,
+or `--dry-run`, says so first). `tests/python/global/test_plugin_folder.py` points a real
+Claude Code and Gemini CLI at a folder written from the checkout, in a home of their own,
+wherever their commands are installed.
 
 Test the skills the way users get them: as the plugin, with CAD's server. One
 script installs this checkout into an agent app, and running it again replaces
@@ -641,9 +644,12 @@ scripts/bundle/bundle.sh --check
 
 `--clean` removes old runtime outputs before building. `--check` builds and
 asserts the required outputs (the Viewer client's and the CAD app's
-`index.html`, and the `THIRD_PARTY_LICENSES.txt` each build writes beside its page of the
-packages it inlines); wheel validation checks the complete packaged runtime too. Per-stage `cadgen-runtime.sh` flags are for
-debugging; normal iteration goes through `bundle.sh`.
+`index.html`, the `THIRD_PARTY_LICENSES.txt` each build writes beside its page of the
+packages it inlines, and the plugin's files and every skill file, byte for byte as the checkout
+holds them); wheel validation checks the complete packaged runtime too, and that the wheel's
+plugin is the repository's (`scripts/release/check-wheel-contents.sh`). Per-stage `cadgen-runtime.sh` flags are for
+debugging; normal iteration goes through `bundle.sh`. A skill's file must not be hidden (a dot
+name): the wheel's package data takes no hidden file (`tests/python/global/test_plugin_folder.py`).
 
 ## Branch Layout
 
@@ -708,7 +714,9 @@ wrong.
 
 `main` is source. Everything the server serves that is not Python — the CAD Viewer
 client under `cad_server/_runtime/viewer` and the CAD app page under `_runtime/mcp`
-— is gitignored and
+— and the agent-app plugin it writes into the plugin folder every app is pointed at
+(`_runtime/plugin`: the root's plugin manifests and `skills/`, byte for byte,
+`cad_server/_internal/plugin.py`) are gitignored and
 produced by `scripts/bundle/bundle.sh`. Nothing built is ever
 committed: a rebundle used to add a megabyte of history per commit, and a
 committed bundle can drift from the source that claims to produce it.
@@ -925,6 +933,7 @@ What each store and installer reads:
 | Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
+| The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`texttocad`) |
 | claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
@@ -957,6 +966,7 @@ hold each one:
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| the plugin folder's configs, which the install command points every app at | each as `latest`'s: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `agent-plugins` | yes | `cad_server/_internal/plugin.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |

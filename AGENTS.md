@@ -89,7 +89,9 @@ which points both at the checkout.
 
 ## Repo Map
 
-- `skills/`: agent skills and their references/scripts.
+- `skills/`: agent skills and their references/scripts. They ship byte for byte in the server's
+  wheel (`cad_server/_runtime/plugin`, with the plugin manifests), from which the server writes the
+  plugin folder (`<state>/plugin`) that `cad setup` points every agent app at.
 - `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`, and the
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
@@ -202,7 +204,7 @@ which points both at the checkout.
   interpreter; raising the declared minimum relaxes the check automatically.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
-- The server's packaged runtime (`_runtime/viewer` and `_runtime/mcp`) is BUILT,
+- The server's packaged runtime (`_runtime/viewer`, `_runtime/mcp` and `_runtime/plugin`) is BUILT,
   never committed: the whole directory is gitignored and ships only inside the
   server's wheel. Build it with the one bundle entry point, `scripts/bundle/bundle.sh`;
   `bundle.sh --check` builds it and asserts every required output. Call

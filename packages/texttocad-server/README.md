@@ -53,14 +53,16 @@ src/cad_server/
                          #   `cad +<version>`; written by `cad doctor`, `cad setup` and a CAD
                          #   app's first registration), the proxy (proxy), the releases an update
                          #   installs (releases), the update the button starts (update) and its
-                         #   switch (switch), the agent apps setup reads and writes (providers),
+                         #   switch (switch), the plugin folder every agent app is pointed at
+                         #   (plugin), the agent apps setup reads and writes (providers),
                          #   what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, the
                          #   install channel, file locks (the state folder's one lock:
                          #   `file_lock.state`), the CLI derivation
-  _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced
-                         #   when the wheel is packaged, never committed, never edited
+  _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
+                         #   plugin (its manifests and skills) -- produced when the wheel is
+                         #   packaged, never committed, never edited
 ```
 
 ## Commands
@@ -79,8 +81,19 @@ none written in the last seven days); `cad run` a program in the CAD kernel envi
 up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder, makes the CAD kernel environment models
 run in and moves the device's engine to its release; `cad update` runs the newest release's
-`cad setup`, as the update button does; `cad uninstall` takes text-to-cad out; and `cad telemetry`
-the person's answer. A model builds by running its script: `cad run model.py`, or
+`cad setup`, as the update button does; `cad uninstall` takes text-to-cad out; `cad plugin` writes
+the plugin folder and prints its path; and `cad telemetry` the person's answer.
+
+The plugin every agent app gets is one folder, `plugin` in the state folder, which the server writes
+from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's
+server, and the skills, byte for byte as they were released) with every version this distribution's
+(`_internal/plugin.py`). It is written again in place -- each file renamed over, never a symlink --
+at a registration of the current installation, by `cad setup` before it points the apps at it, and by
+the release left current after every switch of the engine (`cad plugin --refresh`). Each app takes it
+the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
+place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
+skills copied by the Skills CLI for the agents without a plugin. An update writes the folder for the
+new release and brings the copies along; nothing updates by itself. A model builds by running its script: `cad run model.py`, or
 `cad +<version> run model.py` through the `cad` command, which runs the current installation, else
 the one registered last (`_internal/proxy.py`; a `+<version>` is taken off). The CAD app an agent
 host starts is `cad-mcp`, of the `texttocad-mcp` distribution, which reaches this server.

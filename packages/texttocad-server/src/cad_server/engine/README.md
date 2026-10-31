@@ -249,8 +249,10 @@ An update moves the device to another release in one step, and only when the per
 button in the CAD Viewer and the CAD app (`POST /__cad/update`, `cad_server._internal.update`), `cad
 update`, or the install command run again (both `cad setup`). Each installs the release in a folder
 of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
-where it holds it), makes that release's base (**Running a model**), updates each agent app's plugin,
-and then switches (`cad_server._internal.switch`):
+where it holds it), makes that release's base (**Running a model**), writes the plugin folder every
+agent app is pointed at, `<state>/plugin`, from that release (`cad_server._internal.plugin`: in place,
+each file renamed over), brings the apps' copies of it along (`cad_server._internal.providers`; an app
+that reads the folder in place needs nothing), and then switches (`cad_server._internal.switch`):
 
 1. The engine drains (`Daemon.drain`): once no build, draw, export or agent's MCP call is in flight --
    open pages and held sessions do not count --, its door and its HTTP listener close, and it exits.
@@ -263,7 +265,10 @@ and then switches (`cad_server._internal.switch`):
 
 Every page and card keeps its link through it, and reloads once its engine answers with the new
 release. The release before's folder stays -- a process of it may still run, and it is the way back
---; the others go at the next switch, once nothing runs from them (`releases.collect`). What a switch
+--; the others go at the next switch, once nothing runs from them (`releases.collect`). After the
+switch, held or gone back, the release left current writes the plugin folder again (its own `cad
+plugin --refresh`, `switch.follow`): nothing changes when that release's setup already wrote it, and a
+switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
 did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
 lines `update.log`.
 
