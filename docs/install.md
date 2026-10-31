@@ -24,7 +24,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. On a computer 0.8 was set up on, moves what 0.9 keeps of 0.8's state folder
    into its own, once: your telemetry answer and language, the installations'
@@ -196,7 +196,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "texttocad-mcp==0.9.0", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.9.0", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -205,7 +205,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
 
 The config pins a release in `args`, and uvx keeps the version it first
 downloads. To update, change that version to the
-[latest release](https://pypi.org/project/texttocad-mcp/), then restart Claude Desktop.
+[latest release](https://pypi.org/project/cad-mcp/), then restart Claude Desktop.
 The install command writes this entry, with uvx's full path, and moves its release
 to the new one each time it updates.
 
@@ -418,11 +418,11 @@ step, and an agent with the CAD skill can follow it.
 
 ## What a model runs in
 
-The release the install command runs is text-to-cad's server (`texttocad-server`): the
+The release the install command runs is text-to-cad's server (`cad-server`): the
 `cad` command, the CAD Viewer's server and the engine every build goes through, without
-the CAD kernel. Each app's CAD server is the smaller `texttocad-mcp` (`cad-mcp`), which
+the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
 reaches it. A model runs where the kernel is: in one environment the server makes with uv
-in its cache folder and keeps, the library with its kernel (`texttocad[build123d]`) on the
+in its cache folder and keeps, the library with its kernel (`cad[build123d]`) on the
 server's Python, 3.14. Every model runs there, and so do the server's own kernel
 processes: exports, snapshots and the meshes the viewer shows. The install command makes
 it; otherwise the server makes it as it starts, in the background (with a plugin alone,
@@ -430,7 +430,7 @@ the first start of an app's CAD app), and a first model or view waits for it. A 
 imports what that environment holds: the library (`cad`), build123d and what they bring.
 
 To run models with a Python of your own instead, install the library with its kernel
-into it: `pip install 'texttocad[build123d]'` (`pip install texttocad` is the library alone,
+into it: `pip install 'cad[build123d]==0.9.0'` (`pip install cad==0.9.0` is the library alone,
 and `import build123d` fails there). That environment is then the one models run in.
 
 ## Windows 11: Smart App Control

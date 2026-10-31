@@ -23,7 +23,7 @@ current development interpreter:
 ```sh
 python3.13 -m venv /tmp/cadgen-xbf8-fixture
 /tmp/cadgen-xbf8-fixture/bin/python -m pip install cadgen==0.8.0
-/tmp/cadgen-xbf8-fixture/bin/python tests/python/packages/texttocad/engine/fixtures/make_xbf8_fixture.py
+/tmp/cadgen-xbf8-fixture/bin/python tests/python/packages/cad/engine/fixtures/make_xbf8_fixture.py
 ```
 
 The generator checks all three package versions before writing. Review the XBF

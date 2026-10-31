@@ -35,15 +35,15 @@ exact version, ask which one. A release pull request comes one of two ways:
 - **On the pull request that should carry it**: on its branch,
   `scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>` sets `VERSION` past
   `main`'s and stamps the derived metadata and every pin of the release's own
-  (`texttocad==`, `texttocad-server==`, `texttocad-mcp==`, `cad +<VERSION>`) with it.
+  (`cad==`, `cad-server==`, `cad-mcp==`, `cad +<VERSION>`) with it.
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
 its Version Check vets the bump (a branch of this repository only, a version past
 `main`'s and the latest tag, every stamp in step). `Publish Release`
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
-and the wheel and sdist of each of the release's five projects on PyPI (`texttocad`,
-`texttocad-server`, `texttocad-mcp`, and the aliases `cadgen` and `text-to-cad`), uploads
+and the wheel and sdist of each of the release's five projects on PyPI (`cad`,
+`cad-server`, `cad-mcp`, and the aliases `cadgen` and `text-to-cad`), uploads
 them one project at a time, the library first, waiting until PyPI lists each,
 and only then writes the install branches (`latest`, `claude-plugin`), deploys
 the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
@@ -56,27 +56,29 @@ local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
 (Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
 `scripts/install/` runs the newest release's `cad setup` through uvx
-(`--from texttocad-server==<VERSION>`), which installs that release in its own folder
+(`--from cad-server==<VERSION>`), which installs that release in its own folder
 (`<state>/releases/<release>`), sets up the plugin in every agent app on the device (the skills
 alone, through the Skills CLI, for the agents without a plugin) and moves the device's server to it,
 asking nothing, and, run again, updates them; the update button in the CAD Viewer and the CAD app,
 and `cad update`, take the same steps.
 
-text-to-cad is three distributions from this repository at one `VERSION`: the library `texttocad`
+text-to-cad is three distributions from this repository at one `VERSION`: the library `cad`
 (import `cad`, the CAD kernel as its `build123d` extra; `cadgen` is an import alias of it), the server
-`texttocad-server` (import `cad_server`, command `cad`: the engine and its daemon, the commands, the
-CAD Viewer's server) and the shim `texttocad-mcp` (import `cad_mcp`, command `cad-mcp`: the stdio
+`cad-server` (import `cad_server`, command `cad`: the engine and its daemon, the commands, the
+CAD Viewer's server) and the shim `cad-mcp` (import `cad_mcp`, command `cad-mcp`: the stdio
 transport an agent app starts, the standard library alone). The alias distributions `cadgen` and
 `text-to-cad` install the library at the same release. A file's place: imported by a model or run in
 a worker, the library; run in the daemon or a command, the server; run inside the host's process,
 the shim. The plugin server configs run the shim as ONE uvx command,
-`uvx --no-config --managed-python --python 3.14 --from texttocad-mcp==<VERSION> cad-mcp`, and the
-server runs as `uvx ... --from texttocad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
+`uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the
+server runs as `uvx ... --from cad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
 The server installs the library with its `build123d` extra, with uv, into one base environment per
 installation that every model and kernel process runs in (`cad_server._internal.base`), a program's
 own folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad +<VERSION>` through it (uvx cannot
-start in an agent's sandbox, the command can). The release stamps every pin and `+<VERSION>`
+start in an agent's sandbox, the command can). Every requirement on the library names its release
+exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`): PyPI's `cad` project holds unrelated 1.x
+releases an open requirement would resolve to. The release stamps every pin and `+<VERSION>`
 (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. The device runs one
 server, the current installation's (`<state>/installations/current`): the CAD app, every thread and
@@ -108,16 +110,16 @@ which points both at the checkout.
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
   Codex, cards in Claude Desktop (its server is `cad-mcp`).
 - `packages/` ([README](packages/README.md)): the published distributions and the shared JS
-  packages. `packages/texttocad` ([README](packages/texttocad/README.md)) is the library: the
+  packages. `packages/cad` ([README](packages/cad/README.md)) is the library: the
   engine's library half (`cad/engine`: models built into documents, and the XBF, STEP, GLB, STL,
   3MF and DXF files written from them; the worker every build runs in; exports; the OCCT stills;
   the client every command reaches the server by), the formats and validators, and the `cadgen`
-  alias. `packages/texttocad-server` ([README](packages/texttocad-server/README.md)) is the server:
+  alias. `packages/cad-server` ([README](packages/cad-server/README.md)) is the server:
   the daemon, the supervisor of the processes it declares and its registry (`cad_server/engine`),
   the `cad` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
   app's server half (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built
   by `scripts/bundle/cadgen-runtime.sh`).
-  `packages/texttocad-mcp` ([README](packages/texttocad-mcp/README.md)) is the shim, and
+  `packages/cad-mcp` ([README](packages/cad-mcp/README.md)) is the shim, and
   `packages/aliases/` the `cadgen` and `text-to-cad` aliases. Skills consume the server as an
   installed distribution.
   `packages/core` ([README](packages/core/README.md)) is `@text-to-cad/core`, shared
@@ -135,7 +137,7 @@ which points both at the checkout.
 ## Repo Rules
 
 - Boundaries and design laws live in each package's README: read
-  [`packages/texttocad/README.md`](packages/texttocad/README.md) (the laws),
+  [`packages/cad/README.md`](packages/cad/README.md) (the laws),
   [`packages/core/README.md`](packages/core/README.md),
   [`packages/ui/README.md`](packages/ui/README.md),
   [`apps/web/README.md`](apps/web/README.md), [`apps/docs/README.md`](apps/docs/README.md)
@@ -144,12 +146,12 @@ which points both at the checkout.
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
   link — not the tree. Where the mechanisms are: the engine's README
-  (`packages/texttocad-server/src/cad_server/engine/README.md`: models, the daemon and its workers,
+  (`packages/cad-server/src/cad_server/engine/README.md`: models, the daemon and its workers,
   documents, exports, the mesh, references, the build closure), `packages/core/docs/`,
   `packages/ui/docs/` (`settings-ui.md` is BINDING for any settings control) and
   `apps/web/docs/`; each README's table says what every document there is for.
-- Ships-alone law: each distribution (`packages/texttocad`, `packages/texttocad-server`,
-  `packages/texttocad-mcp`: a built PyPI wheel) works in isolation outside this repo, so its
+- Ships-alone law: each distribution (`packages/cad`, `packages/cad-server`,
+  `packages/cad-mcp`: a built PyPI wheel) works in isolation outside this repo, so its
   markdown must not refer to anything outside its own package — enforced by
   `tests/python/global/test_package_boundaries.py`.
   Repo-development guidance for it goes in `CONTRIBUTING.md`.
@@ -168,7 +170,7 @@ which points both at the checkout.
   repository-root module, and must not add `skills/`, the repository root, or a
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
-- Shared runtime comes from the **`texttocad-server` distribution**. A skill that uses it
+- Shared runtime comes from the **`cad-server` distribution**. A skill that uses it
   defines `cad` and `python` in its SKILL.md as `cad +<VERSION>` above
   (the release stamps every pin); no skill installs the server or the library
   any other way (no `requirements.txt` naming either), because a second installation
@@ -198,7 +200,7 @@ which points both at the checkout.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
   Only their pure helper units run in a test runner.
-- The Python floor is `requires-python` in `packages/texttocad/pyproject.toml` and
+- The Python floor is `requires-python` in `packages/cad/pyproject.toml` and
   nowhere else (every other `pyproject.toml` declares the same). Every source of the three
   distributions is parsed against that floor, so syntax
   newer than it fails here rather than at `pip install` time on a user's
@@ -223,7 +225,7 @@ which points both at the checkout.
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
 - The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
-  `packages/texttocad-server`), the React client's source is `apps/web/` and its build
+  `packages/cad-server`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
   checkout serves `apps/web/dist`). The CAD, DXF and robot-description skills document that verb directly.
   Nothing in `cad_server.viewer` imports the CAD kernel at module scope — a STEP or
@@ -289,7 +291,7 @@ when touching shared surfaces or before handoff:
   `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run test`,
   `npm --prefix apps/web run build` (`scripts/test/test-js.sh` runs them all).
   The Viewer is two languages and `npm run test` covers only the client — the
-  backend's suite is `tests/python/packages/texttocad_server/viewer`, run by
+  backend's suite is `tests/python/packages/cad_server/viewer`, run by
   `scripts/test/test-python.sh`. Touching `cad_server/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
 - API (`api.texttocad.dev`): `npm --prefix apps/api test`

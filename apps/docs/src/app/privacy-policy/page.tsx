@@ -15,7 +15,7 @@ export default function PrivacyPolicyPage() {
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
           text-to-cad: the text-to-cad plugin and its skills, the text-to-cad software they run (the packages{" "}
-          <code>texttocad</code>, <code>texttocad-server</code> and <code>texttocad-mcp</code>, named cadgen
+          <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
           before 0.9), the
           step.parts part library they search, and this website, texttocad.dev. text-to-cad runs on
           your computer. Your prompts, models, drawings and files stay there, and we do not collect
@@ -222,13 +222,13 @@ export default function PrivacyPolicyPage() {
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad telemetry off</code>, use{" "}
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry off</code>, use{" "}
             <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
             Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}

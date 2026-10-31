@@ -1,11 +1,11 @@
-# texttocad
+# cad
 
 The library: CAD models written as Python, imported as `cad` (and as `cadgen`, its earlier name, an
 alias of it), built by the engine (`cad.engine`) into live XCAF documents and the files those models
 declare (XBF, STEP, GLB, STL, 3MF, DXF). It is one of three distributions released together, at one
-version: the library; the server, `texttocad-server` (imported as `cad_server`), the computer's one
+version: the library; the server, `cad-server` (imported as `cad_server`), the computer's one
 daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD app's MCP endpoint
-and the command that runs them all; and the shim, `texttocad-mcp` (`cad_mcp`), the stdio transport
+and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
 an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
 page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
 *source* never ships). Snapshots are drawn by OCCT, never in a browser. This file holds the laws of
@@ -47,12 +47,12 @@ document model, the protocol a client speaks, the build's words -- imports no CA
 kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `build123d`
 extra, which the server installs into the environment models run in (the engine's **Running a
 model**). A person who installs the library by hand to run models with their own Python installs
-`texttocad[build123d]`. The library's layer over that kernel -- the model API and the engine's
+`cad[build123d]`. The library's layer over that kernel -- the model API and the engine's
 `kernel/` (the memo, element naming, the determinism settings) -- is the build123d integration: a
 third-party technology and the application layer over it are an integration, named for the
 technology, and its extra carries the same name.
 
-**DEPENDED ON BY** — the server, `texttocad-server`, which pins it at its own release, and through
+**DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
 the server every skill that runs `cad`; the aliases `cadgen` and `text-to-cad`, which install it.
 The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
@@ -64,7 +64,7 @@ the two disagree, the engine's README is right.
 
 | Document | What it is for | Go there when |
 |---|---|---|
-| The engine's README, `cad_server/engine/README.md` in the server's distribution (`texttocad-server`) | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
+| The engine's README, `cad_server/engine/README.md` in the server's distribution (`cad-server`) | The engine: models and decorators, the engine server and its workers, the door, progress, the viewer and the snapshot, exports, kinematics, couplings and configuration sequences, materials, imports, placements, the mesh and its wire format, element names, references, body retention, queries, memo functions and the build closure | changing anything a build, an export, a snapshot or a served document does |
 
 ## The design laws
 
@@ -98,7 +98,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
    beside a library or a model; and under `base/` the environment models and the engine's kernel
-   processes run in, an installation's base, `texttocad[build123d]` at its release, made by uv from its
+   processes run in, an installation's base, `cad[build123d]` at its release, made by uv from its
    cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -197,7 +197,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     was built from gone -- and its markdown must read that way, referring to nothing outside its
     own distribution, another one's files included.
     *Pressure-test*: every sentence in a distribution's markdown must be true and actionable for
-    someone who only ran `pip install texttocad` (or `texttocad-server`, or `texttocad-mcp`). Naming a bundled thing ("the JavaScript runtime
+    someone who only ran `pip install cad==<release>` (or `cad-server`, or `cad-mcp`). Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
     repository workflow does not.
 15. **No backwards compatibility for authoring and runtime APIs.** Hard cutovers only.
@@ -405,12 +405,12 @@ src/cad/
   _internal/             # the runner `cad run` starts a program by (program: the program's
                          #   folder last on its path), the lazy kernel (lazy_kernel: `import
                          #   build123d` binds, the kernel loads on first use;
-                         #   texttocad-lazy-kernel.pth, at the root of site-packages, installs it
+                         #   cad-lazy-kernel.pth, at the root of site-packages, installs it
                          #   at interpreter start), the font guard (font_scan), what the library
                          #   counts (counts), atomic replace, the validators' door, the version
 src/cadgen/              # the earlier import name: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
 
-The server, `texttocad-server`, and the shim, `texttocad-mcp`, say their own shapes and commands in
+The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
 their own READMEs.

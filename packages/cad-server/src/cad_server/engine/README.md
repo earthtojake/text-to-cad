@@ -55,7 +55,7 @@ A program that holds a shape -- a script with no model, a REPL, a notebook -- ha
 the engine, exportable, and returned as a handle whose `.shape` is the shape passed.
 
 `import build123d as bd` binds at once: the library makes the import of `build123d` and `OCP` lazy
-(its `texttocad-lazy-kernel.pth`, run at interpreter start in the environment the library is
+(its `cad-lazy-kernel.pth`, run at interpreter start in the environment the library is
 installed in, and `import cad` in a checkout), so the kernel loads on the first attribute anything
 reads from it -- in the worker, for a build the daemon runs, and never in a run of the script
 the engine finds current. `from build123d import Box` reads the name, and loads the kernel at
@@ -361,9 +361,9 @@ only, and a file's id is derived again from its path after a restart.
 
 ## Running a model
 
-A model runs where the CAD kernel is. The server (`texttocad-server`: the engine's daemon, the `cad`
+A model runs where the CAD kernel is. The server (`cad-server`: the engine's daemon, the `cad`
 command, the viewer's server, and the numpy, ezdxf and Pillow they read meshes, drawings and
-pictures with) depends on the library (`texttocad`) without its kernel, and the CAD kernel (OCP,
+pictures with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
 build123d and the rest) is the library's `build123d` extra. The library's layer over it (the model
 API, `kernel/`'s memo, naming and determinism settings) is the build123d integration, named for its
 technology as its extra is. So the installation the install command and `cad +<version>` run (the
@@ -371,7 +371,7 @@ server, as uvx installs it) runs no model itself: it makes one
 environment, **the base**, and every process that loads the kernel starts from it
 (`cad_server._internal.base`).
 
-The base is `texttocad[build123d]` at the engine's own release -- or the source tree, or the wheel, the
+The base is `cad[build123d]` at the engine's own release -- or the source tree, or the wheel, the
 installation was made from -- on the engine's own Python, made by uv at `base/<key>` in the cache
 folder, its files hard links into uv's cache; uv is asked `--offline` first and goes to the network
 only for what its cache lacks, saying so first. One per installation, keyed by it (its environment,
@@ -380,7 +380,7 @@ makes a base of its own -- before it switches (**Starting and updating**), so th
 it waits on nothing. Its marker, `cadgen-env.json`, written last, makes it complete, so a later
 use reads the marker and resolves nothing; a lock beside it makes one process make it while another
 waits. An installation whose own environment carries the kernel (installed with the extra, `pip
-install 'texttocad[build123d]'`) is its own base, and none is made.
+install 'cad[build123d]==<release>'`) is its own base, and none is made.
 
 `cad run SCRIPT.py` (`-m`, `-c`) makes the base the first time it is asked for -- a line says so
 while uv works -- and runs the arguments with the base's Python, in the caller's folder and

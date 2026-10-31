@@ -1,8 +1,8 @@
 # Backend
 
 The browser host talks to `cad_server.viewer`, the HTTP application hosted by the engine in the
-`texttocad-server` Python distribution. Its source lives in
-`packages/texttocad-server/src/cad_server/viewer/`; this app owns the React host and its build.
+`cad-server` Python distribution. Its source lives in
+`packages/cad-server/src/cad_server/viewer/`; this app owns the React host and its build.
 The wheel includes that build at `cad_server/_runtime/viewer`, beside the CAD app's one-file
 page (`cad_server/_runtime/mcp`); the engine's snapshots are OCCT's and need no browser. Skills
 invoke the installed distribution.
@@ -214,7 +214,7 @@ epoch, `GET /__cad/exports/<id>` a job's state (`?after=&wait=`), and `GET /__ca
 the download, whose file goes once the browser has it whole or after ten minutes. CLI exports
 remain outside this HTTP interface.
 
-Backend tests live in `tests/python/packages/texttocad_server/viewer` and are run by
+Backend tests live in `tests/python/packages/cad_server/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
 host only.
 

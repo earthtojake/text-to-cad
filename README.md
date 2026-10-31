@@ -6,7 +6,7 @@ Design physical products with AI.
 
 [Website](https://www.texttocad.dev)
 
-[![texttocad-server](https://img.shields.io/pypi/v/texttocad-server?style=flat&logo=pypi&logoColor=white&label=texttocad-server)](https://pypi.org/project/texttocad-server/)
+[![cad-server](https://img.shields.io/pypi/v/cad-server?style=flat&logo=pypi&logoColor=white&label=cad-server)](https://pypi.org/project/cad-server/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)](LICENSE)
 [![Downloads](https://img.shields.io/pepy/dt/cadgen?style=flat&logo=pypi&logoColor=white&label=downloads)](https://pepy.tech/projects/cadgen)

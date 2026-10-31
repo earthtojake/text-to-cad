@@ -35,7 +35,7 @@ installer runs.
 `cadgen export <id> part.step` is `cad export <id> part.step`, `~/.local/bin/cadgen` is
 `~/.local/bin/cad` (on Windows `cad.cmd`), and a skill's
 `uvx ... --from cadgen==0.8.4 cadgen doctor` is
-`uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad doctor`.
+`uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad doctor`.
 0.8's `cadgen` command finds nothing once its records have moved; `cad doctor --prune`
 removes it.
 
@@ -47,7 +47,7 @@ removes it.
 `uvx ... --from cadgen==0.8.4 cadgen mcp` -- is the CAD app's own package now:
 
 ```
-uvx --no-config --managed-python --python 3.14 --from texttocad-mcp==0.9.0 cad-mcp
+uvx --no-config --managed-python --python 3.14 --from cad-mcp==0.9.0 cad-mcp
 ```
 
 The server's key stays `cad`. The installer rewrites the Claude Desktop entry it wrote
@@ -75,6 +75,6 @@ nowhere.
 update`, or the install command again. Nothing updates on its own.
 
 Installing the library into a Python of your own instead of the install command: it is
-`texttocad` on PyPI now (`pip install 'texttocad[build123d]'`), beside the server,
-`texttocad-server`, and the CAD app's, `texttocad-mcp`; `cadgen` and `text-to-cad` install
-`texttocad` at the same release (`cadgen[kernel]`, 0.8's spelling, as `texttocad[build123d]`).
+`cad` on PyPI now (`pip install 'cad[build123d]==0.9.0'`; pin it, the release you run), beside the
+server, `cad-server`, and the CAD app's, `cad-mcp`; `cadgen` and `text-to-cad` install `cad` at the
+same release (`cadgen[kernel]`, 0.8's spelling, as `cad[build123d]`).

@@ -151,7 +151,7 @@ Quick Edit's view hid come back in its job's `selection.hide`. A robot opens at
 (`cad snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
 section and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core) and `kit/view-settings/renderState.test.js` (one look from either route); the engine's
-stills of each family are `tests/python/packages/texttocad_server/engine/test_snapshot.py`'s.
+stills of each family are `tests/python/packages/cad_server/engine/test_snapshot.py`'s.
 
 ### Shell
 

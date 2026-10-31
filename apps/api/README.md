@@ -4,7 +4,7 @@
 project of its own (`texttocad-api`, Root Directory `apps/api`).
 
 **PURPOSE** — the one service cadgen talks to (`cad_server/_internal/api.py` in
-`packages/texttocad-server`). Every released cadgen, 0.7.7 on, calls its four routes, so their
+`packages/cad-server`). Every released cadgen, 0.7.7 on, calls its four routes, so their
 paths, methods, statuses, bodies and headers are a contract that never breaks.
 
 **MAY DEPEND ON** — Node's standard library and the web platform's `fetch`,
@@ -40,7 +40,7 @@ redeploys. Nothing about it follows a release.
 ## Routes
 
 Its `/v1` routes serve the version feed cadgen's hourly check reads (`cad_server/updates.py` in
-`packages/texttocad-server`), and receive its telemetry (`cad_server/analytics.py`): the usage
+`packages/cad-server`), and receive its telemetry (`cad_server/analytics.py`): the usage
 counts the CAD app, the browser viewer and a `cad` command's sender (and 0.7's build
 daemon) send, which it checks and passes on to PostHog. Clients know only
 `api.texttocad.dev`, so the service behind it can change without a release of cadgen.

@@ -50,7 +50,7 @@ and assets, so the app does not scan another package's source.
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
   The backend is not here: its code, its tests and its laws live with the server
-  (`texttocad-server`).
+  (`cad-server`).
 - **Document boundary**: everything renders from the file. A STEP and an `.xbf`
   render from what the engine serves of them — the structure (names,
   colours, materials, the mechanism) and one buffer per part, read through the

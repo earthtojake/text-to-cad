@@ -83,7 +83,7 @@ suite tests the pure configuration, copy, selection, aggregation and comparison 
 ## Viewer against OCCT, mode by mode
 
 ```sh
-PYTHONPATH=packages/texttocad/src .venv/bin/python scripts/bench/occt_parity.py \
+PYTHONPATH=packages/cad/src .venv/bin/python scripts/bench/occt_parity.py \
   --doc motorbike=models/motorbike/XBF/motorbike.xbf --out tmp/bench/occt-parity/now
 ```
 

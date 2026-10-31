@@ -18,7 +18,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 
 ## Index
 
-`bundle/` — the server's packaged runtime (`packages/texttocad-server/src/cad_server/_runtime`).
+`bundle/` — the server's packaged runtime (`packages/cad-server/src/cad_server/_runtime`).
 None of it is committed: the directory is gitignored end to end and the wheel is
 where those files ship, so these scripts are what produces them.
 
@@ -118,7 +118,7 @@ where those files ship, so these scripts are what produces them.
   `test.yml` (Version Check).
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its five projects
-  (`PROJECTS`: `texttocad`, `texttocad-server`, `texttocad-mcp`, `cadgen`,
+  (`PROJECTS`: `cad`, `cad-server`, `cad-mcp`, `cadgen`,
   `text-to-cad`, in the order they go up) and what its GitHub Release attaches: of
   the run's files, that project's at the version; one PyPI does not hold goes to
   `--upload`; one PyPI already holds (a resumed release) is not uploaded again, and
@@ -128,12 +128,12 @@ where those files ship, so these scripts are what produces them.
   `release-publish.yml`'s `pypi` job, project by project.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the five
   `pyproject.toml`s are `VERSION` and pin the library at it, every skill's main file and setup
-  guide pin `texttocad-server==VERSION` or run `cad +VERSION`, the one-line installer falls back
+  guide pin `cad-server==VERSION` or run `cad +VERSION`, the one-line installer falls back
   to `VERSION`, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (Version Check), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
-  lockfile and `pyproject.toml` metadata, the `texttocad`, `texttocad-server` and `texttocad-mcp`
+  lockfile and `pyproject.toml` metadata, the `cad`, `cad-server` and `cad-mcp`
   pins, the skills' `cad +VERSION` in each
   skill's main file and `references/setup.md`, and the one-line installer's fallback release) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
@@ -209,7 +209,7 @@ where those files ship, so these scripts are what produces them.
   passed on. The docs site copies both into its `public/` as it builds
   (`apps/docs/scripts/install-scripts.mjs`), and `release-publish.yml` attaches them, with their
   `SHA256SUMS`, to each GitHub Release. Their structure and behaviour are tested by
-  `tests/python/packages/texttocad_server/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
+  `tests/python/packages/cad_server/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
   `install.ps1` on a Windows runner.
 
 - `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
@@ -238,7 +238,7 @@ Run by hand when the brand changes; ordinary builds use the committed files. See
 [the brand recipe](brand/README.md).
 
 `look/` — `bake-environment.mjs` bakes the engine's look's reflection environment
-(`packages/texttocad/src/cad/engine/render/studio.hdr`, committed): core's neutral
+(`packages/cad/src/cad/engine/render/studio.hdr`, committed): core's neutral
 studio scene ray-cast into a small equirectangular Radiance image, which the viewer
 and the OCCT prototype both light an engine document's regular modes with. Run by
 hand when the studio or the look changes.

@@ -1,13 +1,13 @@
-# texttocad-server
+# cad-server
 
 The CAD server for text-to-cad, imported as `cad_server`: the computer's one daemon that builds, keeps and
 serves CAD documents; the CAD Viewer and the CAD app's MCP endpoint on its listener; the environment the
 CAD kernel runs in; the installations and the one that is current; and the command that runs and
 installs them all.
 
-Models are written against the library, `texttocad` (imported as `cad`), which the server imports without
+Models are written against the library, `cad`, which the server imports without
 its CAD kernel: the kernel lives in the environment the server makes for models and its own kernel
-processes, `texttocad[build123d]` at the server's own release.
+processes, `cad[build123d]` at the server's own release.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -48,7 +48,7 @@ src/cad_server/
                          #   and the release an update moves to
   assets.py              # where the bundled runtime is
   _internal/             # the environment models run in (base: the installation's base,
-                         #   texttocad[build123d], made by uv), the launch commands (launch), the
+                         #   cad[build123d], made by uv), the launch commands (launch), the
                          #   installations' registry, which one is current, and the proxy it
                          #   writes (installations: ~/.local/bin/cad, which the skills run as
                          #   `cad +<version>`; written by `cad doctor`, `cad setup` and a CAD
@@ -97,7 +97,7 @@ skills copied by the Skills CLI for the agents without a plugin. An update write
 new release and brings the copies along; nothing updates by itself. A model builds by running its script: `cad run model.py`, or
 `cad +<version> run model.py` through the `cad` command, which runs the current installation, else
 the one registered last (`_internal/proxy.py`; a `+<version>` is taken off). The CAD app an agent
-host starts is `cad-mcp`, of the `texttocad-mcp` distribution, which reaches this server.
+host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
 The state folder is `texttocad` in the platform's place for state (`texttocad-state` on Windows),
 the cache folder `texttocad` in its place for caches. On a computer an earlier release (0.8, named

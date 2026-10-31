@@ -75,7 +75,7 @@ all presentations, including text-only hosts. They use the Python operations,
 not page state. Each tool starts work with a request ID and polls or cancels its
 own operation; there is no `cad_job` tool. `cad_inspect` also takes
 `query: "structure"`, the summary without bounds, volume or mass. See the
-[operation contract](../../packages/texttocad/README.md#agent-operations) for progress,
+[operation contract](../../packages/cad/README.md#agent-operations) for progress,
 retry, cancellation and explicit server-host destinations. An operation's status carries where the
 engine is as the engine's own progress event -- `progress`, `{kind, stage, job, outputs, detail, done,
 total, elapsedMs}`, the latest it said (an export's `read` and `write`, a snapshot's `scene`, `draw`

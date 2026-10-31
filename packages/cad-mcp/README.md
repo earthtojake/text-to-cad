@@ -1,4 +1,4 @@
-# texttocad-mcp
+# cad-mcp
 
 The stdio transport an agent app starts for text-to-cad's CAD app (`cad-mcp`): it carries the app's MCP
 requests to the CAD server on this computer, over HTTP, and the server's answers back. The standard

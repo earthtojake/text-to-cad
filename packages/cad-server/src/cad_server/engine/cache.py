@@ -3,7 +3,7 @@ deletes it, so a restart opens every project at once -- with the code still the 
 
 For every ``model`` and ``shape`` document (never a file's document: that is its own file),
 the engine keeps ``<cache>/documents/<id>/document.xbf`` -- ``<cache>`` the platform's cache folder
-the distribution names (``Registry.cache``: ``CAD_CACHE_DIR``, else ``$XDG_CACHE_HOME/texttocad`` or
+named for the product (``Registry.cache``: ``CAD_CACHE_DIR``, else ``$XDG_CACHE_HOME/texttocad`` or
 ``%LOCALAPPDATA%\\texttocad``, else ``~/.cache/texttocad``), the record staying in the state folder
 (``registry``) -- written through a ``registry.Folder`` (``replace_atomic``): the bytes the hold
 makes of it (``document.to_bytes``: the document, its closure record and its compiled animation

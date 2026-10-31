@@ -108,8 +108,8 @@ library, the server and the shim editable, the library with its `build123d` extr
 build123d and the rest; the library's required dependency is numpy alone), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`). The editable
-library installs `texttocad-lazy-kernel.pth` into the venv's site-packages as its wheel
-does (`packages/texttocad/setup.py`), so `import build123d` defers the kernel and a
+library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
+does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
 that has no such file until `requirements-dev.txt` is installed again. This is
 the default Python environment for broad repo checks and source-checkout
@@ -130,7 +130,7 @@ working copy, use the checkout's `.venv` (`requirements-dev.txt`), or
 `scripts/install/dev_install.py`, which makes a dev install of it the current installation (see
 [Test In Agent Apps](#test-in-agent-apps)).
 
-`packages/texttocad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
+`packages/cad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
 fresh clone therefore has no Viewer client or CAD app page until
 `scripts/bundle/bundle.sh` runs, and the server says so by name the
@@ -158,8 +158,8 @@ test, a benchmark or an experiment a daemon to itself. `cad status` lists its
 workers, one per model script, each with its memo, and what each is building;
 `cad stop` stops it (`cad server` runs one in the foreground); a running `cad-mcp` holds it
 until its host quits. A running daemon keeps the engine code it started with:
-after editing the library or the server (`packages/texttocad/src/cad`,
-`packages/texttocad-server/src/cad_server`), stop the daemon you started so the next
+after editing the library or the server (`packages/cad/src/cad`,
+`packages/cad-server/src/cad_server`), stop the daemon you started so the next
 build runs the new code. Never stop one you did not start.
 
 The engine's switches are environment variables, never script options (the
@@ -325,7 +325,7 @@ the first thing to read when a run is slow.
 With the development environment active, check the three distributions' Python sources with:
 
 ```sh
-for project in texttocad texttocad-server texttocad-mcp; do
+for project in cad cad-server cad-mcp; do
   python -m pyrefly check --config "packages/$project/pyproject.toml"
 done
 ```
@@ -354,14 +354,14 @@ diff content: a comment in a module selects what the module's code would.
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/texttocad`, `packages/texttocad-server`, `packages/texttocad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
+| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@text-to-cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/texttocad*`, `scripts/bundle`), dfm and dfam-check (their skills) |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`), dfm and dfam-check (their skills) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
-| packaging | `packages/texttocad*`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
+| packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
@@ -460,10 +460,10 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/texttocad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
+(`packages/cad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
-`tests/python/packages/texttocad/engine/test_memo.py` and `test_bodies.py`, and a
+`tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a
 change to it runs them first.
 
 Those numbers come from one batch, measured once every change that moves them is
@@ -477,7 +477,7 @@ A part is meshed at one tolerance, 0.25 % of its size and 28.5 degrees, by
 second pass, no repair. A change
 to that opens its PR with what it does to the faces left unmeshed and the triangle
 counts across the sample corpus, `main` against the branch; the engine's mesh tests
-(`tests/python/packages/texttocad/engine/test_mesh.py`) assert the contract on small
+(`tests/python/packages/cad/engine/test_mesh.py`) assert the contract on small
 fixtures.
 
 ## Source Boundaries
@@ -487,7 +487,7 @@ must not put `skills/`, the repository root, or a sibling skill directory on
 `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any similar lookup path. Skills are
 independent of *each other*.
 
-They are not independent of the server, `texttocad-server`. Each skill that uses it runs it
+They are not independent of the server, `cad-server`. Each skill that uses it runs it
 through the `cad` command its installation writes, and a skill's `scripts/<tool>` is a thin
 entrypoint whose parser and behaviour live in `cad_server.cli` — so what a published skill
 needs is an install, not a copy. Skills used to vendor the runtime and its JavaScript builders into
@@ -498,18 +498,18 @@ Canonical source directories are:
 
 - `skills/*` for skill instructions, references, and the thin entrypoints.
 - `apps/web/` for the CAD Viewer's React client. Its backend is
-  `cad_server.viewer` (in `packages/texttocad-server`), and its built `dist/` ships inside the
+  `cad_server.viewer` (in `packages/cad-server`), and its built `dist/` ships inside the
   server's wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
 - `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Claude Desktop). Its
-  server is the engine's MCP endpoint (`cad_server/mcp` in `packages/texttocad-server`), which
-  `cad-mcp` (`packages/texttocad-mcp`) carries a host's requests to, and its one-file
+  server is the engine's MCP endpoint (`cad_server/mcp` in `packages/cad-server`), which
+  `cad-mcp` (`packages/cad-mcp`) carries a host's requests to, and its one-file
   build ships inside the server's wheel as `cad_server/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
 - `apps/api/` for `api.texttocad.dev`, the version feed and the telemetry receiver
   the server talks to: a Vercel project of its own, with no dependencies.
-- `packages/texttocad/`, `packages/texttocad-server/` and `packages/texttocad-mcp/` for the three
+- `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
   Python distributions (the library, the server with its bundled runtime assets, and the shim), and
   `packages/aliases/` for the `cadgen` and `text-to-cad` alias distributions.
 - `packages/core/` for non-React CAD/client code.
@@ -517,9 +517,9 @@ Canonical source directories are:
 
 Three source trees ship whole and must each work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
-`tests/python/global/test_package_boundaries.py`: `packages/texttocad`,
-`packages/texttocad-server` (with @text-to-cad/core and the viewer client bundled in at build
-time) and `packages/texttocad-mcp` each build into a PyPI wheel whose README is its long
+`tests/python/global/test_package_boundaries.py`: `packages/cad`,
+`packages/cad-server` (with @text-to-cad/core and the viewer client bundled in at build
+time) and `packages/cad-mcp` each build into a PyPI wheel whose README is its long
 description. Markdown under it must be true and
 actionable with this repo gone: name the bundled thing ("the @text-to-cad/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
@@ -531,9 +531,9 @@ imports remain inside its directory.
 ## Working On The Packages In This Repo
 
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine
-  (`tests/python/packages/texttocad/engine/`, `tests/python/packages/texttocad_server/engine/`);
+  (`tests/python/packages/cad/engine/`, `tests/python/packages/cad_server/engine/`);
   `tests/python/global/` holds the policy
-  gates that enforce the design laws in `packages/texttocad/README.md`.
+  gates that enforce the design laws in `packages/cad/README.md`.
 - Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
   there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
   shows up in the diff as the shared package source it was made in and reaches a user
@@ -624,7 +624,7 @@ Use `--with-deps` when installing browsers on Linux. The browser suite runs
 exactly what CI runs: every load path (STEP, STL, DXF, URDF) and the camera
 across modes and a saved revision, through the real backend (picking and
 kinematics are the `packages/ui` browser specs' on every PR). Backend tests live in
-`tests/python/packages/texttocad_server/viewer` and are selected with
+`tests/python/packages/cad_server/viewer` and are selected with
 `scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
 Nothing in `cad_server.viewer` imports the CAD kernel at module scope.
 
@@ -783,9 +783,9 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 `bump-version.sh` sets `VERSION`
 past `main`'s and stamps the derived metadata and every pin of the release's own
 (`sync-version.mjs`: package, plugin and lockfile versions, the five
-`pyproject.toml`s and their `texttocad==` pins, the plugin server configs'
-`texttocad-mcp==`, each skill's launch command and `cad +<version>`, the installers'
-`texttocad-server==` fallback). It works from `main`'s version, not the
+`pyproject.toml`s and their `cad==` pins, the plugin server configs'
+`cad-mcp==`, each skill's launch command and `cad +<version>`, the installers'
+`cad-server==` fallback). It works from `main`'s version, not the
 branch's, so running it twice changes nothing and running it again after `main`
 moves moves the bump with it; it refuses a branch that does not contain `main`
 yet, whose stamps would conflict.
@@ -829,8 +829,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
    `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's five projects on
-   PyPI into one folder (the library `texttocad`, the server `texttocad-server`, the
-   shim `texttocad-mcp`, and the aliases `cadgen` and `text-to-cad`, a wheel and an
+   PyPI into one folder (the library `cad`, the server `cad-server`, the
+   shim `cad-mcp`, and the aliases `cadgen` and `text-to-cad`, a wheel and an
    sdist each, and nothing else at any other version), and an `unzip -l` assertion
    that the server's wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
@@ -1135,7 +1135,7 @@ requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
 `release`, whose deployment branches are `main` alone, and the trusted publisher of each
-of the five projects on PyPI (`texttocad`, `texttocad-server`, `texttocad-mcp`, `cadgen`,
+of the five projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`,
 `text-to-cad`) names this repository, `release-publish.yml` and that environment, so no
 run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
 project PyPI does not have yet takes a pending publisher, the same three names, before
@@ -1215,7 +1215,7 @@ scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 `skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
-suite is `tests/python/packages/texttocad_server/viewer/`, part of the server's package suite.
+suite is `tests/python/packages/cad_server/viewer/`, part of the server's package suite.
 
 For fast CAD Viewer source iteration, build the shared packages, then invoke
 the web app in dev mode from a folder of models (outside `apps/web`). The app
