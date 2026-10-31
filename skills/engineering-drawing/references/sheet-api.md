@@ -327,7 +327,9 @@ def bracket_drawing():
 
 - **Views that earn their place**: the view looking down most of the holes
   and slots is drawn as the front, the part turned to face it as drafters
-  choose a front (your points stay in the part's own frame); then each further
+  choose a front (your points stay in the part's own frame), and spun about
+  the front's line of sight so holes the front doesn't see open toward a view
+  a first pass draws, not the bottom, back or left; then each further
   view that looks down a hole, sees a slope edge-on, or shows a model axis no
   view chosen shows, a tie going to the view beside the front before the one
   above it, with an isometric. A plate's two edge views show one thing, its
@@ -335,11 +337,21 @@ def bracket_drawing():
   diameters, tapers and grooves, every step placed from one end, a long one
   lying down).
 - **Holes**: up to six in a view called out once (`5× ⌀5.5 THRU`) and located
-  from the part's edge faces; more in a hole table.
+  from the part's edge faces; more in a hole table. A hole down a hexagon's
+  axis (a nut's bore) is located by the hexagon.
+- **Hexagons**: `HEX 19 A/F` across the flats in the view down its axis, which
+  states all six sides and their angles; its centre located from the edges
+  unless it spans the part.
+- **Bosses and shanks**: a round one on a part not turned whole (a bolt's
+  shank, a boss on a plate) is given its diameter across its profile
+  (`⌀10`), its centre located from the edges.
 - **Faces**: every flat face square to a model axis placed from the same
-  edges, and both ends of every slope (which then states it), the largest
-  faces first, at most six places along an axis. A ladder past that shrinks
-  the part more than it helps; the report names the rest.
+  edges, the largest faces first, at most six places along an axis across all
+  the views, in the front first. A ladder
+  past that shrinks the part more than it helps; the report names the rest.
+- **Slopes**: one at a whole or half degree is stated by its angle (`30°`,
+  measured from the view axis that gives the rounder number) and its rounder
+  end placed; any other by both its ends, as a gusset is given by its legs.
 - **Edges**: `geometry_notes(part)`, then a note for each fillet, round and
   chamfer size it leaves (`5× CHAMFER 0.5 × 45°.`).
 

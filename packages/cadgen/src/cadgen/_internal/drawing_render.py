@@ -702,9 +702,12 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
         image = [sum(row[k] * a for row, a in zip(projections[id(parent)].m, along)) for k in (0, 1)]
         plane_sides.setdefault(id(parent), set()).update(
             ("left", "right") if abs(image[0]) >= abs(image[1]) else ("top", "bottom"))
-    for view, _proj, _bounds, _items, plan, _centre in work:
-        for side in plane_sides.get(id(view), ()):
-            plan["room"][side] = max(plan["room"][side], _PLANE_ROOM + (11.5 if side == "bottom" else 0.0))
+    def plane_room() -> None:
+        for view, _proj, _bounds, _items, plan, _centre in work:
+            for side in plane_sides.get(id(view), ()):
+                plan["room"][side] = max(plan["room"][side], _PLANE_ROOM + (11.5 if side == "bottom" else 0.0))
+
+    plane_room()
 
     # A sheet that chooses its own size or scale chooses again now that each
     # view's annotation is known: the choice three_views() made assumed two rows
@@ -713,11 +716,18 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
         groups_seen = {id(view._arranged): view for view, *_rest in work if view._arranged is not None}
         if len(groups_seen) == 1:
             first = next(iter(groups_seen.values()))
+            size, gap, iso, names = first._arranged
+            planned = sheet._scale()
             rooms = {view.name: plan["room"] for view, _proj, _bounds, _items, plan, _centre in work
                      if view._arranged is first._arranged}
-            size, gap, iso, names = first._arranged
             _settle(sheet, _choose_size_and_scale(sheet, size, iso, rooms, gap, floor=floor, ceiling=ceiling,
                                                   names=names))
+            if abs(sheet._scale() - planned) > 1e-9:
+                # Some room is the scale's: a value wider than its span at the scale
+                # chosen is set beyond it. Planned again at that scale, for the layout.
+                work[:] = [(view, proj, bounds, items, _plan_view(view, proj, bounds, items, sheet), centre)
+                           for view, proj, bounds, items, _plan, centre in work]
+                plane_room()
         else:
             # Several arrangements, or none: no one layout to choose by, so the
             # earlier choice stands, held within the bounds a retry set.
@@ -1293,6 +1303,7 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
                 base = (a[0], (max(a[1], b[1]) if offset >= 0 else min(a[1], b[1])) + offset)
                 if beside + 1.0 > span:
                     location = (max(a[0], b[0]) + 1.5 * arrow + 1.0 + width / 2, base[1] + stand)
+                    reach["right"] = max(reach["right"], location[0] + width / 2 - vx1 + 1.0)
                 d = msp.add_linear_dim(base=base, p1=a, p2=b, location=location, angle=0, dimstyle=dimstyle,
                                        text=label, override=style_override, dxfattribs={"layer": "DIM"})
                 side = "top" if offset >= 0 else "bottom"
@@ -1302,6 +1313,7 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
                 base = ((max(a[0], b[0]) if offset >= 0 else min(a[0], b[0])) + offset, a[1])
                 if beside + 1.0 > span:
                     location = (base[0] - stand, max(a[1], b[1]) + 1.5 * arrow + 1.0 + width / 2)
+                    reach["top"] = max(reach["top"], location[1] + width / 2 - vy1 + 1.0)
                 d = msp.add_linear_dim(base=base, p1=a, p2=b, location=location, angle=90, dimstyle=dimstyle,
                                        text=label, override=style_override, dxfattribs={"layer": "DIM"})
                 side = "right" if offset >= 0 else "left"

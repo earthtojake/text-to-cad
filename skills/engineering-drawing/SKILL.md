@@ -88,7 +88,8 @@ outside the sandbox once.
    from its first pass: `part_sheet(part, title=..., part_number=...)` draws
    the views that earn their place (the one looking down most holes as the
    front), overall sizes, holes called out and located
-   (a table past six), every step placed and edges noted, from the part alone
+   (a table past six), hexagons across their flats, boss diameters, slopes by
+   their angle, every step placed and edges noted, from the part alone
    ([part_sheet](references/sheet-api.md#part_sheetpart-fields)); refine that
    sheet with the person's requirements. To lay it out yourself, start from
    [the template](references/sheet-api.md#template). Import the facts your

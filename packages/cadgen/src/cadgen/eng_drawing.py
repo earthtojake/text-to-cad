@@ -1296,7 +1296,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
     from build123d import GeomType
 
     from cadgen._internal.drawing_features import (
-        grooves, holes as find_holes, revolved, slots as find_slots, tapers, turned_surfaces,
+        grooves, hexes, holes as find_holes, revolved, slots as find_slots, tapers, turned_surfaces,
     )
     from cadgen._internal.drawing_report import _owned
 
@@ -1316,11 +1316,18 @@ def _first_pass(sheet: Sheet, shape) -> None:
     if turned is None:
         # The view showing most is drawn as the front, as drafters choose it: a
         # part whose holes are seen from above or the side is turned to face it.
-        from build123d import Rot
+        # Then it is spun about the front's line of sight so the holes the front
+        # does not see open toward a view a first pass draws, not the bottom,
+        # the back or the left: level first (half a turn), on end only to show more.
+        from build123d import Location, Rot
 
         main = _main_view(features)
-        if main != "front":
-            turn = Rot(90, 0, 0) if main == "top" else Rot(0, 0, -90)
+        face = Rot(90, 0, 0) if main == "top" else Rot(0, 0, -90) if main == "right" else Location()
+        candidates = [Rot(0, spin, 0) * face for spin in (0, 180, 90, 270)]
+        seen = [_seen_turned(features, c) for c in candidates]
+        best = max(range(len(candidates)), key=lambda i: (seen[i], -i))
+        if main != "front" or best:
+            turn = candidates[best]
             shape = turn * shape
             features = [*find_holes(shape), *find_slots(shape)]
     names = list(_VIEW_NAMES) if turned is not None else _earned_views(shape, features)
@@ -1380,7 +1387,38 @@ def _first_pass(sheet: Sheet, shape) -> None:
                 side.dim(start, on_profile(z, r), orientation=lengthwise)
         placed = set(stations)
         stated = {j for j in range(3) if j != k}
-    for view in views:
+    hexagons = [] if turned is not None else hexes(shape)
+    box = shape.bounding_box()
+    for hexagon in hexagons:
+        # Across its flats, in the view looking down its axis: HEX 19 A/F says the
+        # six sides and their angles at once. Spanning the part, it is that way's
+        # overall size too.
+        view = next((v for v in views if hexagon.axis not in _view_axes(v.name)), None)
+        if view is None:
+            continue
+        ends = [list(hexagon.centre) for _ in range(2)]
+        ends[0][hexagon.flat] -= hexagon.across / 2
+        ends[1][hexagon.flat] += hexagon.across / 2
+        view.dim(tuple(ends[0]), tuple(ends[1]), text="HEX <> A/F",
+                 orientation="h" if _view_axes(view.name)[0] == hexagon.flat else "v")
+        if abs(hexagon.across - tuple(box.size)[hexagon.flat]) < 1e-3:
+            stated.add(hexagon.flat)
+    bosses = [] if turned is not None else _bosses(shape)
+    for boss in bosses:
+        # A boss or a shank, across its profile in a view that sees its axis
+        # side-on (seen as a circle it may be hidden under what it carries).
+        k = _axis_of(boss.axis)
+        side = next((v for v in views if not VIEW_DIRECTIONS[v.name][0][k]), None)
+        if side is None:
+            continue
+        across = _cross(boss.axis, _look(side))
+        side.dim(*(tuple(m + s * boss.diameter / 2 * c for m, c in zip(boss.middle, across)) for s in (1, -1)),
+                 text="%%c<>")
+        stated |= {j for j in range(3) if j != k and abs(tuple(box.size)[j] - boss.diameter) < 1e-3}
+    # The front first: it is the view showing most, and the sizes it can show
+    # are stated on it, not on a thin view beside or above it.
+    first = views if turned is not None else sorted(views, key=lambda v: v.name != "front")
+    for view in first:
         width_axis, height_axis = _view_axes(view.name)
         if width_axis not in stated or height_axis not in stated:
             view.overall(width=width_axis not in stated, height=height_axis not in stated)
@@ -1388,13 +1426,30 @@ def _first_pass(sheet: Sheet, shape) -> None:
     low = shape.bounding_box().min
     if turned is None:
         placed: Any = {}
+        for hexagon in hexagons:
+            # Its centre from the part's edges, along each way it does not span
+            # the part (spanning it, its centre is half way across).
+            view = next((v for v in views if hexagon.axis not in _view_axes(v.name)), None)
+            ways = tuple(j for j in (hexagon.flat, hexagon.corner)
+                         if tuple(box.size)[j] - _hex_width(hexagon, j) > 1e-3)
+            if view is not None and ways:
+                _locate(view, shape, [(hexagon.centre, ways)], placed)
+        for boss in bosses:
+            k = _axis_of(boss.axis)
+            view = next((v for v in views if k not in _view_axes(v.name)), None)
+            ways = tuple(j for j in range(3) if j != k and tuple(box.size)[j] - boss.diameter > 1e-3)
+            if view is not None and ways:
+                _locate(view, shape, [(boss.middle, ways)], placed)
     for view in views:
         look = _look(view)
         seen = [f for f in features if _looks_into(f, look)]
         if not seen:
             continue
         if turned is None:
-            if len(seen) > _FEW_HOLES or not _locate(view, shape, [(f.mouth, (0, 1, 2)) for f in seen], placed):
+            # A hole on a hexagon's axis is located by it: a nut's bore.
+            loose = [f for f in seen if not any(_on_hex(f, h) for h in hexagons)]
+            if len(seen) > _FEW_HOLES or (loose and not _locate(view, shape, [(f.mouth, (0, 1, 2)) for f in loose],
+                                                                 placed)):
                 view.hole_table()  # each hole's X and Y from one corner: called out and located
             else:
                 view.holes()
@@ -1412,7 +1467,7 @@ def _first_pass(sheet: Sheet, shape) -> None:
             end = tuple((low.X, low.Y, low.Z)[j] if j == k else feature.mouth[j] for j in range(3))
             view.dim(end, feature.mouth)
     if turned is None:
-        _place_faces(views, shape, features, placed)
+        _place_faces(first, shape, features, placed, hexagons)
         _state_edges(sheet, shape)
     for view in sheet.views:
         # The author's points are in the part's own frame, as the shape given is.
@@ -1432,6 +1487,101 @@ _FEW_STEPS = 6
 #: (a sheet is landscape: a thin view beside the front costs less paper than one
 #: above it), then the one above.
 _PREFERRED = ("front", "right", "top")
+
+
+def _seen_turned(features, turn) -> int:
+    """How many holes and slots a first pass's principal views would look down
+    with the part turned by ``turn``: each view's line of sight taken back into
+    the part's own frame."""
+    from OCP.gp import gp_Dir
+
+    back = turn.inverse().wrapped.Transformation()
+    looks = []
+    for name in _PREFERRED:
+        d = gp_Dir(*VIEW_DIRECTIONS[name][0]).Transformed(back)
+        looks.append((d.X(), d.Y(), d.Z()))
+    return sum(any(_looks_into(f, look) for look in looks) for f in features)
+
+
+def _axis_of(direction) -> int | None:
+    """The model axis a direction runs along, or None."""
+    return next((k for k in range(3) if abs(abs(direction[k]) - 1) < 1e-9), None)
+
+
+def _bosses(shape) -> list:
+    """A part's round bosses and shanks -- its turned outside surfaces on a model
+    axis -- one per diameter and axis line."""
+    from cadgen._internal.drawing_features import turned_surfaces
+
+    return [s for s in turned_surfaces(shape) if _axis_of(s.axis) is not None]
+
+
+def _hex_width(hexagon, axis: int) -> float:
+    """A hexagon's width along a model axis: across its flats, or its corners."""
+    return hexagon.across if axis == hexagon.flat else hexagon.across * 2 / math.sqrt(3)
+
+
+def _on_hex(feature, hexagon) -> bool:
+    """Whether a hole or slot runs down a hexagon's axis, centred on it."""
+    return (abs(abs(feature.axis[hexagon.axis]) - 1) < 1e-9
+            and all(abs(feature.mouth[j] - hexagon.centre[j]) < 1e-3 for j in (hexagon.flat, hexagon.corner)))
+
+
+#: A slope whose angle comes within this many degrees of a whole or half degree is
+#: stated by that angle and one end: the designer drew it at an angle. Any other is
+#: stated by both its ends, as a gusset is given by its legs.
+_ROUND_ANGLE = 1e-3
+
+
+def _decimals(value: float) -> int:
+    """How many decimal places ``value`` needs, to three: 0 for 30, 1 for 12.5."""
+    return next((n for n in range(3) if abs(value - round(value, n)) < 1e-3), 3)
+
+
+def _slope_angle(view: "View", face, shape) -> tuple | None:
+    """How a first pass states a slope ``view`` sees edge-on by its angle: the end
+    it places, the other end, and a point along the model axis its angle is
+    measured from, for ``View.angle``; or None where its angle is no whole or half
+    degree. Of each end and each of the view's two axes, measured toward the
+    slope's other end: first one whose reference line runs through air (along an
+    edge the slope cut away, not across the part), then the rounder angle, then
+    the end whose places from the part's edges are the rounder, then the smaller
+    angle."""
+    from build123d import Vector
+
+    axes = _view_axes(view.name)
+    look = _look(view)
+    run = _cross(tuple(face.normal_at()), look)
+    points = sorted({tuple(round(c, 6) for c in tuple(v)) for v in face.vertices()},
+                    key=lambda q: sum(a * b for a, b in zip(q, run)))
+    ends = (points[0], points[-1])
+    depth = tuple(face.center())
+    edges = [_edge_face(shape, j) for j in axes]
+    starts = [tuple(e.center())[j] if e is not None else 0.0 for e, j in zip(edges, axes)]
+    chosen = []
+    for k in axes:
+        degrees = math.degrees(math.acos(min(1.0, abs(run[k]) / math.sqrt(sum(c * c for c in run)))))
+        if abs(degrees * 2 - round(degrees * 2)) * 0.5 >= _ROUND_ANGLE:
+            continue
+        for at, vertex in enumerate(ends):
+            other = ends[1 - at]
+            along = [0.0, 0.0, 0.0]
+            along[k] = other[k] - vertex[k]
+            # Half way along the reference line, at the slope's own depth in the view.
+            middle = [vertex[j] + along[j] / 2 if j != _look_axis(view) else depth[j] for j in range(3)]
+            inside = shape.is_inside(Vector(*middle))
+            places = sum(_decimals(abs(vertex[j] - s)) for j, s in zip(axes, starts))
+            key = (inside, _decimals(round(degrees * 2) / 2), places, round(degrees, 3))
+            chosen.append((key, vertex, other, tuple(v + a for v, a in zip(vertex, along))))
+    if not chosen:
+        return None
+    _key, vertex, other, along = min(chosen, key=lambda c: c[0])
+    return vertex, other, along
+
+
+def _look_axis(view: "View") -> int:
+    """The model axis a principal view looks along."""
+    return next(k for k in range(3) if k not in _view_axes(view.name))
 
 
 def _main_view(features) -> str:
@@ -1508,20 +1658,23 @@ def _edge_face(shape, axis: int):
     return max(ends, key=lambda f: f.area, default=None)
 
 
-def _locate(view: "View", shape, points, placed: dict, *, most: int | None = None) -> bool:
+def _locate(view: "View", shape, points, placed: dict, *, most: dict | None = None) -> bool:
     """Each of ``points`` located in ``view`` from the part's edge faces: a point
     with the model axes it states (a hole's mouth, both; a face, the one it is
     square to), a dimension from the edge along each the view shows, to each
     place not stated yet (``placed``, by axis; places shared are stated once), at
-    most ``most`` new places an axis, the first given first. False, and nothing
-    added, where the part has no flat edge to measure from along an axis the
-    view shows."""
+    most ``most[axis]`` new places an axis where given (counted down as they are
+    placed), the first given first. False, and nothing
+    added, where the part has no flat edge to measure from along an axis a point
+    states that the view shows."""
     axes = _view_axes(view.name)
     edges = [_edge_face(shape, k) for k in axes]
-    if None in edges:
+    if any(edge is None and any(k in stated for _q, stated in points) for edge, k in zip(edges, axes)):
         return False
     high = tuple(shape.bounding_box().max)
     for k, edge, orientation in zip(axes, edges, ("h", "v")):
+        if edge is None:
+            continue
         start = tuple(edge.center())
         chosen: dict[float, tuple] = {}
         for point in (q for q, stated in points if k in stated):
@@ -1529,44 +1682,58 @@ def _locate(view: "View", shape, points, placed: dict, *, most: int | None = Non
             if (place in placed.setdefault(k, set()) or place in chosen or abs(point[k] - start[k]) < 1e-6
                     or abs(point[k] - high[k]) < 1e-6):
                 continue
-            if most is not None and len(chosen) >= most:
+            if most is not None and len(chosen) >= most.get(k, 0):
                 break
             chosen[place] = point
         for place, point in sorted(chosen.items()):
             placed[k].add(place)
             view.dim(start, tuple(point), orientation=orientation)
+        if most is not None:
+            most[k] = most.get(k, 0) - len(chosen)
     return True
 
 
-def _place_faces(views, shape, features, placed: dict) -> None:
+def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
     """The flat faces of a part not turned, square to a model axis, placed from
     the part's edge along that axis, in the first view that shows the axis; and
-    both ends of each slope (a flat face leaning in one model plane), which then
-    state it: the largest faces first, at most ``_FEW_STEPS`` places an axis.
-    Faces a hole or slot owns are its callout's, chamfers their note's; the far
-    end along an axis is the overall size's."""
+    each slope (a flat face leaning in one model plane) stated in the view that
+    sees it edge-on: by its angle and one end where its angle is a whole or half
+    degree (``_slope_angle``), else by both its ends. The largest faces first, at
+    most ``_FEW_STEPS`` places an axis. Faces a hole or slot owns are its
+    callout's, a hexagon's its HEX callout's, chamfers their note's; the far end
+    along an axis is the overall size's."""
     from build123d import GeomType
 
     from cadgen._internal.drawing_report import _owned
 
     bevel = _bevels(shape)
     flats = [face for face in shape.faces()
-             if face.geom_type == GeomType.PLANE and not _owned(face, features) and not bevel(face)]
+             if face.geom_type == GeomType.PLANE and not _owned(face, features) and not bevel(face)
+             and not any(h.holds(face) for h in hexagons)]
+    angled: set[int] = set()
+    most = dict.fromkeys(range(3), _FEW_STEPS)
     for view in views:
         points = []
-        for face in flats:
+        for at, face in enumerate(flats):
             normal = tuple(face.normal_at())
             square = next((k for k in range(3) if abs(abs(normal[k]) - 1) < 1e-9), None)
             if square is not None:
                 points.append((face.area, tuple(face.center()), (square,)))
             elif sum(abs(c) < 1e-9 for c in normal) == 1 and abs(_dot(normal, _look(view))) < 1e-9:
                 leans = tuple(k for k in range(3) if abs(normal[k]) >= 1e-9)
-                points.extend((face.area, tuple(v), leans) for v in face.vertices())
+                stated = _slope_angle(view, face, shape) if at not in angled else None
+                if stated is None:
+                    points.extend((face.area, tuple(v), leans) for v in face.vertices())
+                    continue
+                angled.add(at)
+                vertex, other, along = stated
+                view.angle(vertex, other, along)
+                points.append((face.area, vertex, leans))
         shown = set(_view_axes(view.name))
         points = [(q, stated) for _area, q, stated in sorted(points, key=lambda p: -p[0])
                   if any(k in shown and round(q[k], 3) not in placed.get(k, set()) for k in stated)]
         if points:
-            _locate(view, shape, points, placed, most=_FEW_STEPS)
+            _locate(view, shape, points, placed, most=most)
 
 
 def _state_edges(sheet: Sheet, shape) -> None:
@@ -1607,15 +1774,21 @@ def part_sheet(part, **fields: Any) -> Sheet:
 
     The views are the ones that earn their place: the view looking down most of
     the part's holes, drawn as the front (the part turned to face it, as drafters
-    choose a front; points given its views stay in the part's own frame), and
+    choose a front, and spun about the front's line of sight so the holes it
+    does not see open toward a view a first pass draws; points given its views
+    stay in the part's own frame), and
     each further principal view that shows a hole, a slope seen edge-on or a
     model axis no view chosen shows, the one beside the front before the one
     above (a plate's two edge views show one thing, its thickness, and one is
     drawn), with an isometric. On them:
     the overall sizes; up to six holes and slots in a view called out and
-    located from the part's edge faces (more in a hole table); every flat face
-    square to a model axis, and both ends of every slope, placed from the same
-    edges; and the fillets, rounds and chamfers stated in notes. A part turned
+    located from the part's edge faces (more in a hole table; one down a
+    hexagon's axis is located by it); each hexagon across its flats (``HEX 19
+    A/F``) and each round boss or shank by its diameter, their centres located;
+    every flat face square to a model axis placed from the same edges, at most
+    six an axis, in the front first; each
+    slope by its angle and one end where the angle is a whole or half degree,
+    else by both ends; and the fillets, rounds and chamfers stated in notes. A part turned
     whole is drawn as :func:`assembly_sheets` draws one: its diameters, tapers and
     grooves, every step placed from one end, a long one lying down.
 

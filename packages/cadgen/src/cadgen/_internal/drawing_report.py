@@ -186,7 +186,8 @@ def _anchors(record: dict) -> dict[int, set]:
     faces made datums, the centre lines stated symmetric, the centres of datum
     features of size, and the axis of a part whose outline is turned (a centred
     bore on a flange is located by the flange's diameter), or that is turned
-    whole (a coned spring perch's bore by the perch)."""
+    whole (a coned spring perch's bore by the perch), or whose outline is a
+    hexagon (a nut's bore by the nut)."""
     from cadgen._internal.drawing_features import revolved, turned_surfaces
 
     shape = record["shape"]
@@ -212,6 +213,11 @@ def _anchors(record: dict) -> dict[int, set]:
         for k in range(3):
             if k != whole.axis:
                 anchors[k].add(round(whole.at[k], _PLACE))
+    for hexagon in _found(record, "hexes"):
+        widths = {hexagon.flat: hexagon.across, hexagon.corner: hexagon.across * 2 / math.sqrt(3)}
+        if all(abs(hi[k] - lo[k] - width) <= 0.01 for k, width in widths.items()):
+            for k in widths:
+                anchors[k].add(round(hexagon.centre[k], _PLACE))
     return anchors
 
 
@@ -375,14 +381,16 @@ def _redundant(facts: _Facts) -> list[str]:
 
 
 def _found(record: dict, what: str) -> list:
-    """A part's holes, slots or bolt circles, read off it once for every check
+    """A part's holes, slots, hexagons or bolt circles, read off it once for every check
     that asks."""
-    from cadgen._internal.drawing_features import bolt_circles, holes as find_holes, slots as find_slots
+    from cadgen._internal.drawing_features import bolt_circles, hexes, holes as find_holes, slots as find_slots
 
     cache = record.setdefault("_found", {})
     if what not in cache:
         if what == "holes":
             cache[what] = find_holes(record["shape"])
+        elif what == "hexes":
+            cache[what] = hexes(record["shape"])
         elif what == "slots":
             cache[what] = find_slots(record["shape"])
         else:
@@ -458,6 +466,13 @@ def _path(near: dict, a: Hashable, b: Hashable) -> list[str] | None:
     return None
 
 
+def _stated_hexes(record: dict) -> list:
+    """The part's hexagons a dimension across the flats states."""
+    spans = {(k, frozenset((round(a, _PLACE), round(b, _PLACE)))) for k, a, b, *_rest in record["spans"]}
+    return [h for h in _found(record, "hexes")
+            if (h.flat, frozenset(round(h.centre[h.flat] + s * h.across / 2, _PLACE) for s in (-1, 1))) in spans]
+
+
 def _reached(record: dict) -> dict[int, set]:
     """Every place along each model axis the sheet ties to an anchor through its
     dimensions, its hole tables and its bolt circles; worked out once a part."""
@@ -472,6 +487,12 @@ def _reach(record: dict) -> dict[int, set]:
         links[axis].extend(slopes)
     box = record["shape"].bounding_box()
     middle = tuple(round((lo + hi) / 2, _PLACE) for lo, hi in zip(box.min, box.max))
+    for hexagon in _stated_hexes(record):
+        # Across its flats, a hexagon is the same both sides of its centre: its
+        # flats and its corners are each half their width from it.
+        for k, width in ((hexagon.flat, hexagon.across), (hexagon.corner, hexagon.across * 2 / math.sqrt(3))):
+            for sign in (-1, 1):
+                links[k].append((round(hexagon.centre[k], _PLACE), round(hexagon.centre[k] + sign * width / 2, _PLACE)))
     for axis, a, b, *_rest in record["spans"]:
         a, b = round(a, _PLACE), round(b, _PLACE)
         links[axis].append((a, b))
@@ -573,7 +594,9 @@ def _unplaced_faces(record: dict, whose: str) -> list[str]:
     square to a model axis (a step, a shoulder, a rib's side, a plate's top) is
     placed when its position ties to an anchor through dimensions; an inclined
     face is stated by an angle in a view that sees it edge-on. Faces a called-out
-    hole or slot owns, and chamfers, are stated by their callouts and notes."""
+    hole or slot owns, and chamfers, are stated by their callouts and notes; a
+    hexagon's, by a dimension across its flats (HEX 19 A/F: six equal sides, each
+    at 120 degrees to the next)."""
     from build123d import GeomType, Vector
 
     from cadgen._internal.drawing_features import chamfers
@@ -581,6 +604,7 @@ def _unplaced_faces(record: dict, whose: str) -> list[str]:
     shape, views = record["shape"], record["views"]
     features = [f for f in [*_found(record, "holes"), *_found(record, "slots")] if _member_key(f) in record["called"]]
     bevels = [c.point for c in chamfers(shape)]
+    across = _stated_hexes(record)
     reached = None
     steps: dict[tuple[int, float], None] = {}
     slopes: dict[tuple, None] = {}
@@ -598,6 +622,8 @@ def _unplaced_faces(record: dict, whose: str) -> list[str]:
                 steps[(axis, place)] = None
             continue
         if any(face.distance_to(Vector(*p)) < 1e-6 for p in bevels):
+            continue
+        if any(h.holds(face) for h in across):
             continue
         seen = [name for name, look in views if abs(sum(a * b for a, b in zip(normal, look))) < 1e-6]
         stated = False

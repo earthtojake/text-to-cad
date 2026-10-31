@@ -848,6 +848,17 @@ def _plan_view(view: View, proj, bounds, items: list["_Dim"], sheet: Sheet) -> d
     room = {side: (rows_out[side] * _DIM_ROW + th * 1.5) if rows_out[side] else 0.0 for side in _SIDES}
     rowed = dict(room)
     for dim in items:
+        if dim.kind == "linear" and dim.orientation != "aligned" and dim.text and dim.tol is None:
+            # A value wider than its span is set beyond the span's far end, along
+            # its line: past the top of an upright one, right of a level one.
+            a, b = proj.point(dim.p1), proj.point(dim.p2)
+            horizontal = (dim.orientation or _spans(a, b)) == "h"
+            span = abs(b[0] - a[0]) if horizontal else abs(b[1] - a[1])
+            width = _ink_width(dim.text.replace("<>", _fmt(span)), th)
+            if width + 1.0 > span * sv:
+                end = (max(a[0], b[0]) - bx1) if horizontal else (max(a[1], b[1]) - by1)
+                side = "right" if horizontal else "top"
+                room[side] = max(room[side], end * sv + 1.5 * th * 0.85 + 1.0 + width + 1.0)
         if dim.kind in ("hole", "slot", "diameter", "radius"):
             # The side a callout prefers is its hole's own half of the view, the
             # short way out, past every dimension row on that side.

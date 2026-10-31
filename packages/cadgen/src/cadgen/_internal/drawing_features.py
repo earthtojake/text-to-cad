@@ -42,7 +42,7 @@ import math
 from dataclasses import dataclass
 
 __all__ = ["Hole", "Axis", "Slot", "BoltCircle", "Blend", "Chamfer", "holes", "axes", "slots", "bolt_circles",
-           "turned_diameters", "blends", "chamfers", "sharp_edges"]
+           "turned_diameters", "blends", "chamfers", "sharp_edges", "Hex", "hexes"]
 
 #: Model millimetres two positions on an axis may differ by and still touch. A
 #: counterbore's floor and the bore below it meet at one plane, so their ranges
@@ -932,6 +932,87 @@ def grooves(shape) -> list[Groove]:
         groove = Groove(round(torus.MinorRadius(), 6), _tidy(middle), d, round(torus.MajorRadius(), 6))
         if groove not in found:
             found.append(groove)
+    return found
+
+
+@dataclass(frozen=True)
+class Hex:
+    """A hexagonal prism standing out of the part -- a hex bar, a nut, a bolt's
+    head, a standoff -- on an axis along a model axis: ``centre`` is a point on
+    that axis, ``across`` the distance across its flats, ``flat`` the model axis
+    one pair of its flats is square to (``corner``, the one its corners point
+    along), and ``planes`` its six flats as ``(normal, offset)``, outward."""
+
+    axis: int
+    centre: tuple[float, float, float]
+    across: float
+    flat: int
+    corner: int
+    planes: tuple[tuple[tuple[float, float, float], float], ...]
+
+    def holds(self, face) -> bool:
+        """Whether a flat face lies on one of the hexagon's flats."""
+        normal, point = tuple(face.normal_at()), tuple(face.center())
+        return any(sum(abs(a - b) for a, b in zip(normal, n)) < 1e-6
+                   and abs(sum(a * b for a, b in zip(n, point)) - d) < 1e-4 for n, d in self.planes)
+
+
+def hexes(shape) -> list[Hex]:
+    """The part's hexagons: six flat faces parallel to one model axis whose outward
+    normals are 60 degrees apart, each the same distance from one centre line, one
+    pair square to a model axis (a hexagon turned off every axis has no flat to
+    dimension across, and is left to the report). A hex socket faces in, and is
+    not one."""
+    from build123d import GeomType
+
+    planes: dict[tuple, tuple] = {}
+    for face in shape.faces():
+        if face.geom_type != GeomType.PLANE:
+            continue
+        normal = _tidy(tuple(face.normal_at()))
+        offset = sum(a * b for a, b in zip(normal, tuple(face.center())))
+        planes.setdefault((normal, round(offset, 4)), (normal, offset))
+
+    def facing(side, m) -> list[float]:
+        return [q for v, q in side if sum(abs(a - b) for a, b in zip(v, m)) < 1e-6]
+
+    found = []
+    for k in range(3):
+        side = [p for p in planes.values() if abs(p[0][k]) < 1e-9]
+        for n, d in side:
+            flat = next((j for j in range(3) if abs(n[j] - 1) < 1e-9), None)
+            if flat is None:
+                continue  # each hexagon is found once: from its flat facing +flat
+            corner = 3 - k - flat
+            for twin in facing(side, tuple(-c for c in n)):
+                if d + twin <= 1e-6:
+                    continue
+                across, middle = d + twin, (d - twin) / 2
+                # The other four flats, at 60 and 120 degrees round from this one,
+                # lie half the width across from the same centre, wherever along the
+                # corner axis that centre is; each pair's two offsets fix it there.
+                centres = []
+                for angle in (60.0, 120.0):
+                    m = [0.0, 0.0, 0.0]
+                    m[flat], m[corner] = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+                    m = _tidy(m)
+                    hits = [(a - b) / 2 for a in facing(side, m) for b in facing(side, tuple(-c for c in m))
+                            if abs(a + b - across) < 1e-3]
+                    if not hits:
+                        break
+                    centres.append((hits[0] - middle * m[flat]) / m[corner])
+                if len(centres) != 2 or abs(centres[0] - centres[1]) > 1e-3:
+                    continue
+                centre = [0.0, 0.0, 0.0]
+                centre[flat], centre[corner] = middle, (centres[0] + centres[1]) / 2
+                flats = []
+                for angle in range(0, 360, 60):
+                    v = [0.0, 0.0, 0.0]
+                    v[flat], v[corner] = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+                    v = _tidy(v)
+                    flats.append((v, round(sum(a * b for a, b in zip(v, centre)) + across / 2, 6)))
+                found.append(Hex(k, _tidy([round(c, 6) for c in centre]), round(across, 6), flat, corner,
+                                 tuple(flats)))
     return found
 
 

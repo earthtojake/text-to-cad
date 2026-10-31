@@ -5650,8 +5650,9 @@ class PartSheetTests(unittest.TestCase):
     def test_a_plate_s_first_pass_states_all_of_it(self) -> None:
         """Paul Fremantle's Draftwright drew this plate from its STEP with one call;
         so does this: one edge view (a plate's two say one thing), the holes called
-        out once and located from the edges, the cut corner placed by both its
-        ends, and the chamfers in a note. Nothing is left unstated."""
+        out once and located from the edges, the cut corner by its 45 degrees and
+        the 40 to its top end, and the chamfers in a note. Nothing is left
+        unstated."""
         sheet, doc, unstated = self._drawn(_joining_plate())
         # Its holes are seen from above: it is turned to face the front, the edge view beside.
         self.assertEqual([v.name for v in sheet.views], ["front", "right", "iso"])
@@ -5659,7 +5660,7 @@ class PartSheetTests(unittest.TestCase):
         self.assertEqual(unstated, [])
         self.assertEqual(_callouts(doc), ["5× %%c5.5 THRU", "⌵ %%c6.5 × 90° BOTH ENDS"])  # stacked
         self.assertIsNone(sheet.views[0]._table)
-        self.assertEqual(sorted(_dim_texts(doc)), sorted(["10", "10", "20", "30", "30", "4", "40", "50", "50",
+        self.assertEqual(sorted(_dim_texts(doc)), sorted(["10", "10", "30", "30", "4", "40", "45°", "50", "50",
                                                           "60", "60"]))
 
     def test_more_holes_than_a_few_go_in_a_table(self) -> None:
@@ -5670,11 +5671,13 @@ class PartSheetTests(unittest.TestCase):
 
     def test_steps_past_a_few_are_left_to_the_report(self) -> None:
         """Placing every step of a long ladder shrinks the part more than it helps:
-        the largest six go on, and the report names the step it leaves."""
+        the largest six along an axis go on, across all the views, and the report
+        names the riser and the tread it leaves."""
         sheet, _doc, unstated = self._drawn(_staircase())
         self.assertEqual([v.name for v in sheet.views], ["front", "right", "iso"])  # the right for its depth
-        self.assertEqual(len(unstated), 1, unstated)
-        self.assertIn("is not located", unstated[0])
+        self.assertEqual(len(unstated), 2, unstated)
+        self.assertIn("(square to X) is not located", unstated[0])
+        self.assertIn("(square to Z) is not located", unstated[1])
         self.assertEqual(self._drawn(_staircase(6))[2], [], "five risers and five treads each fit")
 
     def test_a_view_repeating_one_chosen_goes_last_on_a_tie(self) -> None:
@@ -5694,6 +5697,83 @@ class PartSheetTests(unittest.TestCase):
         sheet, _doc, unstated = self._drawn(part)
         self.assertEqual([n for n in sheet.notes if "ROUND" in n], ["2× ROUNDS R2.", "2× ROUNDS R5."])
         self.assertEqual(unstated, [])
+
+    def test_a_part_turned_to_face_the_front_is_spun_so_its_edge_holes_are_seen(self) -> None:
+        """A plate drilled through from above and into one edge: turned so the
+        through holes face the front, its edge holes would open to the bottom,
+        which a first pass does not draw. Spun half a turn, they face the top."""
+        from build123d import Align, Box, Cylinder, Pos, Rot
+
+        align = (Align.MIN, Align.MIN, Align.MIN)
+        plate = Box(80, 40, 10, align=align)
+        for x in (15, 40, 65):
+            plate -= Pos(x, 20, 0) * Cylinder(3, 10, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        for x in (25, 55):
+            plate -= Pos(x, 0, 5) * Rot(-90, 0, 0) * Cylinder(2, 12, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        sheet, doc, unstated = self._drawn(plate)
+        self.assertEqual([v.name for v in sheet.views], ["top", "front", "iso"])
+        self.assertEqual(unstated, [])
+        self.assertIn("2× %%c4 ↧12", _callouts(doc))
+
+    def test_a_slope_at_a_whole_angle_is_stated_by_it_and_one_end(self) -> None:
+        """A block whose top runs flat for 35 then falls at 30 degrees to its end:
+        the angle and the 35 state the slope, not two ends at 15.57 and 30."""
+        from build123d import Plane, Polyline, extrude, make_face
+
+        drop = 25 * math.tan(math.radians(30))
+        part = extrude(make_face(Plane.XZ * Polyline((0, 0), (60, 0), (60, 30 - drop), (35, 30), (0, 30),
+                                                     close=True)), -20)
+        _sheet, doc, unstated = self._drawn(part)
+        self.assertEqual(sorted(_dim_texts(doc)), ["20", "30", "30°", "35", "60"])
+        self.assertEqual(unstated, [])
+
+    def test_a_slope_at_no_round_angle_is_stated_by_its_ends(self) -> None:
+        """A dovetail's flanks fall 10 in 5, 26.57 degrees: a designer gave its
+        ends, so its ends are what the drawing gives."""
+        from build123d import Plane, Polyline, extrude, make_face
+
+        part = extrude(make_face(Plane.XZ * Polyline((0, 0), (50, 0), (50, 20), (35, 20), (30, 10), (20, 10),
+                                                     (15, 20), (0, 20), close=True)), -30)
+        _sheet, doc, unstated = self._drawn(part)
+        self.assertFalse([t for t in _dim_texts(doc) if "°" in t])
+        self.assertEqual(unstated, [])
+
+    def test_a_hex_is_given_across_its_flats_and_locates_its_bore(self) -> None:
+        """A nut: HEX 20.78 A/F states its six sides and their angles, and its bore,
+        on the hexagon's axis, is located by it, not by a hole table."""
+        from build123d import Cylinder, RegularPolygon, extrude
+
+        sheet, doc, unstated = self._drawn(extrude(RegularPolygon(12, 6), 10) - Cylinder(6, 30))
+        self.assertIn("HEX 20.78 A/F", _dim_texts(doc))
+        self.assertEqual(_callouts(doc), ["%%c12 THRU"])
+        self.assertIsNone(sheet.views[0]._table)
+        self.assertEqual(unstated, [])
+
+    def test_a_hex_boss_is_located_by_its_centre(self) -> None:
+        from build123d import Align, Box, Cylinder, Pos, RegularPolygon, extrude
+
+        part = Box(60, 40, 6, align=(Align.MIN, Align.MIN, Align.MIN))
+        part += Pos(20, 20, 6) * extrude(RegularPolygon(8, 6), 8)
+        _sheet, doc, unstated = self._drawn(part - Pos(20, 20, 0) * Cylinder(3, 40))
+        self.assertIn("HEX 13.86 A/F", _dim_texts(doc))
+        self.assertEqual(unstated, [])
+
+    def test_a_shank_on_a_part_not_turned_whole_is_given_its_diameter(self) -> None:
+        """A bolt: its hexagon head makes it no turned part, and its shank's ⌀10 is
+        dimensioned across its profile all the same, its value beside the short
+        HEX dimension kept on the paper."""
+        from build123d import Align, Cylinder, Pos, RegularPolygon, extrude
+
+        bolt = extrude(RegularPolygon(10, 6), 7) + Pos(0, 0, 7) * Cylinder(5, 30, align=(Align.CENTER,
+                                                                                          Align.CENTER, Align.MIN))
+        from cadgen._internal.drawing_base import _MARGIN, _text_width
+
+        sheet, doc, unstated = self._drawn(bolt)
+        self.assertEqual(unstated, [])  # the ⌀10 among them
+        hex_dim = next(t for d in doc.modelspace().query("DIMENSION") for t in doc.blocks.get(d.dxf.geometry)
+                       if t.dxftype() == "MTEXT" and "A/F" in t.text)
+        top = hex_dim.dxf.insert.y + _text_width(hex_dim.text, sheet.text_height) / 2  # upright, set beyond its span
+        self.assertLess(top, sheet.height - _MARGIN)
 
     def test_a_through_hole_opened_out_alike_at_both_ends_is_seen_from_either(self) -> None:
         from cadgen._internal.drawing_annotation import _looks_into
