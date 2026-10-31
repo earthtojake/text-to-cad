@@ -112,10 +112,20 @@ def forget(uv_cache: Path, versions: tuple[str, ...]) -> list[str]:
             shutil.rmtree(found.parent, ignore_errors=True)
             removed.append(str(found.parent))
         for entry in root.glob(f"wheels-v*/index/*/cadgen/{version}-*"):
+            # A link to the archive (on Windows perhaps a junction: taken out, never followed), or its lock
+            # or revision file; a real folder is not one of these, and is left.
             try:
-                entry.unlink()  # a link to the archive, or its lock or revision file
+                if entry.is_symlink() or os.path.isjunction(entry):
+                    try:
+                        entry.unlink()
+                    except OSError:
+                        os.rmdir(entry)
+                elif entry.is_file():
+                    entry.unlink()
+                else:
+                    continue
             except OSError:
-                shutil.rmtree(entry, ignore_errors=True)
+                continue
             removed.append(str(entry))
     for folder in root.glob("wheels-v*/index/*/cadgen"):
         for empty in (folder, folder.parent):
