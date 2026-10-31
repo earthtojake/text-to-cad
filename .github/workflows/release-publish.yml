@@ -306,7 +306,7 @@ jobs:
 
       # The wheels about to ship, the library's, the server's and the shim's, installed together
       # into a fresh venv with no repo on the path: the front door, the viewer verb, the shim's command
-      # and the skill pin check all answer. test-installed.sh then drives the same wheels through a
+      # and the doctor all answer (0.9's doctor takes no skill folder). test-installed.sh then drives the same wheels through a
       # real build.
       - name: Install the built wheels and exercise them
         run: |
@@ -316,7 +316,7 @@ jobs:
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad-mcp" --help >/dev/null)
-          "$RUNNER_TEMP/install-test/bin/cad" doctor --no-server skills/cad
+          "$RUNNER_TEMP/install-test/bin/cad" doctor --no-server
           scripts/test/test-installed.sh --wheels dist
 
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
