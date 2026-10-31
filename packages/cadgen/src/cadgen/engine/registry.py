@@ -36,32 +36,29 @@ and ``<state>/engines/engine.json`` the engine's record (``Registry.engine``, ``
 (``port``). Both are written this user's alone (0600). Links stay valid across restarts and updates
 because of them (``daemon.bind``); ``cadgen server --rotate-token`` replaces the token.
 
-The engine imports nothing outside itself (law 3): where the state folder is is the
-distribution's to say, through ``FACTORY`` (``cadgen._internal.engine_host``). With none, the
-engine records nothing and caches nothing (``current`` is None).
+A record's shape, and the words said of one (``home``, ``rerun``), are the library's (``records``): a
+model's run reads a record of its own in its process, where the registry is not installed. The state and
+cache folders are where ``places`` says; ``FACTORY`` makes the registry of another (a test's).
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-import shlex
 import shutil
 import stat
-import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Callable
 
 from cadgen.engine.atomic_replace import replace_atomic
 from cadgen.engine.ids import is_id
+from cadgen.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative,
+                                   rerun)
 
 __all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "Folder", "OBSERVERS", "RECORD", "Registry", "SCHEMA", "TOKEN", "command", "current",
            "detached", "home", "program", "relative"]
 
-SCHEMA = 1
-DOCUMENTS = "documents"
-RECORD = "document.json"
 ENGINES = "engines"
 # The engine records' own schema: 3 holds, while the default port is another's, the port the
 # installation rolled to (and held the installation's token, which is the user's now: ``TOKEN``).
@@ -73,7 +70,7 @@ TOKEN = f"{ENGINES}/token"
 
 # Told of every record written (one that changed), after it is on disk; never waited on for more.
 OBSERVERS: list[Callable[[dict[str, Any]], None]] = []
-# The distribution's: makes the registry of the user's state folder (``cadgen._internal.engine_host``).
+# Makes the registry another way than of the user's state and cache folders (``current``): a test's seam.
 FACTORY: Callable[[], "Registry"] | None = None
 
 # A page token as ``secrets.token_urlsafe`` makes one, long enough to guard anything.
@@ -81,12 +78,16 @@ _TOKEN = re.compile(r"[A-Za-z0-9_-]{32,256}")
 
 _LOCKS: dict[str, threading.RLock] = {}
 _LOCKS_LOCK = threading.Lock()
-WINDOWS = os.name == "nt"
 
 
 def current() -> "Registry | None":
-    """The registry of the user's state folder, as the distribution makes it; None with none."""
-    return FACTORY() if FACTORY is not None else None
+    """The registry of the user's state folder and its cache folder (``places``), where they are now
+    (``CADGEN_STATE_DIR`` and ``CADGEN_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
+    if FACTORY is not None:
+        return FACTORY()
+    from cadgen.engine.places import cache_dir, state_dir
+
+    return Registry(state_dir(), cache=cache_dir())
 
 
 class Folder:
@@ -189,16 +190,7 @@ class Registry:
         """The record of document ``ident``, or None (none, or a file this schema does not read)."""
         if not is_id(ident):
             return None
-        data = self.state.read(f"{DOCUMENTS}/{ident}/{RECORD}")
-        if data is None:
-            return None
-        try:
-            record = json.loads(data)
-        except ValueError:
-            return None
-        if not isinstance(record, dict) or record.get("schema") != SCHEMA or record.get("id") != ident:
-            return None
-        return record
+        return parse(ident, self.state.read(f"{DOCUMENTS}/{ident}/{RECORD}"))
 
     def put(self, record: dict[str, Any]) -> bool:
         """Write ``record`` (its ``id`` names it); False, and nothing written, when every field is
@@ -288,7 +280,7 @@ class Registry:
         self.state.write(TOKEN, (token + "\n").encode("ascii"), mode=0o600)
 
     def engine(self, installation: str) -> dict[str, Any]:
-        """The engine record named ``installation`` (``daemon.NAME``: the device's one engine, so it
+        """The engine record named ``installation`` (``places.NAME``: the device's one engine, so it
         outlives an update): the ``port`` (int) it rolled to
         from a held default, where it has one; ``{}`` with none, or one this schema does not read."""
         data = self.state.read(f"{ENGINES}/{installation}.json")
@@ -333,48 +325,3 @@ def _unreadable(path: Path, error: OSError) -> str:
     if hasattr(os, "getuid") and found.st_uid != os.getuid():
         said += f", owned by uid {found.st_uid}, not this user ({os.getuid()})"
     return said
-
-
-def relative(path: Path | str, root: Path | str) -> str:
-    """``path`` as a record keeps it: relative to ``root``, with ``/``; absolute where it cannot be
-    (another drive)."""
-    try:
-        return Path(os.path.relpath(os.fspath(path), os.fspath(root))).as_posix()
-    except ValueError:
-        return Path(path).as_posix()
-
-
-def home(registry: Registry, record: dict[str, Any]) -> Path:
-    """A record's script (a model's) or file (a file's), absolute."""
-    return Path(os.path.normpath(registry.root(record) / record["home"]))
-
-
-def program(registry: Registry, record: dict[str, Any]) -> Path | None:
-    """The program that handed a shape over, absolute; None for any other record, and for a shape
-    handed over from a Python session (a REPL, a notebook)."""
-    given = record.get("program") if record.get("kind") == "shape" else None
-    return Path(os.path.normpath(registry.root(record) / given)) if given else None
-
-
-def rerun(program: str | os.PathLike) -> str:
-    """The command that runs ``program`` again, as a person pastes it into this platform's shell:
-    ``cadgen run`` and the program, absolute. The engine that says it is the one ``cadgen run``
-    reaches, and its python has the kernel a bare ``python`` may not. The program is quoted for a
-    POSIX shell (``shlex.quote``); on Windows in the double quotes cmd.exe and PowerShell both read,
-    and only where a space or a quote needs them (``subprocess.list2cmdline``) -- to cmd.exe a
-    single quote is part of the path."""
-    text = os.fspath(program)
-    return f"cadgen run {subprocess.list2cmdline([text]) if WINDOWS else shlex.quote(text)}"
-
-
-def command(registry: Registry, record: dict[str, Any]) -> str | None:
-    """The command that builds a model's document again (``rerun``): ``cadgen run`` of its home, the
-    script that defines it, never a program that imported it and called it (a check script). None
-    for a shape handed over, which no run built, and for a file's. The engine never runs it."""
-    return rerun(home(registry, record)) if record.get("kind") == "model" else None
-
-
-def detached(registry: Registry, record: dict[str, Any]) -> bool:
-    """Whether the script or the file a record points at is gone (moved, deleted). A shape handed
-    over points at nothing that builds it: never detached."""
-    return record.get("kind") != "shape" and not home(registry, record).is_file()

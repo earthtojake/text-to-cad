@@ -56,7 +56,6 @@ renders, and a failure writes none of the job's pictures, leaving every output a
 
 from __future__ import annotations
 
-import argparse
 import base64
 import contextlib
 import json
@@ -70,9 +69,9 @@ from typing import Any, Callable
 
 from cadgen.engine.atomic_replace import replace_atomic, staging
 
-__all__ = ["SnapshotRefused", "Still", "add_parser", "authored", "build_parser", "draw", "draw_pictures", "job_input",
-           "job_pictures", "main", "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements",
-           "parse_pose", "picture_path", "run", "snapshot"]
+__all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
+           "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
+           "picture_path", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
 DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated"})
@@ -681,7 +680,7 @@ def _checked(document: Path, out: Path, source: Any = None) -> str:
     """What a picture draws and where it goes, checked before anything renders: SRC a file the
     stills draw, and there (unless a build's ``source`` holds it), or a document's id, OUT a
     ``.png``. SRC's suffix (an id's document is drawn as an ``.xbf``)."""
-    if _by_id(document):
+    if by_id(document):
         if out.suffix.lower() != ".png":
             raise SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
         return ".xbf"
@@ -726,7 +725,7 @@ def _job_scope(document: Path, outputs: list[Path], progress: Callable[[dict[str
 
     if progressing.current() is not None:
         return contextlib.nullcontext()
-    job = os.fspath(document) if _by_id(document) else document.name
+    job = os.fspath(document) if by_id(document) else document.name
     return progressing.building(progressing.Progress(progress or (lambda _frame: None), kind="snapshot", job=job,
                                                      outputs=[str(path) for path in outputs]))
 
@@ -743,7 +742,7 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
     from cadgen.engine.progress import say
 
     with _job_scope(document, [out], progress):
-        if _by_id(document) and source is None:
+        if by_id(document) and source is None:
             from cadgen.engine import api
 
             spec = api._source(str(document))
@@ -795,7 +794,7 @@ def _written(document: Path, out: Path, data: bytes, report: dict[str, Any], sta
 # --- a job: a Quick Edit packet's views, drawn ---------------------------------------------------
 
 
-def _by_id(document: Any) -> bool:
+def by_id(document: Any) -> bool:
     """Whether a picture's document is named by its id: drawn from what the engine holds."""
     from cadgen.engine.ids import is_id
 
@@ -924,7 +923,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         if not named:
             raise SnapshotRefused(f"{where} names no input, and no SRC is given")
         document = Path(os.fspath(named))
-        if not _by_id(document):
+        if not by_id(document):
             document = document.expanduser().resolve()
         drawing = document.suffix.lower() == ".dxf"
         settings = _settings(view.get("output"), f"{where}.output", drawing)
@@ -1015,7 +1014,7 @@ def draw_pictures(pictures: list[tuple[Path, Path, Still]], *, daemon: bool = Tr
 def _draw_staged(staged: list[tuple[Path, Path, Path, Still]], daemon: bool,
                  progress: Callable[[dict[str, Any]], None] | None = None) -> list[dict[str, Any]]:
     """Each picture of a job drawn into its staged file (``draw_pictures``)."""
-    if daemon or any(_by_id(document) for document, _out, _stage, _still in staged):
+    if daemon or any(by_id(document) for document, _out, _stage, _still in staged):
         return [_occt(document, stage, still, daemon, None, time.perf_counter(), progress)
                 for document, _out, stage, still in staged]
     from cadgen.engine.formats import FormatError
@@ -1050,156 +1049,3 @@ def _warn(unmeshed: dict[str, list[int]]) -> dict[str, list[int]]:
               f"{', '.join(map(str, faces))} without triangles, so the picture does not draw "
               f"{'them' if len(faces) > 1 else 'it'}", file=sys.stderr)
     return unmeshed
-
-
-def _arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
-    parser.add_argument("document", metavar="SRC", nargs="?",
-                        help="a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
-                             "a drawing (.dxf), or a document id (a model's, which python SCRIPT.py prints: drawn "
-                             "from what the engine holds); with --job, a file drawn in place of every job's input")
-    parser.add_argument("out", metavar="OUT.png", nargs="?",
-                        help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
-                             "write <SRC's stem>_<UTC time>.png into")
-    parser.add_argument("--job", metavar="PACKET",
-                        help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
-                             "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
-                             "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
-                             "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
-                             "sizeProfile); the other flags override every job")
-    parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, appearance, camera, clip, exploded, "
-                                          "hidden, isolated: part refs the picture leaves out, or alone draws), or "
-                                          "a JSON file of it; a drawing takes appearance alone: light or dark, as the word "
-                                          "or as {\"appearance\": ...}")
-    parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
-    parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
-                                         "a camera JSON object (its position, target and orthographicHalfHeight in "
-                                         "the viewer's scene coordinates, as a Quick Edit packet carries them: a "
-                                         "document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the "
-                                         "view --annotation's ink was drawn in, from its Quick Edit packet, exactly")
-    parser.add_argument("--width", type=int)
-    parser.add_argument("--height", type=int)
-    parser.add_argument("--size-profile", choices=sorted(SIZE_PROFILES))
-    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), or joint and coupling "
-                                       "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
-                                       "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
-                                       "built without it (a robot where the viewer opens it)")
-    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation file, or the Quick Edit packet "
-                                                              "(.snapshot.json) that carries it: its ink drawn over the "
-                                                              "model, on the parts it was drawn on")
-    parser.add_argument("--measurements", metavar="FILE", help="Measure's dimensions (a JSON list of {start, end, label, "
-                                                                "color}; the points in the viewer's scene coordinates, "
-                                                                "as --camera's lengths), drawn over the model")
-    parser.add_argument("--json", action="store_true", help="print what was drawn and its timings as JSON")
-    return parser
-
-
-_HELP = "draw a document or a file the viewer opens as the CAD Viewer does, into a PNG"
-
-
-def add_parser(verbs: Any) -> argparse.ArgumentParser:
-    """The ``snapshot`` verb among a command's subcommands (``python -m cadgen.engine snapshot``)."""
-    return _arguments(verbs.add_parser("snapshot", help=_HELP, description=_HELP))
-
-
-def build_parser(prog: str = "cadgen snapshot") -> argparse.ArgumentParser:
-    """``cadgen snapshot``'s parser."""
-    return _arguments(argparse.ArgumentParser(prog=prog, description=_HELP))
-
-
-def main(argv: list[str] | None = None, prog: str = "cadgen snapshot") -> int:
-    """``cadgen snapshot SRC OUT.png``."""
-    from cadgen.engine.cli import answered
-
-    return answered(run, build_parser(prog).parse_args(argv), prog)
-
-
-def run(args: argparse.Namespace, prog: str = "cadgen snapshot") -> int:
-    """The verb run from its parsed flags; a failure raised as ``cli.Failed``, which the command
-    says (``cli.answered``)."""
-    from cadgen.engine.cli import Failed
-
-    if args.job is not None:
-        return _run_job(args, prog)
-    if args.document is None or args.out is None:
-        raise Failed("the following arguments are required: SRC, OUT.png (or --job PACKET)", 2)
-    if _by_id(args.document):
-        return _run_held(args, prog)
-    from cadgen.engine import api
-    from cadgen.engine.cli import _given
-
-    try:
-        # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
-        report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
-                              pose=args.pose, width=args.width, height=args.height,
-                              size_profile=args.size_profile, annotation=args.annotation,
-                              measurements=args.measurements).report
-    except SnapshotRefused as error:
-        raise Failed(str(error), 2) from None
-    except ConnectionError:
-        raise  # the engine not reached: its one line, as every verb says it (``cli.answered``)
-    except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
-        raise Failed(f"{type(error).__name__}: {error}") from None
-    if args.json:
-        print(json.dumps(report))
-    else:
-        timings = report["timings"]
-        print(f"wrote {_given(report['output'], args.out)} ({report['width']}x{report['height']}, {report['displayMode']}"
-              f"{', preview' if report['preview'] else ''}) in {timings['totalMs'] / 1000:.2f}s")
-    return 0
-
-
-def _run_held(args: argparse.Namespace, prog: str) -> int:
-    """``cadgen snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
-    memory of the worker holding it (``api.snapshot``); nothing is built."""
-    from cadgen.engine import api
-    from cadgen.engine.cli import Failed, _given, told_state
-
-    try:
-        drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
-                             pose=args.pose, width=args.width, height=args.height,
-                             size_profile=args.size_profile, annotation=args.annotation,
-                             measurements=args.measurements)
-    except (SnapshotRefused, ValueError) as error:
-        raise Failed(str(error), 2) from None
-    except api.EngineError as error:
-        raise Failed(str(error)) from None
-    told_state(args.document, "drawing")
-    if args.json:
-        print(json.dumps(drawn.report))
-    else:
-        report = drawn.report  # said as a file's and a job's picture are: its size, its display, Preview
-        print(f"wrote {_given(drawn.path, args.out)} ({drawn.width}x{drawn.height}, {report['displayMode']}"
-              f"{', preview' if report.get('preview') else ''}) in {report['timings']['totalMs'] / 1000:.2f}s")
-    return 0
-
-
-def _run_job(args: argparse.Namespace, prog: str) -> int:
-    """``cadgen snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
-    a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
-    from cadgen.engine import api
-    from cadgen.engine.cli import Failed
-
-    if args.out is not None:
-        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out})", 2)
-    started = time.perf_counter()
-    try:
-        drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 pose=args.pose, width=args.width, height=args.height,
-                                 size_profile=args.size_profile, annotation=args.annotation,
-                                 measurements=args.measurements)
-    except SnapshotRefused as error:
-        raise Failed(str(error), 2) from None
-    except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
-        raise Failed(f"{type(error).__name__}: {error}") from None
-    if args.json:
-        print(json.dumps({"ok": True, "pictures": [picture.report for picture in drawn],
-                          "timings": {"totalMs": round((time.perf_counter() - started) * 1000)}}))
-    else:
-        for picture in drawn:
-            report = picture.report
-            print(f"wrote {os.fspath(picture.path)} ({report['width']}x{report['height']}, {report['displayMode']}"
-                  f"{', preview' if report['preview'] else ''}) in {report['timings']['totalMs'] / 1000:.2f}s")
-    return 0

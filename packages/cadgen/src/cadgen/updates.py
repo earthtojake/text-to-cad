@@ -91,7 +91,7 @@ def checking(*, asked: bool = False) -> bool:
 
 
 def _cache() -> Path:
-    from cadgen.viewer.recents import state_dir  # noqa: PLC0415 -- the state directory's one definition
+    from cadgen.engine.places import state_dir
 
     return state_dir() / FILE
 

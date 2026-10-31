@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from cadgen.engine.ids import canonical, derived_id, is_id, model_id
-from cadgen.engine.registry import DOCUMENTS, RECORD, Registry, home, relative
+from cadgen.engine.records import DOCUMENTS, RECORD, home, relative
 
 __all__ = ["claimed", "claims", "fingerprint", "handed", "migrate", "reattach", "released", "relocated", "repoint"]
 
@@ -60,7 +60,7 @@ def _first(node: Any) -> int:
     return min([node.lineno, *(found.lineno for found in node.decorator_list)])
 
 
-def claimed(held: Registry, source: dict[str, Any], name: str) -> None:
+def claimed(held: Any, source: dict[str, Any], name: str) -> None:
     """Refuse the explicit name ``name`` to ``source`` (its script, function and line) while the
     registry's record of it says another file of the same folder declared it at that file's last run
     (its ``line``), naming both ``file:line``. The record's own script is this declaration's (a
@@ -80,7 +80,7 @@ def claimed(held: Registry, source: dict[str, Any], name: str) -> None:
                      f"{other.name} no longer declares it, run `cadgen run {other.name}` so the engine knows")
 
 
-def released(held: Registry, script: str | os.PathLike, names: Iterable[str]) -> list[str]:
+def released(held: Any, script: str | os.PathLike, names: Iterable[str]) -> list[str]:
     """The explicit names a run of ``script`` declared before and declares no more, given up: each
     one's record, while it is this script's, keeps its document and loses its claim (``line``), so
     another file of the folder may declare it. The ids given up."""
@@ -101,7 +101,7 @@ def released(held: Registry, script: str | os.PathLike, names: Iterable[str]) ->
     return given
 
 
-def claims(held: Registry, script: str | os.PathLike) -> set[str]:
+def claims(held: Any, script: str | os.PathLike) -> set[str]:
     """The explicit names the registry's records say ``script`` declared: one pass, a record parsed
     only when its text holds a claim (``line``) and the script's folder. What a run of a script none
     of whose models' records says what it declared (``declares``) gives up from."""
@@ -123,7 +123,7 @@ def claims(held: Registry, script: str | os.PathLike) -> set[str]:
     return found
 
 
-def handed(held: Registry, ident: str, scope: str, name: str) -> None:
+def handed(held: Any, ident: str, scope: str, name: str) -> None:
     """Refuse a shape handed over (``model(shape, name=...)``) under the id a named model holds --
     from a REPL in a folder one of whose scripts gave a model ``name=`` the same at its last run --
     naming that declaration: one id is one document. A model whose script is gone, or whose last run
@@ -139,7 +139,7 @@ def handed(held: Registry, ident: str, scope: str, name: str) -> None:
                      "another name")
 
 
-def repoint(held: Registry, record: dict[str, Any], found: dict[str, Any]) -> None:
+def repoint(held: Any, record: dict[str, Any], found: dict[str, Any]) -> None:
     """Move ``record`` to ``found`` (its new id): the cache file first, then the new record, and only
     then the old one forgotten (``Registry.delete``), so a stop at any step leaves the old identity
     whole. A move stopped part way is finished: a cache file at the new id with no record is no
@@ -164,7 +164,7 @@ def _fields(record: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in record.items() if key != "schema"}
 
 
-def _moved(held: Registry, record: dict[str, Any], script: Path, name: str, entry: str, digest: str) -> bool:
+def _moved(held: Any, record: dict[str, Any], script: Path, name: str, entry: str, digest: str) -> bool:
     """Whether ``record`` is the document of ``script``'s model, moved: the same name, function and
     bytes, its script gone -- or there still as this very file under another spelling (a link, a
     case). Its script there as another file is the original of a copy."""
@@ -178,7 +178,7 @@ def _moved(held: Registry, record: dict[str, Any], script: Path, name: str, entr
     return not was.exists() or canonical(was) == str(script)
 
 
-def _holding(held: Registry, digests: Iterable[str]) -> list[dict[str, Any]]:
+def _holding(held: Any, digests: Iterable[str]) -> list[dict[str, Any]]:
     """Every record whose text holds one of ``digests``: one pass over the registry, a record parsed
     only when its bytes hold one (``Registry.get`` reads it then)."""
     needles = [digest.encode("ascii") for digest in digests]
@@ -195,7 +195,7 @@ def _holding(held: Registry, digests: Iterable[str]) -> list[dict[str, Any]]:
     return found
 
 
-def reattach(held: Registry, sources: list[dict[str, Any]], *,
+def reattach(held: Any, sources: list[dict[str, Any]], *,
              before: Callable[[dict[str, Any]], None] = lambda _record: None,
              log: Callable[[str], None] = lambda _line: None) -> list[tuple[str, str]]:
     """Re-attach each of a run's models that has nothing to take up (``sources``: each a model's
@@ -275,7 +275,7 @@ def relocated(closure: dict[str, Any], origin: str | os.PathLike, script: Path, 
             "inputs": inputs if closure.get("inputs") is not None else None}
 
 
-def migrate(held: Registry | None, *, log: Callable[[str], None] | None = None) -> dict[str, Any]:
+def migrate(held: Any | None, *, log: Callable[[str], None] | None = None) -> dict[str, Any]:
     """The one pass at engine start, over the records' JSON: each record from before ``namespace``,
     ``name`` and ``fingerprint`` (a model's script's bytes, null where its script is gone) gets them,
     and each record a ``key=`` named (``uuid5(NAMESPACE, "key::" + key)``) moves to its id now

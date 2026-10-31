@@ -3,7 +3,7 @@
 The page's URL carries a link, a credential for a day, and a browser (or the launcher that starts
 it) is given its URL as an argument, which other local users may read in the process list. So the browser is
 given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine's
-own folder, which is this user's alone (``daemon.folder_refusal``). It is removed after
+own folder, which is this user's alone (``places.folder_refusal``). It is removed after
 ``KEEP_SECONDS`` by a thread of the process that wrote it, and any one older than that by the
 next open, should that process have exited first."""
 from __future__ import annotations
@@ -75,18 +75,18 @@ def open_page(url: str, *, opener: Callable[[str], bool] = webbrowser.open) -> P
     """Open ``url`` in the browser through an owner-only redirect file; the file's path, or
     ``CannotOpen`` when no browser can be opened here (the file is removed at once when one did
     not)."""
-    from cadgen.engine import daemon
+    from cadgen.engine import places
 
     refusal = display_refusal()
     if refusal is not None:
         raise CannotOpen(refusal)
 
-    folder = daemon.state_dir()
+    folder = places.engine_dir()
     try:
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     except OSError as error:
         raise CannotOpen(f"the engine's folder {folder} cannot be made: {error.strerror or error}") from error
-    refusal = daemon.folder_refusal(folder)
+    refusal = places.folder_refusal(folder)
     if refusal is not None:
         raise CannotOpen(refusal)
     _sweep(folder)

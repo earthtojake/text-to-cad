@@ -56,8 +56,6 @@ pages waiting on a served document the frame's build writes (``serve.Server.buil
 from __future__ import annotations
 
 import collections
-import functools
-import hashlib
 import itertools
 import json
 import os
@@ -67,21 +65,49 @@ import secrets
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from cadgen._internal import engine_telemetry as _engine_telemetry
 from cadgen.engine.atomic_replace import replace_atomic
+from cadgen.engine.client import WORKER_STDERR
+from cadgen.engine import places as _places
 from cadgen.engine.ids import canonical, file_id, is_id
+from cadgen.engine.places import (BYTECODE, NAME, RESTARTS, WINDOWS, bytecode, door_path, engine_dir, engine_root,
+                                  failure_path, folder_refusal, installation, kernel, lock, lock_path, names, port_path,
+                                  pycache, windowless)
 
-__all__ = ["DEFAULT_PORT", "Endpoint", "Pool", "PortHeld", "address", "door_path", "endpoints",
-           "failure_path", "let_go", "lock", "lock_path", "main", "port_holder", "state_dir", "sweep_dead",
-           "worker_cap"]
+__all__ = ["DEFAULT_PORT", "Pool", "PortHeld", "let_go", "main", "port_holder", "sweep_dead", "worker_cap"]
 
-HTTP_FACTORY = None  # optional application supplied by the enclosing distribution
+
+def _application(server: Any, host: str, port: int) -> Any:
+    """The server's HTTP application on the engine's listener: the CAD Viewer's and the CAD app's
+    (``cadgen._internal.engine_host.http_factory``, the one module that imports either)."""
+    from cadgen._internal.engine_host import http_factory
+
+    return http_factory(server, host, port)
+
+
+def _kernel(make: bool) -> dict[str, Any] | None:
+    """The environment the engine's kernel processes run in: the installation's base
+    (``cadgen._internal.engine_host.kernel``)."""
+    from cadgen._internal.engine_host import kernel as made
+
+    return made(make)
+
+
+# The application the engine serves on its listener; None serves the documents' routes alone (``serve``).
+HTTP_FACTORY: Callable[[Any, str, int], Any] | None = _application
+# The engine's verbs the daemon runs for the CAD app's agent operations are counted by the server's
+# telemetry, as a command's are (``cadgen._internal.engine_telemetry``).
+_engine_telemetry.install()
+# Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
+# worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
+# the library's modules that start them are told here (``places.kernel``): the library knows no installation.
+_places.KERNEL = _kernel
 
 # How often the daemon tends itself (``Daemon.tend``): its door, its pipes, and the workers'
 # memory against its cap. The server's pressure poller asks the system's signal more often.
@@ -103,17 +129,6 @@ PORTS_TRIED = 64
 RETIRE_SECONDS = 10.0
 # How long the engine waits for another engine to answer what it is using.
 ASK_SECONDS = 5.0
-# The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
-# are ``engine.lock``, ``engine.door``, ``engine.port`` and ``engine.failed``. One engine a device: the
-# one a client finds there, whatever release it runs, and whatever release the client is. Its record in
-# the state folder (the port it rolled to, ``bind``) goes by the same name.
-NAME = "engine"
-# The version an installation that cannot know its own name runs as (a development install's
-# ``<version>-dev.<time>``, set by its launcher and the ``cadgen`` command): the name its records
-# and its engine's ``status`` give it (``installation``). The engine reads the variable, never the
-# distribution's module that sets it (law 3).
-INSTALLATION_ENV = "CADGEN_INSTALLATION_VERSION"
-WINDOWS = os.name == "nt"
 # The retirements ``status`` lists, the latest first.
 RETIRED_KEPT = 12
 # How long a build's worker is free, with no request waiting for it, before the documents the build
@@ -122,86 +137,15 @@ RETIRED_KEPT = 12
 # build within milliseconds of an answer, so those calls never wait on that read. The worker's own
 # collection waits as long (``worker.COLLECT_IDLE``).
 MEASURE_IDLE = 0.5
-# What a worker's environment must share with a request's for the request to use it: what shapes
-# the import system of the interpreter it started (the interpreter itself is the engine's kernel
-# environment's, ``kernel``). A run adopts the rest of its caller's environment (``worker.adopt``), so a
-# caller whose PATH changes from one run to the next (an agent's shell) keeps its warm worker and its memo.
-RESTARTS = ("PYTHONPATH", "PYTHONHOME", "PYTHONSAFEPATH", "PYTHONNOUSERSITE", "PYTHONUSERBASE", "PYTHONPLATLIBDIR")
-# The installation this process belongs to when it runs in the base that installation made, as the
-# distribution reads it from the base's marker (``cadgen._internal.base.home``): ``{"executable",
-# "prefix", "root", ...}``; None in the installation's own environment. A process there -- a model's
-# script ``cadgen run`` runs, its worker -- goes by its installation's name (``registered``) and, with
-# no current installation (``ENGINE``), starts the engine with its installation's Python
-# (``client._start``).
-HOME: dict[str, Any] | None = None
-# The installation whose engine a client starts when none answers, as the distribution reads it now
-# (``cadgen._internal.installations.current``): ``ENGINE()`` answers ``{"python", "prefix"}``, or None
-# with none current. A client of any release starts that one, never its own; and none started by
-# another release's client ever retires one (``bind``). None (no distribution): this process's own.
-ENGINE: Callable[[], dict[str, Any] | None] | None = None
-# The environment every process of the engine's that loads the kernel runs in -- a model's worker, the
-# standby, the documents worker, the meshing and reading pools, the render processes -- as the
-# distribution makes it (``cadgen._internal.base.kernel``: the installation's base): ``KERNEL(make)``
-# answers ``{"python", "path", "own"}``, or None when it is not made and ``make`` is false, and raises,
-# saying why, when it cannot be made. None (no distribution): this interpreter's own, a standalone
-# engine's (``kernel``).
-KERNEL: Callable[[bool], dict[str, Any] | None] | None = None
-# How the engine's processes treat bytecode (``bytecode``): one of the two, never a run's to change.
-BYTECODE = ("PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE")
-# The folder of the engine's bytecode in the cache folder the distribution names (``registry``):
-# one folder per installation in it (``bytecode_tag``), and one no daemon started in this many days goes.
-PYCACHE = "pycache"
+# How many days a folder of an installation's bytecode (``places.pycache``) no daemon started in stays.
 PYCACHE_UNUSED_DAYS = 30
-
-
-def bytecode(env: dict[str, str]) -> dict[str, str]:
-    """``env`` (the daemon's, or a worker's), its bytecode set as the engine's processes keep it:
-    cached under ``pycache/`` in the cache folder (``PYTHONPYCACHEPREFIX``), so a worker's start
-    imports the kernel's pure-Python libraries from bytecode (a uvx installation compiles nothing
-    on install: every start compiled them, seconds each) and nothing is written beside a library
-    or a model. A ``PYTHONPYCACHEPREFIX`` already given is honoured. A caller's
-    ``PYTHONDONTWRITEBYTECODE`` is not: the daemon and its workers serve every later client, and
-    write their bytecode in a folder of their own, ``pycache/<installation>`` (``bytecode_tag``). With no
-    cache folder this user alone can write -- no distribution to name one, or one others can write
-    to -- nothing is written: ``PYTHONDONTWRITEBYTECODE``. A model's own modules are compiled from
-    their source whatever this says (``build._SourceOnlyLoader``)."""
-    if not env.get("PYTHONPYCACHEPREFIX"):
-        env.pop("PYTHONPYCACHEPREFIX", None)
-        folder = _pycache()
-        if folder is None:
-            env["PYTHONDONTWRITEBYTECODE"] = "1"
-            return env
-        env["PYTHONPYCACHEPREFIX"] = folder
-    env.pop("PYTHONDONTWRITEBYTECODE", None)
-    return env
-
-
-def _pycache() -> str | None:
-    """This installation's folder under ``pycache/`` in the cache folder, made this user's alone and
-    marked in use (its time); None where there is none to use."""
-    from cadgen.engine import registry
-
-    held = registry.current()
-    if held is None or held.cache is None:
-        return None
-    root = Path(held.cache.root) / PYCACHE
-    folder = root / bytecode_tag()
-    try:
-        root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        folder.mkdir(exist_ok=True, mode=0o700)
-        os.utime(folder)  # in use: ``_prune`` leaves it
-    except OSError:
-        return None
-    if not WINDOWS and not (_users_own(str(root)) and _users_own(str(folder))):
-        return None  # a folder another can write to would hand them the engine's code
-    return str(folder)
 
 
 def prune_bytecode() -> None:
     """The bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS``, removed in
     the background, when the daemon caches its own (``bytecode``): never a caller's folder, which is
     not the engine's to judge."""
-    ours = _pycache()
+    ours = pycache()
     if ours is None or os.path.realpath(sys.pycache_prefix or "") != os.path.realpath(ours):
         return
     threading.Thread(target=_prune, args=(Path(ours),), daemon=True).start()
@@ -231,35 +175,6 @@ def standby() -> bool:
     return os.environ.get("CADGEN_ENGINE_STANDBY", "").strip() != "0"
 
 
-def kernel(make: bool = True) -> dict[str, Any] | None:
-    """The environment the engine's kernel processes run in (``KERNEL``): ``{"python", "path", "own"}``
-    -- ``own``: this interpreter's environment, whose engine folder a process started there is given and
-    whose import path a spawned process is handed as it is -- or None when it is not made and ``make``
-    is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying why: no kernel process
-    starts without it, and nothing remembers the failure."""
-    if KERNEL is None:
-        return {"python": sys.executable, "path": None, "own": True}
-    try:
-        return KERNEL(make)
-    except Exception as error:  # noqa: BLE001 - the distribution's refusal, carried in one line
-        from cadgen.engine.serve import KernelProcessesUnavailable
-
-        raise KernelProcessesUnavailable(f"cadgen has no CAD kernel environment: {error}") from error
-
-
-def _home_prefix() -> str:
-    """The environment of the installation this process belongs to (``HOME``), else its own."""
-    return HOME["prefix"] if HOME else sys.prefix
-
-
-def bytecode_tag() -> str:
-    """This installation's folder of bytecode under ``pycache/`` (``_pycache``): its environment, its
-    interpreter's version and the version it runs as (``installation``)."""
-    prefix = os.path.normcase(os.path.realpath(_home_prefix()))
-    material = f"{prefix}|{sys.implementation.cache_tag}|{installation()}"
-    return hashlib.sha256(material.encode()).hexdigest()[:12]
-
-
 def worker_cap() -> int:
     """The live workers' cap: ``CADGEN_ENGINE_WORKERS``, else the machine's cores."""
     try:
@@ -267,108 +182,6 @@ def worker_cap() -> int:
     except ValueError:
         given = 0
     return given if given > 0 else (os.cpu_count() or 1)
-
-
-def state_dir() -> Path:
-    """Where the daemon's door and lock live: ``CADGEN_ENGINE_DIR``, else ``default_state_dir``.
-    Resolved once, here, for the client and the server alike (``os.path.realpath``): a ``..``, a
-    symlink or a trailing slash in either spelling names the same door, lock and port file."""
-    override = os.environ.get("CADGEN_ENGINE_DIR")
-    return Path(os.path.realpath(override if override else default_state_dir()))
-
-
-def default_state_dir() -> str:
-    """The engine's folder when ``CADGEN_ENGINE_DIR`` names none, in a place no other user can make
-    it first: ``$XDG_RUNTIME_DIR/cadgen-engine`` (Linux's per-session folder), else
-    ``cadgen-engine`` in the user's temporary folder when it is this user's alone: on macOS the one
-    the system names (``_darwin_temp``, ``/var/folders/...``), which a sandbox that sets its own
-    ``TMPDIR`` does not move, so a client in it and the engine outside find one folder; ``TMPDIR``
-    only where the system names none. Else ``/tmp/cadgen-<uid>``, which ``folder_refusal`` still
-    checks. On Windows the temporary folder is the user's own: ``cadgen-engine`` in it."""
-    if WINDOWS:
-        return os.path.join(tempfile.gettempdir(), "cadgen-engine")
-    for parent in (os.environ.get("XDG_RUNTIME_DIR"), _darwin_temp() or os.environ.get("TMPDIR")):
-        if parent and os.path.isabs(parent) and _users_own(parent):
-            return os.path.join(parent, "cadgen-engine")
-    return f"/tmp/cadgen-{os.getuid()}"
-
-
-def _darwin_temp() -> str | None:
-    """macOS's per-user temporary folder as the system names it (``_CS_DARWIN_USER_TEMP_DIR``), what
-    ``TMPDIR`` holds in a login session, whatever ``TMPDIR`` a sandbox sets; None elsewhere or when
-    it cannot be asked."""
-    if sys.platform != "darwin":
-        return None
-    try:
-        import ctypes
-
-        buffer = ctypes.create_string_buffer(1024)
-        size = ctypes.CDLL(None, use_errno=True).confstr(65537, buffer, len(buffer))  # _CS_DARWIN_USER_TEMP_DIR
-    except (OSError, AttributeError):
-        return None
-    return os.fsdecode(buffer.value) if 0 < size <= len(buffer) else None
-
-
-def _users_own(folder: str) -> bool:
-    """Whether ``folder`` is a folder of this user's that no one else can write to."""
-    import stat
-
-    try:
-        found = os.stat(folder)
-    except OSError:
-        return False
-    return stat.S_ISDIR(found.st_mode) and found.st_uid == os.getuid() and not found.st_mode & 0o022
-
-
-def folder_refusal(folder: Path) -> str | None:
-    """Why ``folder`` may not hold the engine's door, lock and port file, or None when it may. On
-    POSIX it must be a folder of this user's that no one else can write to: whoever owns the folder,
-    or can write to it, can take the door's place, and every request carries its client's
-    environment. (The default folder's name is shared by every user of a machine: another user who
-    made it first owns it.)"""
-    if WINDOWS:
-        return None
-    import stat
-
-    try:
-        found = os.lstat(folder)
-    except OSError as error:
-        return f"the engine's folder {folder} cannot be read: {error.strerror or error}"
-    if not stat.S_ISDIR(found.st_mode):
-        return f"the engine's folder {folder} is not a folder"
-    if found.st_uid != os.getuid():
-        return (f"the engine's folder {folder} belongs to another user (uid {found.st_uid}): "
-                "set CADGEN_ENGINE_DIR to a folder of your own")
-    if found.st_mode & 0o022:
-        return (f"the engine's folder {folder} can be written by others (mode {stat.S_IMODE(found.st_mode):o}): "
-                "run chmod go-w on it, or set CADGEN_ENGINE_DIR to a folder of your own")
-    return None
-
-
-def lock_path() -> Path:
-    return state_dir() / f"{NAME}.lock"
-
-
-def port_path() -> Path:
-    return state_dir() / f"{NAME}.port"
-
-
-def door_path() -> Path:
-    """The daemon's door on POSIX: a named pipe beside its lock, which it reads hellos from
-    (``door``). A pipe's path has no length limit but the file system's."""
-    return state_dir() / f"{NAME}.door"
-
-
-def address() -> Path:
-    """Where a client reaches the daemon: its door, on Windows its port file."""
-    return port_path() if WINDOWS else door_path()
-
-
-def failure_path() -> Path:
-    """Why the last daemon started here could not take its lock or listen, as JSON: ``reason``, and
-    ``denied`` when the system refused it (a sandbox that forbids a local port). Its stderr goes
-    nowhere, so this is what the client that started it reads when it exits at once."""
-    return state_dir() / f"{NAME}.failed"
 
 
 def _note_failure(reason: str, error: OSError) -> None:
@@ -384,47 +197,6 @@ def _note(said: str, denied: bool = False) -> None:
         pass  # a folder it cannot write either: the client says the daemon exited, and its code
 
 
-@dataclass(frozen=True)
-class Endpoint:
-    """Where the daemon listens and locks: its door (on Windows, its port file) and its lock."""
-
-    address: Path
-    lock: Path
-
-
-def endpoints() -> list[Endpoint]:
-    """The engine's endpoint in its engine folder, which ``stop`` looks at."""
-    return [Endpoint(address(), lock_path())]
-
-
-def engine_root() -> str:
-    """The folder ``cadgen`` is imported from: a worker this daemon starts imports the same."""
-    return str(Path(__file__).resolve().parent.parent.parent)
-
-
-# Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.
-CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-
-
-def windowless() -> dict[str, Any]:
-    """How the engine starts a process -- a worker, a reader, a render process -- on Windows: with
-    a console of its own and no window (``CREATE_NO_WINDOW``); elsewhere as it is. A console program
-    started with no console gets a new one, with a window (#597): a window per process, open as long
-    as it lives, and closing one ends it."""
-    return {"creationflags": CREATE_NO_WINDOW} if os.name == "nt" else {}
-
-
-def detached() -> dict[str, Any]:
-    """How the daemon is started: outliving the command that needed it. On Windows a console of its
-    own with no window and a process group of its own, never no console at all (``DETACHED_PROCESS``),
-    which would give each console program it starts a window of its own (#597); elsewhere a session
-    of its own (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
-    if os.name == "nt":
-        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
-    return {"start_new_session": True}
-
-
 # --- workers -----------------------------------------------------------------------------
 
 
@@ -432,9 +204,6 @@ class WorkerGone(Exception):
     pass
 
 
-# The local diagnostic suffix is excluded from observer facts (``api._error``), even when a
-# startup failure or a broken pipe has no exit status to distinguish it from a Python traceback.
-WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
 
 
 class Worker:
@@ -1177,58 +946,6 @@ class PortHeld(ValueError):
         self.who = who
 
 
-def installation() -> str:
-    """The version this installation runs as -- the one name its client, its daemon and its workers
-    all go by (``status``, its bytecode): ``CADGEN_INSTALLATION_VERSION`` when it names one (the
-    ``cadgen`` command sets it for a development install, which reports its release's version), else
-    the version this environment is registered as (``registered``: a dev environment's
-    ``python model.py`` run directly), else the release declared beside this code
-    (``previous.version``)."""
-    from cadgen.engine.previous import version
-
-    named = os.environ.get(INSTALLATION_ENV, "")
-    if re.fullmatch(r"[0-9][0-9A-Za-z.+_-]*", named):
-        return named
-    return registered() or version()
-
-
-def registered() -> str | None:
-    """The version this environment (``sys.prefix``, or ``HOME``'s) is registered as in the user's state folder
-    (``installations/<version>.json``, the distribution's records: ``cadgen._internal.installations``),
-    when one names its release or a development build of it (``<release>-dev.<time>``): the one
-    registered last. None with no state folder, or no such record -- and for a record of another
-    release, left from before an upgrade into this environment (``pip install -U``), which is not what
-    runs here now. Read once per process and state folder."""
-    from cadgen.engine import registry
-    from cadgen.engine.previous import version
-
-    held = registry.current()
-    if held is None:
-        return None
-    return _registered(str(held.state.root), os.path.normcase(os.path.realpath(_home_prefix())), version())
-
-
-@functools.cache
-def _registered(state: str, prefix: str, release: str) -> str | None:
-    folder = Path(state) / "installations"
-    found: list[tuple[float, str]] = []
-    try:
-        names = [entry for entry in os.scandir(folder) if entry.name.endswith(".json")]
-    except OSError:
-        return None
-    for entry in names:
-        try:
-            record = json.loads(Path(entry.path).read_text(encoding="utf-8"))
-            given = record["version"]
-            if (isinstance(given, str) and given == entry.name[:-5] and isinstance(record.get("prefix"), str)
-                    and os.path.normcase(os.path.realpath(record["prefix"])) == prefix
-                    and (given == release or given.startswith(f"{release}-dev."))):
-                found.append((entry.stat().st_mtime, given))
-        except (OSError, ValueError, KeyError, TypeError):
-            continue
-    return max(found)[1] if found else None
-
-
 def _uses(status: dict[str, Any]) -> list[str] | None:
     """What uses another engine, by its ``status``, in words: its holds (an agent host's app server),
     the pages that watch its documents, its requests; None when its ``status`` does not say (one this
@@ -1434,7 +1151,7 @@ def _engine_serving(port: int) -> tuple[Path, dict[str, Any]] | None:
     when no engine there answers so."""
     ours = {NAME}
     try:
-        doors = sorted(state_dir().glob("*.port" if WINDOWS else "*.door"))
+        doors = sorted(engine_dir().glob("*.port" if WINDOWS else "*.door"))
     except OSError:
         return None
     for address in doors:
@@ -1569,7 +1286,7 @@ def others_running() -> list[Path]:
 
     ours = {NAME}
     try:
-        doors = sorted(state_dir().glob("*.port" if WINDOWS else "*.door"))
+        doors = sorted(engine_dir().glob("*.port" if WINDOWS else "*.door"))
     except OSError:
         return []
     return [door for door in doors if door.stem not in ours and client._answering(door)]
@@ -2047,7 +1764,7 @@ class Daemon:
             send({"ok": True, "models": self.models.listing()})
             return
         if op == "delete":
-            # ``cadgen delete`` (``api.delete``): each id deleted by the one deletion (``models.delete``).
+            # ``cadgen delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
             deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
@@ -2513,7 +2230,7 @@ def _serve_door(daemon: Daemon, ident: str) -> None:
         except (OSError, ValueError):
             pass  # the client went, or sent no request
 
-    door.answer(state_dir() / door.CLIENTS, ident, serve)
+    door.answer(engine_dir() / door.CLIENTS, ident, serve)
 
 
 def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
@@ -2552,50 +2269,6 @@ def _can_listen() -> None:
         probe.close()
 
 
-def lock(path: Path | None = None) -> Any:
-    """The daemon's lock (or the one at ``path``), held for its life; None when
-    another daemon holds it. A lock file is removed by whoever holds it (``let_go``, ``sweep_dead``),
-    so a lock taken on a file whose name has gone, or names another file now, is no lock: it is let
-    go and the file the name names now is taken instead (``_names``)."""
-    state_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
-    refusal = folder_refusal(state_dir())
-    if refusal is not None:
-        raise PermissionError(refusal)
-    path = path or lock_path()
-    while True:
-        handle = open(path, "a+")
-        try:
-            if WINDOWS:
-                import msvcrt
-
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            gone = not _names(handle, path)  # its holder removed it as this opened it: open it again
-            handle.close()
-            if gone:
-                continue
-            return None
-        if _names(handle, path):
-            return handle
-        handle.close()  # taken as its last holder removed it: the name is another file's, or none
-
-
-def _names(handle: Any, path: Path) -> bool:
-    """Whether ``path`` still names the file ``handle`` holds open. On Windows an open file is never
-    removed, so it does."""
-    if WINDOWS:
-        return True
-    try:
-        held, named = os.fstat(handle.fileno()), os.lstat(path)
-    except OSError:
-        return False
-    return (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino)
-
-
 def let_go(held: Any, *, failed: bool = False) -> None:
     """This daemon's files gone as it lets go of its lock: its port file and, unless it ``failed``
     (its client reads why there), its failure note, then the lock file itself -- on POSIX removed
@@ -2612,7 +2285,7 @@ def let_go(held: Any, *, failed: bool = False) -> None:
 
 def _drop_lock(held: Any, path: Path) -> None:
     """The lock ``held`` (on ``path``) let go, and its file removed (see ``let_go``)."""
-    if not WINDOWS and _names(held, path):
+    if not WINDOWS and names(held, path):
         try:
             path.unlink()
         except OSError:
@@ -2643,7 +2316,7 @@ def sweep_dead(folder: Path | None = None, now: float | None = None) -> list[str
     live engine's files are never touched, nor this daemon's, nor a failure note or a port file
     being written younger than ``NOTE_KEPT_SECONDS``. Its folder's other files (``clients/``, a
     browser's redirect page) are not an engine's. The paths removed."""
-    folder = folder or state_dir()
+    folder = folder or engine_dir()
     now = time.time() if now is None else now
     if folder_refusal(folder) is not None:
         return []  # a folder another can change: nothing in it is this user's daemon's to remove
@@ -2754,7 +2427,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
     try:
         held = lock()
     except OSError as error:
-        _note_failure(f"the engine server cannot take its lock in {state_dir()}", error)
+        _note_failure(f"the engine server cannot take its lock in {engine_dir()}", error)
         return 1
     if held is None:
         if rotate:

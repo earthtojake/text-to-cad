@@ -12,22 +12,29 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from cadgen.engine import daemon as _daemon
+from cadgen.engine import places
 from cadgen.engine.atomic_replace import RETRY_DELAYS_SECONDS
 from cadgen.engine.door import Connection, answering, dial
 
 __all__ = ["hold", "request", "sweep"]
 
-DAEMON_MODULE = "cadgen.engine.daemon"  # the enclosing distribution may supply an application host
+# The module the server runs its engine as: the daemon with its application host installed. Named, never
+# imported: a client in the CAD kernel environment has only the library, and starts the engine with the
+# Python of an installation that has the server (``_start``).
+DAEMON_MODULE = "cadgen._internal.engine_daemon"
 # Called once a connection reaches a daemon this process started (``connect``): a command that
 # starts the engine says so (``cli.answered``); None, the default, says nothing.
 on_started: Callable[[], None] | None = None
 
 # The sandboxes known to refuse the loopback port the engine's HTTP server needs, each by a variable
-# and the value it sets in the shells it runs: a daemon started there could never serve a build. The
-# enclosing distribution names them (its host adapter); a sandbox none names is found by the daemon
-# that cannot listen (``daemon.failure_path``), as fast.
-SANDBOXES: tuple[tuple[str, str], ...] = ()
+# and the value it sets in the shells it runs: a daemon started there could never serve a build (an agent
+# app's shell sandbox, in its default mode, with its network disabled). A sandbox none names is found by the
+# daemon that cannot listen (``places.failure_path``), as fast.
+SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
+# The words a worker's failure carries its stderr's tail under (``daemon.Worker``): local detail, which
+# no observer's facts carry (``api._error``), even when a startup failure or a broken pipe has no exit
+# status to tell it from a Python traceback.
+WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
              "(the CAD plugin's server starts the engine) or run `cadgen server` outside the sandbox")
 
@@ -37,18 +44,18 @@ def _connect(address: Path | None = None) -> Connection | None:
     the engine's), or None when none answers there. ``ConnectionError`` when the system refuses
     this process the engine's folder (a sandbox that forbids writing there)."""
     try:
-        if _daemon.WINDOWS:
-            port, _token = _port_text(address or _daemon.port_path()).split()
+        if places.WINDOWS:
+            port, _token = _port_text(address or places.port_path()).split()
             connection = socket.create_connection(("127.0.0.1", int(port)), timeout=5)
             connection.settimeout(None)
             stream = connection.makefile("rwb")
             return Connection(stream, stream, stream, connection)
-        door = address or _daemon.door_path()
-        if _daemon.folder_refusal(door.parent) is not None or not door.exists():
+        door = address or places.door_path()
+        if places.folder_refusal(door.parent) is not None or not door.exists():
             return None
         return dial(door)
     except PermissionError as error:
-        raise _denied(f"opening a pipe in the engine's folder {_daemon.state_dir()}: {error.strerror or error}") from None
+        raise _denied(f"opening a pipe in the engine's folder {places.engine_dir()}: {error.strerror or error}") from None
     except (OSError, ValueError):
         return None
 
@@ -69,7 +76,7 @@ def _port_text(path: Path) -> str:
 def _answering(address: Path) -> bool:
     """Whether a daemon answers at ``address``, asked without a request: its door takes a writer
     (on Windows, its port takes a connection)."""
-    if not _daemon.WINDOWS:
+    if not places.WINDOWS:
         return answering(address)
     connection = _connect(address)
     if connection is None:
@@ -90,21 +97,21 @@ def _denied(cause: str) -> ConnectionError:
 
 
 def _lock(path: Path | None = None) -> Any:
-    """``daemon.lock`` taken by a client (to see a daemon gone, or its files dead): a folder refused
-    (``daemon.folder_refusal``) or denied by the system said in one line, as ``connect`` says it."""
+    """``places.lock`` taken by a client (to see a daemon gone, or its files dead): a folder refused
+    (``places.folder_refusal``) or denied by the system said in one line, as ``connect`` says it."""
     try:
-        return _daemon.lock(path)
+        return places.lock(path)
     except PermissionError as error:
         if error.errno is None:  # ``folder_refusal``'s words
             raise ConnectionError(str(error)) from None
-        raise _denied(f"taking the lock in the engine's folder {_daemon.state_dir()}: "
+        raise _denied(f"taking the lock in the engine's folder {places.engine_dir()}: "
                       f"{error.strerror or error}") from None
 
 
 def _not_started(code: int) -> ConnectionError:
     """A daemon that exited at once, failing (``daemon.main``): the reason its note gives."""
     try:
-        note = json.loads(_daemon.failure_path().read_text(encoding="utf-8"))
+        note = json.loads(places.failure_path().read_text(encoding="utf-8"))
         reason, denied = str(note["reason"]), bool(note.get("denied"))
     except (OSError, ValueError, KeyError, TypeError):
         reason, denied = f"it exited with code {code}", False
@@ -139,30 +146,30 @@ def environment() -> dict[str, str]:
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process, whose ``pid`` says whether the daemon that answers
     is the one this process started (``_told_started``). It is the current installation's engine
-    (``daemon.ENGINE``, read now), started with that installation's Python whatever release this client
+    (``places.engine``, read now), started with that installation's Python whatever release this client
     is -- a client of another release is handed nothing of its own import path --; with none current,
-    the installation's own: this process's, or, in the base the installation made (``daemon.HOME``),
+    the installation's own: this process's, or, in the base the installation made (``places.HOME``),
     the installation's, the engine's folder first on its ``PYTHONPATH`` only where that Python's
     environment would not find it -- a source tree --, so no process the daemon starts in the base
     inherits it."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
-    found = _daemon.ENGINE() if _daemon.ENGINE is not None else None
-    home = _daemon.HOME
+    found = places.engine()
+    home = places.HOME
     if found is not None:
         python = found["python"]
         if not _same(found["prefix"], home["prefix"] if home else sys.prefix):
             env.pop("PYTHONPATH", None)  # the current installation's engine imports its own cadgen
     else:
         python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
-                                else (sys.executable, _daemon.engine_root(), sys.prefix))
+                                else (sys.executable, places.engine_root(), sys.prefix))
         path = env.get("PYTHONPATH", "")
         inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
         if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
             env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
-    _daemon.bytecode(env)
+    places.bytecode(env)
     return subprocess.Popen([python, "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=_working_folder(),
-                            **_daemon.detached())
+                            **places.detached())
 
 
 def _same(one: str, other: str) -> bool:
@@ -171,11 +178,11 @@ def _same(one: str, other: str) -> bool:
 
 def _working_folder() -> str | None:
     """Where the daemon (and every child it starts) stands. On POSIX the engine's own folder, which
-    is this user's alone (``daemon.folder_refusal``): never the shared temporary folder above it,
+    is this user's alone (``places.folder_refusal``): never the shared temporary folder above it,
     where another user could leave a file a name-resolved helper would find. On Windows the
     per-user temporary folder above it, so the engine's folder holds no process's working folder."""
-    folder = _daemon.state_dir()
-    if not _daemon.WINDOWS:
+    folder = places.engine_dir()
+    if not places.WINDOWS:
         return str(folder) if folder.is_dir() else None
     return str(folder.parent) if folder.parent.exists() else None
 
@@ -183,21 +190,21 @@ def _working_folder() -> str | None:
 def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
     """A connection to the daemon, started when ``start`` and none answers. In a shell whose
     sandbox refuses the loopback port the engine's HTTP server needs, none is started: that is
-    said at once, as is a daemon that exits failing (its note, ``daemon.failure_path``)."""
+    said at once, as is a daemon that exits failing (its note, ``places.failure_path``)."""
     found = _connect()
     if found is not None or not start:
         return found
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     try:
-        _daemon.state_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
+        places.engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
     except PermissionError as error:
         raise _denied(f"making the engine's folder: {error.strerror or error}") from None
-    refusal = _daemon.folder_refusal(_daemon.state_dir())
+    refusal = places.folder_refusal(places.engine_dir())
     if refusal is not None:  # said now, not after waiting out a daemon that cannot start there
         raise ConnectionError(refusal)
     try:  # the note is the one this start leaves
-        _daemon.failure_path().unlink(missing_ok=True)
+        places.failure_path().unlink(missing_ok=True)
     except PermissionError as error:
         raise _denied(f"writing in the engine's folder: {error.strerror or error}") from None
     process = _start()
@@ -235,13 +242,13 @@ def _told_started(mine: list[subprocess.Popen]) -> None:
         on_started()
 
 
-def wait_gone(timeout: float = 60.0, endpoint: _daemon.Endpoint | None = None) -> bool:
+def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None) -> bool:
     """Wait until the daemon is gone: its door no longer answers and its lock, held until its workers
     have stopped, is free."""
     deadline = time.monotonic() + timeout
-    lock = endpoint.lock if endpoint else _daemon.lock_path()
+    lock = endpoint.lock if endpoint else places.lock_path()
     while time.monotonic() < deadline:
-        if not _answering(endpoint.address if endpoint else _daemon.address()):
+        if not _answering(endpoint.address if endpoint else places.address()):
             if not lock.exists():
                 return True  # it removed its lock as it let it go (``daemon.let_go``)
             held = _lock(lock)
@@ -269,8 +276,8 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
             message["host"] = named
         if holder:
             message["holder"] = holder
-        if _daemon.WINDOWS:
-            message = {"token": _daemon.port_path().read_text(encoding="utf-8").split()[1], **message}
+        if places.WINDOWS:
+            message = {"token": places.port_path().read_text(encoding="utf-8").split()[1], **message}
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
         if json.loads(connection.reader.readline() or b"{}").get("ok") is not True:
@@ -294,9 +301,9 @@ def request(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = 
 
 def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None,
               on_progress: Callable[[dict[str, Any]], None] | None = None, address: Path | None = None) -> dict[str, Any]:
-    if _daemon.WINDOWS:
+    if places.WINDOWS:
         # The token first, so the daemon checks it in the line's first bytes, before it reads the rest.
-        message = {"token": (address or _daemon.port_path()).read_text(encoding="utf-8").split()[1], **message}
+        message = {"token": (address or places.port_path()).read_text(encoding="utf-8").split()[1], **message}
     with connection:
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
@@ -319,13 +326,13 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
 
 
 def sweep(*, stop: bool) -> dict[str, list[str]]:
-    """The engine of this engine folder (``daemon.endpoints``): with ``stop``, stopped if it lives and
+    """The engine of this engine folder (``places.endpoints``): with ``stop``, stopped if it lives and
     waited for until gone (``stopped``, its door or port file); a live one left running listed in
     ``running``. The door and lock files of a dead one -- nothing answers there and nobody holds its
     lock -- are removed (``removed``). A daemon starting or stopping holds its lock before it listens
     and until it has left, so its files are never taken."""
     found: dict[str, list[str]] = {"stopped": [], "running": [], "removed": []}
-    for endpoint in _daemon.endpoints():
+    for endpoint in places.endpoints():
         if _answering(endpoint.address):
             if not stop:
                 found["running"].append(str(endpoint.address))
@@ -343,11 +350,11 @@ def sweep(*, stop: bool) -> dict[str, list[str]]:
     return found
 
 
-def _remove_dead(endpoint: _daemon.Endpoint) -> list[str]:
+def _remove_dead(endpoint: places.Endpoint) -> list[str]:
     """The files of ``endpoint`` removed when its daemon is dead: its lock free (taken here while
     they go, so no daemon starts between) and nothing answering at its address."""
     present = [path for path in (endpoint.address, endpoint.lock) if path.exists() or path.is_symlink()]
-    if not present or _daemon.folder_refusal(endpoint.lock.parent) is not None:
+    if not present or places.folder_refusal(endpoint.lock.parent) is not None:
         return []  # nothing, or a folder another can change: none of it this user's daemon's to remove
     held = _lock(endpoint.lock)
     if held is None:
@@ -357,7 +364,7 @@ def _remove_dead(endpoint: _daemon.Endpoint) -> list[str]:
         if _answering(endpoint.address):
             return []
         for path in present:
-            if _daemon.WINDOWS and path == endpoint.lock:
+            if places.WINDOWS and path == endpoint.lock:
                 continue  # an open file is not removed on Windows: after the lock is let go
             try:
                 path.unlink()
@@ -366,7 +373,7 @@ def _remove_dead(endpoint: _daemon.Endpoint) -> list[str]:
                 pass
     finally:
         held.close()
-    if _daemon.WINDOWS and endpoint.lock in present:
+    if places.WINDOWS and endpoint.lock in present:
         try:
             endpoint.lock.unlink()
             removed.append(str(endpoint.lock))

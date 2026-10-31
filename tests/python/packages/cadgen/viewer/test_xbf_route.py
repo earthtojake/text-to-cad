@@ -252,8 +252,8 @@ finally:
         self.assertEqual(self.request('/__cad/xbf/api/docs')[0], 404)
 
     def test_the_cad_apps_tunnel_carries_an_engine_document(self) -> None:
-        from cadgen.mcp.shim import Proxy
-        from cadgen.mcp.protocol import RequestContext
+        from cad_mcp.protocol import RequestContext
+        from cad_mcp.shim import Proxy
         proxy = Proxy()
         context = RequestContext(1, {})
         proxy.handle('initialize', {'protocolVersion': '2025-11-25',

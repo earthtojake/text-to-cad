@@ -192,7 +192,7 @@ class RunLineTest(unittest.TestCase):
         import io
         from unittest import mock
 
-        from cadgen.engine import cli
+        from cadgen.engine import said
 
         class Pipe(io.StringIO):
             flushed = ""
@@ -204,7 +204,7 @@ class RunLineTest(unittest.TestCase):
         report = {"ok": True, "model": "m.py::m", "memo": {"bodies_loaded": 1}, "timings": {}, "bodies": {},
                   "cache": {"from": "memory"}, "id": "an-id", "url": "http://127.0.0.1:1/an-id"}
         with mock.patch("sys.stdout", pipe):
-            cli._reported([report], 0.1, None, False)
+            said.reported([report], 0.1, None, False)
         self.assertTrue(pipe.flushed.endswith("  view: http://127.0.0.1:1/an-id\n"), pipe.flushed)
 
     def test_a_stopped_run_names_unbuilt_models_only_where_its_code_calls_one_after(self) -> None:
@@ -222,29 +222,29 @@ class RunLineTest(unittest.TestCase):
         self.assertFalse(engine_model._calls_after(frame(2)), "only a print after the last model")
 
     def test_one_miss_and_one_hit_are_singular(self) -> None:
-        from cadgen.engine import cli
+        from cadgen.engine import said
 
         report = {"ok": True, "model": "m.py::m", "memo": {"misses": 1, "hits": 1}, "bodies": {"m": "run"},
                   "timings": {}}
-        self.assertEqual(cli._describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 1 miss, 1 hit")
+        self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 1 miss, 1 hit")
         report["memo"] = {"misses": 2, "hits": 0}
-        self.assertEqual(cli._describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 2 misses, 0 hits")
+        self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 2 misses, 0 hits")
         took = {"ok": True, "model": "m.py::m", "memo": {"bodies_loaded": 3}, "timings": {}, "bodies": {}, "cache": {"from": "memory"}}
-        self.assertEqual(cli._describe(took, 0.1, None), "took m.py::m in 0.10s: its document in memory holds the model's key, "
+        self.assertEqual(said.describe(took, 0.1, None), "took m.py::m in 0.10s: its document in memory holds the model's key, "
                                                           "3 bodies loaded, nothing ran")
 
     def test_a_build_that_waited_for_its_scripts_running_one_says_what_it_did_with_it(self) -> None:
-        from cadgen.engine import cli
+        from cadgen.engine import said
 
         waited = {"script": "turbine.py", "ago": 21, "seconds": 206}
         took = {"ok": True, "model": "turbine.py::turbine", "memo": {"bodies_loaded": 1}, "timings": {},
                 "bodies": {"turbine.py::turbine": "loaded"}, "cache": {"used": True, "from": "memory"}, "waited": waited}
-        self.assertEqual(cli._describe(took, 3.61, False),
+        self.assertEqual(said.describe(took, 3.61, False),
                          "took turbine.py::turbine warm in 3.61s: its document in memory holds the model's key, "
                          "1 body loaded, nothing ran; took the build of turbine.py it waited 206s for")
         replayed = {"ok": True, "model": "turbine.py::turbine", "memo": {"misses": 0, "hits": 0}, "timings": {},
                     "bodies": {"turbine.py::turbine": "replayed"}, "waited": waited}
-        self.assertEqual(cli._describe(replayed, 3.61, False),
+        self.assertEqual(said.describe(replayed, 3.61, False),
                          "built turbine.py::turbine warm in 3.61s: bodies 1 replayed; 0 misses, 0 hits; replayed "
                          "the build of turbine.py it waited 206s for")
 

@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cadgen.engine import client, daemon, executables
+from cadgen.engine import client, executables, places
 
 
 @unittest.skipIf(os.name == "nt", "a POSIX PATH and executable bits")
@@ -55,7 +55,7 @@ class DaemonWorkingFolderTest(unittest.TestCase):
                 mock.patch.object(client.subprocess, "Popen") as started:
             client._start()
         self.assertEqual(started.call_args.kwargs["cwd"], str(engine))
-        self.assertIsNone(daemon.folder_refusal(engine))
+        self.assertIsNone(places.folder_refusal(engine))
 
     def test_an_idle_worker_stands_in_the_engine_s_folder_and_never_one_others_can_write(self) -> None:
         from cadgen.engine import worker

@@ -100,10 +100,17 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    after it. Explicit viewer exports write only the requested
    artifact to managed temporary storage for delivery; no source or intermediate XBF
    is written (the engine's **Viewer exports**).
-3. **Standalone.** `cadgen.engine` imports nothing of cadgen outside itself: OCP, build123d, bd_materials, threejs_materials (and
-   ezdxf, build123d's own DXF library), numpy, Pillow and the standard library only. cadgen
-   reaches into it, never the other way: its telemetry is an observer the engine calls with
-   plain facts (`engine.api.observers`).
+3. **Three sides, by where the code runs.** The library -- what a model imports and what runs in
+   a worker: the model API, the kernel side of the engine, the document model and the protocol a
+   client speaks -- imports nothing of the server's or the shim's, so a model runs where only it is
+   installed; its engine imports nothing of cadgen outside itself: OCP, build123d, bd_materials,
+   threejs_materials (and ezdxf, build123d's own DXF library), numpy, Pillow and the standard library
+   only. The server -- what runs in the daemon or a `cadgen` command: the daemon, the registry, the
+   CAD Viewer's and the CAD app's servers, every verb, the environment makers, telemetry -- imports
+   the library's kernel-free modules and never the kernel. The shim (`cad_mcp`), the stdio transport
+   an agent app starts, is the standard library alone. The server reaches into the library, never the
+   other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
+   which the server's commands append.
 4. **XCAF is the document; files are explicit.** A live model holds an XCAF document;
    `@xbf` or `--xbf` serializes it as native BinXCAF. It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
@@ -221,8 +228,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
     and leaves everything as it was. Nothing updates on its own.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
-    snapshot (`_internal/engine_telemetry.py`, cadgen's observer of the engine), a drawing, a
-    crash -- is kept in a small file beside the settings (`analytics.spool`), which the CAD app's
+    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
+    crash; a model's own process, where only the library is installed, counts nothing -- is kept
+    in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command that finds it has waited more than a
     window, with no other process sending, starts a sender detached that sends it and exits
     (`_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
@@ -377,13 +385,12 @@ src/cadgen/
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a robot's (robots), Quick Edit's packets
                          #   (prompt_files)
-  mcp/                   # stateless stdio proxy (shim) and its JSON-RPC transport
-                         #   (protocol), engine sessions (http), tools and launches
-                         #   (server), the agent operations (operations), which host started
-                         #   the shim and how it presents CAD (host), open views (views),
-                         #   sidebar views shared in memory (sidebar), the viewer routes
-                         #   in-process (tunnel), the page (ui), and the CAD Viewer link for
-                         #   a host that renders no MCP Apps, which the shim opens (browser)
+  mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
+                         #   engine sessions (http), tools and launches (server), the agent
+                         #   operations (operations), how a host presents CAD (host), open
+                         #   views (views), sidebar views shared in memory (sidebar), the
+                         #   viewer routes in-process (tunnel), the page (ui), and the CAD
+                         #   Viewer link for a host that renders no MCP Apps (browser)
   urdf.py, sdf.py,       # the robot validators: one public namespace per format, its
   srdf.py                #   `validate` verb, and the checks behind it (*_source.py,
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
@@ -417,11 +424,18 @@ src/cadgen/
                          #   the lazy kernel (lazy_kernel: `import build123d` binds, the
                          #   kernel loads on first use; cadgen-lazy-kernel.pth, at the root
                          #   of site-packages, installs it at interpreter start),
-                         #   the engine observer and the telemetry sender, the install
-                         #   channel, atomic replace, file locks (the state folder's one
-                         #   lock: `file_lock.state`), the CLI derivation
+                         #   the server's observer of the engine and the telemetry sender,
+                         #   what the library counts (counts), the install channel, atomic
+                         #   replace, file locks (the state folder's one lock:
+                         #   `file_lock.state`), the CLI derivation
   _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced
                          #   when the wheel is packaged, never committed, never edited
+src/cad_mcp/             # the stdio transport an agent app starts (`cadgen mcp`), the standard
+                         #   library alone: the host's JSON-RPC (protocol) carried to the
+                         #   engine's MCP endpoint (shim), the engine reached by its door and
+                         #   started, the current installation's, when none runs (engine),
+                         #   which host started it (host), and the browser a text host's
+                         #   `cad_show` opens (browser)
 ```
 
 Commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and

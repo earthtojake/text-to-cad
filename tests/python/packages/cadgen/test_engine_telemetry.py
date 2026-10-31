@@ -1,8 +1,9 @@
-"""The engine's verbs counted (``cadgen/_internal/engine_telemetry.py``): cadgen's observer of
-``cadgen.engine.api`` turns what each build, export and snapshot did into the counts the build daemon
-kept for its builds -- kind ``model``, who asked, how it ended and why, the workers' health, cadgen's own
-crashes -- keeps them in the spool, and a command starts the sender (``telemetry_send``, process ``cli``)
-when nothing has taken the spool for a window. Nothing is counted where the environment says no."""
+"""The engine's verbs counted (``cadgen/_internal/engine_telemetry.py``): the server's observer of
+``cadgen.engine.api``, which its commands append, turns what each build, export and snapshot did into the
+counts the build daemon kept for its builds -- kind ``model``, who asked, how it ended and why, the
+workers' health, cadgen's own crashes -- keeps them in the spool, and a command starts the sender
+(``telemetry_send``, process ``cli``) when nothing has taken the spool for a window. Nothing is counted
+where the environment says no, nor in a model's own process, which runs where only the library is."""
 
 from __future__ import annotations
 
@@ -238,8 +239,8 @@ class EngineTelemetryTest(unittest.TestCase):
 
 
 class ThroughTheDaemonTest(unittest.TestCase):
-    """``python model.py`` and a ``cadgen`` command, counted in their own processes through the engine's own
-    daemon: who asked, the worker started for the first build, and the one that died under a build."""
+    """``python model.py`` and a ``cadgen`` command through the engine's own daemon: the command counted in
+    its own process, who asked and its worker's part; the model's own process counting nothing."""
 
     def setUp(self) -> None:
         # One folder of the test's own holds the models, the engine's door, its state and its cache.
@@ -266,7 +267,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
     def run_in(self, *args: str) -> subprocess.CompletedProcess:
         return engine_daemon.run([sys.executable, *args], cwd=self.folder, env=self.env)
 
-    def test_a_model_script_and_a_command_are_counted_by_who_asked(self) -> None:
+    def test_a_command_is_counted_and_a_model_s_own_process_counts_nothing(self) -> None:
         (self.folder / "plate.py").write_text(textwrap.dedent("""
             import build123d as bd
             from cadgen.engine import stl, xbf
@@ -299,14 +300,9 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertEqual(self.run_in("dies.py").returncode, 1)
         spool = self.state / analytics.SPOOL
-        first, second, third = [json.loads(line)["counts"] for line in spool.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual((first["builds"][0]["via"], first["builds"][0]["outcome"], first["features"], first["health"]),
-                         ("script", "ok", ["assembly", "declared_mesh"], {"workers": 1}))
-        self.assertEqual((second["builds"][0]["kind"], second["builds"][0]["via"], second["builds"][0]["outcome"],
-                          second.get("health")), ("step", "command", "ok", None), "its worker was warm")
-        self.assertEqual((third["builds"][0]["via"], third["builds"][0]["outcome"], third["health"], third["crashes"]),
-                         ("script", "crashed", {"crashes": 1}, [analytics.died(3)]))
-        self.assertEqual({build["kind"] for counts in (first, third) for build in counts["builds"]}, {"model"})
+        [counted] = [json.loads(line)["counts"] for line in spool.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual((counted["builds"][0]["kind"], counted["builds"][0]["via"], counted["builds"][0]["outcome"],
+                          counted.get("health")), ("step", "command", "ok", None), "its worker was warm")
 
     def test_a_telemetry_batch_holds_no_id_and_no_path(self) -> None:
         """Verbs by document id -- a pointer model's and a shape's handed over, one refused, one whose body
@@ -351,7 +347,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         spooled = spool.read_text(encoding="utf-8")
         counted = [json.loads(line)["counts"] for line in spooled.splitlines()]
         outcomes = [(build["kind"], build["outcome"]) for counts in counted for build in counts.get("builds", [])]
-        self.assertIn(("model", "failed"), outcomes, "the body that raised was counted")
+        self.assertNotIn("model", {kind for kind, _outcome in outcomes}, "the script's own builds counted nothing")
         self.assertEqual(outcomes.count(("stl", "ok")), 2, "both exports by id were counted")
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")
@@ -367,10 +363,12 @@ class ThroughTheDaemonTest(unittest.TestCase):
                            canonical(self.folder), str(self.state), canonical(self.state), "part.py"):
                 self.assertNotIn(secret, text, f"the {where} holds {secret}")
 
-    def test_cadgen_observes_the_engine_once_its_verbs_are_imported_and_never_sooner(self) -> None:
-        done = self.run_in("-c", "import sys, cadgen; print(any(name.startswith('cadgen.engine') for name in sys.modules)); "
+    def test_a_command_observes_the_engine_once_its_verbs_are_imported_and_never_sooner(self) -> None:
+        done = self.run_in("-c", "import sys, cadgen.cli; print(any(name.startswith('cadgen.engine') for name in sys.modules)); "
                                  "from cadgen.engine import api; print([o.__module__ for o in api.observers])")
         self.assertEqual(done.stdout.split("\n")[:2], ["False", "['cadgen._internal.engine_telemetry']"], done.stderr)
+        model = self.run_in("-c", "import cadgen; from cadgen.engine import api; print(api.observers)")
+        self.assertEqual(model.stdout.split("\n")[0], "[]", "a model's own process has no observer")
 
 
 def setUpModule() -> None:

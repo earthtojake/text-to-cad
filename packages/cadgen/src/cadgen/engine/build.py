@@ -210,7 +210,7 @@ class _FirstPartyFromSource(importlib.abc.MetaPathFinder):
 def _from_source() -> None:
     """The model's code runs from its source: no bytecode read or written for a first-party
     module (a library's is the interpreter's to cache: a worker's under the engine's own folder,
-    ``daemon.bytecode``). One finder per process, ahead of the current import hooks."""
+    ``places.bytecode``). One finder per process, ahead of the current import hooks."""
     finder = next((finder for finder in sys.meta_path if isinstance(finder, _FirstPartyFromSource)), None)
     if finder is None:
         sys.meta_path.insert(0, _FirstPartyFromSource())
@@ -846,9 +846,9 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
         timings[target.kind] = round(seconds, 4)
         written[str(target.path)] = {"kind": target.kind, "written": fresh, "seconds": round(seconds, 4), "bytes": size}
         if fresh or kept:
-            from cadgen.engine.cli import _bytes  # the size as every verb says one: never "0.0 MB" for a small file
+            from cadgen.engine.said import size as said  # the size as every verb says one: never "0.0 MB" for a small file
 
-            log(f"{'wrote' if fresh else 'kept'} {_shown(target.path, None)} ({_bytes(size)}) in {seconds:.2f}s")
+            log(f"{'wrote' if fresh else 'kept'} {_shown(target.path, None)} ({said(size)}) in {seconds:.2f}s")
     report["files"] = {str(target.path): written[str(target.path)] for target in plan}
 
 
@@ -1026,7 +1026,7 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         where = "cache"
         if cache is None:
             return {"used": False, "reason": "the engine keeps no cache to take it from"}, None
-        from cadgen.engine.cache import FILE
+        from cadgen.engine.records import FILE
 
         cached = Path(cache) / model.id / FILE
         if not cached.is_file():
@@ -1096,10 +1096,9 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
 def _relocation(model: Any) -> dict[str, Any] | None:
     """Where the cache file of ``model``'s document was built, when that is where its script was
     before a move (its record's ``relocated``: ``{script, module}``); else None. One record read."""
-    from cadgen.engine import registry
+    from cadgen.engine import records
 
-    held = registry.current()
-    found = ((held.get(model.id) if held is not None else None) or {}).get("relocated")
+    found = (records.current().get(model.id) or {}).get("relocated")
     return found if isinstance(found, dict) and isinstance(found.get("script"), str) else None
 
 
@@ -1110,12 +1109,10 @@ def _reattach(models: list, cache: Path) -> None:
     re-attaches the record of its script moved (``identity.reattach``) before its cache is read. A
     model this worker holds, or whose cache file is there, costs a stat, and nothing is asked. Asked
     of the engine that runs this worker, never of one it would start."""
-    from cadgen.engine import registry
-    from cadgen.engine.cache import FILE
+    from cadgen.engine import records
+    from cadgen.engine.records import FILE
 
-    held = registry.current()
-    if held is None:
-        return
+    held = records.current()
     asked = []
     for model in models:
         if _WRITTEN.get(f"{model.script}::{model.name}") is not None:
@@ -1124,7 +1121,7 @@ def _reattach(models: list, cache: Path) -> None:
             if model.explicit_name is None:
                 continue  # its id is its script's own: that file is its document
             record = held.get(model.id)
-            if record is None or registry.home(held, record) == model.script:
+            if record is None or records.home(held, record) == model.script:
                 continue
         asked.append(model.source)
     if not asked:

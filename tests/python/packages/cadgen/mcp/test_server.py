@@ -19,8 +19,9 @@ from unittest import mock
 from urllib.parse import quote
 
 from cadgen._internal.picker import FilePicker
-from cadgen.mcp.browser import OPEN, OPENED, deliver
-from cadgen.mcp.shim import initialize_params
+from cad_mcp.browser import deliver
+from cadgen.mcp.browser import OPEN, OPENED
+from cad_mcp.shim import initialize_params
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.viewer.recents import RecentStore
 from cadgen.mcp.server import _AGENT_TOOLS, FOLLOWS, Server, local_path
@@ -103,9 +104,11 @@ class _Session(unittest.TestCase):
         self.opened: list[str] = []
         engine = self.tmp / "opener"
         engine.mkdir(mode=0o700)
+        from cad_mcp import browser as transport
         from cadgen.viewer import browser_open
         for patched in (mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}),
-                        mock.patch.object(browser_open, "display_refusal", return_value=None)):
+                        mock.patch.object(browser_open, "display_refusal", return_value=None),
+                        mock.patch.object(transport, "display_refusal", return_value=None)):
             patched.start()
             self.addCleanup(patched.stop)
         self.server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"), viewer_url=self.viewer_url,
@@ -897,9 +900,12 @@ class TextServerTest(_Session):
         self.assertEqual(self.opened, [])
 
     def test_where_no_browser_opens_the_answer_is_the_url(self) -> None:
+        from cad_mcp import browser as transport
         from cadgen.viewer import browser_open
 
-        with mock.patch.object(browser_open, "display_refusal", return_value="there is no display to open a browser on"):
+        refusal = "there is no display to open a browser on"
+        with mock.patch.object(browser_open, "display_refusal", return_value=refusal), \
+                mock.patch.object(transport, "display_refusal", return_value=refusal):
             shown = self.call("cad_show", {"source": self.bracket})["content"][0]["text"]
         self.assertTrue(shown.startswith("No browser can be opened from here (there is no display to open a browser on); "
                                          "bracket.stl's page is http://127.0.0.1:3245/"), shown)
@@ -1009,9 +1015,12 @@ class TextServerTest(_Session):
         self.assertEqual((self.opened, told), ([], []))
 
     def test_a_peer_that_can_open_no_browser_is_asked_for_none(self) -> None:
+        from cad_mcp import browser as transport
         from cadgen.viewer import browser_open
 
-        with mock.patch.object(browser_open, "display_refusal", return_value="this is a remote session with no display to open a browser on"):
+        refusal = "this is a remote session with no display to open a browser on"
+        with mock.patch.object(browser_open, "display_refusal", return_value=refusal), \
+                mock.patch.object(transport, "display_refusal", return_value=refusal):
             server = Server(page=self.server.page, recents=self.server.recents, viewer_url=self.viewer_url)
             server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                                            "clientInfo": self.client}), None)

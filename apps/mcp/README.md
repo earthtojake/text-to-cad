@@ -41,7 +41,7 @@ terminal UI show none and are served as text clients.
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
 a launch registers it), started if none runs (`cadgen/mcp/browser.py`), in the person's
-browser through an owner-only redirect file (`browser_open`), and answers with the page's URL
+browser through an owner-only redirect file (`cad_mcp/browser.py`), and answers with the page's URL
 for the agent to give the person: "opened in your browser at <url>". The host's stdio process
 (`cadgen mcp`) makes that open, in the agent's own environment (its `BROWSER`, its display), from
 the page the engine's answer names (`_meta["dev.texttocad/open"]`, stripped before the host sees
@@ -418,7 +418,7 @@ mutations are never replayed. The app capability does not: the shim makes one fo
 and gives it to every session it opens, so the views the host shows sync again with the new
 session at their next call. Only a view from before the host restarted the shim carries one
 no session takes.
-Host-specific capability corrections live in `mcp/shim.py`. Version polls use `wait=0`
+Host-specific capability corrections live in the stdio transport (`cad_mcp/shim.py`). Version polls use `wait=0`
 in the page’s tunnel so they never occupy a host call slot. The engine has no such
 host-specific timing rule. The manifests continue to launch `cadgen mcp`.
 

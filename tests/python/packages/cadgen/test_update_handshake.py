@@ -42,12 +42,12 @@ def surface() -> dict:
     from cadgen._internal import installations, releases, switch, update
     from cadgen.cli import setup as setup_cli
     from cadgen.cli import update as update_cli
-    from cadgen.engine import client, daemon, progress, registry
+    from cadgen.engine import client, daemon, places, progress, registry
     from cadgen.viewer.engine_app import EngineApp
 
     # A client of one release starting the current installation's engine: its Python, these arguments.
     current = {"python": "PYTHON", "prefix": os.path.abspath("elsewhere"), "version": "9.9.9"}
-    with mock.patch.object(daemon, "ENGINE", lambda: current), \
+    with mock.patch.object(places, "engine", lambda: current), \
             mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
         try:
             client._start()

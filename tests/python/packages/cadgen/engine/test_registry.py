@@ -25,7 +25,7 @@ SRC = Path(__file__).resolve().parents[5] / "packages" / "cadgen" / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from cadgen.engine import registry  # noqa: E402
+from cadgen.engine import records, registry  # noqa: E402
 from cadgen.engine.ids import model_id  # noqa: E402
 from cadgen.engine.model import Model  # noqa: E402
 from cadgen.engine.registry import Registry  # noqa: E402
@@ -76,8 +76,8 @@ class RegistryTest(unittest.TestCase):
                  (True, "C:\\m\\caller.py", "cadgen run C:\\m\\caller.py"),
                  (True, "C:\\my models\\caller.py", 'cadgen run "C:\\my models\\caller.py"'))
         for windows, program, pasted in cases:
-            with self.subTest(program=program), mock.patch.object(registry, "WINDOWS", windows):
-                self.assertEqual(registry.rerun(program), pasted)
+            with self.subTest(program=program), mock.patch.object(records, "WINDOWS", windows):
+                self.assertEqual(records.rerun(program), pasted)
 
     def test_a_record_is_relocated_by_its_root_alone_and_a_shape_s_is_never_detached(self) -> None:
         moved = self.state / "elsewhere"

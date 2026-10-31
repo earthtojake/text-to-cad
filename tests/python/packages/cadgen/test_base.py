@@ -23,6 +23,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import base  # noqa: E402
+from cadgen.engine import places  # noqa: E402
 from cadgen.cli import run  # noqa: E402
 
 RELEASE = "9.9.9"
@@ -95,10 +96,10 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(self.said, [f"making the CAD kernel environment, once: cadgen[kernel] {RELEASE} on Python "
                                      f"3.14.2, in {env}"])
         # Its marker names the installation it belongs to: a process there reaches that engine.
-        home = base.home(str(env))
+        home = places.home(str(env))
         self.assertEqual((home["executable"], home["prefix"], home["root"]),
                          (self.installation.executable, self.installation.prefix, self.installation.root))
-        self.assertIsNone(base.home(str(self.core)), "an environment no marker names is its own installation")
+        self.assertIsNone(places.home(str(self.core)), "an environment no marker names is its own installation")
 
     def test_the_network_is_asked_only_for_what_uvs_cache_lacks_and_said_first(self) -> None:
         fake = Fake((2, "error: Network connectivity is disabled, but the requested data wasn't found in the cache"))

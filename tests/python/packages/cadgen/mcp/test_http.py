@@ -15,9 +15,10 @@ from unittest.mock import patch
 
 from cadgen.engine.client import request
 from cadgen.mcp.browser import OPENED
-from cadgen.mcp.protocol import RequestContext, RpcError
-from cadgen.mcp.shim import Proxy
-from cadgen.viewer.engine_client import EngineClient
+from cad_mcp.protocol import RpcError
+from cadgen.mcp.protocol import RequestContext
+from cad_mcp.shim import Proxy
+from cad_mcp.engine import EngineClient
 from tests.python.support import engine_daemon
 
 INIT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'codex-mcp-client'}, 'capabilities': {}}
@@ -266,8 +267,9 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'}, **headers)[0], 404)
 
     def test_the_release_an_app_s_server_runs_shows_the_update_button_when_newer_with_no_network(self):
-        # Each stdio server says its release as its session opens (``shim``'s transport meta): one newer
-        # than the engine's proves a release is out, and the button shows it, with no feed read.
+        # Each stdio transport says its release as its session opens (``cad_mcp.shim``'s transport meta): one
+        # newer than the engine's proves a release is out, and the button shows it, with no feed read.
+        import cad_mcp
         import cadgen
 
         client = EngineClient()
@@ -279,10 +281,10 @@ class HttpSessionsTest(unittest.TestCase):
 
         release = cadgen.__version__
         self.assertEqual(version()['release'], release)
-        with patch.object(cadgen, '__version__', '0.0.1'):
+        with patch.object(cad_mcp, '_version', return_value='0.0.1'):
             self.proxy()  # an older release's server: no release is out
         self.assertIsNone(version()['notice'])
-        with patch.object(cadgen, '__version__', '999.0.0'):
+        with patch.object(cad_mcp, '_version', return_value='999.0.0'):
             self.proxy()
         self.assertEqual(version()['notice'], {'latest': '999.0.0', 'version': release})
 
@@ -387,7 +389,10 @@ class HttpSessionsTest(unittest.TestCase):
             time.sleep(0.05)
 
     def test_shim_imports_no_tool_server_or_viewer_application(self):
-        code = "import sys; from cadgen.mcp.shim import Proxy; assert not {'cadgen.mcp.server', 'cadgen.mcp.ui', 'cadgen.viewer.http_app', 'OCP', 'build123d'} & sys.modules.keys()"
+        # What the environment loads at its start (a checkout's .pth binds the lazy kernel) is not the shim's.
+        code = ("import sys; before = set(sys.modules); from cad_mcp.shim import Proxy; "
+                "assert not {name for name in set(sys.modules) - before "
+                "if name.partition('.')[0] in ('cadgen', 'OCP', 'build123d')}")
         done = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=20)
         self.assertEqual(done.returncode, 0, done.stderr)
 

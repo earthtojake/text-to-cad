@@ -444,12 +444,12 @@ class ConnectTest(unittest.TestCase):
         import warnings
         from unittest import mock
 
-        from cadgen.engine import client
+        from cadgen.engine import client, places
 
         engine = tempfile.mkdtemp(prefix="eng-")
         self.addCleanup(shutil.rmtree, engine, True)
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine}):
-            door = client._daemon.door_path()
+            door = places.door_path()
             os.mkfifo(door, 0o600)  # a dead daemon's: the file stays, and nothing reads it
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", ResourceWarning)
@@ -490,7 +490,7 @@ class SandboxTest(unittest.TestCase):
         import errno
         from unittest import mock
 
-        from cadgen.engine import client, daemon
+        from cadgen.engine import client, daemon, places
 
         bytecode = sys.dont_write_bytecode
         self.addCleanup(setattr, sys, "dont_write_bytecode", bytecode)
@@ -498,9 +498,9 @@ class SandboxTest(unittest.TestCase):
                 mock.patch.object(daemon, "_bind", side_effect=PermissionError(errno.EPERM, "Operation not permitted")), \
                 mock.patch("sys.stderr"):
             self.assertEqual(daemon.main(), 1)
-        note = json.loads(daemon.failure_path().read_text(encoding="utf-8"))
+        note = json.loads(places.failure_path().read_text(encoding="utf-8"))
         self.assertTrue(note["denied"])
-        held = daemon.lock()
+        held = places.lock()
         self.assertIsNotNone(held, "its lock was let go")
         held.close()
 
@@ -508,7 +508,7 @@ class SandboxTest(unittest.TestCase):
             returncode = 1
 
             def __init__(self, written: dict) -> None:
-                daemon.failure_path().write_text(json.dumps(written), encoding="utf-8")
+                places.failure_path().write_text(json.dumps(written), encoding="utf-8")
 
             def poll(self) -> int:
                 return 1
@@ -534,21 +534,21 @@ class EngineFolderTest(unittest.TestCase):
     def test_a_folder_others_can_write_or_another_user_owns_is_refused_by_client_and_daemon(self) -> None:
         from unittest import mock
 
-        from cadgen.engine import client, daemon
+        from cadgen.engine import client, places
 
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
-            self.assertIsNone(daemon.folder_refusal(daemon.state_dir()))
+            self.assertIsNone(places.folder_refusal(places.engine_dir()))
             os.chmod(self.engine, 0o777)
-            refusal = daemon.folder_refusal(daemon.state_dir())
+            refusal = places.folder_refusal(places.engine_dir())
             self.assertIn("can be written by others", refusal)
             with mock.patch.object(client, "_start", side_effect=AssertionError("a daemon was started")):
                 with self.assertRaisesRegex(ConnectionError, "can be written by others"):
                     client.connect()
             with self.assertRaisesRegex(PermissionError, "can be written by others"):
-                daemon.lock()
+                places.lock()
             self.assertEqual(sorted(self.engine.iterdir()), [], "nothing was made in the refused folder")
             os.chmod(self.engine, 0o700)
-            real, folder = os.lstat, os.fspath(daemon.state_dir())
+            real, folder = os.lstat, os.fspath(places.engine_dir())
 
             def foreign(path, *args, **kwargs):
                 found = real(path, *args, **kwargs)
@@ -558,19 +558,19 @@ class EngineFolderTest(unittest.TestCase):
                 return found
 
             with mock.patch.object(os, "lstat", side_effect=foreign):
-                self.assertIn("belongs to another user", daemon.folder_refusal(daemon.state_dir()))
+                self.assertIn("belongs to another user", places.folder_refusal(places.engine_dir()))
                 with self.assertRaisesRegex(PermissionError, "belongs to another user"):
-                    daemon.lock()
+                    places.lock()
 
     @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "a folder's mode binds a POSIX user who is not root")
     def test_a_folder_the_system_denies_is_one_line_from_status_and_stop(self) -> None:
         import io
         from unittest import mock
 
-        from cadgen.engine import cli, daemon
+        from cadgen.engine import cli, places
 
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
-            os.mkfifo(daemon.door_path(), 0o600)  # a dead daemon's door: status sweeps it, taking the lock
+            os.mkfifo(places.door_path(), 0o600)  # a dead daemon's door: status sweeps it, taking the lock
             os.chmod(self.engine, 0o500)
             self.addCleanup(os.chmod, self.engine, 0o700)
             for verb in ("status", "stop"):
@@ -593,13 +593,13 @@ class DefaultEngineFolderTest(unittest.TestCase):
     def folder(self, **env: str) -> Path:
         from unittest import mock
 
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         cleared = {key: value for key, value in os.environ.items()
                    if key not in ("CADGEN_ENGINE_DIR", "XDG_RUNTIME_DIR", "TMPDIR")}
         with mock.patch.dict(os.environ, {**cleared, **env}, clear=True), \
-                mock.patch.object(daemon, "_darwin_temp", return_value=self.system):
-            return daemon.state_dir()
+                mock.patch.object(places, "_darwin_temp", return_value=self.system):
+            return places.engine_dir()
 
     def private(self, name: str, mode: int = 0o700) -> Path:
         folder = self.base / name
@@ -619,18 +619,18 @@ class DefaultEngineFolderTest(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS names its per-user temporary folder")
     def test_macos_without_tmpdir_finds_the_folder_a_login_session_names(self) -> None:
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
-        system = daemon._darwin_temp()
+        system = places._darwin_temp()
         self.assertTrue(system and system.startswith("/var/folders/"), system)
         self.system = system
         self.assertEqual(self.folder(), Path(os.path.realpath(os.path.join(system, "cadgen-engine"))))
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS names its per-user temporary folder")
     def test_macos_keeps_the_system_folder_when_a_sandbox_sets_its_own_tmpdir(self) -> None:
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
-        self.system = daemon._darwin_temp()
+        self.system = places._darwin_temp()
         self.assertEqual(self.folder(TMPDIR=str(self.private("sandbox"))),
                          Path(os.path.realpath(os.path.join(self.system, "cadgen-engine"))))
 
@@ -688,7 +688,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         # client polling for it then is not refused by the system, and one refused throughout is.
         from unittest import mock
 
-        from cadgen.engine import client
+        from cadgen.engine import client, places
 
         port_file = Path(tempfile.mkdtemp(prefix="eng-port-")) / "x.port"
         self.addCleanup(shutil.rmtree, port_file.parent, True)
@@ -697,7 +697,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
                 mock.patch.object(Path, "read_text", side_effect=[refused, refused, "1234 ab\n"]):
             self.assertEqual(client._port_text(port_file), "1234 ab\n")
         with mock.patch.object(client.time, "sleep"), mock.patch.object(Path, "read_text", side_effect=refused), \
-                mock.patch.object(client._daemon, "WINDOWS", True), self.assertRaisesRegex(ConnectionError, "denies"):
+                mock.patch.object(places, "WINDOWS", True), self.assertRaisesRegex(ConnectionError, "denies"):
             client._connect(port_file)
 
     def test_the_client_puts_its_token_first_and_is_served(self) -> None:
@@ -705,7 +705,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
         import threading
         from unittest import mock
 
-        from cadgen.engine import client
+        from cadgen.engine import client, places
 
         token = "ab" * 16
         port_file = Path(tempfile.mkdtemp(prefix="eng-port-")) / "x.port"
@@ -723,7 +723,7 @@ class WindowsTokenFirstTest(unittest.TestCase):
 
         answering = threading.Thread(target=engine)
         answering.start()
-        with mock.patch.object(client._daemon, "WINDOWS", True):
+        with mock.patch.object(places, "WINDOWS", True):
             stream = ours.makefile("rwb")
             connection = client.Connection(stream, stream, stream, ours)
             self.assertEqual(client._exchange(connection, {"op": "status"}, address=port_file), {"ok": True})
@@ -815,12 +815,12 @@ class StandbyStartTest(unittest.TestCase):
     def test_the_daemon_s_start_stands_one_by_in_its_starter_s_environment(self) -> None:
         from unittest import mock
 
-        from cadgen.engine import daemon
+        from cadgen.engine import daemon, places
 
         engine = daemon.Daemon()
         self.addCleanup(engine.pool.stop)
         asked: list[dict] = []
-        root = daemon.engine_root()
+        root = places.engine_root()
         with mock.patch.object(engine.pool, "stand", side_effect=asked.append), \
                 mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join((root, "/mine")),
                                              "CADGEN_ENGINE_STANDBY": "1"}):
@@ -870,7 +870,7 @@ class DaemonEnvironmentTest(unittest.TestCase):
         self.assertNotIn("CADGEN_TELEMETRY", captured)
 
     def test_the_daemon_and_its_workers_cache_bytecode_in_the_engine_s_folder_alone(self) -> None:
-        from cadgen.engine import client, daemon, registry
+        from cadgen.engine import client, daemon, places
 
         cache = Path(tempfile.mkdtemp(prefix="engine-bytecode-")).resolve()
         self.addCleanup(shutil.rmtree, cache, True)
@@ -897,7 +897,7 @@ class DaemonEnvironmentTest(unittest.TestCase):
                     daemon.Worker(str(cache / "model.py"), dict(given))  # in the daemon, for a run in ``given``
             return found
 
-        ours = str(cache / daemon.PYCACHE / daemon.bytecode_tag())
+        ours = str(cache / places.PYCACHE / places.bytecode_tag())
         found = started({"CADGEN_CACHE_DIR": str(cache), "PYTHONDONTWRITEBYTECODE": "1"})
         for process in ("daemon", "worker"):
             self.assertEqual(found[process].get("PYTHONPYCACHEPREFIX"), ours, process)
@@ -906,9 +906,6 @@ class DaemonEnvironmentTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(os.stat(ours).st_mode) & 0o077, 0, "this user's alone")
         given = started({"CADGEN_CACHE_DIR": str(cache), "PYTHONPYCACHEPREFIX": str(cache / "theirs")})
         self.assertEqual(given["daemon"]["PYTHONPYCACHEPREFIX"], str(cache / "theirs"), "a prefix given is honoured")
-        with mock.patch.object(registry, "FACTORY", None):  # no distribution names a cache folder: nothing written
-            bare = started({"PYTHONDONTWRITEBYTECODE": ""})
-        self.assertEqual((bare["daemon"].get("PYTHONDONTWRITEBYTECODE"), bare["daemon"].get("PYTHONPYCACHEPREFIX")), ("1", None))
         if os.name != "nt":
             os.chmod(ours, 0o777)
             self.assertEqual(started({"CADGEN_CACHE_DIR": str(cache)})["daemon"].get("PYTHONDONTWRITEBYTECODE"), "1",
@@ -932,10 +929,10 @@ class SweepTest(unittest.TestCase):
     def test_a_dead_server_s_door_and_lock_are_removed_and_said(self) -> None:
         from unittest import mock
 
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)}):
-            path, lock = daemon.door_path(), daemon.lock_path()
+            path, lock = places.door_path(), places.lock_path()
         os.mkfifo(path, 0o600)  # the file stays, and nothing reads it
         lock.write_text("", encoding="utf-8")
         done = self.cli("status")
@@ -1004,14 +1001,14 @@ class OwnFilesTest(unittest.TestCase):
             time.sleep(0.05)
 
     def test_an_engine_removes_its_files_as_it_stops_and_dead_engines_files_as_it_starts(self) -> None:
-        from cadgen.engine import client, daemon
+        from cadgen.engine import client, places
 
-        ours = daemon.NAME
-        daemon.failure_path().write_text('{"reason": "an earlier start"}', encoding="utf-8")
+        ours = places.NAME
+        places.failure_path().write_text('{"reason": "an earlier start"}', encoding="utf-8")
         dead = self.state / "aaaaaaaaaaaa.lock"
         dead.write_text("", encoding="utf-8")  # a killed engine's: nobody holds it
         live = self.state / "cccccccccccc.lock"
-        held = daemon.lock(live)  # another engine's, running
+        held = places.lock(live)  # another engine's, running
         self.addCleanup(held.close)
         (self.state / "cccccccccccc.port").write_text("1 token\n", encoding="utf-8")
         server = self.started()
@@ -1032,7 +1029,7 @@ class OwnFilesTest(unittest.TestCase):
     def test_the_sweep_takes_a_dead_engine_s_files_and_leaves_a_live_one_s_and_what_is_no_engine_s(self) -> None:
         import socket
 
-        from cadgen.engine import daemon
+        from cadgen.engine import daemon, places
 
         def fifo(name: str, *, read: bool = False) -> None:
             os.mkfifo(self.state / name, 0o600)
@@ -1042,7 +1039,7 @@ class OwnFilesTest(unittest.TestCase):
 
         old = time.time() - 600
         for name in ("aaaaaaaaaaaa.lock", "aaaaaaaaaaaa.port", "aaaaaaaaaaaa.failed", "eeeeeeeeeeee.lock",
-                     "eeeeeeeeeeee.failed", "cccccccccccc.lock", "cccccccccccc.failed", f"{daemon.NAME}.failed",
+                     "eeeeeeeeeeee.failed", "cccccccccccc.lock", "cccccccccccc.failed", f"{places.NAME}.failed",
                      "cadgen-open-0123456789abcdef.html", "notes.txt", "ABCDEFABCDEF.lock", "aaaaaaaaaaaa.lock.bak"):
             (self.state / name).write_text("", encoding="utf-8")
         for name in ("aaaaaaaaaaaa.failed", "cccccccccccc.failed"):
@@ -1058,7 +1055,7 @@ class OwnFilesTest(unittest.TestCase):
         listening.bind(str(self.state / "ffffffffffff.sock"))
         listening.listen(16)
         self.addCleanup(listening.close)
-        held = daemon.lock(self.state / "cccccccccccc.lock")
+        held = places.lock(self.state / "cccccccccccc.lock")
         self.addCleanup(held.close)
 
         removed = daemon.sweep_dead(self.state)
@@ -1067,7 +1064,7 @@ class OwnFilesTest(unittest.TestCase):
                           "bbbbbbbbbbbbbbbb.sock", "eeeeeeeeeeee.lock"])
         self.assertEqual(self.left(), sorted(["ABCDEFABCDEF.lock", "aaaaaaaaaaaa.lock.bak", "cadgen-open-0123456789abcdef.html",
                                               "cccccccccccc.door", "cccccccccccc.failed", "cccccccccccc.lock",
-                                              "dddddddddddd.door", "eeeeeeeeeeee.failed", f"{daemon.NAME}.failed",
+                                              "dddddddddddd.door", "eeeeeeeeeeee.failed", f"{places.NAME}.failed",
                                               "ffffffffffff.sock", "notes.txt"]),
                          "a live engine's files, a note its client may still read, this engine's and no engine's stay")
         self.assertEqual(daemon.sweep_dead(self.state), [], "nothing is removed twice")
@@ -1076,7 +1073,7 @@ class OwnFilesTest(unittest.TestCase):
     def test_a_lock_whose_file_is_removed_as_it_is_taken_takes_the_file_its_name_names(self) -> None:
         import builtins
 
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         path = self.state / "aaaaaaaaaaaa.lock"
         path.write_text("", encoding="utf-8")
@@ -1091,18 +1088,18 @@ class OwnFilesTest(unittest.TestCase):
             return handle
 
         with mock.patch("builtins.open", opener):
-            held = daemon.lock(path)
+            held = places.lock(path)
         self.addCleanup(held.close)
         self.assertEqual(opened, [str(path)])
-        self.assertTrue(daemon._names(held, path), "the lock is on the file the name names")
-        self.assertIsNone(daemon.lock(path), "and it is held: no second daemon takes it")
+        self.assertTrue(places.names(held, path), "the lock is on the file the name names")
+        self.assertIsNone(places.lock(path), "and it is held: no second daemon takes it")
 
 
 class StateDirSpellingTest(unittest.TestCase):
     def test_a_server_started_under_a_dotted_spelling_is_found_and_stopped_under_the_plain_one(self) -> None:
         from unittest import mock
 
-        from cadgen.engine import client
+        from cadgen.engine import client, places
 
         state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, state, True)
@@ -1119,7 +1116,7 @@ class StateDirSpellingTest(unittest.TestCase):
         self.assertEqual(started.returncode, 0, started.stderr)
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": plain}):
             found = client.request({"op": "status"}, start=False)
-            address = client._daemon.address()
+            address = places.address()
         self.assertIsNotNone(found, "the plain spelling reaches the server the dotted one started")
         self.assertEqual(str(found["pid"]), started.stdout.split()[-1])
         done = engine_daemon.run([sys.executable, "-m", "cadgen.engine", "stop"], env=plain_env)
@@ -1132,19 +1129,19 @@ class InstallationTest(unittest.TestCase):
     def test_every_name_of_the_installation_s_interpreter_reaches_one_engine(self) -> None:
         from unittest import mock
 
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         folder = os.path.dirname(sys.executable)
         names = [os.path.join(folder, name) for name in ("python", "python3", f"python3.{sys.version_info[1]}")]
         tags = set()
         for name in names:
             with mock.patch.object(sys, "executable", name):
-                tags.add(daemon.address())
+                tags.add(places.address())
         self.assertEqual(len(tags), 1, "`python3 model.py` and `cadgen viewer` share one engine")
 
     def test_a_relative_and_an_absolute_launch_reach_one_engine(self) -> None:
         # `../../.venv/bin/python model.py` from a model folder, and the absolute path.
-        probe = "from cadgen.engine import daemon; print(daemon.address())"
+        probe = "from cadgen.engine import daemon; print(places.address())"
         env = {**os.environ, "PYTHONPATH": str(SRC)}
         with tempfile.TemporaryDirectory() as folder:
             folder = os.path.realpath(folder)

@@ -130,12 +130,12 @@ class CacheTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         cls.root = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-cache-")))
         cls.addClassCleanup(shutil.rmtree, cls.root, True)
         cls.shared = cls.root / "state", cls.root / "cache"
-        cls.bytecode = str(cls.shared[1] / daemon.PYCACHE / daemon.bytecode_tag())  # the class engine's own
+        cls.bytecode = str(cls.shared[1] / places.PYCACHE / places.bytecode_tag())  # the class engine's own
         cls.engine_env = cls.environment(*cls.shared, cls.addClassCleanup)
 
     @classmethod
@@ -163,13 +163,13 @@ class CacheTest(unittest.TestCase):
 
     def reset(self) -> None:
         """Nothing recorded in the class's engine: every document an earlier test left, deleted."""
-        from cadgen.engine import api
+        from cadgen.engine import cli
 
         with mock.patch.dict(os.environ, {name: self.env[name] for name in
                                           ("CADGEN_ENGINE_DIR", "CADGEN_STATE_DIR", "CADGEN_CACHE_DIR")}):
             left = [row["id"] for row in Registry(self.state).list()]
             if left:
-                api.delete(left)
+                cli.delete(left)
 
     def use(self, state: Path, cache: Path, **extra: str) -> None:
         """The engine the test talks to from now on: one of its own, on ``state`` and ``cache``."""
@@ -593,9 +593,9 @@ class CacheTest(unittest.TestCase):
                                          "written"], "no cap, no evictions")
         self.assertEqual((cache["documents"], cache["root"]), (3, str(self.cache)))
         total = sum(self.file(ident).stat().st_size for ident in idents)
-        from cadgen.engine.cli import _bytes
+        from cadgen.engine.said import size
 
-        self.assertIn(f"cache {self.cache}: 3 documents · {_bytes(total)}, kept until deleted\n", self.cli("status").stdout)
+        self.assertIn(f"cache {self.cache}: 3 documents · {size(total)}, kept until deleted\n", self.cli("status").stdout)
         exported = self.cli("export", idents[0], str(self.folder / "first.step"))
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertEqual({path: path.stat().st_mtime_ns for path in stamps}, stamps, "the rest of the folder is not ours")

@@ -45,9 +45,11 @@ import re
 import sys
 import time
 
+from cadgen.engine.places import VERSION, alive, installation_record
+
 DIR_ENV = "CADGEN_LAUNCHER_DIR"
 NAME_ENV = "CADGEN_INSTALLATION_VERSION"
-FOLDER = "installations"
+FOLDER = "installations"  # ``cadgen.engine.places.INSTALLATIONS``, which clients read
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
@@ -55,7 +57,6 @@ MARK = "cadgen proxy: "
 REVISION = 5
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
-VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # A release's version, as a wheel reports it of itself (``cadgen.__version__``). Any other version a
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
 # installation cannot know by itself: the ``cadgen`` command gives it (``named``).
@@ -79,9 +80,9 @@ def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
 
 
 def state():
-    """The user's state folder (``cadgen.viewer.recents.state_dir``), as its ``Folder``."""
+    """The user's state folder (``cadgen.engine.places.state_dir``), as its ``Folder``."""
     from cadgen.engine.registry import Folder
-    from cadgen.viewer.recents import state_dir
+    from cadgen.engine.places import state_dir
 
     return Folder(state_dir())
 
@@ -118,16 +119,16 @@ def editable() -> bool:
 
 def own_version() -> str | None:
     """The version this installation registers as: a development install's own name, else the
-    version its environment is registered as (``cadgen.engine.daemon.installation``, the name its
+    version its environment is registered as (``cadgen.engine.places.installation``, the name its
     client, engine and workers go by), else the installed version -- or ``None`` for a source tree
     never registered, which registers nothing by itself."""
     named = os.environ.get(NAME_ENV)
     if named:
         return named if VERSION.fullmatch(named) else None
-    from cadgen.engine import daemon
+    from cadgen.engine import places
     from cadgen.engine.previous import version
 
-    found = daemon._registered(str(state().root), os.path.normcase(os.path.realpath(sys.prefix)), version())
+    found = places._registered(str(state().root), os.path.normcase(os.path.realpath(sys.prefix)), version())
     if found:
         return found
     if editable():
@@ -143,17 +144,6 @@ def _inside(version: str) -> str:
     return f"{FOLDER}/{version}.json"
 
 
-def _parse(data: bytes | None) -> dict | None:
-    try:
-        record = json.loads(data) if data is not None else None
-    except ValueError:
-        return None
-    if not isinstance(record, dict) or not all(isinstance(record.get(key), str)
-                                               for key in ("version", "python", "cadgen", "prefix")):
-        return None
-    return record
-
-
 def register(version: str, found: tuple[str, str, str] | None = None, folder=None) -> tuple[str, str]:
     """Write the record of this installation as ``version``: ``(path, status)``, ``REGISTERED`` or
     ``OK`` when the record already names it. ``OSError`` when the state folder cannot be written."""
@@ -164,7 +154,7 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
     if found is None:
         raise OSError(f"this cadgen has no console script to register ({sys.prefix})")
     console, python, prefix = found
-    before = _parse(folder.read(inside))
+    before = installation_record(folder.read(inside))
     if before and (before["cadgen"], before["python"], before["prefix"]) == (console, python, prefix):
         return path, OK
     record = {"version": version, "python": python, "cadgen": console, "prefix": prefix,
@@ -183,10 +173,10 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
 
 def _forget_read() -> None:
     """The records changed in this process: the version its environment is registered as
-    (``cadgen.engine.daemon.registered``, read once per process) is read again."""
-    from cadgen.engine import daemon
+    (``cadgen.engine.places.registered``, read once per process) is read again."""
+    from cadgen.engine import places
 
-    daemon._registered.cache_clear()
+    places._registered.cache_clear()
 
 
 def _same_place(one: str, other: str) -> bool:
@@ -199,7 +189,7 @@ def records(folder=None) -> list[dict]:
     found = []
     for name in folder.names(FOLDER):
         if name.endswith(".json") and VERSION.fullmatch(name[:-5]):
-            record = _parse(folder.read(f"{FOLDER}/{name}"))
+            record = installation_record(folder.read(f"{FOLDER}/{name}"))
             if record is not None and record["version"] == name[:-5]:
                 found.append({**record, "path": str(folder.path(f"{FOLDER}/{name}"))})
     return found
@@ -212,19 +202,15 @@ def named(record: dict) -> str | None:
     return None if RELEASE.fullmatch(record["version"]) else record["version"]
 
 
-def alive(record: dict) -> bool:
-    return os.path.isfile(record["python"]) and os.path.isfile(record["cadgen"])
-
-
 def here(folder=None) -> dict | None:
     """The record the ``cadgen`` command runs this installation by: one naming this environment
     (``sys.prefix``) whose interpreter and console script are there (``alive``) -- the version it runs as
-    (``cadgen.engine.daemon.installation``) where that one is, else the one registered last. ``None`` for an
+    (``cadgen.engine.places.installation``) where that one is, else the one registered last. ``None`` for an
     installation no record names."""
     mine = [record for record in records(folder) if _same_place(record["prefix"], sys.prefix) and alive(record)]
     if not mine:
         return None
-    from cadgen.engine.daemon import installation
+    from cadgen.engine.places import installation
 
     running = installation()
     return next((record for record in mine if record["version"] == running), None) \
@@ -347,7 +333,7 @@ def current(folder=None) -> dict | None:
     version = current_version(folder)
     if version is None:
         return None
-    record = _parse(folder.read(_inside(version)))
+    record = installation_record(folder.read(_inside(version)))
     if record is None or record["version"] != version or not alive(record):
         return None
     return {**record, "path": str(folder.path(_inside(version)))}
@@ -553,3 +539,9 @@ def startup() -> None:
             setup(version)
     except Exception:  # noqa: BLE001 - a registration never fails the server it rides on
         pass
+
+
+if __name__ == "__main__":
+    # ``python -m cadgen._internal.installations``: what an agent app's stdio transport runs on a device with
+    # no installation current (``cad_mcp.engine.register``), with this installation's Python.
+    startup()

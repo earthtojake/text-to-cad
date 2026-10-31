@@ -51,7 +51,7 @@ CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x000
 
 
 def _state() -> Path:
-    from cadgen.viewer.recents import state_dir
+    from cadgen.engine.places import state_dir
 
     return Path(state_dir())
 
@@ -107,16 +107,16 @@ def _point(version: str, told: Callable[[str], None]) -> bool:
     """``current`` pointed at ``version`` under the engine's lock, no engine running: so no client starts
     the release before meanwhile. False when an engine holds the lock (one a client started)."""
     from cadgen._internal import installations
-    from cadgen.engine import daemon
+    from cadgen.engine import daemon, places
 
-    held = daemon.lock()
+    held = places.lock()
     if held is None:
         return False
     try:
         installations.point(version)
         told(f"current is cadgen {version}")
     finally:
-        daemon._drop_lock(held, daemon.lock_path())
+        daemon._drop_lock(held, places.lock_path())
     return True
 
 
@@ -223,7 +223,7 @@ def handover(target: str, *, told: Callable[[str], None] | None = None) -> dict[
             return {"from": record["version"] if record else None, "to": target, "ok": True, "gapMs": None}
     if status is None:
         return None
-    named = installations._parse(installations.state().read(installations._inside(target)))
+    named = installations.installation_record(installations.state().read(installations._inside(target)))
     if named is not None and installations._same_place(str(status.get("prefix") or ""), named["prefix"]):
         if record is None or record["version"] != target:
             installations.point(target)

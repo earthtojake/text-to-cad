@@ -1466,29 +1466,20 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
 
 
 def _counted(run: Callable[..., list[Path]]) -> Callable[..., list[Path]]:
-    """``run``, counted for telemetry (``cadgen/analytics.py``): a drawing made, or a mistake in
-    cadgen's own code making one. A drawing is made in the script's own process, which sends nothing
-    itself: both are kept with a command's counts (``analytics.hand_over``), and neither ever changes
-    what the drawing does."""
+    """``run``, counted for telemetry: a drawing made, or a mistake in cadgen's own code making one,
+    told to the server's telemetry where it is installed in this process (``cadgen._internal.counts``),
+    and neither ever changes what the drawing does."""
 
     @functools.wraps(run)
     def counted(*args: Any, **kwargs: Any) -> list[Path]:
+        from cadgen._internal import counts
+
         try:
             drawn = run(*args, **kwargs)
         except Exception as error:
-            try:
-                from cadgen import analytics
-
-                analytics.report(error, "build", bugs_only=True)  # the person's own mistakes are theirs
-            except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
-                pass
+            counts.report(error, "build", bugs_only=True)  # the person's own mistakes are theirs
             raise
-        try:
-            from cadgen import analytics
-
-            analytics.hand_over({"features": ["drawing"]})
-        except Exception:  # noqa: BLE001 - a count never fails the drawing it counts
-            pass
+        counts.hand_over({"features": ["drawing"]})
         return drawn
 
     return counted

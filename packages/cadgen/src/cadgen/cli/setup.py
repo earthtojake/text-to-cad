@@ -174,19 +174,19 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 def engine_on(port: int) -> dict[str, Any] | None:
     """The ``status`` of the engine in this engine folder whose HTTP server is on ``port``, asked
     read-only (``cadgen.engine.daemon._ask``, bounded), or None when no engine there serves it; with
-    ``device`` true when it is the device's engine (``cadgen.engine.daemon.NAME``'s door), false for an
+    ``device`` true when it is the device's engine (``cadgen.engine.places.NAME``'s door), false for an
     earlier cadgen's."""
-    from cadgen.engine import daemon
+    from cadgen.engine import daemon, places
 
     try:
-        doors = sorted(daemon.state_dir().glob("*.port" if daemon.WINDOWS else "*.door"))
+        doors = sorted(places.engine_dir().glob("*.port" if places.WINDOWS else "*.door"))
     except OSError:
         return None
     for door in doors:
         status = daemon._ask(door, {"op": "status"})
         serving = (status or {}).get("serving")
         if isinstance(serving, dict) and serving.get("port") == port:
-            return {**status, "device": door.stem == daemon.NAME}
+            return {**status, "device": door.stem == places.NAME}
     return None
 
 
@@ -354,7 +354,7 @@ class Installer:
     # --- where things are ---------------------------------------------------------------------
 
     def _state(self) -> Path:
-        from cadgen.viewer.recents import state_dir
+        from cadgen.engine.places import state_dir
 
         return Path(state_dir())
 
@@ -746,7 +746,7 @@ class Installer:
     def uninstall(self) -> int:
         providers = self.providers
         from cadgen._internal import installations
-        from cadgen.viewer.recents import cache_dir
+        from cadgen.engine.places import cache_dir
 
         receipt = self._receipt()
         apps = providers.detect(self.machine)

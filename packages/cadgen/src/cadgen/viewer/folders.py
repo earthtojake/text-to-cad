@@ -6,7 +6,7 @@ folder -- a home, a whole disk -- can hold a request up or wear the server down:
 number of matches, a depth and a deadline, says when it stopped early, skips hidden and build
 folders, and never walks a folder twice (a link back into one is how a walk would never end).
 
-The one hidden folder both reads reach is the engine's cache (``recents.cache_dir``: by default
+The one hidden folder both reads reach is the engine's cache (``places.cache_dir``: by default
 ``~/.cache/cadgen``), and every folder on the way to it: it holds each model's ``document.xbf``
 (``documents/<id>/``), an xbf being as much a CAD file of the viewer's as any other.
 
@@ -49,7 +49,7 @@ def absolute_folder(path: object) -> str:
 
 def _cache() -> str:
     """The engine's cache folder, resolved: the hidden folder the explorer lists all the same."""
-    from .recents import cache_dir
+    from cadgen.engine.places import cache_dir
 
     return os.path.realpath(cache_dir())
 

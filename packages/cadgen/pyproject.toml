@@ -101,7 +101,7 @@ use-ignore-files = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["cadgen*"]
+include = ["cadgen*", "cad_mcp*"]
 
 [tool.setuptools.package-data]
 # _runtime holds what cadgen serves that is not Python: the CAD Viewer's built client that

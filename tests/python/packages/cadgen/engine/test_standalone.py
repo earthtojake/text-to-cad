@@ -1,5 +1,8 @@
-"""The engine stands alone: it imports nothing of cadgen but itself, and a build loads
-nothing of cadgen beyond what importing the package itself loads."""
+"""The library's engine stands alone: it imports nothing of cadgen but itself, and a build loads
+nothing of cadgen beyond what importing the package itself loads. The engine's modules the server runs
+-- the daemon, the registry, the live models' book, the document cache and the verbs as commands --
+are the server's (``test_core_imports``), which takes its application and telemetry from its own
+composition root."""
 
 from __future__ import annotations
 
@@ -22,12 +25,18 @@ LIBRARIES = {"OCP", "build123d", "bd_materials", "threejs_materials", "numpy", "
 # By module, what one imports beyond those: ezdxf, build123d's own DXF library, which the DXF
 # export writes and checks a drawing with.
 BESIDES = {"export/dxf.py": {"ezdxf"}}
+# The server's modules in the engine's folder (``test_core_imports.SERVER``).
+SERVER = {"daemon.py", "registry.py", "models.py", "cache.py", "cli.py", "__main__.py"}
+
+
+def library_files() -> list[Path]:
+    return [path for path in sorted(ENGINE.rglob("*.py")) if path.relative_to(ENGINE).as_posix() not in SERVER]
 
 
 class StandaloneTest(unittest.TestCase):
     def test_every_engine_module_imports_only_the_engine_of_cadgen(self) -> None:
         offenders = []
-        files = sorted(ENGINE.rglob("*.py"))
+        files = library_files()
         self.assertGreater(len(files), 10)
         for path in files:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -56,7 +65,7 @@ class StandaloneTest(unittest.TestCase):
 
     def test_every_engine_module_imports_only_the_standard_library_and_the_engine_s_libraries(self) -> None:
         offenders = []
-        for path in sorted(ENGINE.rglob("*.py")):
+        for path in library_files():
             name = path.relative_to(ENGINE).as_posix()
             allowed = set(sys.stdlib_module_names) | LIBRARIES | {"cadgen"} | BESIDES.get(name, set())
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):

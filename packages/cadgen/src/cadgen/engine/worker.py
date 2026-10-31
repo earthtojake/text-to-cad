@@ -40,7 +40,7 @@ all, with no worker of its script started.
 
 A ``build`` or ``export`` request carries its caller's environment (``env``), and the worker adopts it
 before it runs (``adopt``): its ``os.environ`` becomes the caller's, but for what started this
-interpreter (``daemon.RESTARTS``, which a request shares with its worker or is given another) and
+interpreter (``places.RESTARTS``, which a request shares with its worker or is given another) and
 what the worker set for itself. A run is the script in its caller's environment, as under
 ``python SCRIPT``; the worker is the interpreter, kept warm across them.
 
@@ -250,9 +250,9 @@ def kernel(say: Callable[[str], None]) -> None:
 
 def kept() -> dict[str, str]:
     """What of this worker's environment no run's replaces (``adopt``): what started its
-    interpreter (``daemon.RESTARTS``; the engine's own folder is on its PYTHONPATH) and what it
+    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH) and what it
     set for itself."""
-    from cadgen.engine.daemon import BYTECODE, RESTARTS
+    from cadgen.engine.places import BYTECODE, RESTARTS
 
     return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CADGEN_ENGINE_WORKER") if name in os.environ}
 
@@ -262,9 +262,9 @@ def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
     request with none leaves it as it is. Only what differs is set or unset."""
     if not environment:
         return
-    from cadgen.engine.daemon import BYTECODE, RESTARTS
+    from cadgen.engine.places import BYTECODE, RESTARTS
 
-    # The worker's bytecode is the daemon's (``daemon.bytecode``), never a run's.
+    # The worker's bytecode is the daemon's (``places.bytecode``), never a run's.
     wanted = {name: value for name, value in environment.items() if name not in (*RESTARTS, *BYTECODE)}
     wanted.update(own)
     for name in [name for name in os.environ if name not in wanted]:
@@ -277,10 +277,10 @@ def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
 def _neutral_folder() -> str:
     """Where an idle worker stands: the engine's folder on POSIX when it is this user's alone,
     else the temporary folder (``main``)."""
-    from cadgen.engine import daemon
+    from cadgen.engine import places
 
-    folder = daemon.state_dir()
-    if not daemon.WINDOWS and folder.is_dir() and daemon.folder_refusal(folder) is None:
+    folder = places.engine_dir()
+    if not places.WINDOWS and folder.is_dir() and places.folder_refusal(folder) is None:
         return str(folder)
     return tempfile.gettempdir()
 
@@ -538,7 +538,7 @@ def main() -> int:
 
     # A request runs in its folder (its ``cwd``, else the one this worker started in: its script's),
     # so a model's relative reads resolve as before; between requests the worker stands in the
-    # engine's own folder where it is this user's alone (``daemon.folder_refusal``), else the
+    # engine's own folder where it is this user's alone (``places.folder_refusal``), else the
     # temporary folder, so an idle worker holds no project folder open (on Windows, a folder a
     # process stands in cannot be renamed or deleted) and never stands in a folder others write.
     home, neutral = os.getcwd(), _neutral_folder()

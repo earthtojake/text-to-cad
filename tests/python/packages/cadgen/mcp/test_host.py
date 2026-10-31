@@ -1,4 +1,5 @@
-"""Which host launched `cadgen mcp`, read from its parent processes, and what decides how it presents CAD."""
+"""Which host launched the stdio transport, read from its parent processes (``cad_mcp.host``), and what
+decides how a host presents CAD (the server's ``cadgen.mcp.host``)."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import unittest
 
+from cad_mcp import host as launcher
 from cadgen.mcp import host
 
 # Parent chains as the hosts start the server, nearest first (measured on macOS, 2026-10-24).
@@ -45,10 +47,10 @@ class LauncherTest(unittest.TestCase):
                 ([[], *CODEX_EXEC], "codex exec", False),  # a parent exiting as it was read: past it  # its own program nearest: never Claude Code
                 ([["/opt/homebrew/bin/python3.13", "-m", "unittest"], *CLAUDE_CODE], "python3.13", None)):
             with self.subTest(named=named, nearest=chain[0][:1]):
-                found = host.host_of(chain)
+                found = launcher.host_of(chain)
                 self.assertEqual((found["host"], found["renders"]), (named, renders))
-        self.assertIsNone(host.host_of([UVX, ["/bin/zsh"]]))
-        self.assertIsNone(host.host_of([]))
+        self.assertIsNone(launcher.host_of([UVX, ["/bin/zsh"]]))
+        self.assertIsNone(launcher.host_of([]))
 
     def test_a_container_whose_entrypoint_is_the_host_names_it(self) -> None:
         import io
@@ -62,17 +64,17 @@ class LauncherTest(unittest.TestCase):
             _root, _proc, pid, kind = path.split("/")
             return io.BytesIO(proc[int(pid)][0 if kind == "cmdline" else 1])
 
-        with mock.patch.object(host, "open", read, create=True):
-            chain = host._ancestors_linux(7)
+        with mock.patch.object(launcher, "open", read, create=True):
+            chain = launcher._ancestors_linux(7)
         self.assertEqual(chain, [["/root/.local/bin/uv", "tool", "uvx", "cadgen", "mcp"], ["codex", "app-server"]])
-        self.assertEqual(host.host_of(chain)["host"], "codex app-server")
+        self.assertEqual(launcher.host_of(chain)["host"], "codex app-server")
         # An init the walk ends at, which started the launcher, is no host: none is known.
         for init in (["/sbin/init", "splash"], ["/usr/lib/systemd/systemd", "--switched-root"], ["/sbin/tini", "--"]):
-            self.assertIsNone(host.host_of([UVX, init]), init)
+            self.assertIsNone(launcher.host_of([UVX, init]), init)
 
     @unittest.skipUnless(sys.platform == "darwin" or sys.platform.startswith("linux"), "read on macOS and Linux")
     def test_a_parent_is_read_with_its_arguments_exactly(self) -> None:
-        child = "import json; from cadgen.mcp.host import ancestors; print(json.dumps(ancestors()[0]))"
+        child = "import json; from cad_mcp.host import ancestors; print(json.dumps(ancestors()[0]))"
         parent = f"import subprocess, sys; sys.exit(subprocess.run([sys.executable, '-c', {child!r}]).returncode)"
         done = subprocess.run([sys.executable, "-c", parent, "exec", "two words"], capture_output=True, text=True, timeout=30)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -86,15 +88,16 @@ class PresentationTest(unittest.TestCase):
     TABS = {"extensions": {host.TABS_EXTENSION: {"entrypoints": ["global", "thread", "file"]}}}
 
     def test_a_declaration_then_the_launcher_then_the_name_and_the_name_never_claims_a_tab(self) -> None:
-        execd = host.host_of(CODEX_EXEC)
-        app = host.host_of(CODEX_APP)
-        claude = host.host_of(CLAUDE_CODE)
+        # What the transport reads of each launcher (``cad_mcp.host.host_of``), as it hands it to the server.
+        execd = {"host": "codex exec", "renders": False}
+        app = {"host": "codex app-server", "renders": True}
+        claude = {"host": "claude code", "renders": False}
         for client, offered, launched, expected in (
                 (self.OTHER, self.TABS, execd, ("tabs", True)),      # what a host declares wins
                 (self.CODEX, self.UI, execd, ("tabs", True)),        # Codex shows what it renders as tabs
                 (self.OTHER, self.UI, claude, ("inline", True)),     # Claude Code with CLAUDE_CODE_MCP_APPS_HOST=1
                 (self.CODEX, {}, execd, ("text", False)),            # codex exec, whatever its calls carry
-                (self.CODEX, {}, host.host_of(CODEX_TUI), ("text", False)),
+                (self.CODEX, {}, {"host": "codex", "renders": False}, ("text", False)),
                 (self.CODEX, {}, app, ("tabs", True)),               # the Codex app
                 (self.CODEX, {}, None, ("tabs", None)),              # the name alone: Codex's catalog, no claim
                 (self.CODEX, {}, claude, ("tabs", None)),            # a launcher that is not Codex says nothing of it

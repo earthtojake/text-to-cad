@@ -23,7 +23,7 @@ When it is written, never on the run path:
 
 The cache folder is shared: a cadgen 0.7 installation keeps its store there too, in folders of its
 own. The cache reads, writes, sizes and removes only under ``documents/`` (``DOCUMENTS``; the engine's
-bytecode is under ``pycache/``, ``daemon.bytecode``), and never
+bytecode is under ``pycache/``, ``places.bytecode``), and never
 lists, counts or removes anything else there. The record is authoritative: a cache file missing,
 or not the size its record says, is simply not cached.
 
@@ -61,9 +61,10 @@ import threading
 import time
 from typing import Any
 
+from cadgen.engine.records import FILE
+
 __all__ = ["CACHE_IDLE_SECONDS", "FILE", "SHUTDOWN_SECONDS", "Cache", "idle"]
 
-FILE = "document.xbf"
 # How long a document sits with no build and no read before it is saved: past the gap between a
 # script's calls and between an edit loop's runs (each run a new revision, saved for nothing), and
 # short enough that a model a person stops at is on disk before they close the laptop.

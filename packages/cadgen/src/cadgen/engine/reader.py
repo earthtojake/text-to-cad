@@ -386,7 +386,7 @@ class Reader:
         self.reads = 0
 
     def _start(self) -> subprocess.Popen:
-        from cadgen.engine.daemon import windowless
+        from cadgen.engine.places import windowless
 
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         env = dict(os.environ)

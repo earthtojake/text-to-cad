@@ -203,13 +203,13 @@ class BuildAsksTest(Fixture):
         self.registry.put({"id": here.id, "kind": "model", "root": str(self.folder), "home": "parts.py", "entry": "here"})
         away = model("away", "away", cached=True)
         self.registry.put({"id": away.id, "kind": "model", "root": str(self.folder), "home": moved_away.name, "entry": "away"})
-        with mock.patch("cadgen.engine.registry.current", return_value=self.registry), \
+        with mock.patch("cadgen.engine.records.current", return_value=self.registry), \
                 mock.patch("cadgen.engine.client.request", return_value={"ok": True, "lines": []}) as asked:
             build._reattach([held, cached, new, here, away], cache)
         [((message,), options)] = [(call.args, call.kwargs) for call in asked.call_args_list]
         self.assertEqual([row["name"] for row in message["models"]], ["new", "away"])
         self.assertEqual((message["op"], message["pid"], options), ("reattach", os.getpid(), {"start": False}))
-        with mock.patch("cadgen.engine.registry.current", return_value=self.registry), \
+        with mock.patch("cadgen.engine.records.current", return_value=self.registry), \
                 mock.patch("cadgen.engine.client.request") as asked:
             build._reattach([held, cached, here], cache)
         asked.assert_not_called()

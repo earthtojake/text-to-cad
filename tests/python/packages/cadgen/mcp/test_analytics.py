@@ -25,7 +25,7 @@ from cadgen._internal import channel as install_channel
 from cadgen.analytics import (KEPT, NOTICE_ENV, PRIVACY_URL, Recorder, _post, choose, died, forget_pending,
                               notice_text, notify, spool, status)
 from cadgen.cli import telemetry as telemetry_cli
-from cadgen.mcp.shim import initialize_params
+from cad_mcp.shim import initialize_params
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
@@ -878,12 +878,20 @@ class InstallChannelTest(_Tmp):
             self.assertEqual(install_channel.channel(), "dev")
             self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
 
-    def test_the_cad_server_writes_its_channel_down_as_it_starts(self) -> None:
-        environment = {**os.environ, "CADGEN_INSTALL_CHANNEL": "claude-github", "CADGEN_STATE_DIR": str(self.tmp),
-                       "DO_NOT_TRACK": "1", "CADGEN_UPDATE_CHECK": "0"}
-        # A host that starts a server only to list its tools, and closes it at once.
-        subprocess.run([sys.executable, "-m", "cadgen.cli", "mcp"], stdin=subprocess.DEVNULL, capture_output=True,
-                       env=environment, timeout=120, check=True)
+    def test_the_engine_writes_down_the_channel_a_transport_says_as_its_session_opens(self) -> None:
+        # The plugin's startup config names it to its stdio transport, which says it in its initialize
+        # (``cad_mcp.shim.initialize_params``); the engine's MCP server writes it down for its installation.
+        (self.tmp / "app").mkdir(exist_ok=True)
+        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+                        analytics=Recorder(path=self.path, send=lambda _payload: True))
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": "claude-github"}):
+            params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
+                                        "clientInfo": {"name": "claude-code", "version": "2.1.0"}})
+        server.handle("initialize", params, None)
+        deadline = time.monotonic() + 30
+        while not self.record.exists():  # written in the background as the session opens
+            self.assertLess(time.monotonic(), deadline, "the channel was written down")
+            time.sleep(0.01)
         self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
                          {install_channel.installation(): "claude-github"})
 

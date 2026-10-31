@@ -482,11 +482,11 @@ class KernelProcessesUnavailable(RuntimeError):
 
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
     """A spawn pool of ``workers`` kernel processes, or ``KernelProcessesUnavailable``. Its processes run
-    the engine's kernel environment (``daemon.kernel``: the base, made first when it is not): this
+    the engine's kernel environment (``places.kernel``: the base, made first when it is not): this
     interpreter, or another environment's Python (``_spawn_in``). On Windows the attribute read below is
     what imports ``multiprocessing.connection`` (and so ``_multiprocessing``), which is why it sits
     inside the ``try``."""
-    from cadgen.engine.daemon import kernel
+    from cadgen.engine.places import kernel
 
     found = kernel()
     assert found is not None  # made, or refused

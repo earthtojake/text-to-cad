@@ -44,7 +44,7 @@ SCHEMA = "cadgen release/1"
 
 def root() -> Path:
     """The releases' folder: ``releases`` in the state folder."""
-    from cadgen.viewer.recents import state_dir
+    from cadgen.engine.places import state_dir
 
     return Path(state_dir()) / FOLDER
 
@@ -167,7 +167,7 @@ def collect(keep: Iterable[str]) -> list[str]:
 
 def _bases_of(folder: Path) -> list[Path]:
     """The bases made for the installation in ``folder`` (``base.MARKER`` naming it as theirs)."""
-    from cadgen.viewer.recents import cache_dir
+    from cadgen.engine.places import cache_dir
 
     found = []
     here = os.path.normcase(os.path.realpath(folder))

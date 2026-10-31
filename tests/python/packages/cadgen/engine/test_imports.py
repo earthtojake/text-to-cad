@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen.engine import build as engine_build
-from cadgen.engine import cli
+from cadgen.engine import said
 from cadgen.engine import document
 from tests.python.support import engine_cache
 
@@ -354,7 +354,7 @@ class ReadsTest(unittest.TestCase):
                     f"reads {path} through {call}: its body is never retained (any edit runs it whole); use read_step/read_xbf/read_mesh"]})
                 # The report is the build's, its memo tally whole: `python model.py` prints it.
                 self.assertIn("misses", report["memo"], name)
-                self.assertTrue(cli._describe(report, 1.0, None).startswith(f"built reads.py::{name} in"), name)
+                self.assertTrue(said.describe(report, 1.0, None).startswith(f"built reads.py::{name} in"), name)
             # The file is an input all the same, by its bytes: the closure keeps its key, and a
             # restart with nothing changed takes the document.
             _writer, record = previous.scan(self.folder / f"XBF/{name}.xbf")

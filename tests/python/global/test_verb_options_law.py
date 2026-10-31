@@ -66,14 +66,15 @@ class SnapshotTakesThePictureAlone(unittest.TestCase):
                "annotation", "measurements")
 
     def test_snapshot_refuses_browser_options_before_opening_a_source(self) -> None:
-        from cadgen.engine.snapshot import SnapshotRefused, build_parser as snapshot_parser, job_pictures
+        from cadgen.engine.cli import parser_for
+        from cadgen.engine.snapshot import SnapshotRefused, job_pictures
 
         for option, value in (("preview", True), ("animation", "swing"), ("fps", 30)):
             with self.subTest(option=option):
                 with self.assertRaisesRegex(TypeError, "unexpected keyword argument"):
                     cadgen.snapshot("missing.xbf", "picture.png", **{option: value})
                 with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
-                    snapshot_parser().parse_args(["missing.xbf", "picture.png", f"--{option}"])
+                    parser_for("snapshot").parse_args(["missing.xbf", "picture.png", f"--{option}"])
                 self.assertEqual(refused.exception.code, 2)
                 with self.assertRaisesRegex(SnapshotRefused, f"has no {option}"):
                     job_pictures({"input": "missing.xbf", option: value, "outputs": ["picture.png"]})

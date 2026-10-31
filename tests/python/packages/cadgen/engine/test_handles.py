@@ -456,7 +456,7 @@ class UnreachedEngineTest(unittest.TestCase):
         engine = folder / "engine"
         engine.mkdir(mode=0o700)
         (folder / "peg.py").write_text(UNREACHED, encoding="utf-8")
-        from cadgen._internal.engine_host import SANDBOXES
+        from cadgen.engine.client import SANDBOXES
         from cadgen.engine.client import SANDBOXED
 
         env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),

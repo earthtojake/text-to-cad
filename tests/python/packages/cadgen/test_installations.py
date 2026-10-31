@@ -22,7 +22,7 @@ add_repo_path("packages/cadgen/src")
 from cadgen._internal import installations, proxy  # noqa: E402
 from cadgen.engine.registry import Folder, Registry  # noqa: E402
 from cadgen._internal import engine_host  # noqa: E402
-from cadgen.mcp import host  # noqa: E402
+from cad_mcp import host  # noqa: E402
 
 POSIX = unittest.skipIf(os.name == "nt", "the proxy is an sh script on POSIX")
 
@@ -92,24 +92,23 @@ class RegistryTests(Fixture):
         still wins, and a record of another release (an upgrade in place since) is not this code's."""
         import sys
 
-        from cadgen.engine import daemon, previous
+        from cadgen.engine import places, previous
 
         release = previous.version()
         dev = f"{release}-dev.20261025032333"
         here = (str(self.root / "c"), str(self.root / "p"), sys.prefix)
         with mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": str(self.root / "state")}):
             os.environ.pop(installations.NAME_ENV, None)
-            self.assertEqual(daemon.installation(), release, "unregistered: the release")
+            self.assertEqual(places.installation(), release, "unregistered: the release")
             installations.register("0.0.1-dev.1", here)  # another release's record of this environment
-            self.assertEqual(daemon.installation(), release)
+            self.assertEqual(places.installation(), release)
             installations.register(dev, here)
-            self.assertEqual((daemon.installation(), installations.own_version()), (dev, dev))
+            self.assertEqual((places.installation(), installations.own_version()), (dev, dev))
             os.environ[installations.NAME_ENV] = "9.9.9"
-            self.assertEqual((daemon.installation(), installations.own_version()), ("9.9.9", "9.9.9"))
+            self.assertEqual((places.installation(), installations.own_version()), ("9.9.9", "9.9.9"))
 
     def test_only_the_cad_apps_server_and_doctor_write(self) -> None:
         from cadgen import cli
-        from cadgen.mcp import shim
 
         found = self.environment("env")
         named = {installations.NAME_ENV: "1.2.3", installations.DIR_ENV: str(self.root / "bin"),
@@ -119,7 +118,7 @@ class RegistryTests(Fixture):
                 self.assertEqual(cli._main(["status"]), 0)
             self.assertFalse((self.root / "bin").exists())
             self.assertEqual(installations.records(), [])
-            shim.start()  # the device's first: registered, and current
+            installations.startup()  # the transport's registration, on a device with none (``cad_mcp.engine.register``)
             self.assertEqual([record["version"] for record in installations.records()], ["1.2.3"])
             self.assertEqual(installations.current()["version"], "1.2.3")
             self.assertEqual(installations.proxy_status(), installations.OK)
@@ -127,7 +126,6 @@ class RegistryTests(Fixture):
     def test_a_cad_apps_server_of_another_release_registers_nothing_where_one_is_current(self) -> None:
         """An app that moved its plugin ahead runs a newer server: it attaches to the current
         installation's engine, writes the command, and moves nothing."""
-        from cadgen.mcp import shim
 
         self.registered("1.0.0")
         installations.point("1.0.0", self.state)
@@ -135,7 +133,7 @@ class RegistryTests(Fixture):
                  "CADGEN_STATE_DIR": str(self.root / "state")}
         with mock.patch.dict("os.environ", named), \
                 mock.patch.object(installations, "targets", return_value=self.environment("newer")):
-            shim.start()
+            installations.startup()
             self.assertEqual([record["version"] for record in installations.records()], ["1.0.0"])
             self.assertEqual(installations.current()["version"], "1.0.0")
             self.assertEqual(installations.proxy_status(), installations.OK)
@@ -171,7 +169,6 @@ class CurrentTests(Fixture):
             self.assertEqual(installations.current()["version"], "3.0.0-dev.1")
 
     def test_a_folder_it_cannot_write_is_skipped_silently(self) -> None:
-        from cadgen.mcp import shim
 
         blocked = self.root / "a-file"
         blocked.write_text("", encoding="utf-8")
@@ -181,7 +178,7 @@ class CurrentTests(Fixture):
                  "CADGEN_STATE_DIR": str(blocked / "state")}
         with mock.patch.dict("os.environ", named), mock.patch.object(installations, "targets",
                                                                      return_value=self.environment("env")):
-            shim.start()  # the server says nothing and raises nothing
+            installations.startup()  # it says nothing and raises nothing
             (_, _, unregistered), (_, _, unwritten) = installations.setup("1.2.3")
         self.assertTrue(unregistered and unwritten)
 

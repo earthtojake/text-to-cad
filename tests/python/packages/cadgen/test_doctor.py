@@ -414,7 +414,7 @@ class LeftoversTest(PrivateFolders):
         import json
 
         from cadgen._internal import installations
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         self.file("state/engines/aaaaaaaa.json", json.dumps({"schema": 2, "token": "an-earlier-builds"}))
         trimmed = self.file("state/engines/bbbbbbbb.json", json.dumps({"schema": 3, "port": 3246, "token": "t" * 43}))
@@ -431,7 +431,7 @@ class LeftoversTest(PrivateFolders):
         registered = self.file(f"cache/pycache/aaaaaaaaaaaa/{self.mirror(environment)}/x.pyc").parents[0]
         self.file(f"cache/pycache/bbbbbbbbbbbb/{self.mirror(self.root / 'uninstalled')}/x.pyc", "y" * 2048)
         live = self.file(f"cache/pycache/cccccccccccc/{self.mirror(self.root / 'editable')}/x.pyc")
-        held = daemon.lock(self.engines / "cccccccccccc.lock")  # its engine runs
+        held = places.lock(self.engines / "cccccccccccc.lock")  # its engine runs
         self.addCleanup(held.close)
         recent_bytecode = self.file(f"cache/pycache/dddddddddddd/{self.mirror(self.root / 'other')}/x.pyc", old=False)
         recorded, forgotten, fresh = ("11111111-1111-5111-8111-111111111111", "22222222-2222-5222-8222-222222222222",

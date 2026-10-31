@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING as _TYPE_CHECKING
 # opts out.
 from cadgen._internal.font_scan import install_font_guard as _install_font_guard
 from cadgen._internal.lazy_kernel import install as _install_lazy_kernel
-from cadgen._internal.engine_telemetry import install as _install_engine_telemetry
 
 # ``import build123d as bd`` binds a module the kernel loads into on its first attribute
 # (``_internal/lazy_kernel.py``). The wheel's cadgen-lazy-kernel.pth installs it at interpreter
@@ -41,18 +40,9 @@ del _install_lazy_kernel
 _install_font_guard()
 del _install_font_guard
 
-# The engine counts nothing (its law 3: it imports nothing of cadgen): it tells what each of its verbs did to
-# the functions in cadgen.engine.api.observers. cadgen's telemetry is one, appended here for the reason the
-# font guard is installed here: every route into the engine -- `python model.py`, a `cadgen export` or
-# `snapshot`, `cadgen.export()` -- comes through this package first. Appended as the engine's verbs are
-# imported, never sooner: a process that uses no engine imports none of it.
-_install_engine_telemetry()
-del _install_engine_telemetry
-
-from cadgen._internal.engine_host import install as _install_engine_host
-
-_install_engine_host()
-del _install_engine_host
+# The library installs nothing of the server's: what the engine's verbs did is told to the functions in
+# cadgen.engine.api.observers, which the server's commands fill (``cadgen._internal.engine_telemetry``),
+# and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The engine's surface (``cadgen.engine.__all__``) and its operations on documents as functions
 # (``cadgen.engine.api``).

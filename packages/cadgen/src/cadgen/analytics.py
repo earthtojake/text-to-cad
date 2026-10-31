@@ -268,10 +268,10 @@ def _installed_from() -> str | None:
 
 
 def installation_version() -> str:
-    """The version this installation runs as (``cadgen.engine.daemon.installation``): the one it is registered
+    """The version this installation runs as (``cadgen.engine.places.installation``): the one it is registered
     as -- a development install's ``<version>-dev.<time>`` -- else its release's (``cadgen.__version__``)."""
     try:
-        from cadgen.engine.daemon import installation
+        from cadgen.engine.places import installation
 
         return installation()
     except Exception:  # noqa: BLE001 - a version is only reported: nothing fails for want of one

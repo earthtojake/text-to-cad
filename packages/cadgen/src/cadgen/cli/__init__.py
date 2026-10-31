@@ -20,6 +20,12 @@ import importlib
 import os
 import sys
 
+from cadgen._internal import engine_telemetry as _engine_telemetry
+
+# What the engine's verbs a command runs did is counted as that command's (``_run``): the server's
+# telemetry among the engine's observers, appended as its verbs are imported, never sooner.
+_engine_telemetry.install()
+
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
 # ``cadgen --help`` stays a single readable column.

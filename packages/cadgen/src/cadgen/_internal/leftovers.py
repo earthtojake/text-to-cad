@@ -8,7 +8,7 @@ Five classes, each found by what it is, never by a guess:
   of this schema carrying more than it reads (an earlier build's ``token``) is written again with
   what it reads alone, so the port it rolled to is kept.
 - **Bytecode folders of installations no longer registered**: ``<cache>/pycache/<folder>/``, each
-  an installation's (``daemon.bytecode``, named by its ``daemon.bytecode_tag``), that holds no registered
+  an installation's (``places.bytecode``, named by its ``places.bytecode_tag``), that holds no registered
   installation's environment (``installations/<version>.json``'s ``prefix``, under which the
   bytecode of its libraries is filed) and is no running engine's (its lock held, or its door
   answering, in the engine folder).
@@ -198,18 +198,18 @@ def _filed(folder: Path, prefix: str) -> bool:
 def _running(name: str, engines: Path) -> bool:
     """Whether the engine whose files in the engine folder ``engines`` are named ``name`` runs: its
     lock held, or its door (on Windows, its port) answering."""
-    from cadgen.engine import client, daemon
+    from cadgen.engine import client, places
 
     lock = engines / f"{name}.lock"
     if lock.exists():
         try:
-            held = daemon.lock(lock)
+            held = places.lock(lock)
         except OSError:
             return True  # a folder this cannot lock in: not this to judge
         if held is None:
             return True
         held.close()
-    address = engines / f"{name}.{'port' if daemon.WINDOWS else 'door'}"
+    address = engines / f"{name}.{'port' if places.WINDOWS else 'door'}"
     return address.exists() and client._answering(address)
 
 
@@ -229,7 +229,7 @@ def bytecode_folders(cache: Path, prefixes: list[str], engines: Path, now: float
             continue
         if any(_filed(folder, prefix) for prefix in prefixes) or _running(name, engines):
             continue
-        size, newest = _walk(folder)  # each start of its engine marks the folder (``daemon._pycache``)
+        size, newest = _walk(folder)  # each start of its engine marks the folder (``places.pycache``)
         if not _quiet(newest, now):
             found.recent.append(folder)
             continue

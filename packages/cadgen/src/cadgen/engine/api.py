@@ -6,7 +6,7 @@
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
-    status() / stop() / daemon()
+    status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
 document does the work and keeps what it made in memory for the next call. No verb builds
@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Written", "export", "hand_over",
-           "observers", "serve", "server", "snapshot", "status", "stop", "inspect"]
+           "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words."""
@@ -397,7 +397,7 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
             try:
                 answer = _ask(order, relay, frames)
             except EngineError as error:
-                from cadgen.engine.daemon import WORKER_STDERR
+                from cadgen.engine.client import WORKER_STDERR
 
                 if not streamed or WORKER_STDERR not in str(error):
                     raise
@@ -486,7 +486,7 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
     while frame is not None and frame.f_globals.get("__name__") == __name__:
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
-        from cadgen.engine.cli import said_written
+        from cadgen.engine.said import written as said_written
 
         said_written(written, destinations)
     return written
@@ -729,7 +729,7 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     from urllib.parse import quote
 
     from cadgen.engine import refs
-    from cadgen.engine.cli import weighed
+    from cadgen.engine.said import weighed
 
     from cadgen.engine.addresses import key, split
 
@@ -1012,58 +1012,6 @@ def stop() -> bool:
     return True
 
 
-def delete(documents: Any) -> list[dict[str, Any]]:
-    """``cadgen delete``: documents deleted, each by the one deletion the home's Delete is too
-    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
-    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
-    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
-    person's own files are never touched. One that names nothing recorded is refused (``ValueError``),
-    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
-    the order named."""
-    from cadgen.engine import registry as registering
-    from cadgen.engine.client import request
-    from cadgen.engine.ids import canonical, file_id, is_id
-    from cadgen.engine.models import delete as deleting
-
-    held = registering.current()
-    idents: list[str] = []
-    unknown: list[str] = []
-    listed: list[dict[str, Any]] | None = None
-    for named in [str(document) for document in documents]:
-        found: list[str] = []
-        if held is not None and is_id(named):
-            found = [named] if held.get(named) is not None else []
-        elif held is not None:
-            path = canonical(os.path.abspath(os.path.expanduser(named)))
-            record = held.get(file_id(path))
-            if record is not None and record.get("kind") == "file":
-                found = [record["id"]]
-            else:
-                listed = held.list() if listed is None else listed
-                found = sorted(row["id"] for row in listed if row.get("kind") != "file"
-                               and canonical(registering.home(held, row)) == path)
-        if not found:
-            unknown.append(named)
-        idents.extend(ident for ident in found if ident not in idents)
-    if unknown:
-        raise ValueError(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
-                         "script or a CAD file a page opened (`cadgen status` lists the documents); nothing "
-                         "was deleted")
-    answer = request({"op": "delete", "ids": idents}, start=False)
-    if answer is not None:
-        if not answer.get("ok"):
-            raise EngineError(str(answer.get("failed") or answer.get("error") or answer))
-        return list(answer.get("deleted") or [])
-    return [found for found in (deleting(held, ident) for ident in idents) if found is not None]
-
-
-def server() -> int:
-    """Run the engine server in this process (`cadgen server`)."""
-    from cadgen.engine.daemon import main
-
-    return main([])
-
-
 # --- what each verb did, told to its observers ------------------------------------------------
 #
 # ``observers``: functions called after each build, export and snapshot with the verb's facts (``_facts``):
@@ -1215,7 +1163,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     if error is None:
         return None
     if isinstance(error, EngineError):
-        from cadgen.engine.daemon import WORKER_STDERR
+        from cadgen.engine.client import WORKER_STDERR
 
         text = str(error).partition(WORKER_STDERR)[0]
         died = _DIED.search(text)

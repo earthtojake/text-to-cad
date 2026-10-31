@@ -74,7 +74,7 @@ def pair(folder: Path, ident: str) -> tuple[Path, Path]:
 def _private(folder: Path) -> bool:
     """Whether ``folder`` (made when missing) is a real folder, this user's, closed to everyone else.
     A folder of this user's opened to others is closed again: it is in the engine's folder, which
-    is this user's alone (``daemon.folder_refusal``), so only this user made it so."""
+    is this user's alone (``places.folder_refusal``), so only this user made it so."""
     folder.mkdir(mode=0o700, exist_ok=True)
     found = os.lstat(folder)
     if stat.S_ISDIR(found.st_mode) and found.st_uid == os.getuid() and found.st_mode & 0o077:

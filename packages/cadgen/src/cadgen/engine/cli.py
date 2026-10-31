@@ -30,7 +30,13 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run", "weighed",
+from cadgen._internal import engine_telemetry as _engine_telemetry
+from cadgen.engine import said as _said
+
+# The verbs this command runs are counted as a command's (``cadgen._internal.engine_telemetry``).
+_engine_telemetry.install()
+
+__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run",
            "inspect_main", "inspect_parser"]
 
 
@@ -97,16 +103,138 @@ def _inspect_arguments(parser: argparse.ArgumentParser) -> None:
                                                "declared files), then its build closure")
 
 
-def _snapshot_arguments(parser: argparse.ArgumentParser) -> None:
-    from cadgen.engine.snapshot import _arguments
+def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    from cadgen.engine import snapshot
 
-    _arguments(parser)
+    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
+    parser.add_argument("document", metavar="SRC", nargs="?",
+                        help="a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
+                             "a drawing (.dxf), or a document id (a model's, which python SCRIPT.py prints: drawn "
+                             "from what the engine holds); with --job, a file drawn in place of every job's input")
+    parser.add_argument("out", metavar="OUT.png", nargs="?",
+                        help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
+                             "write <SRC's stem>_<UTC time>.png into")
+    parser.add_argument("--job", metavar="PACKET",
+                        help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
+                             "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
+                             "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
+                             "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
+                             "sizeProfile); the other flags override every job")
+    parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
+                                          "the display JSON object (mode, grid, appearance, camera, clip, exploded, "
+                                          "hidden, isolated: part refs the picture leaves out, or alone draws), or "
+                                          "a JSON file of it; a drawing takes appearance alone: light or dark, as the word "
+                                          "or as {\"appearance\": ...}")
+    parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
+    parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
+                                         "a camera JSON object (its position, target and orthographicHalfHeight in "
+                                         "the viewer's scene coordinates, as a Quick Edit packet carries them: a "
+                                         "document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the "
+                                         "view --annotation's ink was drawn in, from its Quick Edit packet, exactly")
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
+    parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
+    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), or joint and coupling "
+                                       "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
+                                       "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
+                                       "built without it (a robot where the viewer opens it)")
+    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation file, or the Quick Edit packet "
+                                                              "(.snapshot.json) that carries it: its ink drawn over the "
+                                                              "model, on the parts it was drawn on")
+    parser.add_argument("--measurements", metavar="FILE", help="Measure's dimensions (a JSON list of {start, end, label, "
+                                                                "color}; the points in the viewer's scene coordinates, "
+                                                                "as --camera's lengths), drawn over the model")
+    parser.add_argument("--json", action="store_true", help="print what was drawn and its timings as JSON")
+    return parser
 
 
-def _snapshot(args: argparse.Namespace, prog: str) -> int:
-    from cadgen.engine.snapshot import run
+def _snapshot(args: argparse.Namespace, prog: str = "cadgen snapshot") -> int:
+    """``cadgen snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
+    failure raised as ``Failed``, which the command says (``answered``)."""
+    from cadgen.engine import snapshot
 
-    return run(args, prog)
+    if args.job is not None:
+        return _snapshot_job(args, prog)
+    if args.document is None or args.out is None:
+        raise Failed("the following arguments are required: SRC, OUT.png (or --job PACKET)", 2)
+    if snapshot.by_id(args.document):
+        return _snapshot_held(args, prog)
+    from cadgen.engine import api
+
+    try:
+        # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
+        report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
+                              pose=args.pose, width=args.width, height=args.height,
+                              size_profile=args.size_profile, annotation=args.annotation,
+                              measurements=args.measurements).report
+    except snapshot.SnapshotRefused as error:
+        raise Failed(str(error), 2) from None
+    except ConnectionError:
+        raise  # the engine not reached: its one line, as every verb says it (``answered``)
+    except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
+        raise Failed(f"{type(error).__name__}: {error}") from None
+    if args.json:
+        print(json.dumps(report))
+    else:
+        timings = report["timings"]
+        print(f"wrote {_said.given(report['output'], args.out)} ({report['width']}x{report['height']}, {report['displayMode']}"
+              f"{', preview' if report['preview'] else ''}) in {timings['totalMs'] / 1000:.2f}s")
+    return 0
+
+
+def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
+    """``cadgen snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
+    memory of the worker holding it (``api.snapshot``); nothing is built."""
+    from cadgen.engine import api, snapshot
+
+    try:
+        drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
+                             pose=args.pose, width=args.width, height=args.height,
+                             size_profile=args.size_profile, annotation=args.annotation,
+                             measurements=args.measurements)
+    except (snapshot.SnapshotRefused, ValueError) as error:
+        raise Failed(str(error), 2) from None
+    except api.EngineError as error:
+        raise Failed(str(error)) from None
+    told_state(args.document, "drawing")
+    if args.json:
+        print(json.dumps(drawn.report))
+    else:
+        report = drawn.report  # said as a file's and a job's picture are: its size, its display, Preview
+        print(f"wrote {_said.given(drawn.path, args.out)} ({drawn.width}x{drawn.height}, {report['displayMode']}"
+              f"{', preview' if report.get('preview') else ''}) in {report['timings']['totalMs'] / 1000:.2f}s")
+    return 0
+
+
+def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
+    """``cadgen snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
+    a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
+    import time
+
+    from cadgen.engine import api, snapshot
+
+    if args.out is not None:
+        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out})", 2)
+    started = time.perf_counter()
+    try:
+        drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
+                                 pose=args.pose, width=args.width, height=args.height,
+                                 size_profile=args.size_profile, annotation=args.annotation,
+                                 measurements=args.measurements)
+    except snapshot.SnapshotRefused as error:
+        raise Failed(str(error), 2) from None
+    except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
+        raise Failed(f"{type(error).__name__}: {error}") from None
+    if args.json:
+        print(json.dumps({"ok": True, "pictures": [picture.report for picture in drawn],
+                          "timings": {"totalMs": round((time.perf_counter() - started) * 1000)}}))
+    else:
+        for picture in drawn:
+            report = picture.report
+            print(f"wrote {os.fspath(picture.path)} ({report['width']}x{report['height']}, {report['displayMode']}"
+                  f"{', preview' if report['preview'] else ''}) in {report['timings']['totalMs'] / 1000:.2f}s")
+    return 0
 
 
 def build_parser(prog: str = "python -m cadgen.engine") -> argparse.ArgumentParser:
@@ -170,175 +298,6 @@ def answered(runner: Callable[[argparse.Namespace, str], int], args: argparse.Na
         raise
 
 
-def _shown(path: Any) -> str:
-    """A path relative to the working folder, or whole where none can be: on Windows, a path on
-    another drive than the folder's."""
-    try:
-        return os.path.relpath(path)
-    except ValueError:
-        return str(path)
-
-
-def _given(path: Any, given: Any = ()) -> str:
-    """A path a ``wrote`` line names, as the command was given it: the argument that names it,
-    as typed (absolute stays absolute, a relative one stays relative to the working folder);
-    one no argument names, relative where it lies under the working folder and whole where it
-    does not. A job's pictures are named whole: its packet, not the command, gave them."""
-    for typed in [given] if isinstance(given, (str, os.PathLike)) else given:
-        try:
-            if os.path.realpath(os.path.expanduser(typed)) == os.path.realpath(path):
-                return os.fspath(typed)
-        except (TypeError, ValueError, OSError):
-            continue
-    text = os.fspath(path)
-    try:
-        relative = os.path.relpath(text)
-    except ValueError:
-        return text
-    return text if relative == os.pardir or relative.startswith(os.pardir + os.sep) else relative
-
-
-def _files(report: dict[str, Any]) -> list[str]:
-    found = []
-    for path, row in (report.get("files") or {}).items():
-        state = "written" if row.get("written") else "kept"
-        found.append(f"{_shown(path)} ({state}, {_bytes(row.get('bytes'))})")
-    return found
-
-
-def _describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
-    # Each child model the run ran, and the files it wrote (``child_models``).
-    children = "".join(f"\n  {name}, a child{'' if row.get('ok') else ': failed'}"
-                       + "".join(f"\n    {text}" for text in _files(row))
-                       for name, row in (report.get("child_models") or {}).items())
-    if not report.get("ok"):
-        refused = report.get("failedAt")  # an OCCT exception: the call the kernel refused
-        return (f"failed {report.get('model')}" + (f" at {refused}: the kernel refused it" if refused else "")
-                + ("; serving its previous good build" if report.get("previous") else "") + children)
-    timings = report.get("timings", {})
-    memo = report.get("memo", {})
-    bodies = list((report.get("bodies") or {}).values())
-    files = _files(report)
-    worker = "" if fresh is None else (" cold" if fresh else " warm")
-    if memo.get("bodies_loaded"):
-        taken = (report.get("cache") or {}).get("from")
-        holder = "the engine's cache" if taken == "cache" else "its document in memory"
-        loaded = memo.get("bodies_loaded", 0)
-        line = (f"took {report['model']}{worker} in {wall:.2f}s: {holder} holds the model's key, "
-                f"{loaded} bod{'y' if loaded == 1 else 'ies'} loaded, nothing ran") + _waited(report, "took")
-        line += _delta(report.get("delta"))
-    else:
-        counted = {status: bodies.count(status) for status in ("run", "replayed") if bodies.count(status)}
-        shown = ", ".join(f"{count} {status}" for status, count in counted.items()) or "none"
-        stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "names", "document", "xbf", "step",
-                                                                        "glb", "stl", "threemf", "dxf")
-                           if timings.get(name))
-        misses, hits = memo.get("misses", 0), memo.get("hits", 0)
-        line = (f"built {report['model']}{worker} in {wall:.2f}s: bodies {shown}; {misses} miss{'' if misses == 1 else 'es'}, "
-                f"{hits} hit{'' if hits == 1 else 's'}" + (f"; {stages}" if stages else ""))
-        line += _waited(report, "replayed" if counted.get("replayed") and not counted.get("run") else "ran after")
-        line += _delta(report.get("delta"))
-        if (report.get("cache") or {}).get("changed"):
-            line += f"\n  rebuilt: {report['cache']['reason']}"
-    if report.get("retired"):
-        files.append(f"retired: {report['retired']}")
-    return (line + "".join(f"\n  {text}" for text in files) + children
-            + "".join(f"\n  warning: kinematics: {text}" for text in report.get("kinematics", {}).get("warnings", ()))
-            + _verified(report.get("verify")))
-
-
-def _waited(report: dict[str, Any], how: str) -> str:
-    """The end of the run line of a build that waited for its script's running one (``waited``,
-    ``Daemon.behind``): what it did with what that build left, ``how`` (``took``, ``replayed``,
-    ``ran after``) the build of which script, waited how long for. Nothing for one that did not wait."""
-    waited = report.get("waited")
-    if not waited:
-        return ""
-    return f"; {how} the build of {waited.get('script')} it waited {waited.get('seconds', 0):.0f}s for"
-
-
-def _delta(found: dict[str, Any] | None) -> str:
-    """The line under the run line: the model's parts, bounds, joints, configuration sequences and
-    warnings, each with what it was where the build before it held another (``delta.delta``,
-    the engine's); warnings only where there are or were some; then how many parts' geometry
-    changed (``changed N``), or ``materials changed`` when only colours or materials did, so an
-    edit that keeps the bounds is still seen. Nothing without one."""
-    if not found:
-        return ""
-    times, dot = " × ", " · "
-    try:  # a stdout that cannot write them (a Windows pipe in another code page) is given ASCII
-        (times + dot).encode(getattr(sys.stdout, "encoding", None) or "utf-8")
-    except (UnicodeEncodeError, LookupError):
-        times, dot = " x ", " | "
-
-    def size(value: Any) -> str:
-        return times.join(_number(axis) for axis in value) if value else "none"
-
-    said = []
-    for name in ("parts", "bounds", "joints", "sequences", "warnings"):
-        row = found.get(name) or {}
-        now, changed = row.get("now"), "was" in row
-        if name == "warnings" and not now and not row.get("was"):
-            continue
-        if name == "bounds":
-            text = f"bounds {size(now)}" + (" mm" if now else "") + (f" (was {size(row['was'])})" if changed else "")
-        elif name == "warnings":
-            text = f"warnings {now}" + (f" (was {row['was']})" if changed else "")
-        else:
-            text = f"{name} {now}" + (f" ({now - (row['was'] or 0):+d})" if changed else "")
-        said.append(text)
-    changed = found.get("changed") or {}
-    if changed.get("parts"):
-        said.append(f"changed {changed['parts']}")
-    elif changed.get("looks"):
-        said.append("materials changed")
-    return "\n  " + dot.join(said)
-
-
-def _verified(found: dict[str, Any] | None) -> str:
-    if found is None:
-        return ""
-    lines = [f"\n  verify: {len(found['checked'])} replayable bodies run again, {len(found['mismatches'])} differ"]
-    lines += [f"\n    {name}: {found['checked'][name]}; it now runs on every build" for name in found["mismatches"]]
-    return "".join(lines)
-
-
-def _reported(reports: list[dict[str, Any]], wall: float, fresh: bool | None, as_json: bool) -> int:
-    """Each report on stdout, described or as JSON; a failed one's error and the line naming it on
-    stderr, and nothing more of it; 1 if any failed."""
-    failed = False
-    for report in reports:
-        if as_json:
-            print(json.dumps({**report, "wall": round(wall, 4)}))
-        elif not report.get("ok"):
-            # The model's frames, once, then the line that names what failed: nothing else.
-            failed = True
-            sys.stdout.flush()
-            print(report.get("error", ""), file=sys.stderr)
-            print(_describe(report, wall, fresh), file=sys.stderr)
-            continue
-        else:
-            print(_describe(report, wall, fresh))
-            if report.get("profile"):
-                from cadgen.engine.profiling import describe
-
-                print(describe(report["profile"]))
-            if report.get("id"):
-                print(f"  id: {report['id']}")
-            if report.get("url"):
-                # Only a build the engine holds has a page to open: a daemon=False
-                # build's document went with its process.
-                print(f"  view: {report['url']}")
-        if not report.get("ok"):
-            failed = True
-            print(report.get("error", ""), file=sys.stderr)
-    # The call's answer is read now, its page opened from its `view:` line: a pipe (an agent's shell)
-    # would hold it until the script exits, after whatever the script does next -- a self-check that
-    # loads the CAD kernel here takes seconds.
-    sys.stdout.flush()
-    return 1 if failed else 0
-
-
 def told_state(source: Any, doing: str) -> None:
     """A model document read by its id, said once on stderr once a verb has read it, when its last
     run failed, so the previous good build is read: from what the engine reports of it
@@ -362,7 +321,7 @@ def told_state(source: Any, doing: str) -> None:
 def state_notice(model: dict[str, Any], doing: str) -> str | None:
     """The words ``told_state`` says of a model document (``model_info``'s record), or None when its
     last run did not fail."""
-    from cadgen.engine.registry import rerun
+    from cadgen.engine.records import rerun
 
     name = (model.get("source") or {}).get("name") or model.get("id")
     if model.get("state") == "failed":
@@ -370,10 +329,6 @@ def state_notice(model: dict[str, Any], doing: str) -> str | None:
         fix = f"; fix it and run `{rerun(program)}` to update it" if program else ""
         return f"the last run of {name} failed; {doing} its previous good build{fix}"
     return None
-
-
-def _log(text: str) -> None:
-    print(text, file=sys.stderr)
 
 
 def _export(args: argparse.Namespace, prog: str) -> int:
@@ -397,18 +352,8 @@ def _export(args: argparse.Namespace, prog: str) -> int:
                           "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes, "seconds": row.seconds,
                                      "written": row.written} for row in written]}))
         return 0
-    said_written(written, args.destinations)
+    _said.written(written, args.destinations)
     return 0
-
-
-def said_written(written: Any, given: Any) -> None:
-    """A line on stdout per file an export wrote or found holding its bytes already, each named as
-    ``given`` names it: ``cadgen export``'s, and a program's own ``export()`` call's."""
-    for row in written:
-        if row.written:
-            print(f"wrote {_given(row.path, given)} ({_bytes(row.bytes)}) in {row.seconds:.2f}s")
-        else:
-            print(f"unchanged {_given(row.path, given)} ({_bytes(row.bytes)}): it holds these bytes already")
 
 
 def _serve(args: argparse.Namespace, prog: str) -> int:
@@ -421,40 +366,6 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     except api.EngineError as error:
         raise Failed(str(error)) from None
     return 0
-
-
-def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> dict[str, Any]:
-    """What the occurrence a ref names (``refs.Hit``, from ``refs.resolve_structure``) weighs: each
-    part below it, its instance's volume (its prototype's, mm^3, by key in ``volumes``) times its
-    material's density, in kg, summed; ``mass`` None when no part of it has a material with a
-    density, and the parts that have none listed by their occurrence paths."""
-    from cadgen.engine.refs import path_text
-
-    prototypes = structure["prototypes"]
-    total_volume = 0.0
-    mass = 0.0
-    weighed_any = False
-    unweighed = []
-    held = [(structure["instances"][node.payload["instance"]], path_text(hit.root, node)) for node in hit.node.parts()]
-    for instance, path in held:
-        prototype = prototypes[instance["prototype"]]
-        volume = volumes[prototype["key"]]
-        total_volume += volume
-        density = ((prototype.get("material") or {}).get("material") or {}).get("density")
-        if density is None:
-            unweighed.append(path)
-            continue
-        mass += volume * 1e-9 * density
-        weighed_any = True
-    found: dict[str, Any] = {"ref": hit.ref, "parts": len(held), "volume": total_volume,
-                             "mass": mass if weighed_any else None, "unweighed": unweighed}
-    if len(held) == 1:
-        instance, path = held[0]
-        material = (prototypes[instance["prototype"]].get("material") or {}).get("material")
-        found.update(part=prototypes[instance["prototype"]]["name"], path=path,
-                     material=material["name"] if material else None,
-                     density=material.get("density") if material else None)
-    return found
 
 
 def inspect_parser(prog: str = "cadgen inspect") -> argparse.ArgumentParser:
@@ -485,7 +396,7 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
         print(plain(f"{mesh['name']}  a mesh (GLB)"))
         print(f"nodes       {mesh['nodes']}")
         print(f"meshes      {mesh['meshes']}")
-        rows = [plain(f"{row['name']}  {_number(row['duration'])} s") for row in mesh["animations"]]
+        rows = [plain(f"{row['name']}  {_said.number(row['duration'])} s") for row in mesh["animations"]]
         print("animations" + "".join(f"\n  {row}" for row in rows) if rows else "animations  none")
         print("closure     none: a mesh carries none, only an .xbf does")
     elif query in ("summary", "structure") and not args.json:
@@ -502,11 +413,6 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
     else:
         print(json.dumps(found, indent=2))
     return 0
-
-
-def _number(value: float) -> str:
-    """A measure at a glance: four significant figures below a thousand, whole above, never an exponent."""
-    return f"{value:.4g}" if abs(value) < 1000 else f"{value:,.0f}"
 
 
 # Precision::Confusion: a joint value below it is the kernel's zero, and reads as one.
@@ -555,20 +461,20 @@ def summary_text(summary: dict[str, Any]) -> str:
     if measured:
         bounds = summary.get("bounds")
         if bounds:
-            size = " x ".join(_number(value) for value in bounds["size"])
-            corner = ", ".join(_number(value) for value in bounds["min"])
+            size = " x ".join(_said.number(value) for value in bounds["size"])
+            corner = ", ".join(_said.number(value) for value in bounds["min"])
             lines.append(f"bounds      {size} mm, from ({corner})")
         else:
             lines.append("bounds      none: no geometry")
-        lines.append(f"volume      {_number(summary['volume'])} mm^3")
+        lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
     if summary["materials"]:
         mass = summary.get("mass")
-        lines.append("materials" + (f"   {_number(mass)} kg in all" if mass is not None else ""))
+        lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))
         for row in summary["materials"]:
             if not measured:
                 lines.append(f"  {row['name']}: {', '.join(row['parts'])}")
                 continue
-            weight = f"{_number(row['mass'])} kg" if row["mass"] is not None else "no density"
+            weight = f"{_said.number(row['mass'])} kg" if row["mass"] is not None else "no density"
             lines.append(f"  {row['name']}: {weight}, {', '.join(row['parts'])}")
         assigned = {part for row in summary["materials"] for part in row["parts"]}
         missing = [part for part in summary["unweighed"] if part not in assigned]
@@ -589,7 +495,7 @@ def summary_text(summary: dict[str, Any]) -> str:
         ranges = []
         for at, limits in enumerate(row.get("range") or []):
             unit = units[at] if at < len(units) else ""
-            ranges.append("free" if not limits else f"{_number(limits[0])} to {_number(limits[1])} {unit}".rstrip())
+            ranges.append("free" if not limits else f"{_said.number(limits[0])} to {_said.number(limits[1])} {unit}".rstrip())
         built = row.get("asBuilt")
         as_built = "" if built is None else f", as built {_joint_value(built)}"
         return f"{row['name']}  {row['type']}  {'; '.join(ranges) or 'no range'}{as_built}"
@@ -597,17 +503,17 @@ def summary_text(summary: dict[str, Any]) -> str:
     listed("joints", [joint(row) for row in summary["joints"]])
 
     def coupling(row: dict[str, Any]) -> str:
-        joints = ", ".join(f"{joint['name']} {_number(joint['ratio'])}" if isinstance(joint["ratio"], (int, float))
-                           else f"{joint['name']} {' '.join(_number(value) for value in joint['ratio'])}"
+        joints = ", ".join(f"{joint['name']} {_said.number(joint['ratio'])}" if isinstance(joint["ratio"], (int, float))
+                           else f"{joint['name']} {' '.join(_said.number(value) for value in joint['ratio'])}"
                            for joint in row["joints"])
-        ratio = f", ratio {_number(row['ratio'])}" if row.get("ratio") is not None else ""
+        ratio = f", ratio {_said.number(row['ratio'])}" if row.get("ratio") is not None else ""
         return f"{row['name']}  {row['kind']}  {joints}{ratio}"
 
     listed("couplings", [coupling(row) for row in summary.get("couplings") or []])
     listed("states", [f"{row['name']}  " + ", ".join(f"{name} {_joint_value(value)}" for name, value in row["values"].items())
                       for row in summary["states"]])
-    listed("sequences", [f"{row['name']}  {_number(row['duration'])} s" for row in summary["sequences"]])
-    listed("animations", [f"{row['name']}  {_number(row['duration'])} s" for row in summary["animations"]])
+    listed("sequences", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["sequences"]])
+    listed("animations", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["animations"]])
     # The files the model's decorators declare, not what an export wrote beside it.
     listed("declared files", summary["files"])
     return "\n".join(plain(line) for line in lines)
@@ -675,9 +581,53 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def _delete(args: argparse.Namespace, _prog: str) -> int:
-    from cadgen.engine.api import delete
+def delete(documents: Any) -> list[dict[str, Any]]:
+    """``cadgen delete``: documents deleted, each by the one deletion the home's Delete is too
+    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
+    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
+    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
+    person's own files are never touched. One that names nothing recorded is refused (``ValueError``),
+    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
+    the order named."""
+    from cadgen.engine import registry as registering
+    from cadgen.engine.api import EngineError
+    from cadgen.engine.client import request
+    from cadgen.engine.ids import canonical, file_id, is_id
+    from cadgen.engine.models import delete as deleting
 
+    held = registering.current()
+    idents: list[str] = []
+    unknown: list[str] = []
+    listed: list[dict[str, Any]] | None = None
+    for named in [str(document) for document in documents]:
+        found: list[str] = []
+        if held is not None and is_id(named):
+            found = [named] if held.get(named) is not None else []
+        elif held is not None:
+            path = canonical(os.path.abspath(os.path.expanduser(named)))
+            record = held.get(file_id(path))
+            if record is not None and record.get("kind") == "file":
+                found = [record["id"]]
+            else:
+                listed = held.list() if listed is None else listed
+                found = sorted(row["id"] for row in listed if row.get("kind") != "file"
+                               and canonical(registering.home(held, row)) == path)
+        if not found:
+            unknown.append(named)
+        idents.extend(ident for ident in found if ident not in idents)
+    if unknown:
+        raise ValueError(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
+                         "script or a CAD file a page opened (`cadgen status` lists the documents); nothing "
+                         "was deleted")
+    answer = request({"op": "delete", "ids": idents}, start=False)
+    if answer is not None:
+        if not answer.get("ok"):
+            raise EngineError(str(answer.get("failed") or answer.get("error") or answer))
+        return list(answer.get("deleted") or [])
+    return [found for found in (deleting(held, ident) for ident in idents) if found is not None]
+
+
+def _delete(args: argparse.Namespace, _prog: str) -> int:
     try:
         deleted = delete(args.documents)
     except ValueError as error:
@@ -708,15 +658,6 @@ def _span(seconds: Any) -> str:
     return f"{hours}h{minutes:02d}m" if minutes else f"{hours}h"
 
 
-def _bytes(count: Any) -> str:
-    """A size at a glance: ``8.6 KB``, ``12.4 MB``, ``1.2 GB``."""
-    count = float(count or 0)
-    for unit, scale in (("GB", 2**30), ("MB", 2**20), ("KB", 2**10)):
-        if count >= scale:
-            return f"{count / scale:.1f} {unit}"
-    return f"{int(count)} B"
-
-
 def _gb(megabytes: Any) -> str:
     return "-" if megabytes is None else f"{float(megabytes) / 1024:.1f} GB"
 
@@ -741,7 +682,7 @@ def cache_text(root: Any, documents: Any, size: Any) -> str:
     """The engine's document cache as ``cadgen status`` and ``cadgen doctor`` say it, after the word
     ``cache``: its folder, and the documents and bytes it keeps, which stay until a person deletes
     them (no cap)."""
-    return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_bytes(size)}, "
+    return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_said.size(size)}, "
             "kept until deleted")
 
 

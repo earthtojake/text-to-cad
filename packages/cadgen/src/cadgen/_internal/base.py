@@ -6,7 +6,7 @@ its ``kernel`` extra. So an installation of the core, as uvx makes the plugin's 
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cadgen run`` runs, its worker, and the engine's own kernel
 processes (the standby, the documents worker, the meshing and reading pools, the render processes:
-``kernel``, which the engine is handed as ``cadgen.engine.daemon.KERNEL``).
+``kernel``, which the engine is handed as ``cadgen.engine.places.KERNEL``).
 
 - **What it is**: ``cadgen[kernel]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
@@ -44,13 +44,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BASE", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
-           "ensure", "failure", "find_uv", "home", "interpreter", "kernel", "make", "where"]
+from cadgen.engine import places
 
-# The bases' folder in the cache folder, and the marker that makes one complete, written last.
+__all__ = ["BASE", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
+           "ensure", "failure", "find_uv", "interpreter", "kernel", "make", "where"]
+
+# The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
+# process in the base reads its installation from (``places.home``).
 BASE = "base"
-MARKER = "cadgen-env.json"
-SCHEMA = "cadgen env/2"
+MARKER = places.MARKER
+SCHEMA = places.MARKER_SCHEMA
 # The modules whose presence makes an environment carry the CAD kernel.
 KERNEL_MODULES = ("OCP", "build123d")
 # How the base's installed files are made from uv's cache: hard links, as uv makes them on Linux and
@@ -85,7 +88,7 @@ class Installation:
     """The installation whose engine the base serves: what it installs and belongs to."""
 
     release: str  # cadgen's release, as its metadata says it
-    name: str  # the version it runs as (``cadgen.engine.daemon.installation``)
+    name: str  # the version it runs as (``cadgen.engine.places.installation``)
     python: str  # its Python's version, ``3.14.0``
     executable: str  # its Python, as its environment names it (never resolved: that reaches the base interpreter)
     prefix: str  # its environment
@@ -96,9 +99,9 @@ class Installation:
 
     @classmethod
     def here(cls) -> "Installation":
-        """This process's installation: the one the environment it runs in belongs to (``home``), else
-        its own environment's."""
-        found = home()
+        """This process's installation: the one the environment it runs in belongs to (``places.home``),
+        else its own environment's."""
+        found = places.home()
         if found is not None:
             try:
                 return cls(**{name.name: found[name.name] for name in dataclasses.fields(cls)})
@@ -120,12 +123,11 @@ class Installation:
 def _own() -> Installation:
     """This environment's installation, read once a process."""
     import cadgen
-    from cadgen.engine import daemon
     from cadgen.engine.previous import version
 
     package = Path(cadgen.__file__).resolve().parent
     prefix = os.path.abspath(sys.prefix)
-    return Installation(release=version(), name=daemon.installation(), python=platform.python_version(),
+    return Installation(release=version(), name=places.installation(), python=platform.python_version(),
                         executable=os.path.abspath(sys.executable), prefix=prefix, root=str(package.parent),
                         source=_source(package, prefix), arch=_machine(), kernel=_carries_kernel())
 
@@ -170,20 +172,6 @@ def _source(package: Path, prefix: str) -> str | None:
     return None
 
 
-def home(prefix: str | None = None) -> dict[str, Any] | None:
-    """The installation the environment at ``prefix`` (this process's, ``sys.prefix``) belongs to, as its
-    marker names it -- ``executable``, ``prefix``, ``root`` and the rest of its ``Installation`` -- or None
-    for an environment this module did not make."""
-    try:
-        marker = json.loads((Path(prefix or sys.prefix) / MARKER).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    found = marker.get("installation") if isinstance(marker, dict) and marker.get("schema") == SCHEMA else None
-    if not isinstance(found, dict) or not all(isinstance(found.get(name), str) for name in ("executable", "prefix", "root")):
-        return None
-    return found
-
-
 # --- the base --------------------------------------------------------------------------------------
 
 
@@ -213,7 +201,7 @@ def _inputs(installation: Installation) -> dict[str, Any]:
 
 def where(installation: Installation | None = None) -> Path:
     """The folder of the installation's base, made or not: ``base/<key>`` in the cache folder."""
-    from cadgen.viewer.recents import cache_dir
+    from cadgen.engine.places import cache_dir
 
     found = installation or Installation.here()
     return cache_dir() / BASE / hashlib.sha256(json.dumps(_inputs(found), sort_keys=True).encode("utf-8")).hexdigest()[:16]
@@ -258,7 +246,7 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
 
 def kernel(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's kernel processes run in, as the engine is handed it
-    (``cadgen.engine.daemon.KERNEL``): the base's Python, its import path and whether it is this
+    (``cadgen.engine.places.KERNEL``): the base's Python, its import path and whether it is this
     installation's own; None when it is not made and ``make`` is false. ``Refused`` when it cannot be."""
     found = ensure(make=make, told=lambda _line: None)
     if found is None:

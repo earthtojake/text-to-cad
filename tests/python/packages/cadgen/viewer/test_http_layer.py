@@ -752,7 +752,7 @@ class EngineClientFollowsARestartedEngine(unittest.TestCase):
     def test_a_refused_token_is_asked_again_once(self):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-        from cadgen.viewer import engine_client
+        from cad_mcp import engine as engine_client
 
         class Engine(BaseHTTPRequestHandler):
             def do_GET(self):

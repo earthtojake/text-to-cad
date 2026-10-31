@@ -618,7 +618,7 @@ class RenderProcess:
     first snapshot; the version it holds and the parts whose meshes it was sent."""
 
     def __init__(self, path: Path, environment: dict[str, str]) -> None:
-        from cadgen.engine.daemon import engine_root, kernel, windowless
+        from cadgen.engine.places import engine_root, kernel, windowless
 
         env = dict(environment)
         # The engine's kernel environment's Python (the base, made first when it is not); the daemon's own

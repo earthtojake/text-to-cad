@@ -10,7 +10,7 @@ import threading
 import time
 import unittest
 
-from cadgen.mcp.protocol import Connection, RpcError
+from cad_mcp.protocol import Connection, RpcError
 
 
 class _Pipe:
@@ -126,7 +126,7 @@ class EndTest(unittest.TestCase):
 
         script = (
             "import sys, threading\n"
-            "from cadgen.mcp.protocol import Connection\n"
+            "from cad_mcp.protocol import Connection\n"
             "def handler(method, params, context):\n"
             "    sys.stderr.buffer.write(b'entered\\n'); sys.stderr.flush()\n"
             "    threading.Event().wait()\n"
@@ -148,7 +148,7 @@ class ClaimStdoutTest(unittest.TestCase):
 
         script = (
             "import os,sys\n"
-            "from cadgen.mcp.protocol import claim_stdout\n"
+            "from cad_mcp.protocol import claim_stdout\n"
             "out = claim_stdout()\n"
             "print('stray')\n"
             "os.system('echo child')\n"
@@ -167,7 +167,7 @@ class ClaimStdinTest(unittest.TestCase):
 
         script = (
             "import os,sys\n"
-            "from cadgen.mcp.protocol import claim_stdin\n"
+            "from cad_mcp.protocol import claim_stdin\n"
             "requests = claim_stdin()\n"
             "null = os.stat(os.devnull)\n"
             "zero = os.fstat(0)\n"

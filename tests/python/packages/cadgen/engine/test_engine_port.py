@@ -132,10 +132,10 @@ class EnginePortTest(unittest.TestCase):
 
     def ours(self) -> Path:
         """The engine's door in the test's engine folder (on Windows, its port file)."""
-        from cadgen.engine import daemon
+        from cadgen.engine import places
 
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
-            return daemon.address()
+            return places.address()
 
     def earlier(self, port: int) -> tuple[Path, dict]:
         """An earlier cadgen's engine in the test's engine folder -- its door another name, a tag of 12
@@ -143,7 +143,8 @@ class EnginePortTest(unittest.TestCase):
         stopped at the end."""
         from cadgen.engine import client, daemon
 
-        code = f"import sys; from cadgen.engine import daemon; daemon.NAME = {EARLIER!r}; sys.exit(daemon.main())"
+        code = (f"import sys; from cadgen.engine import daemon, places; places.NAME = daemon.NAME = {EARLIER!r}; "
+                "sys.exit(daemon.main())")
         process = subprocess.Popen([sys.executable, "-c", code], env=self.env, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(engine_daemon.reap, process)
@@ -161,14 +162,14 @@ class EnginePortTest(unittest.TestCase):
 
     def server(self, *args: str) -> None:
         """``cadgen server ARGS`` in the background, once its door answers."""
-        from cadgen.engine import client, daemon
+        from cadgen.engine import client, places
 
         process = subprocess.Popen([sys.executable, "-m", "cadgen.engine", "server", *args], env=self.env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(engine_daemon.reap, process)
         with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
             deadline = time.monotonic() + 60
-            while (found := client._connect(daemon.address())) is None:
+            while (found := client._connect(places.address())) is None:
                 self.assertIsNone(process.poll(), "the server exited before its door answered")
                 self.assertLess(time.monotonic(), deadline, "the server's door answered")
                 time.sleep(0.05)
@@ -232,9 +233,9 @@ class EnginePortTest(unittest.TestCase):
         return server, where
 
     def remembered(self) -> int | None:
-        from cadgen.engine import daemon, registry
+        from cadgen.engine import places, registry
 
-        return registry.Registry(self.root / "state").engine(daemon.NAME).get("port")
+        return registry.Registry(self.root / "state").engine(places.NAME).get("port")
 
     def test_the_default_port_is_3245_and_taken_when_free(self) -> None:
         from cadgen.engine import daemon
@@ -319,11 +320,11 @@ class EnginePortTest(unittest.TestCase):
         self.assertNotIn(f"{default} is held", again.stderr + self.cli("status", **extra).stdout)
 
     def test_the_installation_port_returns_to_a_free_default_and_rolls_from_a_held_remembered_one(self) -> None:
-        from cadgen.engine import daemon, registry
+        from cadgen.engine import places, registry
 
         default, remembered = held_port(self), free_port()
         registry.Registry(self.root / "state").put_token("t" * 43)
-        registry.Registry(self.root / "state").put_engine(daemon.NAME, {"port": remembered})
+        registry.Registry(self.root / "state").put_engine(places.NAME, {"port": remembered})
         server, where = self.bound(default)  # the default held, the remembered port free: used, nothing said
         self.assertEqual((server.port, where["source"], "notice" in where), (remembered, "rolled", False))
         self.assertEqual(server.token, "t" * 43)

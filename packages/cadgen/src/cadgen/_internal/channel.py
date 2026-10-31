@@ -11,9 +11,10 @@ environment variable it does not know, where a flag it does not know would stop 
 Only the server hears it, though, and most of CAD's work is not the server's: a skill's ``cadgen``
 command, a model script and the CAD Viewer a skill opens run with nothing a plugin set -- nor is the
 counting: the server's sessions are counted by the engine, whose environment is whoever started it,
-often ``python model.py``. So the server writes its channel down for its installation (``remember``): uv
-keeps one installation per requirement, and the plugin's server and its skills run the same requirement,
-so the same installation -- the one the engine daemon is named after. Any process of that installation
+often ``python model.py``. So the engine writes down, for its installation, the channel each plugin's stdio
+transport says as it opens a session (``remember``, from the transport's initialize): the device runs one
+installation, the current one, whose engine every transport reaches and whose ``cadgen`` command every
+skill runs. Any process of that installation
 that was not told a channel itself reports the one written down (``recorded``), re-read with each batch,
 as the engine outlives the server that wrote it. Where two plugins pin the same release on one machine
 they share an installation, and the server that started last is the one written down: the app most
@@ -93,7 +94,7 @@ def channel() -> str:
 
 
 def _record_path() -> Path:
-    from cadgen.viewer.recents import state_dir  # noqa: PLC0415 -- the state directory's one definition
+    from cadgen.engine.places import state_dir
 
     return state_dir() / RECORD
 
@@ -123,11 +124,12 @@ def recorded(*, path: Path | None = None) -> str | None:
         return None
 
 
-def remember(*, path: Path | None = None) -> str | None:
-    """Write down the channel this process's plugin named, for every process of its installation that was not told
-    one (``recorded``): the CAD server does, as it starts. Nothing is written when there is nothing named, or when
-    it is what the record holds already. What was written, or ``None``. Never raises."""
-    value = str(os.environ.get(ENV) or "").strip()
+def remember(value: str | None = None, *, path: Path | None = None) -> str | None:
+    """Write down a plugin's channel -- ``value``, what a plugin's stdio transport said as it opened a session
+    (the engine's MCP server, at initialize), else what this process's plugin named -- for every process of
+    this installation that was not told one (``recorded``). Nothing is written when there is nothing named, or
+    when it is what the record holds already. What was written, or ``None``. Never raises."""
+    value = str((os.environ.get(ENV) if value is None else value) or "").strip()
     if not is_channel(value):
         return None
     try:

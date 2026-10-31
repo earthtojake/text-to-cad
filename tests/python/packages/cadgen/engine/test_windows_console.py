@@ -3,7 +3,7 @@ daemon (``client._start``) a process group of its own too, never no console at a
 worker, STEP reader and render process windowless; what they start in turn (the meshing and
 reading pools) shares their windowless console. No CI machine shows a window, so the flags handed
 to ``subprocess.Popen`` are read under a patched ``os.name``: the engine's, where its processes
-are started (``daemon.windowless``, ``daemon.detached``), as pathlib reads the real one."""
+are started (``places.windowless``, ``places.detached``), as pathlib reads the real one."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest import mock
 
-from cadgen.engine import client, daemon, reader
+from cadgen.engine import client, daemon, places, reader
 from cadgen.engine.render import service
 
 # Windows' values: ``subprocess`` names them on Windows alone.
@@ -39,7 +39,7 @@ class _Os:
 class WindowsConsoleTest(unittest.TestCase):
     def popen(self, start: Callable[[], Any], name: str = "nt") -> dict[str, Any]:
         """The keyword arguments ``start`` hands ``Popen`` where ``os.name`` is ``name``."""
-        with mock.patch.object(daemon, "os", _Os(name)), \
+        with mock.patch.object(places, "os", _Os(name)), \
                 mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
             with self.assertRaises(Started):
                 start()

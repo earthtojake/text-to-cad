@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cadgen.mcp.shim import initialize_params
+from cad_mcp.shim import initialize_params
 from cadgen.mcp.protocol import RequestContext
 from cadgen.viewer.recents import RecentStore
 from cadgen.mcp.server import Server

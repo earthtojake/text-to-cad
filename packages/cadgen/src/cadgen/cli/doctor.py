@@ -56,10 +56,10 @@ def _server(start: bool = True) -> str:
     running, from which installation -- started when none is and ``start``, through the client's own
     start (the current installation's), which in a sandbox that cannot start one says so."""
     try:
-        from cadgen.engine import daemon as engine_daemon
+        from cadgen.engine import places
         from cadgen.engine.client import request
 
-        where = engine_daemon.address()
+        where = places.address()
         answer = request({"op": "status"}, start=False)
         started = False
         if not isinstance(answer, dict) and start:
@@ -300,7 +300,7 @@ def _cache() -> str:
     from cadgen.engine.cli import cache_text
     from cadgen.engine.ids import is_id
     from cadgen.engine.registry import DOCUMENTS, RECORD
-    from cadgen.viewer.recents import cache_dir, state_dir
+    from cadgen.engine.places import cache_dir, state_dir
 
     try:
         root, state = cache_dir(), state_dir()
@@ -322,13 +322,12 @@ def _leftovers():
     """What cadgen left behind that no cadgen running now needs (``cadgen._internal.leftovers``):
     the state and cache folders, and each class found in them."""
     from cadgen._internal import installations, leftovers
-    from cadgen.engine import daemon
-    from cadgen.viewer.recents import cache_dir, state_dir
+    from cadgen.engine.places import cache_dir, engine_dir, state_dir
 
     state, cache = state_dir(), cache_dir()
     prefixes = [record["prefix"] for record in installations.records()]
     return (state, cache, leftovers.engine_records(state),
-            leftovers.bytecode_folders(cache, prefixes, daemon.state_dir()), leftovers.unrecorded(state, cache),
+            leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
             leftovers.earlier(state), leftovers.seven(state, cache))
 
 

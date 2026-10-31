@@ -211,13 +211,10 @@ class Model:
             raise TypeError(f"model {self.name!r} declares two names, {self.explicit_name!r} and {name!r}")
         line = self.function.__code__.co_firstlineno
         claim(str(self.script.parent), name, str(self.script), self.name, line)
-        from cadgen.engine import registry
+        from cadgen.engine import records
+        from cadgen.engine.identity import claimed
 
-        held = registry.current()
-        if held is not None:
-            from cadgen.engine.identity import claimed
-
-            claimed(held, {"script": str(self.script), "name": self.name, "line": line}, name)
+        claimed(records.current(), {"script": str(self.script), "name": self.name, "line": line}, name)
         self.explicit_name = name
         return self
 
@@ -237,7 +234,7 @@ class Model:
         if build is not None:
             return build.child(self)
         from cadgen.engine import api
-        from cadgen.engine.cli import _log, _reported
+        from cadgen.engine.said import log, reported
 
         # Decoration only declares. The caller's control flow reaches this build,
         # and resumes after it; importing the engine never runs or exits a script.
@@ -248,7 +245,7 @@ class Model:
         previous = getattr(_CONTEXT, "program", False)
         _CONTEXT.program = program
         try:
-            built = self.build(log=_log if program else None)
+            built = self.build(log=log if program else None)
         except (ConnectionError, api.EngineError) as error:
             # The engine not reached, or refusing the call before any build (``api._ask``): one line,
             # said only if nothing catches it (``_told``).
@@ -257,7 +254,7 @@ class Model:
         finally:
             _CONTEXT.program = previous
         if program:
-            _reported(built.models, built.wall, built.fresh, False)
+            reported(built.models, built.wall, built.fresh, False)
         if not built.ok:
             error = api.EngineError(next(row.get("error", "model failed") for row in built.models if not row.get("ok")))
             if program:

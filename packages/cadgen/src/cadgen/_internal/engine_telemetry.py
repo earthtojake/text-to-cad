@@ -2,9 +2,12 @@
 
 The engine counts nothing and imports nothing of cadgen (its law 3). After each build, export and
 snapshot it calls the functions in ``cadgen.engine.api.observers`` with a plain dict of what the verb
-did (``api._facts``). ``observe`` is cadgen's: appended by cadgen's package ``__init__`` (``install``)
-the moment the engine's verbs are imported, never sooner, so a process that does not use the engine
-imports none of it. It counts these events (``analytics.EVENTS``):
+did (``api._facts``). ``observe`` is the server's: appended by the server's commands (``install``: the
+``cadgen`` command, the engine's own) the moment the engine's verbs are imported, never sooner, so a
+process that does not use the engine imports none of it; with it, what the library counts itself (a
+drawing, ``cadgen._internal.counts``) is told to the server's telemetry. A process no command of the
+server's runs -- a model's own, in the CAD kernel environment, where only the library is -- counts
+nothing. It counts these events (``analytics.EVENTS``):
 
 - a ``build`` of kind ``model``, by who asked (``via``): ``python model.py``, or a Python caller's
   ``Model.build()``, is ``script`` (no command builds one now; ``command`` is still a value
@@ -49,9 +52,30 @@ KINDS = {"xbf": "xbf", "step": "step", "glb": "glb", "stl": "stl", "threemf": "3
 MESHES = frozenset({"stl", "glb", "threemf"})
 
 
+class _Analytics:
+    """The server's telemetry as the library's counts reach it (``cadgen._internal.counts``): ``cadgen.analytics``,
+    imported when something is counted, never before."""
+
+    @staticmethod
+    def report(error: BaseException, where: str, **options: Any) -> None:
+        from cadgen import analytics
+
+        analytics.report(error, where, **options)
+
+    @staticmethod
+    def hand_over(found: dict[str, Any]) -> None:
+        from cadgen import analytics
+
+        analytics.hand_over(found)
+
+
 def install() -> None:
     """``observe`` among the engine's observers: now, when its verbs are imported already, else as they are
-    (``_Attach``). Idempotent."""
+    (``_Attach``); and the server's telemetry told what the library counts (``cadgen._internal.counts``).
+    Idempotent."""
+    from cadgen._internal import counts
+
+    counts.TELEMETRY = _Analytics
     module = sys.modules.get(API)
     if module is not None:
         _attach(module)

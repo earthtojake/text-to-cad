@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 from cadgen.engine import build as engine_build
-from cadgen.engine import cli
+from cadgen.engine import said
 
 SCRIPT = """
 import build123d as bd
@@ -46,14 +46,14 @@ class KernelRefusalTest(unittest.TestCase):
         report = self.built("plate")
         self.assertRegex(report["error"], r"OCP\.OCP\.Standard\.Standard_\w+")
         self.assertEqual(report["failedAt"], "Solid.make_box(0, 60, 5)")
-        self.assertEqual(cli._describe(report, 0.1, None),
+        self.assertEqual(said.describe(report, 0.1, None),
                          "failed parts.py::plate at Solid.make_box(0, 60, 5): the kernel refused it")
 
     def test_a_failure_with_its_own_words_names_no_call(self) -> None:
         report = self.built("rounded")
         self.assertIn("fillet", report["error"])
         self.assertNotIn("failedAt", report)
-        self.assertEqual(cli._describe(report, 0.1, None), "failed parts.py::rounded")
+        self.assertEqual(said.describe(report, 0.1, None), "failed parts.py::rounded")
 
 
 if __name__ == "__main__":

@@ -12,9 +12,9 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
-from cadgen.mcp.protocol import RequestContext
-from cadgen.mcp.shim import Proxy
-from cadgen.viewer import engine_client
+from cad_mcp.protocol import RequestContext
+from cad_mcp.shim import Proxy
+from cad_mcp import engine as engine_client
 
 
 class Listener:
@@ -160,7 +160,7 @@ class HolderTest(unittest.TestCase):
     goes held again only at the host's next request -- a stop is obeyed."""
 
     def test_a_request_while_the_hold_is_taken_never_holds_again_after_a_stop(self) -> None:
-        from cadgen.mcp.shim import Holder
+        from cad_mcp.shim import Holder
 
         gone, taking, calls = threading.Event(), threading.Event(), []
 
@@ -184,7 +184,7 @@ class HolderTest(unittest.TestCase):
             return Held()
 
         holder = Holder()
-        with mock.patch("cadgen.engine.client.hold", hold):
+        with mock.patch("cad_mcp.shim.hold", hold):
             holder.start()
             holder.want()  # Proxy._send, while the first hold starts the engine
             taking.set()
@@ -202,10 +202,10 @@ class HolderTest(unittest.TestCase):
             calls.append(host)
             raise RuntimeError("an answer of no shape")
 
-        from cadgen.mcp.shim import Holder
+        from cad_mcp.shim import Holder
 
         holder = Holder()
-        with mock.patch("cadgen.engine.client.hold", hold):
+        with mock.patch("cad_mcp.shim.hold", hold):
             holder.start()
             self.assertTrue(holder.tried.wait(10), "the server's exit never waits a minute on it")
             holder.want()
