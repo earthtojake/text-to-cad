@@ -684,6 +684,22 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.scene.caps, [], "nor in Wireframe, which draws no faces")
 
 
+class RenderStatusTest(unittest.TestCase):
+    def test_a_render_process_that_is_gone_is_no_row_of_the_status(self) -> None:
+        from types import SimpleNamespace
+
+        from cad.engine.render.service import Renders
+
+        def process(name: str, alive: bool) -> SimpleNamespace:
+            return SimpleNamespace(path=Path(name), pid=1, version="v", held={}, frames=1, rss=10,
+                                   alive=lambda: alive, lock=threading.Lock())
+
+        renders = Renders(server=None)
+        renders.processes = {"live": process("live.xbf", True), "gone": process("gone.xbf", False)}
+        self.assertEqual([row["document"] for row in renders.status()], ["live.xbf"],
+                         "exited or retired, it waits for no picture to leave the status")
+
+
 class RenderProcessTest(unittest.TestCase):
     """The render process, as the daemon talks to it: a version held, frames answered with PNG
     bytes, and gone after a frame that leaves it over its memory cap."""

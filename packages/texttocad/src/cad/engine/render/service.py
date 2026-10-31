@@ -804,9 +804,11 @@ class Renders:
         return data, report
 
     def status(self) -> list[dict[str, Any]]:
+        """The render processes alive now, a row each: one that exited, or retired itself after a
+        frame, is no row, though its document's next picture has yet to start another."""
         return [{"document": str(render.path), "pid": render.pid, "version": render.version, "held": render.held,
-                 "frames": render.frames, "rssMb": render.rss, "alive": render.alive(), "busy": render.lock.locked()}
-                for render in self.processes.values()]
+                 "frames": render.frames, "rssMb": render.rss, "alive": True, "busy": render.lock.locked()}
+                for render in list(self.processes.values()) if render.alive()]
 
     def processes_now(self) -> list[RenderProcess]:
         """The render processes alive now, whose memory the workers' cap counts (``daemon.Pool.shed``):
