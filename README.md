@@ -9,7 +9,6 @@ Design physical products with AI.
 [![texttocad-server](https://img.shields.io/pypi/v/texttocad-server?style=flat&logo=pypi&logoColor=white&label=texttocad-server)](https://pypi.org/project/texttocad-server/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)](LICENSE)
-[![skills.sh](https://skills.sh/b/earthtojake/text-to-cad?style=flat)](https://skills.sh/earthtojake/text-to-cad)
 [![Downloads](https://img.shields.io/pepy/dt/cadgen?style=flat&logo=pypi&logoColor=white&label=downloads)](https://pepy.tech/projects/cadgen)
 
 [![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
