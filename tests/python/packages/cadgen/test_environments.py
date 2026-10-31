@@ -125,7 +125,7 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertGreater((project / "out.stl").stat().st_size, 0)
         inspected = self.run_cadgen("inspect", "XBF/part.xbf", "--json", cwd=project)
-        self.assertEqual(inspected.returncode, 0, inspected.stderr)
+        self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)  # --json says a failure on stdout
         self.assertAlmostEqual(json.loads(inspected.stdout)["summary"]["volume"], 120.0, places=3)
 
 

@@ -161,5 +161,29 @@ class RunTest(unittest.TestCase):
         self.assertEqual(err.getvalue(), "cadgen run: the CAD kernel environment needs the network once: dns error\n")
 
 
+class SpawnTest(unittest.TestCase):
+    """The engine's spawn pools in the base (``cadgen.engine.serve._spawn_in``): on Windows their processes
+    run the base by its real interpreter, which its ``pyvenv.cfg`` names, never through the venv's
+    launcher (the pool's handles would go to the launcher)."""
+
+    def test_the_real_interpreter_behind_a_virtual_environment(self) -> None:
+        from cadgen.engine import serve
+
+        with tempfile.TemporaryDirectory(prefix="cadgen-venv-") as scratch:
+            root = Path(scratch)
+            home = root / "python"
+            home.mkdir()
+            (home / "python.exe").write_bytes(b"")
+            venv = root / "base"
+            (venv / "Scripts").mkdir(parents=True)
+            launcher = venv / "Scripts" / "python.exe"
+            launcher.write_bytes(b"")
+            self.assertIsNone(serve._venv_interpreter(str(launcher)), "no pyvenv.cfg: no virtual environment")
+            (venv / "pyvenv.cfg").write_text(f"home = {home}\nimplementation = CPython\n", encoding="utf-8")
+            self.assertEqual(serve._venv_interpreter(str(launcher)), str(home / "python.exe"))
+            (home / "python.exe").unlink()
+            self.assertIsNone(serve._venv_interpreter(str(launcher)), "a home with no interpreter")
+
+
 if __name__ == "__main__":
     unittest.main()

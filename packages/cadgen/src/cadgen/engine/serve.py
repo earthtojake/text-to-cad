@@ -495,7 +495,7 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
 
         context = multiprocessing.get_context("spawn")
         if not found["own"]:
-            _spawn_in(context, found["python"], found["path"])
+            context = _spawn_in(context, found["python"], found["path"])
         return concurrent.futures.ProcessPoolExecutor(workers, mp_context=context, **options)
     except (ImportError, OSError, NotImplementedError, ValueError) as error:
         where = "" if found["own"] else f" in {found['python']}"
@@ -509,12 +509,13 @@ _SPAWN_PATH: list[str] | None = None
 _PREPARATION: Callable[[str], dict[str, Any]] | None = None
 
 
-def _spawn_in(context: Any, python: str, path: Any) -> None:
+def _spawn_in(context: Any, python: str, path: Any) -> Any:
     """The spawn pools' processes started with ``python``, another environment's (the base), importing
-    from that environment's ``path``. ``multiprocessing`` hands a spawned process its parent's import
-    path (``spawn.get_preparation_data``), which here is the engine's, not the kernel environment's: the
-    path it is handed is the environment's own. Both are the process's for every spawn pool: the
-    engine's spawned processes are all kernel processes."""
+    from that environment's ``path``: the context to start them with. ``multiprocessing`` hands a
+    spawned process its parent's import path (``spawn.get_preparation_data``), which here is the
+    engine's, not the kernel environment's: the path it is handed is the environment's own. Both are the
+    process's for every spawn pool: the engine's spawned processes are all kernel processes. On Windows
+    the process is the environment's real interpreter (``_windows_context``)."""
     global _SPAWN_PATH, _PREPARATION
     import multiprocessing.spawn as spawn
 
@@ -525,6 +526,83 @@ def _spawn_in(context: Any, python: str, path: Any) -> None:
     if _PREPARATION is None:
         _PREPARATION = spawn.get_preparation_data
         spawn.get_preparation_data = _prepared
+    if sys.platform == "win32":
+        real = _venv_interpreter(python)
+        if real is not None:
+            return _windows_context(python, real)
+    return context
+
+
+def _venv_interpreter(python: str) -> str | None:
+    """The real interpreter behind a virtual environment's ``python`` (its ``pyvenv.cfg``'s ``home``), or
+    None for one that is no virtual environment's."""
+    config = Path(python).parent.parent / "pyvenv.cfg"
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        key, _, value = line.partition("=")
+        if key.strip().lower() == "home":
+            real = Path(value.strip()) / Path(python).name
+            return str(real) if real.is_file() else None
+    return None
+
+
+def _windows_context(venv: str, real: str) -> Any:
+    """A spawn context whose processes run the virtual environment of ``venv`` by its real interpreter,
+    ``real``, told the environment by ``__PYVENV_LAUNCHER__``. On Windows a virtual environment's
+    ``python.exe`` is a launcher that starts the real interpreter as a child of its own, and
+    ``multiprocessing`` hands a spawned process the handles of its queues by duplicating them into the
+    process it started -- the launcher, which never passes them on, so the pool's processes die
+    unheard. CPython starts its own environment's processes this way for that reason (bpo-35797:
+    ``multiprocessing.popen_spawn_win32``, whose start this is, for another environment than this one)."""
+    import msvcrt  # pyrefly: ignore[missing-import]
+    import multiprocessing.context as contexts
+    import multiprocessing.popen_spawn_win32 as win32  # pyrefly: ignore[missing-import]
+    import multiprocessing.spawn as spawn
+    import _winapi  # pyrefly: ignore[missing-import]
+    from multiprocessing import reduction, util
+    from subprocess import STARTF_FORCEOFFFEEDBACK, STARTUPINFO  # pyrefly: ignore[missing-module-attribute]
+
+    class Popen(win32.Popen):
+        def __init__(self, process_obj: Any) -> None:  # noqa: D107 - win32.Popen's, the interpreter and its environment aside
+            prep_data = spawn.get_preparation_data(process_obj._name)
+            rhandle, whandle = _winapi.CreatePipe(None, 0)
+            wfd = msvcrt.open_osfhandle(whandle, 0)
+            cmd = spawn.get_command_line(parent_pid=os.getpid(), pipe_handle=rhandle)
+            cmd[0] = real
+            env = {**os.environ, "__PYVENV_LAUNCHER__": venv}
+            line = " ".join('"%s"' % part for part in cmd)
+            with open(wfd, "wb", closefd=True) as to_child:
+                try:
+                    hp, ht, pid, _tid = _winapi.CreateProcess(real, line, None, None, False, 0, env, None,
+                                                               STARTUPINFO(dwFlags=STARTF_FORCEOFFFEEDBACK))
+                    _winapi.CloseHandle(ht)
+                except BaseException:
+                    _winapi.CloseHandle(rhandle)
+                    raise
+                self.pid = pid
+                self.returncode = None
+                self._handle = hp
+                self.sentinel = int(hp)
+                self.finalizer = util.Finalize(self, win32._close_handles, (self.sentinel, int(rhandle)))
+                contexts.set_spawning_popen(self)
+                try:
+                    reduction.dump(prep_data, to_child)
+                    reduction.dump(process_obj, to_child)
+                finally:
+                    contexts.set_spawning_popen(None)
+
+    class Process(contexts.SpawnProcess):
+        @staticmethod
+        def _Popen(process_obj: Any) -> Any:  # noqa: N802 - multiprocessing's name
+            return Popen(process_obj)
+
+    class Context(contexts.SpawnContext):
+        Process = Process
+
+    return Context()
 
 
 def _prepared(name: str) -> dict[str, Any]:
