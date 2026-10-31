@@ -71,8 +71,8 @@ and nothing more:
 
 - `from cadgen import step` -> `from cadgen import model` (and `memo`,
   `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); cadgen's
-  build123d proxy -> `import build123d as bd`; `cadgen.ap242` for the mechanism and
-  `cadgen.gltf` for a GLB's animations.
+  build123d proxy -> `import build123d as bd`; `cad.ap242` for the mechanism and
+  `cad.gltf` for a GLB's animations.
 - `@step(out=...)` -> `@model`, and nothing else, but where the table above keeps a file.
   Every script calls its models under `__main__`; a module of `@memo` stages or plain
   helpers calls nothing there.
@@ -93,7 +93,7 @@ and nothing more:
 - Animation (`animation=` JavaScript, `cadgen.clip`) -> two layers. The mechanism's own
   motion (a gait, a door, an engine running) is a `configuration_sequence`, kept in the
   document. A showcase (an explode, a teardown, a reveal, a part hidden) is a
-  `cadgen.gltf` `animation()`, baked into every GLB exported from the model: parts
+  `cad.gltf` `animation()`, baked into every GLB exported from the model: parts
   translated, turned or hidden after the mechanism's pose, and the mechanism posed at
   its keys where the old clip ran it. No joint exists only to slide a part apart. Every
   old clip keeps its name and duration in one or the other; what neither can say (an

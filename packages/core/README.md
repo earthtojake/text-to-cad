@@ -14,7 +14,7 @@ Browser entry points never import Node-only code.
 
 **Consumers:** `@text-to-cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
 bench's bundler.
-`@text-to-cad/core/client` communicates with `cadgen.viewer` over HTTP; this
+`@text-to-cad/core/client` communicates with `cad_server.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
 ## The laws that live here
@@ -86,7 +86,7 @@ protocol relationship never imports Python or discovers an interpreter.
   for that family and the OCCT parity bench's headless page (`common/headlessScene.js`)
   both call; the look they wear is resolved in one place (`resolveSceneSurfaceLook`,
   `common/sceneSettings.js`) and a robot opens at one pose: the opening of the
-  articulation cadgen resolved for it (`cadgen.robot_payload`, played by
+  articulation cadgen resolved for it (`cad_server.robot_payload`, played by
   `common/articulation.js`). The
   parity page therefore cannot draw one of them differently from the viewer (cadgen's own
   stills are OCCT's), and none is flattened into mesh data for a render. They are cut, exploded and measured the same
@@ -157,10 +157,10 @@ docs/              # subsystem docs (the map below)
 ```
 
 Contract mirrors that must stay in lockstep (each has a sync test):
-`lib/cadRefs.js` ↔ `cadgen/engine/refs.py` (an engine document's refs, an `.xbf`'s and
+`lib/cadRefs.js` ↔ `cad/engine/refs.py` (an engine document's refs, an `.xbf`'s and
 a STEP's: their parse and their canonical spelling), one fixture, `lib/cadRefs.parity.json`,
 which also holds the element names (`elementNameCases`) that the engine's `ELEMENT_NAME`
-(`cadgen/engine/kernel/trace.py`) must accept (`test_naming.py`).
+(`cad/engine/kernel/trace.py`) must accept (`test_naming.py`).
 
 Where the mechanism is written:
 

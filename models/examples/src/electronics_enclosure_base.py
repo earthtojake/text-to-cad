@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 import build123d as bd
 
 

@@ -5,7 +5,7 @@ const encode = (text: string) => btoa(text);
 
 it('the shell reads the engine\'s app through the call the host carries, a part at a time for a long one', async () => {
   const code = 'x'.repeat(10);
-  // A body longer than one part is answered a part at a time (`cadgen/mcp/tunnel.py`), each naming the body it continues.
+  // A body longer than one part is answered a part at a time (`cad_server/mcp/tunnel.py`), each naming the body it continues.
   const ranges: string[] = [];
   const callTool = vi.fn(async (_name: string, args: Record<string, any>) => {
     const range = args.headers.range as string;

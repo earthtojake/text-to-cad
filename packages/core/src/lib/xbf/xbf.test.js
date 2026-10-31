@@ -194,7 +194,7 @@ test("the scene: a group per instance over one geometry per prototype, colours, 
   document.release();
 });
 
-// Materials as the structure serves them (`cadgen.engine.document.material_json`).
+// Materials as the structure serves them (`cad.engine.document.material_json`).
 const BRUSHED = { type: "MetalMaterial", material: { name: "Aluminum 6061-T6", density: 2700 },
   pbr: { values: { metalness: 1, roughness: 0.35, anisotropy: 0.3, anisotropyRotation: 0.5 } } };
 const LACQUER = { type: "RangeMaterial", material: { name: "Red lacquer", density: null },

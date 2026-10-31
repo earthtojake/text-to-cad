@@ -3,7 +3,7 @@
 World datums; palm-facing +Z. The fifth ray is procedural; the single-body main frame is a validated native integration input.
 Rounded load paths remain peripheral to the open tendon fan-out corridors.
 """
-from cadgen import read_step
+from cad import read_step
 
 import build123d as bd
 

@@ -106,7 +106,7 @@ carries each as a clip.
 
 ### The teardown
 
-The old `showcase`, `teardown` and `engine` clips are GLB animations (`cadgen.gltf`),
+The old `showcase`, `teardown` and `engine` clips are GLB animations (`cad.gltf`),
 with their names and durations; each ends where it starts, as the old looping clips
 did, and carries no loop of its own (players repeat a clip). Each child but the
 monocoque moves along its old direction by its old distance, and the power unit's

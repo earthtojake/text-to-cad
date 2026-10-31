@@ -12,7 +12,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /**
  * A newer text-to-cad, as the update button: an icon and nothing else, which a host hands the viewer
  * (`update`) to draw first among the navbar's controls, over every file and over the home (and, where
- * the host shows the view alone, in its corner), while this install is behind (`cadgen/updates.py`).
+ * the host shows the view alone, in its corner), while this install is behind (`cad_server/updates.py`).
  * A click updates (`useUpdate`): the icon becomes a ring that fills as the release installs, then a
  * spinner while the engine restarts, and the page reloads itself into the new release (the host's to
  * do). Nothing else is shown; a failed update says its one line (the host's toast) and offers itself again.

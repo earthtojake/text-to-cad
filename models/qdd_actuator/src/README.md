@@ -54,7 +54,7 @@ player repeats it:
 
 - `drive` (12 s), a motion: `drive` swept 0 -> 4.5, linear: one closed cycle, 4.5
   input turns, seamless at tooth and pole phase.
-- `inspect` (12 s), a GLB animation (`cadgen.gltf`): the same cycle (`drive`, posed)
+- `inspect` (12 s), a GLB animation (`cad.gltf`): the same cycle (`drive`, posed)
   while every module moves to its station by `sin(pi * phase)`, the ring, sun and
   planets meshed at 210 mm (`GEAR_CLUSTER`), the connectors fixed and the housing
   rising 82 mm (`FLOOR_LIFT`), as the old `frame()` had them.

@@ -52,11 +52,11 @@ The port:
   `u_channel_bracket` and `multi_bend_test_panel`, the text and score of
   `label_plate`, the cabinet panel's annotation). A model returning one shape is the
   layer `CUT`.
-- `cadgen.flatten.flat_pattern(plate(), ..., coordinate=THICKNESS_MM, kerf=0)` becomes
+- `cad.flatten.flat_pattern(plate(), ..., coordinate=THICKNESS_MM, kerf=0)` becomes
   the solid's top face moved onto z=0: one planar face at that height, no kerf, which is
   all the flat pattern did here. The helper stays a plain module, not a model.
 
 The drawing checks run on every DXF before it is written (units, closed cut
 profiles, no duplicate or zero-length entity, open geometry only on a bend, engrave
 or reference layer); all eight pass them. Run them on any DXF with
-`cadgen.engine.export.dxf.validate_dxf_file`.
+`cad.engine.export.dxf.validate_dxf_file`.

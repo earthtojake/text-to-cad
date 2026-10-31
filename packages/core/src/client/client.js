@@ -321,7 +321,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       }
     },
     robot(file, { signal } = {}) {
-      // A robot description resolved on the SERVER (cadgen.robot_payload): the articulation
+      // A robot description resolved on the SERVER (cad_server.robot_payload): the articulation
       // the page plays and the visuals it draws, each mesh by a URL this server answers.
       // Derived data cached by the description's bytes, so a second request is one object
       // read; a cold read validates, resolves frames and meshes primitives within the 10 s.
@@ -330,7 +330,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     },
     async engineDocument(file, { signal, onProgress } = {}) {
       // A document the cadgen ENGINE reads -- an `.xbf`, or a STEP -- is served by the engine: the
-      // viewer asks it to serve the file (`cadgen.viewer.documents`) and answers where the page reads it,
+      // viewer asks it to serve the file (`cad_server.viewer.documents`) and answers where the page reads it,
       // through this server (`/__cad/api/doc/<id>`), so the reads travel as every request does
       // (over the CAD app's tunnel too). Answered with the fetch they are made with. The engine's
       // first read of a large STEP takes a while: the server answers 202 { state: 'reading',

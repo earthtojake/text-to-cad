@@ -83,7 +83,7 @@ suite tests the pure configuration, copy, selection, aggregation and comparison 
 ## Viewer against OCCT, mode by mode
 
 ```sh
-PYTHONPATH=packages/cadgen/src .venv/bin/python scripts/bench/occt_parity.py \
+PYTHONPATH=packages/texttocad/src .venv/bin/python scripts/bench/occt_parity.py \
   --doc motorbike=models/motorbike/XBF/motorbike.xbf --out tmp/bench/occt-parity/now
 ```
 
@@ -92,7 +92,7 @@ display modes. Each `--doc NAME=PATH` (an `.xbf`, built first) is drawn in Solid
 Shaded, Parts, X-ray, Hidden line and Wireframe at iso and front (`--modes`,
 `--cameras`, `--size`) twice, both from the engine daemon's meshes
 (`CADGEN_ENGINE_DIR` picks the daemon): by OCCT, whose look is the reference
-(`cadgen/engine/render/look.py`) and which `cadgen snapshot` draws with; and by the
+(`cad/engine/render/look.py`) and which `cadgen snapshot` draws with; and by the
 viewer's own scene code, `@text-to-cad/core`'s headless renderer, which the bench
 builds at the start of each run (`scripts/bundle/lib/snapshot_runtime.sh`, into the
 ignored `tmp/bench/snapshot-page`; the wheel does not carry it), then loads in a

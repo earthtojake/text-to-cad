@@ -114,7 +114,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
         self.assertIn("gemini-extension.json", targets)
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()  # the script runs main() only when argv[1] is its real path
-            for relative in {*targets, "packages/cadgen/pyproject.toml", "scripts/release/sync-version.mjs"}:
+            for relative in {*targets, "packages/texttocad/pyproject.toml", "scripts/release/sync-version.mjs"}:
                 if repo_path(relative).is_file():
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)

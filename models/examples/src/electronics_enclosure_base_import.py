@@ -9,7 +9,7 @@ as every export is; Git holds no CAD files) and reads them back from there, so r
 before opening either import model.
 """
 
-from cadgen import export, model, read_step
+from cad import export, model, read_step
 
 from pathlib import Path
 

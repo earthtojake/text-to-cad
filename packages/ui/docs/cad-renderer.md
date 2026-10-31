@@ -151,7 +151,7 @@ Quick Edit's view hid come back in its job's `selection.hide`. A robot opens at
 (`cadgen snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
 section and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core) and `kit/view-settings/renderState.test.js` (one look from either route); the engine's
-stills of each family are `tests/python/packages/cadgen/engine/test_snapshot.py`'s.
+stills of each family are `tests/python/packages/texttocad_server/engine/test_snapshot.py`'s.
 
 ### Shell
 
@@ -483,7 +483,7 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
 
 `createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
 `.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: cadgen
-resolves the description (`GET /__cad/robot`, `cadgen.robot_payload`) into the
+resolves the description (`GET /__cad/robot`, `cad_server.robot_payload`) into the
 articulation the page plays, played by core's `common/articulation.js`, the visuals it
 draws (each mesh at its rest placement: a link's mesh file, or a box, cylinder, sphere or
 capsule cadgen meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
@@ -627,7 +627,7 @@ and Explode used puts it at rest, nothing set aside.
 
 What an engine document's selection copies -- an `.xbf`'s, a STEP's alike; a chip, Copy Reference,
 Copy Prompt -- is the engine's canonical ref of each thing, the file's path first, the ref `cadgen inspect` answers and
-`select` labels its shapes with (`cadgen.engine.refs`): a part or subassembly by its label where that
+`select` labels its shapes with (`cad.engine.refs`): a part or subassembly by its label where that
 names it alone in the document, else by its occurrence path, each segment its label numbered among the
 siblings sharing it (`/work/XBF/kit.xbf#kit/hand/finger.2`); an element by its name, else its kind and
 number, under it (`…#palm/f:palm.body.3`, `…#kit/hand/finger.2/face 7`); a label a plain segment
@@ -1527,7 +1527,7 @@ payload's revision beside the pose (`robot/useRobotVisibility.js`); a live reloa
 retains only ids still present.
 
 The `tcad:four_bar` extension is a nonlinear mimic: cadgen's URDF reader resolves it
-(`cadgen.robot_payload`) and core's articulation player follows it (`common/articulation.js`). Its dependent joint has no Position slider or joint handle;
+(`cad_server.robot_payload`) and core's articulation player follows it (`common/articulation.js`). Its dependent joint has no Position slider or joint handle;
 its chip card names its four-bar driver instead of an affine mimic formula.
 The authoring contract specifies the namespace, geometry and range constraints.
 

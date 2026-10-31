@@ -2,7 +2,7 @@
 import argparse
 from pathlib import Path
 
-from cadgen import export
+from cad import export
 from source import machined_bearing_housing, painted_pressure_regulator, glass_sample_vessel, mixed_material_instrument
 
 

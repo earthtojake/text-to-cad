@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useI18n } from "../i18n/index.js";
 
-/** What a CAD app's server says when a newer text-to-cad is out (`cadgen/updates.py`): the release offered, and this install's. */
+/** What a CAD app's server says when a newer text-to-cad is out (`cad_server/updates.py`): the release offered, and this install's. */
 export interface UpdateNotice {
   /** The release offered. */
   latest: string;
@@ -10,11 +10,11 @@ export interface UpdateNotice {
   version: string;
 }
 
-/** Where an update a click started is (`cadgen/_internal/update.py`): its last progress frame among the rest. */
+/** Where an update a click started is (`cad_server/_internal/update.py`): its last progress frame among the rest. */
 export interface UpdateState {
   state: "idle" | "working" | "restarting" | "failed";
   target?: string | null;
-  /** The update's progress frame (`cadgen/engine/progress.py`, kind `update`): its stage, counted of the four. */
+  /** The update's progress frame (`cad/engine/progress.py`, kind `update`): its stage, counted of the four. */
   progress?: { stage?: string; done?: number; total?: number | null } | null;
   /** Why it failed, in one line. */
   error?: string | null;

@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "texttocad"
+version = "0.8.4"
+description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its kernel extra."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+authors = [{ name = "earthtojake" }]
+keywords = ["cad", "step", "glb", "build123d", "parametric", "agent-skills"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Manufacturing",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Scientific/Engineering",
+]
+# Two sets. The required dependencies are what the server imports of the library -- the document
+# model, the protocol a client speaks, the build's words -- none of which imports the CAD kernel (a
+# test holds that): numpy alone, the meshes' arrays. The `kernel` extra is what a model runs on: the
+# server installs `texttocad[kernel]` at its own release into the one environment every worker starts
+# from (the base), and a person who installs the library by hand to run models installs
+# `texttocad[kernel]`.
+dependencies = [
+  # The library's meshes are numpy arrays end to end: the engine packs each part's triangles into
+  # its wire format, and the STL/3MF/GLB writers read them back. The server's own process reads the
+  # wire format's buffers too, so numpy is required. build123d requires numpy 2 already; the library
+  # names the same range because it imports numpy itself.
+  "numpy>=2,<3",
+]
+
+[project.optional-dependencies]
+# The CAD kernel and what the library's kernel processes import beside it. shapely is kept DIRECT on
+# purpose though it looks transitive through build123d: the library imports it itself -- flatten's
+# unions and offsets are OCC operations now, with shapely only the fallback for the degenerate unions
+# OCC refuses -- and a fallback that is not installed is not a fallback.
+kernel = [
+  "bd_materials>=0.2.5,<0.3",
+  "threejs-materials>=1.2.5,<1.3",
+  # Bounded above on purpose. The library does not merely CALL build123d, it reaches into it: the
+  # engine's determinism settings shadow `set` in its topology modules and replace
+  # `Vertex.__hash__`, and its memo wraps the kernel's constructors and reads their arguments BY
+  # POSITION. A minor release is free to reorder those signatures or rename those choke points, and
+  # the failure mode is silent: a patch that no longer matches simply stops applying. Raise the
+  # ceiling deliberately, after re-running the suite against the new minor.
+  "build123d>=0.13.0,<0.14",
+  # The library imports OCP directly for STEP/XCAF, topology and BREP work. Match build123d's
+  # non-VTK provider: the library does not import VTK or cadquery, and this keeps the optional
+  # visualization stack out of every CAD install. OCP 8 collection, vector and downcast names are
+  # used directly.
+  "cadquery-ocp-novtk>=8.0,<8.1",
+  # @eng_drawing renders its PDF through ezdxf's drawing add-on, whose matplotlib backend is the page
+  # renderer. The add-on also imports Pillow at module level and ezdxf declares neither, so a module
+  # of the library would otherwise import packages it does not depend on -- and the drawing IS the
+  # PDF, so neither is optional. It runs in model code, where the server cannot know before the run
+  # that a script wants it: so it is the kernel's.
+  "matplotlib",
+  "shapely",
+  # The engine's DXF export writes a drawing through build123d's ExportDXF and checks it with ezdxf,
+  # and @eng_drawing lays out its sheets in it; the OCCT stills draw their annotation ink and
+  # measurements with Pillow. Both run in the kernel's processes.
+  "ezdxf",
+  "pillow",
+]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+Repository = "https://github.com/earthtojake/text-to-cad"
+Issues = "https://github.com/earthtojake/text-to-cad/issues"
+
+[tool.pyrefly]
+preset = "basic"
+project-includes = ["src"]
+search-path = ["src"]
+# A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
+# otherwise have src excluded by the ignore files above it and check nothing.
+use-ignore-files = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# `cad`, the library, and `cadgen`, its earlier name: an alias of it (src/cadgen/__init__.py).
+include = ["cad", "cad.*", "cadgen"]
+
+[tool.setuptools.package-data]
+cad = ["py.typed", "*.pyi"]
+# The page `cadgen serve` shows a document in (cad.engine.serve reads it beside itself).
+"cad.engine" = ["page/*"]
+# The engine's look lights the regular display modes with this environment image, which the
+# engine serves to the viewer and the OCCT stills read (cad.engine.render.look).
+"cad.engine.render" = ["studio.hdr"]

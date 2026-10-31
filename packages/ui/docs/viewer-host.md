@@ -7,7 +7,7 @@ persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
 A view shows a file by its absolute path, or a document the engine holds by its id alone (a
-model's: a lower-case UUID, `cadgen.engine.ids`). A file's metadata may carry `navigationPath`,
+model's: a lower-case UUID, `cad.engine.ids`). A file's metadata may carry `navigationPath`,
 the on-disk file to browse from and act on; null says the document has no file of its own (a
 model's): its view has no file menu, its navbar and Preview's bar name it by its `name`, with no glyph, and
 its Files starts where the explorer was last in this tab, else the person's home folder, never

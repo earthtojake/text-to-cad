@@ -21,7 +21,7 @@ import { createContext, createElement, useContext, useEffect, useRef, useState }
  *
  * The page reports at most every minute it has something to say, as it is hidden, and as the view goes;
  * the host's server adds the reports up into its own batch, and sends nothing without the person's yes.
- * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cadgen/analytics.py`:
+ * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cad_server/analytics.py`:
  * `CONTROLS`), which refuse any other.
  */
 export const CONTROLS = Object.freeze(/** @type {const} */ ([

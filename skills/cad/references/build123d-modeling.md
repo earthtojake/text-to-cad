@@ -109,7 +109,7 @@ placed = bd.Location((5, 0, 0)) * rotated  # retains the rotation
 
 In build123d 0.11.1, a moved assembly compound's `intersect()` can traverse
 unmoved `.children` although `.wrapped` carries the placement: extract the placed
-`.solids()` first. `cadgen.geometry.overlap_volume` takes individual solids and
+`.solids()` first. `cad.geometry.overlap_volume` takes individual solids and
 handles placement itself.
 
 ## Kernel pitfalls
@@ -154,6 +154,6 @@ handles placement itself.
 Topology validity does not prove positive orientation, the requested shape, or
 suitability for a later Boolean ([inspection](inspection-and-validation.md#geometry-diagnostics)).
 A validity gate inside a model body (a retry ladder that keeps a fillet only when
-the result is sound) uses `shape.is_valid` and `cadgen.geometry.is_sound`; each
+the result is sound) uses `shape.is_valid` and `cad.geometry.is_sound`; each
 check costs kernel time when its body runs. A periodic cylinder or revolved face has
 a seam edge that appears in CAD linework; it is not a crack.

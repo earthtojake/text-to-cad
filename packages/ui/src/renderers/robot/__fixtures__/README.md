@@ -11,13 +11,13 @@ refuses: `gone.urdf`, whose link mesh is missing, and `lonely.srdf`, with no URD
 beside it.
 
 Beside each is what cadgen resolves it to: `<name>.<kind>.robot.json` is exactly
-what `GET /__cad/robot` answers for it (`cadgen.robot_payload`), with every
+what `GET /__cad/robot` answers for it (`cad_server.robot_payload`), with every
 visual's mesh named by the URL the browser test's server answers; `primitives/`
 holds the meshes cadgen made for the shapes (one GLB per shape and size, named
 by the sha256 of its bytes); `refusals.json` holds the sentence cadgen refuses the two
 refused descriptions with. So the browser test (`RobotRenderer.browser.test.mjs`)
 and the unit tests need neither Python nor a store, and the Python suite holds
-these files current (`tests/python/packages/cadgen/test_robot_payload.py`).
+these files current (`tests/python/packages/texttocad_server/test_robot_payload.py`).
 
 Regenerate after changing a description or the payload shape, from the
 repository root:

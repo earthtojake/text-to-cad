@@ -61,7 +61,7 @@ diverter slots and the cockpit opening; the 41 cosmetic panel recesses stay drop
 ## The staged teardown
 
 Nothing about the aircraft articulates, so it has no mechanism. The old `teardown` and
-`explodedHold` clips are GLB animations (`cadgen.gltf`) with their names and durations
+`explodedHold` clips are GLB animations (`cad.gltf`) with their names and durations
 (60 s, 24 s), each out and back to the built aircraft so a player repeats it seamlessly
 (the old `loop: true`; an animation carries no loop). Both walk one master ramp, 0 built
 to 1 apart, sampled every 0.1 s:

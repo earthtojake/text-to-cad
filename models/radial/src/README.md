@@ -119,7 +119,7 @@ its own moves after its host's) and the layout `lib/explodedrun.py` made (25 gro
 constant offsets over the running cycle: the cylinders 205 mm out along their bores,
 their rocker covers 60 mm further, the crankcase halves, cam section, nose and
 propeller forward, the blower and accessory case back). `lib/explode.py` plays them as
-GLB animations (`cadgen.gltf`), exactly:
+GLB animations (`cad.gltf`), exactly:
 
 - **`explode`**: each unit's translation, its whole track (its host's moves and its
   own) sampled every 0.05 s as LINEAR keys, from the rest pose. Every part is a

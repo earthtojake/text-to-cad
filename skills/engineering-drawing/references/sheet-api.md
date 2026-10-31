@@ -1,13 +1,13 @@
-# `cadgen.eng_drawing` reference
+# `cad.eng_drawing` reference
 
 ```python
-from cadgen.eng_drawing import eng_drawing, Sheet
+from cad.eng_drawing import eng_drawing, Sheet
 ```
 
 ## Template
 
 ```python
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 # The part, and the facts the dimensions reference, come from the model, not from this file.
 from enclosure import HOLES, L, H, W, enclosure
 

@@ -58,7 +58,7 @@ it every link and every session made before. Behind the credentials:
   `Authorization` header carries a link within its day, and that request's
   preflight, get CORS headers for the origin that sent it, so a CAD card whose
   host carries none of its calls back can read the engine from its sandbox
-  (`cadgen.viewer.engine_app`). A browser never sends that header by itself, so
+  (`cad_server.viewer.engine_app`). A browser never sends that header by itself, so
   only a page already holding the link can; no credentials header is ever sent,
   so the session cookie never rides a cross-origin read. A link in a URL, the
   cookie, your own token and `/mcp` get no CORS headers.

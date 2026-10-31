@@ -121,8 +121,8 @@ def load_file(loader: unittest.TestLoader, path: str, top: str) -> unittest.Test
     return loader.loadTestsFromModule(module)
 
 
-# What a person's cadgen registers in its state folder (``cadgen.engine.registry``,
-# ``cadgen._internal.installations``): documents' records, engines' records and the page token,
+# What a person's cadgen registers in its state folder (``cad_server.engine.registry``,
+# ``cad_server._internal.installations``): documents' records, engines' records and the page token,
 # installations' records. A name ending ``.tmp`` is a write in flight (``registry.Folder``).
 REGISTERED = ("documents", "engines", "installations")
 # A file's line naming what appeared in the developer's own places while one of its tests ran.
@@ -217,6 +217,18 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
+# The three packages' source trees under the checkout, the library's first (common.sh's
+# PACKAGE_SOURCES): what the run's own helpers import.
+SOURCES = (("packages", "texttocad", "src"), ("packages", "texttocad-server", "src"),
+           ("packages", "texttocad-mcp", "src"))
+
+
+def _source_path(top: str) -> str:
+    """``PYTHONPATH`` naming the checkout's packages, then whatever this run's already names."""
+    return os.pathsep.join(filter(None, [*(os.path.join(top, *source) for source in SOURCES),
+                                         os.environ.get("PYTHONPATH", "")]))
+
+
 def stop_engine(top: str, engine_dir: str) -> None:
     """Stop the engine daemon a file left running in its own engine directory, if it left one."""
     try:
@@ -225,29 +237,26 @@ def stop_engine(top: str, engine_dir: str) -> None:
         return
     if not any(name.endswith((".door", ".port")) for name in names):
         return
-    env = {**os.environ, "CADGEN_ENGINE_DIR": engine_dir,
-           "PYTHONPATH": os.pathsep.join(filter(None, [os.path.join(top, "packages", "cadgen", "src"),
-                                                       os.environ.get("PYTHONPATH", "")]))}
-    stopped = subprocess.run([sys.executable, "-P", "-c", "from cadgen.engine import api; api.stop()"],
+    env = {**os.environ, "CADGEN_ENGINE_DIR": engine_dir, "PYTHONPATH": _source_path(top)}
+    stopped = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import api; api.stop()"],
                              env=env, capture_output=True, text=True, timeout=ENGINE_STOP_SECONDS)
     if stopped.returncode:
         raise RuntimeError(f"the test engine daemon in {engine_dir} did not stop: {stopped.stdout}{stopped.stderr}")
 
 
 def _engine_python(top: str, code: str, **env: str) -> subprocess.CompletedProcess:
-    """``code`` run against this checkout's cadgen, the environment as this run's but ``env``."""
+    """``code`` run against this checkout's packages, the environment as this run's but ``env``."""
     given = {key: value for key, value in os.environ.items() if key != "CADGEN_ENGINE_DIR"}
-    given["PYTHONPATH"] = os.pathsep.join(filter(None, [os.path.join(top, "packages", "cadgen", "src"),
-                                                        os.environ.get("PYTHONPATH", "")]))
+    given["PYTHONPATH"] = _source_path(top)
     return subprocess.run([sys.executable, "-P", "-c", code], env={**given, **env}, capture_output=True, text=True,
                           timeout=ENGINE_STOP_SECONDS)
 
 
 def default_engine_door(top: str) -> str | None:
     """Where the device's engine has its door when nothing names its folder
-    (``daemon.default_state_dir``): the developer's own engine's place. None where it cannot be said."""
-    found = _engine_python(top, "import os; from cadgen.engine import daemon; "
-                                "print(os.path.join(daemon.default_state_dir(), daemon.NAME + "
+    (``places.default_engine_dir``): the developer's own engine's place. None where it cannot be said."""
+    found = _engine_python(top, "import os; from cad.engine import places; "
+                                "print(os.path.join(places.default_engine_dir(), places.NAME + "
                                 "('.port' if os.name == 'nt' else '.door')))")
     return (found.stdout.strip() or None) if found.returncode == 0 else None
 
@@ -256,27 +265,27 @@ def engine_answers(top: str, door: str) -> bool:
     """Whether an engine answers at ``door``'s folder (its file alone may be a dead engine's)."""
     if not os.path.exists(door):
         return False
-    found = _engine_python(top, "from cadgen.engine.client import request; "
+    found = _engine_python(top, "from cad.engine.client import request; "
                                 "print('yes' if request({'op': 'pid'}, start=False) else 'no')",
                            CADGEN_ENGINE_DIR=os.path.dirname(door))
     return found.stdout.strip() == "yes"
 
 
 # Where the developer keeps what their own cadgen registers, which no test may write (every file has
-# folders of its own): the state folder (``cadgen.viewer.recents.state_dir``) and the ``cadgen``
-# command (``cadgen._internal.installations.proxy_path``), as this run's environment names them and
+# folders of its own): the state folder (``cad_server.viewer.recents.state_dir``) and the ``cadgen``
+# command (``cad_server._internal.installations.proxy_path``), as this run's environment names them and
 # as the platform does where nothing names them; and the name this run's engines give their records
-# there (``daemon.NAME``: one engine a device, so one record).
+# there (``places.NAME``: one engine a device, so one record).
 _PERSON_PLACES = (
     "import json, os\n"
-    "from cadgen._internal.installations import proxy_path\n"
-    "from cadgen.engine import daemon\n"
-    "from cadgen.viewer.recents import state_dir\n"
+    "from cad_server._internal.installations import proxy_path\n"
+    "from cad.engine import places as engine\n"
+    "from cad_server.viewer.recents import state_dir\n"
     "places = [(str(state_dir()), proxy_path())]\n"
     "os.environ.pop('CADGEN_STATE_DIR', None)\n"
     "os.environ.pop('CADGEN_LAUNCHER_DIR', None)\n"
     "places.append((str(state_dir()), proxy_path()))\n"
-    "print(json.dumps({'places': places, 'engine': daemon.NAME}))\n"
+    "print(json.dumps({'places': places, 'engine': engine.NAME}))\n"
 )
 
 
@@ -412,7 +421,7 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 if door is not None and not developers and engine_answers(top, door):
                     beside = ", ".join(sorted(running)) or "none"
                     leaked.append(f"{door}, after {path} (running beside it: {beside})")
-                    _engine_python(top, "from cadgen.engine import api; api.stop()", CADGEN_ENGINE_DIR=os.path.dirname(door))
+                    _engine_python(top, "from cad.engine import api; api.stop()", CADGEN_ENGINE_DIR=os.path.dirname(door))
                 for where, test in _OUTSIDE.findall(output):
                     seen_in.setdefault(where, []).append(f"{test} ({path})")
                 output = _OUTSIDE.sub("", output)

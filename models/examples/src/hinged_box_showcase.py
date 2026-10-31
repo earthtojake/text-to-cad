@@ -10,9 +10,9 @@ id its run prints); one exported from a saved xbf carries the motion alone.
 
 import build123d as bd
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
+from cad.gltf import animation
 
 HINGE = ((-40, 0, 30), (0, -1, 0))  # the hinge axis, point and direction: +angle lifts the lid
 

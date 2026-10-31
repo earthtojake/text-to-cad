@@ -13,7 +13,7 @@ import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
 // name's stem fold into one row carrying the count, as a STEP's repeated components do.
 //
 // Each node, and each element of a part, is also a ref into the document as the engine spells it
-// (`spellEngineRefs`, `cadgen.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
+// (`spellEngineRefs`, `cad.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
 // itself, never the rows a fold made.
 
 /**

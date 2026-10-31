@@ -6,7 +6,7 @@ the runtime fixture. Each model was its own script in `models/tendon_hand/src/`;
 share nothing expensive, so none is a `@memo` and no model calls another.
 """
 
-from cadgen import model
+from cad import model
 
 import build123d as bd
 

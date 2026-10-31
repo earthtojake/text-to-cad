@@ -2,7 +2,7 @@
 
 A module that defines a top-level ``main()`` but has no ``__main__`` guard
 exits 0 silently under ``python -m`` — the caller gets a success code and no
-work (this shipped once: ``cadgen.cli.step_snapshot`` was documented as a
+work (this shipped once: ``cad_server.cli.step_snapshot`` was documented as a
 module entrypoint and did nothing). The guard is one line and easy to forget,
 so it is policy-checked here rather than re-reviewed each time.
 
@@ -18,11 +18,11 @@ import re
 import unittest
 from pathlib import Path
 
-from cadgen.cli import _COMMANDS
-from cadgen.cli import main as dispatch
+from cad_server.cli import _COMMANDS
+from cad_server.cli import main as dispatch
 
 ROOT = Path(__file__).resolve().parents[3]
-CLI_DIR = ROOT / "packages" / "cadgen" / "src" / "cadgen" / "cli"
+CLI_DIR = ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "cli"
 
 MAIN_DEF = re.compile(r"^def main\(", re.MULTILINE)
 GUARD = re.compile(r"^if __name__ == \"__main__\":", re.MULTILINE)
@@ -40,7 +40,7 @@ class CliMainGuardTest(unittest.TestCase):
                 continue
             checked += 1
             # cli/__init__.py is dispatched through cli/__main__.py, which owns
-            # the guard for the package form (`python -m cadgen.cli`).
+            # the guard for the package form (`python -m cad_server.cli`).
             if path.name == "__init__.py":
                 continue
             if not GUARD.search(text):

@@ -23,8 +23,8 @@ page the person has open updates. Files are exports, made when asked.
 | **Resolve a reference from a prompt** | `cadgen inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cadgen snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
-| **Articulate a mechanism** | build123d joints in the body, then `cadgen.ap242`. | [Kinematics](references/kinematics.md) |
-| **Explode, reveal or showcase a model** | `cadgen.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
+| **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
+| **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
 
 A project built with cadgen 0.7 may need migrating: see [migrations](references/migrations.md).
@@ -284,7 +284,7 @@ Copy `world_parts` and `find_part` from
 first. They accumulate parent placements; raw `.leaves` do not.
 
 ```python
-from cadgen.geometry import closest_points
+from cad.geometry import closest_points
 
 from assembly import assembly
 

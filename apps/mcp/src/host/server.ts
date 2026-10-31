@@ -29,7 +29,7 @@ export interface Launch {
   /** Whether a newer text-to-cad is out, as the server last read it: the update button draws with the page. */
   notice?: UpdateNotice | null;
   /**
-   * The ways to the engine that need no call, where it gives a page (`cadgen/mcp/server.py`'s
+   * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its day link
    * (`?token=`), and `engine`, that page's origin. A card whose host carries no `tools/call` links
    * the page, and first tries the engine directly with the link's token (`host/direct.ts`).

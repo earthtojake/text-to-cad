@@ -105,7 +105,7 @@ function FullSizeButton({ bridge }: { bridge: Bridge }) {
 }
 
 /**
- * The CAD Viewer's page of each document a launch named, from its `browser` (`cadgen/mcp/server.py`'s
+ * The CAD Viewer's page of each document a launch named, from its `browser` (`cad_server/mcp/server.py`'s
  * `_reach`, the link a text client's `cad_show` gives): by absolute path, the home's under ''.
  */
 type Pages = ReadonlyMap<string, string>;
@@ -291,7 +291,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
-  // A newer text-to-cad (`cadgen/updates.py`), from the launch's notice at once, while this install is
+  // A newer text-to-cad (`cad_server/updates.py`), from the launch's notice at once, while this install is
   // behind: the update button, an icon first among the navbar's controls (in the file handler, which
   // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from
   // under this card, another view's click -- the card asks for its release, and loads the engine's app

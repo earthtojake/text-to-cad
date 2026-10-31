@@ -1,7 +1,7 @@
 """The logos' deliverables: a STEP of each, rewritten from its model on every run."""
 from pathlib import Path
 
-from cadgen import export
+from cad import export
 
 from logo_c import logo_c
 from logo_cad import logo_cad

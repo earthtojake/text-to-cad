@@ -1,7 +1,7 @@
 import { SURFACE_BRDFS } from "../viewer/surfaceBrdf.js";
 
 // The engine's look of the regular display modes (`GET /api/look` and its environment image,
-// `GET /api/look/environment`: `cadgen/engine/render/look.py`), and what an engine document's scene
+// `GET /api/look/environment`: `cad/engine/render/look.py`), and what an engine document's scene
 // draws by it in those modes: the rig a stage lights it with in place of the theme's
 // (`../viewer/sceneContract.js`'s `rig`, put up by `../viewer/sceneRig.js`) and what its surfaces
 // wear (`xbfLookSurface`). Preview's photographic look is not this: there the scene is drawn as

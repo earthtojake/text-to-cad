@@ -58,11 +58,11 @@ the device (the skills alone, through the Skills CLI, for the agents without a p
 device's engine to it, asking nothing, and, run again, updates them; the update button in the CAD
 Viewer and the CAD app, and `cadgen update`, take the same steps. cadgen itself
 installs as ONE uvx command, `uvx --no-config --managed-python --python
-3.14 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
+3.14 --from cadgen==<VERSION> <tool>` (`cad_server._internal.launch`), which the
 plugin server configs run: the wheel's core (engine, command, viewer server, MCP
 shim). The CAD kernel is its `kernel` extra, which the engine installs with uv into
 one base environment per installation that every model and kernel process runs in
-(`cadgen._internal.base`). That installation registers itself and writes the
+(`cad_server._internal.base`). That installation registers itself and writes the
 `cadgen` command, `~/.local/bin/cadgen`; every cadgen skill's SKILL.md runs
 `cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
 command can). The release stamps every pin and `+<VERSION>` (`sync-version.mjs`),
@@ -90,16 +90,16 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
   `docs/migrations/`: the hand-migration guides between releases
   ([0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the engine
-  hosts `cadgen.viewer`'s HTTP app).
+  hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
   Codex, cards in Claude Desktop (its server is `cadgen mcp`).
 - `packages/` ([README](packages/README.md)): the three shared packages.
-  `packages/cadgen` ([README](packages/cadgen/README.md)) is the published distribution,
+  `packages/cadgen` ([README](packages/texttocad/README.md)) is the published distribution,
   not just the Python: the engine (`cadgen/engine`: models built into documents it holds,
   and the XBF, STEP, GLB, STL, 3MF and DXF files written from them; the daemon and its
   workers; exports; the OCCT stills; the verbs the cadgen skills' commands run), the
-  `cadgen` command line (`cadgen/cli`), the CAD Viewer server (`cadgen/viewer`), the CAD
-  app server (`cadgen/mcp`), and the JS assets they serve (`cadgen/_runtime`, built by
+  `cadgen` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
+  app server (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built by
   `scripts/bundle/cadgen-runtime.sh`); skills consume it as an installed distribution.
   `packages/core` ([README](packages/core/README.md)) is `@text-to-cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))
@@ -116,7 +116,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
 ## Repo Rules
 
 - Boundaries and design laws live in each package's README: read
-  [`packages/cadgen/README.md`](packages/cadgen/README.md) (the laws),
+  [`packages/texttocad/README.md`](packages/texttocad/README.md) (the laws),
   [`packages/core/README.md`](packages/core/README.md),
   [`packages/ui/README.md`](packages/ui/README.md),
   [`apps/web/README.md`](apps/web/README.md), [`apps/docs/README.md`](apps/docs/README.md)
@@ -125,7 +125,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
   link — not the tree. Where the mechanisms are: the engine's README
-  (`packages/cadgen/src/cadgen/engine/README.md`: models, the daemon and its workers,
+  (`packages/texttocad-server/src/cad_server/engine/README.md`: models, the daemon and its workers,
   documents, exports, the mesh, references, the build closure), `packages/core/docs/`,
   `packages/ui/docs/` (`settings-ui.md` is BINDING for any settings control) and
   `apps/web/docs/`; each README's table says what every document there is for.
@@ -153,7 +153,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
   (the release stamps every pin); no skill installs cadgen
   any other way (no `requirements.txt` naming it), because a second installation
   is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
-  parser and behaviour live in `cadgen.cli`. The engine draws every snapshot with
+  parser and behaviour live in `cad_server.cli`. The engine draws every snapshot with
   OCCT, so no skill has a browser step. cadgen carries the JavaScript it serves too
   (the CAD Viewer client, the CAD app page), so a skill ships no runtime of its own. Not every
   skill needs cadgen (bambu-labs, dfam-check, dfm, gcode, sendcutsend,
@@ -178,7 +178,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
   Only their pure helper units run in a test runner.
-- The Python floor is `requires-python` in `packages/cadgen/pyproject.toml` and
+- The Python floor is `requires-python` in `packages/texttocad/pyproject.toml` and
   nowhere else. Every cadgen source is parsed against that floor, so syntax
   newer than it fails here rather than at `pip install` time on a user's
   interpreter; raising the declared minimum relaxes the check automatically.
@@ -201,11 +201,11 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
-- The CAD Viewer is `cadgen viewer`: the engine hosts `cadgen.viewer` (Python, in
+- The CAD Viewer is `cadgen viewer`: the engine hosts `cad_server.viewer` (Python, in
   `packages/cadgen`), the React client's source is `apps/web/` and its build
-  ships in the wheel at `cadgen/_runtime/viewer` (built, never committed; a
+  ships in the wheel at `cad_server/_runtime/viewer` (built, never committed; a
   checkout serves `apps/web/dist`). The CAD, DXF and robot-description skills document that verb directly.
-  Nothing in `cadgen.viewer` imports the CAD kernel at module scope — a STEP or
+  Nothing in `cad_server.viewer` imports the CAD kernel at module scope — a STEP or
   `.xbf` it shows is read and meshed by the engine (`viewer/documents.py`),
   never by a request's thread.
   Keep repo-level tooling in `scripts/`, not under `apps/web/`.
@@ -268,8 +268,8 @@ when touching shared surfaces or before handoff:
   `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run test`,
   `npm --prefix apps/web run build` (`scripts/test/test-js.sh` runs them all).
   The Viewer is two languages and `npm run test` covers only the client — the
-  backend's suite is `tests/python/packages/cadgen/viewer`, run by
-  `scripts/test/test-python.sh`. Touching `cadgen/viewer/` means running that.
+  backend's suite is `tests/python/packages/texttocad_server/viewer`, run by
+  `scripts/test/test-python.sh`. Touching `cad_server/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
 - API (`api.texttocad.dev`): `npm --prefix apps/api test`
 - Targeted Python tests: `scripts/test/test-python.sh <changed test paths>` (each file

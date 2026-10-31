@@ -9,13 +9,17 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
 python_candidate="${VIEWER_PYTHON:-$PYTHON_BIN}"
 PYTHON="$(command -v "$python_candidate" 2>/dev/null || true)"
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cadgen/src/cadgen/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/texttocad-server/src/cad_server/_runtime/viewer}"
 HOST=127.0.0.1
 
-export PYTHONPATH="$REPO_ROOT/packages/cadgen/src${PYTHONPATH:+:$PYTHONPATH}"
+# The checkout's own packages (common.sh's PACKAGE_SOURCES), ahead of whatever is installed.
+for source in "${PACKAGE_SOURCES[@]}"; do
+  sources="${sources:+$sources:}$REPO_ROOT/$source"
+done
+export PYTHONPATH="$sources${PYTHONPATH:+:$PYTHONPATH}"
 
-if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import cadgen' >/dev/null 2>&1; then
-  echo "FAIL: ${python_candidate:-python} cannot import cadgen; set VIEWER_PYTHON to the test interpreter" >&2
+if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import cad, cad_server' >/dev/null 2>&1; then
+  echo "FAIL: ${python_candidate:-python} cannot import the server; set VIEWER_PYTHON to the test interpreter" >&2
   exit 1
 fi
 if [ ! -f "$RUNTIME/index.html" ]; then
@@ -57,7 +61,7 @@ export CADGEN_STATE_DIR="$project/state"
 export CADGEN_ENGINE_DIR="$project/engine" CADGEN_ENGINE_MESH=inline CADGEN_CACHE_DIR="$project/no-0.7-store"
 export CADGEN_VIEWER_DIST="$RUNTIME"
 cleanup() {
-  "$PYTHON" -m cadgen.engine stop >/dev/null 2>&1 || true
+  "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
@@ -79,7 +83,7 @@ if ! head -1 "$project/smoke.step" | grep -q 'ISO-10303-21'; then
 fi
 
 # The mesh fixture is an export of the STEP fixture, by the engine.
-if ! (cd "$project" && "$PYTHON" -m cadgen.engine export smoke.step smoke.stl) >"$log" 2>&1 \
+if ! (cd "$project" && "$PYTHON" -m cad_server.engine export smoke.step smoke.stl) >"$log" 2>&1 \
    || [ ! -f "$project/smoke.stl" ]; then
   echo "FAIL: the mesh fixture did not export" >&2
   sed 's/^/    /' "$log" >&2
@@ -92,7 +96,7 @@ fi
 cat > "$project/assembly_fixture.py" <<'ASSEMBLY'
 from pathlib import Path
 
-from cadgen.engine import read_step, step
+from cad.engine import read_step, step
 import build123d as bd
 
 HERE = Path(__file__).resolve().parent
@@ -113,7 +117,7 @@ ASSEMBLY
 # A STEP model the camera gate saves a rebuilt revision over. Built from
 # primitives, so it imports nothing.
 cat > "$project/hinge.py" <<'HINGE'
-from cadgen.engine import step
+from cad.engine import step
 import build123d as bd
 
 
@@ -163,7 +167,7 @@ fi
 # (through this test's own engine daemon). Its script goes once it is built, as the hinge's does.
 cat > "$project/smoke_xbf.py" <<'XBF'
 import build123d as bd
-from cadgen.engine import xbf
+from cad.engine import xbf
 
 
 @xbf(out="smoke.xbf")
@@ -213,7 +217,7 @@ cat > "$project/smoke.urdf" <<'URDF'
 </robot>
 URDF
 
-(cd "$project" && "$PYTHON" -m cadgen.viewer --json) >"$log"
+(cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
 url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
 export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
 e2e_args=(--dir "$project" --url "$url")

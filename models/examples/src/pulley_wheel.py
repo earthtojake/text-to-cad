@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Pulley wheel with a central hub, outer groove, and circular through-bore.
 
 from lib.simple_model_library import make_pulley_wheel

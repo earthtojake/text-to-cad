@@ -197,7 +197,7 @@ Use these defaults unless the user specifies otherwise:
 - Cut profiles close. Open contours belong on bend/engrave/reference layers:
   the drawing checks enforce this (see Validation).
 - For CAD-backed parts, derive contours from the real topology with
-  `cadgen.flatten` rather than redrawing them: `planar_faces` selects,
+  `cad.flatten` rather than redrawing them: `planar_faces` selects,
   `flatten_face` lays a face into XY exactly, `union_faces` fuses, and
   `flat_pattern` does all of it in one call. Hand-drawn parametric outlines only
   when there is no reliable 3D topology.
@@ -330,7 +330,7 @@ The same checks run on any existing `.dxf` file, including one that never came
 from a model:
 
 ```python
-from cadgen.engine.export.dxf import validate_dxf_file
+from cad.engine.export.dxf import validate_dxf_file
 
 for finding in validate_dxf_file("path/to/file.dxf"):
     print(finding.render())

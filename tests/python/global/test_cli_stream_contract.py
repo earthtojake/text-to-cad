@@ -21,14 +21,14 @@ import unittest
 from pathlib import Path
 
 from tests.python.support import engine_daemon
-from tests.python.support.paths import repo_path
+from tests.python.support.paths import SOURCE_PATH, repo_path
 
 REPO = Path(repo_path("."))
 
 # The fixtures are the test's own: a box part and a rectangle drawing written into a
 # temporary project, so the run reads nothing under models/ and leaves nothing there.
 PART_SOURCE = """\
-from cadgen.engine import step
+from cad.engine import step
 import build123d as bd
 
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
 """
 
 DRAWING_SOURCE = """\
-from cadgen.engine import dxf
+from cad.engine import dxf
 import build123d as bd
 
 
@@ -76,7 +76,7 @@ def setUpModule() -> None:
 
 def tearDownModule() -> None:
     if ENGINE:
-        subprocess.run([sys.executable, "-P", "-c", "from cadgen.engine import api; api.stop()"],
+        subprocess.run([sys.executable, "-P", "-c", "from cad.engine import api; api.stop()"],
                        env=_env(), capture_output=True, check=False, timeout=120)
         engine_daemon.survivors(_env())  # its workers gone too, before their folder is
     if _PROJECT is not None:
@@ -88,8 +88,7 @@ def _env() -> dict[str, str]:
     # under review, not against whatever cadgen the interpreter happens to have (in a
     # worktree, that is another branch's).
     env = dict(os.environ)
-    own_cadgen = str(REPO / "packages" / "cadgen" / "src")
-    env["PYTHONPATH"] = os.pathsep.join([own_cadgen, *filter(None, [WATCHED.get("PYTHONPATH"), env.get("PYTHONPATH")])])
+    env["PYTHONPATH"] = os.pathsep.join([SOURCE_PATH, *filter(None, [WATCHED.get("PYTHONPATH"), env.get("PYTHONPATH")])])
     env[engine_daemon.JOURNAL] = WATCHED.get(engine_daemon.JOURNAL, "")
     env["CADGEN_ENGINE_DIR"] = ENGINE
     # Its registry of documents and its cache too: what the builds record never reaches the developer's.
@@ -115,7 +114,7 @@ ROBOT_URDF = """<?xml version="1.0"?>
 
 def run(*args: str) -> subprocess.CompletedProcess:
     # Every verb lives behind the one cadgen front door.
-    return subprocess.run([sys.executable, "-m", "cadgen.cli", *args], cwd=REPO, capture_output=True, text=True,
+    return subprocess.run([sys.executable, "-m", "cad_server.cli", *args], cwd=REPO, capture_output=True, text=True,
                           check=False, env=_env())
 
 

@@ -7,7 +7,7 @@ called the four finger models; here each finger's combs are one `@memo` stage,
 model and the four-finger review both place, so a build makes each finger's combs once.
 """
 
-from cadgen import memo, model
+from cad import memo, model
 
 import build123d as bd
 

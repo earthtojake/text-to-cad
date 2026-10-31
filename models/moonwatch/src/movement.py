@@ -3,7 +3,7 @@ motion works + chronograph works, all authored in the shared MOVEMENT local
 frame (see `lib/spec.py`), so composition is identity — no re-posing here.
 """
 
-from cadgen import model
+from cad import model
 
 import chrono_works
 import keyless_works

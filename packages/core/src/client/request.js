@@ -11,7 +11,7 @@ export class ViewerRequestError extends Error {
 /**
  * Whether a request failed because the engine that served this page is gone: nothing answers at its
  * address (it stopped), or an engine answers there that does not hold this page's token (one started
- * since, `cadgen/viewer/engine_app.py`). What the page says then is the engine's state, never the
+ * since, `cad_server/viewer/engine_app.py`). What the page says then is the engine's state, never the
  * refusal's JSON.
  */
 export function isEngineGone(error) {

@@ -1,0 +1,142 @@
+"""What `from cadgen import ...` offers, and what it costs.
+
+Two properties that are easy to break together. Every name in ``__all__`` must actually
+resolve -- the lazy ``__getattr__`` dispatches on hand-written name sets, so adding a name
+to ``__all__`` and forgetting the branch advertises an AttributeError. And importing the
+package must stay cheap: the whole point of the lazy dispatch is that `import cadgen`
+does not pay for OCP, which costs seconds and is useless to a caller who only wanted
+`__version__`.
+"""
+
+import subprocess
+import sys
+import unittest
+
+import cad
+import cad.engine.model
+
+HEAVY = ("OCP", "build123d")
+
+# The engine's names the root re-exports, and the operations on documents as functions; process
+# control (serve, status, stop, daemon) is the CLI's alone.
+ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
+          "read_step", "read_xbf", "read_mesh")
+VERBS = ("export", "snapshot", "inspect")
+ROOT = (*ENGINE, *VERBS, "__version__")
+# The names that are the standards' rather than the engine's.
+NAMESPACES = {
+    "cad.ap242": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
+                     "posed"),
+    "cad.gltf": ("animation",),
+}
+
+
+class RootExports(unittest.TestCase):
+    def test_every_advertised_name_resolves(self):
+        unresolvable = [name for name in cad.__all__ if not hasattr(cad, name)]
+        self.assertEqual([], unresolvable, "in __all__ but not handled by __getattr__")
+
+    def test_the_root_is_exactly_its_declared_names(self):
+        """A model imports what it needs from ``cadgen`` itself: the engine's names, each the very
+        object ``cad.engine`` exports, and the verbs on documents as functions."""
+        import cad.engine
+        from cad.engine import api
+
+        self.assertEqual(sorted(ROOT), sorted(cad.__all__))
+        self.assertEqual(sorted(cad.engine.__all__), sorted(ENGINE))
+        for name in ("Material", "materials"):
+            self.assertFalse(hasattr(cad.engine, name), f"materials come from bd_materials: {name}")
+        for name in ENGINE:
+            with self.subTest(name=name):
+                self.assertIs(getattr(cad, name), getattr(cad.engine, name))
+        for verb in VERBS:
+            with self.subTest(verb=verb):
+                self.assertIs(getattr(cad, verb), getattr(api, verb))
+
+    def test_snapshot_is_one_verb_of_two_input_shapes(self):
+        """One picture (``source``, ``out``) or every picture a job names (``job``, ``source`` in place of its
+        input); no ``snapshot_job``, and any other call refused as Python refuses one."""
+        import inspect
+
+        from cad.engine import api
+
+        parameters = inspect.signature(cad.snapshot).parameters
+        self.assertEqual(list(parameters)[:3], ["source", "out", "job"])
+        self.assertEqual(parameters["job"].kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertFalse(hasattr(api, "snapshot_job"))
+        self.assertNotIn("snapshot_job", api.__all__)
+        for call in (lambda: cad.snapshot(), lambda: cad.snapshot("a.xbf"),
+                     lambda: cad.snapshot("a.xbf", "a.png", job={"jobs": []})):
+            with self.subTest(call=call), self.assertRaises(TypeError):
+                call()
+
+    def test_each_namespace_is_exactly_its_declared_names(self):
+        import importlib
+
+        from cad.engine import mechanism, model
+
+        defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model,
+                   "gear_pair": mechanism, "rack_and_pinion_pair": mechanism, "screw_pair": mechanism,
+                   "posed": mechanism}
+        for namespace, names in NAMESPACES.items():
+            module = importlib.import_module(namespace)
+            self.assertEqual(sorted(names), sorted(module.__all__))
+            for name in names:
+                with self.subTest(name=f"{namespace}.{name}"):
+                    self.assertIs(getattr(module, name), getattr(defined[name], name))
+                    self.assertFalse(hasattr(cad, name), f"{name} is {namespace}'s, not the root's")
+
+    def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
+        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
+        shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its
+        name. No ``id=``: an id is derived; no ``store=``: every document is kept alike."""
+        import inspect
+
+        parameters = inspect.signature(cad.engine.model.model).parameters
+        self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
+            ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
+            ("animations", inspect.Parameter.KEYWORD_ONLY)])
+        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
+            with self.subTest(kind=kind):
+                self.assertEqual(list(inspect.signature(getattr(cad, kind)).parameters), ["out", "name"])
+
+    def test_a_name_the_root_never_had_is_pythons_own_error(self):
+        # No backwards compatibility: a retired name is no name, and says nothing about history.
+        # ``build`` among them: a model builds by a decorated function's call, never cadgen.build (law 12).
+        for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
+                     "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
+                     "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "build123d"):
+            with self.subTest(name=name), self.assertRaises(AttributeError) as caught:
+                getattr(cad, name)
+            self.assertEqual(str(caught.exception), f"module 'cad' has no attribute {name!r}")
+
+    def test_importing_cadgen_does_not_import_the_cad_stack(self):
+        """Run in a subprocess: this one almost certainly has OCP loaded already."""
+        code = (
+            "import sys, cadgen, cad.ap242, cad.gltf;"
+            f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"
+        )
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        marked = [ln for ln in proc.stdout.splitlines() if ln.startswith("HEAVY:")]
+        self.assertEqual(["HEAVY:"], marked, "importing cadgen pulled in the CAD stack")
+
+    def test_model_body_helpers_do_not_import_the_cad_stack(self):
+        """`from cadgen import flatten` sits in a model's MODULE BODY, so the module behind it
+        must defer the kernel -- its `import build123d` bound lazily (`_internal/lazy_kernel.py`)
+        -- or every such model pays the ~2.5s import in the process that only asks the daemon to
+        build it."""
+        code = (
+            "import sys, cad.flatten;"
+            "from cadgen import flatten;"
+            "from cad._internal.lazy_kernel import loaded;"
+            f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if loaded(m)))"
+        )
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        marked = [ln for ln in proc.stdout.splitlines() if ln.startswith("HEAVY:")]
+        self.assertEqual(["HEAVY:"], marked, "cad.flatten imported the kernel at module scope")
+
+
+if __name__ == "__main__":
+    unittest.main()

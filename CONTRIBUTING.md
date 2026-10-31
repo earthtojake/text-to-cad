@@ -55,8 +55,8 @@ environment's interpreter for direct CLI calls:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cadgen.cli snapshot --help
-./.venv/bin/python -m cadgen.cli urdf validate --help
+./.venv/bin/python -m cad_server.cli snapshot --help
+./.venv/bin/python -m cad_server.cli urdf validate --help
 ```
 
 The engine draws every snapshot with OCCT in an OpenGL context. On Linux with no
@@ -96,7 +96,7 @@ Use the Windows virtual-environment path for direct CLI calls, and the runner fo
 focused test, so the file builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cadgen.cli snapshot --help
+.\.venv\Scripts\python.exe -m cad_server.cli snapshot --help
 & $gitBash scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 ```
 
@@ -107,14 +107,14 @@ small set of Python extras mirrored from skill runtime requirements. Its editabl
 cadgen comes with its `kernel` extra (OCP, build123d and the rest; the wheel's
 required dependencies are only the core), so the checkout's `.venv` carries the CAD
 kernel and is its own base environment: the engine makes no base for it
-(`cadgen/_internal/base.py`). Its editable
+(`cad_server/_internal/base.py`). Its editable
 cadgen installs `cadgen-lazy-kernel.pth` into the venv's site-packages as the wheel
-does (`packages/cadgen/setup.py`), so `import build123d` defers the kernel and a
+does (`packages/texttocad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
 that has no such file until `requirements-dev.txt` is installed again. This is
 the default Python environment for broad repo checks and source-checkout
 development. After pulling, reinstall `requirements-dev.txt` to refresh the
-editable-install metadata: `cadgen.__version__` reports the installed
+editable-install metadata: `cad.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
@@ -130,7 +130,7 @@ working copy, use the checkout's `.venv` (`requirements-dev.txt`), or
 `scripts/install/dev_install.py`, which makes a dev install of it the current installation (see
 [Test In Agent Apps](#test-in-agent-apps)).
 
-`packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
+`packages/texttocad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
 fresh clone therefore has no Viewer client or CAD app page until
 `scripts/bundle/bundle.sh` runs, and cadgen says so by name the
@@ -158,7 +158,7 @@ test, a benchmark or an experiment a daemon to itself. `cadgen status` lists its
 workers, one per model script, each with its memo, and what each is building;
 `cadgen stop` stops it (`cadgen server` runs one in the foreground); a running `cadgen mcp` holds it
 until its host quits. A running daemon keeps the engine code it started with:
-after editing `packages/cadgen/src/cadgen`, stop the daemon you started so the next
+after editing `packages/texttocad/src/cadgen`, stop the daemon you started so the next
 build runs the new code. Never stop one you did not start.
 
 The engine's switches are environment variables, never script options (the
@@ -183,7 +183,7 @@ that folder, which a 0.7 install's store may share. Tests point both folders at 
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cadgen`
-subcommand (`cadgen <verb>`, or `python -m cadgen.cli <verb>` when the console
+subcommand (`cadgen <verb>`, or `python -m cad_server.cli <verb>` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is `cadgen.{urdf,sdf,srdf}_*` now,
@@ -195,8 +195,8 @@ A person installs and updates text-to-cad, in every agent app on the computer, w
 the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Windows
 `irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and
 `install.ps1`, which run the newest release's `cadgen setup` through uvx
-(`cadgen.cli.setup`; `cadgen uninstall` takes it out). It reads the apps through
-`cadgen._internal.providers`, as the development installer below does, and takes a
+(`cad_server.cli.setup`; `cadgen uninstall` takes it out). It reads the apps through
+`cad_server._internal.providers`, as the development installer below does, and takes a
 development install out of an app as a second copy (its plan, or `--dry-run`, says so
 first).
 
@@ -321,12 +321,12 @@ the first thing to read when a run is slow.
 With the development environment active, check cadgen's Python sources with:
 
 ```sh
-python -m pyrefly check --config packages/cadgen/pyproject.toml
+python -m pyrefly check --config packages/texttocad/pyproject.toml
 ```
 
 Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
-over `packages/cadgen/src`. It checks a limited set of diagnostics, including
+over `packages/texttocad/src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader
 argument and assignment checks. Tests, scripts and skill helpers are outside this
 check's scope. Both cadgen CI jobs run it before the package suite.
@@ -348,7 +348,7 @@ diff content: a comment in a module selects what the module's code would.
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, the engine's and the CAD Viewer backend's included (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
+| cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, the engine's and the CAD Viewer backend's included (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@text-to-cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
@@ -392,7 +392,7 @@ prints every thread's stack and fails by name.
 
 The CAD Viewer's backend and the CAD app's server are leaves of cadgen:
 outside them and the commands that start them, nothing in cadgen imports either
-but `cadgen.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
+but `cad_server.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
 change confined to one of them can run the cadgen tests that reach it instead of
 the whole suite. Windows runs the Python package suite because paths, locks,
 subprocesses, file URLs and daemon behavior are platform-sensitive.
@@ -454,10 +454,10 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cadgen/src/cadgen/engine/README.md`, **Body retention**) is keyed by
+(`packages/texttocad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
-`tests/python/packages/cadgen/engine/test_memo.py` and `test_bodies.py`, and a
+`tests/python/packages/texttocad/engine/test_memo.py` and `test_bodies.py`, and a
 change to it runs them first.
 
 Those numbers come from one batch, measured once every change that moves them is
@@ -471,7 +471,7 @@ A part is meshed at one tolerance, 0.25 % of its size and 28.5 degrees, by
 second pass, no repair. A change
 to that opens its PR with what it does to the faces left unmeshed and the triangle
 counts across the sample corpus, `main` against the branch; the engine's mesh tests
-(`tests/python/packages/cadgen/engine/test_mesh.py`) assert the contract on small
+(`tests/python/packages/texttocad/engine/test_mesh.py`) assert the contract on small
 fixtures.
 
 ## Source Boundaries
@@ -483,7 +483,7 @@ independent of *each other*.
 
 They are not independent of `cadgen`. Each cadgen skill's SKILL.md runs that
 distribution through the `cadgen` command its installation writes, and a skill's `scripts/<tool>` is a thin
-entrypoint whose parser and behaviour live in `cadgen.cli` — so what a published skill
+entrypoint whose parser and behaviour live in `cad_server.cli` — so what a published skill
 needs is an install, not a copy. Skills used to vendor cadgen and its JavaScript builders into
 `skills/*/scripts/packages/`; six copies of one runtime is what that cost, and it
 is gone. cadgen now carries the JavaScript it executes as well as the Python.
@@ -492,12 +492,12 @@ Canonical source directories are:
 
 - `skills/*` for skill instructions, references, and the thin entrypoints.
 - `apps/web/` for the CAD Viewer's React client. Its backend is
-  `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
-  cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
+  `cad_server.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
+  cadgen wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
 - `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Claude Desktop). Its
-  server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
-  build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
+  server is `cadgen mcp` (`cad_server/mcp` in `packages/cadgen`), and its one-file
+  build ships inside the cadgen wheel as `cad_server/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
 - `apps/api/` for `api.texttocad.dev`, the version feed and the telemetry receiver
@@ -522,7 +522,7 @@ imports remain inside its directory.
 
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine
   (`tests/python/packages/cadgen/engine/`); `tests/python/global/` holds the policy
-  gates that enforce the design laws in `packages/cadgen/README.md`.
+  gates that enforce the design laws in `packages/texttocad/README.md`.
 - Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
   there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
   shows up in the diff as the shared package source it was made in and reaches a user
@@ -613,9 +613,9 @@ Use `--with-deps` when installing browsers on Linux. The browser suite runs
 exactly what CI runs: every load path (STEP, STL, DXF, URDF) and the camera
 across modes and a saved revision, through the real backend (picking and
 kinematics are the `packages/ui` browser specs' on every PR). Backend tests live in
-`tests/python/packages/cadgen/viewer` and are selected with
+`tests/python/packages/texttocad_server/viewer` and are selected with
 `scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
-Nothing in `cadgen.viewer` imports the CAD kernel at module scope.
+Nothing in `cad_server.viewer` imports the CAD kernel at module scope.
 
 The engine is keyed by the Python installation, so the CLI, page and each host's
 stdio shim share it. Different installations have different engines. There is one page per
@@ -699,7 +699,7 @@ wrong.
 ### Build artifacts live in the wheel, never in git
 
 `main` is source. Everything cadgen serves that is not Python — the CAD Viewer
-client under `cadgen/_runtime/viewer` and the CAD app page under `_runtime/mcp`
+client under `cad_server/_runtime/viewer` and the CAD app page under `_runtime/mcp`
 — is gitignored and
 produced by `scripts/bundle/bundle.sh`. Nothing built is ever
 committed: a rebundle used to add a megabyte of history per commit, and a
@@ -920,7 +920,7 @@ directory for its uv installation (`install-channels.json`), which its skills'
 commands share, so a skill's Viewer and its commands report it too. cadgen reports the channel
 with telemetry and says the feed's new release only to a copy that is not
 auto-updated (a store's copy hears of a release once its store has moved an app's
-plugin ahead of the engine; `cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
+plugin ahead of the engine; `cad_server/_internal/channel.py`, `cad_server/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
 environment, never flags: an install of `main` pins the last release, and a cadgen
 ignores a variable it does not know but refuses a flag, so a new setting would
@@ -1184,7 +1184,7 @@ scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 `skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
-suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
+suite is `tests/python/packages/texttocad_server/viewer/`, part of the cadgen package suite.
 
 For fast CAD Viewer source iteration, build the shared packages, then invoke
 the web app in dev mode from a folder of models (outside `apps/web`). The app

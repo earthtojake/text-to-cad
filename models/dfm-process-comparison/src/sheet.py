@@ -2,7 +2,7 @@
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 from lib.tray_geometry import tray
 
 

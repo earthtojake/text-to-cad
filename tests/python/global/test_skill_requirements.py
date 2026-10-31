@@ -3,9 +3,9 @@ pinned to this release.
 
 The CAD plugin's server is one command,
 `uvx --no-config --managed-python --python 3.14 --from cadgen==<release> cadgen mcp`
-(cadgen._internal.launch): uv keeps one installation per requirement, and that installation
+(cad_server._internal.launch): uv keeps one installation per requirement, and that installation
 registers itself and writes the `cadgen` command, `~/.local/bin/cadgen`
-(cadgen._internal.installations), which every skill runs as `cadgen +<release>` -- uvx cannot start
+(cad_server._internal.installations), which every skill runs as `cadgen +<release>` -- uvx cannot start
 in an agent's sandbox, the command can. The same installation, so the same warm daemon. A skill
 defines that command in its SKILL.md and names the uvx command once, in its setup guide
 (`references/setup.md`, which the SKILL.md links), as `cadgen doctor`, which installs cadgen,
@@ -93,8 +93,10 @@ class SkillLaunchCommand(unittest.TestCase):
     def test_every_skill_that_uses_cadgen_names_its_version_and_install_command(self) -> None:
         import sys
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen.updates import INSTALL as INSTALL_COMMAND, INSTALL_WINDOWS
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server.updates import INSTALL as INSTALL_COMMAND, INSTALL_WINDOWS
 
         for skill in SKILLS:
             text = (skill / "SKILL.md").read_text(encoding="utf-8")
@@ -127,9 +129,11 @@ class SkillLaunchCommand(unittest.TestCase):
         import sys
         import tempfile
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen._internal import installations
-        from cadgen._internal.launch import launch_command, pinned
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server._internal import installations
+        from cad_server._internal.launch import launch_command, pinned
 
         self.assertEqual(launch_command("python", VERSION), LAUNCH.format(version=VERSION, tool="python"))
         self.assertEqual(pinned(VERSION), f"cadgen +{VERSION}")

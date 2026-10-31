@@ -89,7 +89,7 @@ build123d joints, placed where the parts stand and paired by label:
   (`one_minute`, `half_hour`, `chrono_at_10min`, `start_pressed`, `reset_pressed`,
   `winding`, `setting`; `rest` is the watch as built).
 - **Clips.** `running` is a motion, a function of time over the escapement and the two
-  couplings. `reveal`, `showcase` and `grand_tour` are GLB animations (`cadgen.gltf`):
+  couplings. `reveal`, `showcase` and `grand_tour` are GLB animations (`cad.gltf`):
   the escapement and the trains posed at every key, each part or group the old clips
   translated moved along its own vector, the movement's tiers fanned (translations inside
   the movement, so its flip carries them, as the old clip composed them), and the

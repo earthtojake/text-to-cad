@@ -2,7 +2,7 @@
 
 packages/core and packages/ui serve every app -- the web CAD Viewer and the Codex
 plugin -- through injected host capabilities (packages/ui/docs/viewer-host.md).
-cadgen is shared the same way: its Codex adapter lives in cadgen/mcp/ (plus the
+cadgen is shared the same way: its Codex adapter lives in cad_server/mcp/ (plus the
 `cadgen mcp` command shell), which may depend on the rest of cadgen; nothing else
 in cadgen may name a host or import the adapter, but the installer's providers
 (`_internal/providers.py`), whose whole job is each agent app's own commands and files.
@@ -32,7 +32,7 @@ SHARED_PACKAGE_MANIFESTS = (
     repo_path("packages/ui/package.json"),
 )
 
-CADGEN_PACKAGE = repo_path("packages/cadgen/src/cadgen")
+CADGEN_PACKAGE = repo_path("packages/texttocad/src/cadgen")
 # The adapter and its command shell: the only cadgen code allowed to know the host. And the agent
 # apps `cadgen setup` sets text-to-cad up in, each by its own commands and files: the installer's providers.
 CADGEN_ADAPTER = ("mcp/", "cli/mcp.py", "_internal/engine_host.py", "_internal/providers.py")

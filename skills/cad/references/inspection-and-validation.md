@@ -273,7 +273,7 @@ size = shape.bounding_box().size
 ```
 
 ```python
-from cadgen.geometry import closest_points, overlap_volume
+from cad.geometry import closest_points, overlap_volume
 
 result = closest_points(a, b)   # .distance, .point_a, .point_b
 volume = overlap_volume(solid_a, solid_b)
@@ -297,7 +297,7 @@ built: a part clear there can still pass through another in a pose
 ## Geometry diagnostics
 
 ```python
-from cadgen.geometry import is_sound, topology_errors, boundary_edges, self_intersections
+from cad.geometry import is_sound, topology_errors, boundary_edges, self_intersections
 
 ok = shape.is_valid                       # bool: BRepCheck passes (build123d)
 clean = is_sound(shape)                   # bool: the boolean kernel's argument check passes, expensive
@@ -325,7 +325,7 @@ A part given a native material (`from bd_materials import metals`; `part.materia
 `cadgen inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
 
 ```python
-from cadgen.geometry import mass_properties
+from cad.geometry import mass_properties
 
 properties = mass_properties([
     (aluminum_body, 2.70e-6),  # kg/mm³; use the material density for the task

@@ -4,7 +4,7 @@ Built in car coordinates by `lib/details.py`; `f1.py` calls it in the car's body
 a `@memo` stage of its own.
 """
 
-from cadgen import memo
+from cad import memo
 
 from lib import details as details_lib
 

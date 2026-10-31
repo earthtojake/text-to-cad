@@ -271,7 +271,7 @@ safety wire, casting parting line, machined boss and lifting eye.
    check pairwise boolean-common volume over your own leaves, AABB-prefiltered).
    Your static geometry must not touch any moving part at ANY crank
    angle, nor any neighbouring system. Use `kin` to sweep your moving neighbours
-   (e.g. 0..720° in 10° steps) and `cadgen.geometry` / OCP distance checks.
+   (e.g. 0..720° in 10° steps) and `cad.geometry` / OCP distance checks.
    Report the minimum clearances you measured. Moving-part builders must sweep
    their parts against their moving neighbours over 720°.
 4. Renders IN CONTEXT of the whole engine with the PRESENTATION envelope (never

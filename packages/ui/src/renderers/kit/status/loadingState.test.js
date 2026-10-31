@@ -48,7 +48,7 @@ test("a loader names its STAGE in `phase`; its own label never has to be recogni
 });
 
 test("the engine's progress event is named by its key, for every kind, counted where its stage has units", () => {
-  // One event for every job the engine runs (`cadgen/engine/progress.py`): the page reads its kind and
+  // One event for every job the engine runs (`cad/engine/progress.py`): the page reads its kind and
   // stage and nothing of the engine's words, so the screen says each in the view's language.
   const event = (kind, stage, done, total, detail = "") => ({ kind, stage, job: "hand.py::hand", outputs: [], detail, done, total, elapsedMs: 42 });
   assert.deepEqual(loadingProgress(event("build", "body", 2, null, "finger")),

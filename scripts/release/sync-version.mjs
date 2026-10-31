@@ -21,7 +21,7 @@ export const jsonTargets = [
 ];
 
 const tomlTargets = [
-  "packages/cadgen/pyproject.toml",
+  "packages/texttocad/pyproject.toml",
 ];
 
 // Every skill that runs cadgen names the version the server's installation registers as

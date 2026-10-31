@@ -271,8 +271,8 @@ jobs:
       - name: Check cadgen package version matches the canonical release version
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
-          if ! grep -Eq "^version = \"$version\"$" packages/cadgen/pyproject.toml; then
-            echo "packages/cadgen/pyproject.toml version does not match VERSION ($version)." >&2
+          if ! grep -Eq "^version = \"$version\"$" packages/texttocad/pyproject.toml; then
+            echo "packages/texttocad/pyproject.toml version does not match VERSION ($version)." >&2
             exit 1
           fi
 
@@ -293,8 +293,8 @@ jobs:
       # test-installed.sh then drives the same wheel through a real build.
       - name: Install the built wheel and exercise it
         run: |
-          wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
-          [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
+          wheel="$(find packages/texttocad/dist -name '*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no wheel under packages/texttocad/dist" >&2; exit 1; }
           python3 -m venv "$RUNNER_TEMP/install-test"
           "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
@@ -308,16 +308,16 @@ jobs:
       # installs cleanly and then cannot serve a Viewer or the CAD app.
       - name: Assert the shipping wheel carries its built runtime
         run: |
-          wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
-          [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
+          wheel="$(find packages/texttocad/dist -name '*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no wheel under packages/texttocad/dist" >&2; exit 1; }
           listing="$(unzip -l "$wheel")"
-          echo "$listing" | grep -E 'cadgen/_runtime/' || true
+          echo "$listing" | grep -E 'cad_server/_runtime/' || true
           for required in \
-            cadgen/_runtime/viewer/index.html \
-            cadgen/_runtime/viewer/THIRD_PARTY_LICENSES.txt \
-            cadgen/_runtime/mcp/shell.html \
-            cadgen/_runtime/mcp/app.js \
-            cadgen/_runtime/mcp/THIRD_PARTY_LICENSES.txt; do
+            cad_server/_runtime/viewer/index.html \
+            cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt \
+            cad_server/_runtime/mcp/shell.html \
+            cad_server/_runtime/mcp/app.js \
+            cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2
               echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2
@@ -333,7 +333,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: cadgen-${{ needs.gate.outputs.version }}
-          path: packages/cadgen/dist/*
+          path: packages/texttocad/dist/*
           if-no-files-found: error
 
       # ---- irreversible from here: main only -------------------------------------
@@ -354,7 +354,7 @@ jobs:
         if: needs.gate.outputs.is_main != 'true'
         run: |
           echo "Rehearsal complete on $GITHUB_REF_NAME at ${{ needs.gate.outputs.release_sha }}."
-          echo "Would have uploaded: $(ls packages/cadgen/dist)"
+          echo "Would have uploaded: $(ls packages/texttocad/dist)"
           echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin to latest and claude-plugin."
@@ -365,7 +365,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/installer"
           cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
           (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS)
-          for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
+          for file in packages/texttocad/dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
@@ -607,7 +607,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: cadgen-${{ needs.gate.outputs.version }}-released
-          path: packages/cadgen/dist
+          path: packages/texttocad/dist
 
       # The plugin ZIP the publish job built and checked from this same commit.
       - name: Download the OpenAI plugin ZIP
@@ -646,8 +646,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
-          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
+          ls -l packages/texttocad/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
+          for file in packages/texttocad/dist/*.whl packages/texttocad/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
               "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/SHA256SUMS; do
             [ -f "$file" ] && args+=(--asset "$file")
           done

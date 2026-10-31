@@ -34,11 +34,11 @@ def _record() -> None:
     if not folder or not os.path.isdir(folder):
         return
     argv = " ".join(getattr(sys, "orig_argv", sys.argv))
-    # Each by its module; the distribution starts the daemon as ``cadgen._internal.engine_daemon``
-    # (``engine_host``), its engine's own entry point being ``cadgen.engine.daemon``.
-    roles = {"cadgen.engine.daemon": "daemon", "cadgen._internal.engine_daemon": "daemon",
-             "cadgen.engine.worker": "worker", "cadgen.engine.reader": "reader",
-             "cadgen.engine.render.service": "render"}
+    # Each by its module; the distribution starts the daemon as ``cad_server._internal.engine_daemon``
+    # (``engine_host``), its engine's own entry point being ``cad_server.engine.daemon``.
+    roles = {"cad_server.engine.daemon": "daemon", "cad_server._internal.engine_daemon": "daemon",
+             "cad.engine.worker": "worker", "cad.engine.reader": "reader",
+             "cad.engine.render.service": "render"}
     role = next((role for module, role in roles.items() if module in argv), "process")
     path = os.path.join(folder, f"{role}-{os.getpid()}.txt")
     started = time.time()

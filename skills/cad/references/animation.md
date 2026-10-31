@@ -17,12 +17,12 @@ joints, mechanism states, couplings and configuration sequences, read
 
 Two layers, each true to its format:
 
-- **A configuration sequence** (`cadgen.ap242`'s `configuration_sequence`, a motion on
+- **A configuration sequence** (`cad.ap242`'s `configuration_sequence`, a motion on
   the page) is the mechanism's: joint values over time, kept in the document as STEP
   AP242's configuration sequence. Every GLB of the model carries it as a clip, and the
   page's Motion section plays it. A robot's gait, a door's opening, an engine's running
   belong here.
-- **An animation** (`cadgen.gltf`'s `animation`) is the GLB's: glTF channels
+- **An animation** (`cad.gltf`'s `animation`) is the GLB's: glTF channels
   (translation, rotation, scale) on the parts a GLB places, and the mechanism's forward
   kinematics at given times. It is no part of the mechanism: the viewer's page and a
   STEP show nothing of it, and an exported `.xbf` only records its compiled tracks for a
@@ -51,8 +51,8 @@ The rules:
 # src/hinged_box.py
 import build123d as bd
 from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
-from cadgen.gltf import animation
+from cad.ap242 import configuration_sequence, mechanism_state
+from cad.gltf import animation
 
 
 @model

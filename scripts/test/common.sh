@@ -25,6 +25,10 @@ export CADGEN_ENGINE_STANDBY=0
 # client prints, and so the failing test's output, says where.
 export PYTHONFAULTHANDLER=1
 
+# The three packages' source trees, the library's first: every suite runs on this checkout's own
+# packages, never on whatever the interpreter has installed (a worktree's venv may point at another).
+PACKAGE_SOURCES=(packages/texttocad/src packages/texttocad-server/src packages/texttocad-mcp/src)
+
 # The paths a run is narrowed to: test-python.sh and test-global.sh take them as arguments,
 # and only the test files at or under one of them run. Empty, the default, runs every file.
 # CI passes what scripts/github-workflows/select_checks.py selected for a change.

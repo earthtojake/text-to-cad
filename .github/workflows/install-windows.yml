@@ -18,12 +18,12 @@ on:
     paths:
       - .github/workflows/install-windows.yml
       - scripts/install/install.ps1
-      - packages/cadgen/src/cadgen/cli/setup.py
-      - packages/cadgen/src/cadgen/cli/uninstall.py
-      - packages/cadgen/src/cadgen/cli/doctor.py
-      - packages/cadgen/src/cadgen/_internal/providers.py
-      - packages/cadgen/src/cadgen/_internal/launch.py
-      - packages/cadgen/src/cadgen/_internal/installations.py
+      - packages/texttocad-server/src/cad_server/cli/setup.py
+      - packages/texttocad-server/src/cad_server/cli/uninstall.py
+      - packages/texttocad-server/src/cad_server/cli/doctor.py
+      - packages/texttocad-server/src/cad_server/_internal/providers.py
+      - packages/texttocad-server/src/cad_server/_internal/launch.py
+      - packages/texttocad-server/src/cad_server/_internal/installations.py
 
 permissions:
   contents: read

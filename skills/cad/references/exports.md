@@ -105,7 +105,7 @@ part's file is the part's own model:
 ```python
 # src/arm_poses.py
 from cadgen import model
-from cadgen.ap242 import posed
+from cad.ap242 import posed
 
 from arm import arm                              # an assembly with a mechanism state "folded"
 

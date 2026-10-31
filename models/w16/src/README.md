@@ -117,7 +117,7 @@ document keeps it as samples; the GLB carries it as the clip `crank`.
 
 ### The explode and the running cutaway
 
-The original's other two clips are GLB animations (`lib/explode.py`, `cadgen.gltf`): the
+The original's other two clips are GLB animations (`lib/explode.py`, `cad.gltf`): the
 `crank` cycle posed throughout (every 0.02 s, 2.4 degrees of crank), and the original's
 tables of straight, eased translations played on top of it, each part or system moved
 after the pose, so a part moved clear still carries its own motion. A reference that

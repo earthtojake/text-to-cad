@@ -17,7 +17,7 @@ from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 
-add_repo_path("packages/cadgen/src")
+add_repo_path("packages/texttocad/src")
 
 spec = importlib.util.spec_from_file_location("isolated_unittest_runner", REPO_ROOT / "scripts/test/unittest_files.py")
 runner = importlib.util.module_from_spec(spec)
@@ -75,7 +75,7 @@ class PythonTestRunnerIsolation(unittest.TestCase):
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["leaves.py"], str(REPO_ROOT), 1, False)
         (_file_argv, file_env), (stop_argv, stop_env) = calls
-        self.assertEqual(stop_argv[1:], ["-P", "-c", "from cadgen.engine import api; api.stop()"])
+        self.assertEqual(stop_argv[1:], ["-P", "-c", "from cad.engine import api; api.stop()"])
         self.assertEqual(stop_env["CADGEN_ENGINE_DIR"], file_env["CADGEN_ENGINE_DIR"])
 
     def test_a_failed_child_still_stops_its_daemon(self):
@@ -122,7 +122,7 @@ class DefaultEngineGuard(unittest.TestCase):
         code, said, stopped = self.run_with([False, True])  # none before the run, one after the file
         self.assertEqual(code, 1)
         self.assertIn("/default/cadgen-engine/0123456789ab.door, after leaves.py", said)
-        self.assertEqual(stopped, [("from cadgen.engine import api; api.stop()", {"CADGEN_ENGINE_DIR": "/default/cadgen-engine"})])
+        self.assertEqual(stopped, [("from cad.engine import api; api.stop()", {"CADGEN_ENGINE_DIR": "/default/cadgen-engine"})])
 
     def test_the_developer_s_own_engine_running_there_before_the_run_is_left_alone(self):
         code, said, stopped = self.run_with([True])
@@ -348,7 +348,7 @@ class HangGuard(unittest.TestCase):
         env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call))
         try:
             # Its argv names the module as the distribution starts it; it imports nothing of it.
-            done = engine_daemon.run([sys.executable, "-c", "import sys", "cadgen._internal.engine_daemon"], env=env)
+            done = engine_daemon.run([sys.executable, "-c", "import sys", "cad_server._internal.engine_daemon"], env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual([role for role, _pid in engine_daemon._processes(env)], ["daemon"])
         finally:

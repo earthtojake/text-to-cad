@@ -341,7 +341,7 @@ function same(a: Uint8Array, b: Uint8Array) {
 }
 
 /**
- * A server that answers a ranged GET as `cadgen mcp` does (`cadgen/mcp/tunnel.py`) for a body
+ * A server that answers a ranged GET as `cadgen mcp` does (`cad_server/mcp/tunnel.py`) for a body
  * longer than the range: its part (206). `etag` names the body a part is of, `offset` moves where
  * a part starts, and `alter` changes a part's bytes.
  */

@@ -9,7 +9,7 @@ license: MIT
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth.
 
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, places dimensions between points ON
 that geometry, finds centre marks on it, and lays the result out on an ISO
 sheet with a frame and a title block. Change the model, rerun the drawing

@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "texttocad-server"
+version = "0.8.4"
+description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the CAD Viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+authors = [{ name = "earthtojake" }]
+keywords = ["cad", "step", "glb", "build123d", "mcp", "agent-skills"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Manufacturing",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Scientific/Engineering",
+]
+# None of it imports the CAD kernel (a test holds that): the server makes the environment the kernel
+# runs in (the base, `texttocad[kernel]` at this release) and starts its kernel processes there.
+dependencies = [
+  # The library at this very release, without its kernel: the document model, the protocol, the
+  # words the verbs say. Exact: one release of the two is one product.
+  "texttocad==0.8.4",
+  # The server makes the environment its workers run in, and each release's an update installs, with
+  # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
+  # machine with no uv on PATH too.
+  "uv>=0.7",
+  # The CAD Viewer's DXF pane flattens a drawing with ezdxf in the server's own process.
+  "ezdxf",
+  # The DXF pane's raster and the Recents' previews are drawn with Pillow.
+  "pillow",
+]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+Repository = "https://github.com/earthtojake/text-to-cad"
+Issues = "https://github.com/earthtojake/text-to-cad/issues"
+
+[project.scripts]
+cadgen = "cad_server.cli:main"
+
+[tool.pyrefly]
+preset = "basic"
+project-includes = ["src"]
+search-path = ["src", "../texttocad/src"]
+# A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
+# otherwise have src excluded by the ignore files above it and check nothing.
+use-ignore-files = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cad_server", "cad_server.*"]
+
+[tool.setuptools.package-data]
+# _runtime holds what the server serves that is not Python: the CAD Viewer's built client that
+# `cadgen viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage
+# (no __init__), and it is found at call time by cad_server.assets. Verified by
+# scripts/release/check-wheel-contents.sh.
+cad_server = ["py.typed", "_runtime/**/*"]
+# The viewer server's catalog ordering is ICU root collation, read from this table at
+# runtime; it ships beside the code that reads it.
+"cad_server.viewer" = ["collation.json"]
+# The engine's README is the mechanisms the server's laws constrain.
+"cad_server.engine" = ["README.md"]

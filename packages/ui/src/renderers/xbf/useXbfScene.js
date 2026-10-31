@@ -8,7 +8,7 @@ const SERVING = Object.freeze({ phase: "read", label: "Opening document", done: 
 
 /**
  * What the page says of a document before the engine has said anything: a STEP's is an import -- the
- * engine's reader parses it, then collects its parts (`cadgen.engine.serve`), and says so in progress
+ * engine's reader parses it, then collects its parts (`cad.engine.serve`), and says so in progress
  * events the page hears (`engineDocument`'s `onProgress`), so the page starts on the first of them, the
  * read (`kit/status/progressEvent.js`); any other document's is a read.
  */

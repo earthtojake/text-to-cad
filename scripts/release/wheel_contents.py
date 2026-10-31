@@ -19,16 +19,16 @@ def stage_package(source: Path, destination: Path) -> None:
 
 
 def verify_runtime(wheel: Path, package: Path) -> int:
-    runtime = package / "src" / "cadgen" / "_runtime"
+    runtime = package / "src" / "cad_server" / "_runtime"
     expected = {
-        "cadgen/_runtime/" + path.relative_to(runtime).as_posix(): path
+        "cad_server/_runtime/" + path.relative_to(runtime).as_posix(): path
         for path in runtime.rglob("*") if path.is_file()
     }
     if not expected:
         raise ValueError(f"No bundled runtime files in {runtime}; run scripts/bundle/bundle.sh")
     with zipfile.ZipFile(wheel) as archive:
         entries = [entry for entry in archive.infolist()
-                   if entry.filename.startswith("cadgen/_runtime/") and not entry.is_dir()]
+                   if entry.filename.startswith("cad_server/_runtime/") and not entry.is_dir()]
         counts = Counter(entry.filename for entry in entries)
         missing = sorted(expected.keys() - counts.keys())
         extra = sorted(counts.keys() - expected.keys())

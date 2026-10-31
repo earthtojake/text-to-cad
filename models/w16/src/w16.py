@@ -24,8 +24,8 @@ run prints).
 
 from __future__ import annotations
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence
+from cad import model
+from cad.ap242 import configuration_sequence
 
 import build123d as bd
 

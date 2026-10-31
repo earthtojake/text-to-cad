@@ -8,7 +8,7 @@ engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
 
-Hosts present it in one of two ways, which `initialize` selects (`cadgen/mcp/host.py`):
+Hosts present it in one of two ways, which `initialize` selects (`cad_server/mcp/host.py`):
 a host can declare the `dev.texttocad/tabs` extension with the `global`, `thread` and `file`
 entrypoints, and an MCP Apps host advertises the `io.modelcontextprotocol/ui` extension.
 Codex declares neither, from its app or from `codex exec`, and names itself
@@ -40,7 +40,7 @@ terminal UI show none and are served as text clients.
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
-a launch registers it), started if none runs (`cadgen/mcp/browser.py`), in the person's
+a launch registers it), started if none runs (`cad_server/mcp/browser.py`), in the person's
 browser through an owner-only redirect file (`cad_mcp/browser.py`), and answers with the page's URL
 for the agent to give the person: "opened in your browser at <url>". The host's stdio process
 (`cadgen mcp`) makes that open, in the agent's own environment (its `BROWSER`, its display), from
@@ -75,7 +75,7 @@ all presentations, including text-only hosts. They use the Python operations,
 not page state. Each tool starts work with a request ID and polls or cancels its
 own operation; there is no `cad_job` tool. `cad_inspect` also takes
 `query: "structure"`, the summary without bounds, volume or mass. See the
-[operation contract](../../packages/cadgen/README.md#agent-operations) for progress,
+[operation contract](../../packages/texttocad/README.md#agent-operations) for progress,
 retry, cancellation and explicit server-host destinations. An operation's status carries where the
 engine is as the engine's own progress event -- `progress`, `{kind, stage, job, outputs, detail, done,
 total, elapsedMs}`, the latest it said (an export's `read` and `write`, a snapshot's `scene`, `draw`
@@ -131,13 +131,13 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   the page ignores a show that reaches it anyway.
 - **An agent reads the sidebar too, and shows beside its thread.** Each MCP session
   owns its conversation views. Sidebar views alone are shared across sessions in the
-  engine’s memory (`cadgen/mcp/sidebar.py`). Selection and capture replies cross sessions
+  engine’s memory (`cad_server/mcp/sidebar.py`). Selection and capture replies cross sessions
   directly, with no file registry. `cad_show` targets the thread’s tab unless it names
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
 - **Two requests to the network: the version check, and analytics with consent.**
   Both go to `api.texttocad.dev` (`apps/api`). Once a day at most, cadgen
-  reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
+  reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). A server of a newer release than the engine's -- an app whose plugin
   moved ahead -- says a release is out too, with no request (`updates.see`). While this
@@ -148,7 +148,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   with the page; the page reads it again (`/__cad/version`) when the person comes back to
   it. A press is the update (`POST /__cad/update`, through `cad_http`): the engine installs
   the release, updates each agent app's plugin and restarts on it, on the same port with
-  the same token (`cadgen/_internal/update.py`). Meanwhile the button is a ring that fills
+  the same token (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
   as the update goes, then a spinner while the engine restarts; once the engine answers
   with the new release, the card loads that release's app in its own place
   (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
@@ -156,7 +156,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   A text client gets one line with its first `cad_show` result instead, naming the install
   command. Where the
   install came from is its channel, which each plugin's startup config names in
-  the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
+  the server's environment (`CADGEN_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
   with `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
   Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
@@ -164,7 +164,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --
-  and sends the counts at most every five minutes (`cadgen/analytics.py`): never a path,
+  and sends the counts at most every five minutes (`cad_server/analytics.py`): never a path,
   an argument or a file. A Quick Edit that went is counted through the host's `usage`, and
   crashes are reported too: a tool's call or a route that failed for no reason its caller
   gave, and the page's own (`main.tsx`, its frames named by the chunks the inline loader
@@ -206,7 +206,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
   Codex, Send from a thread's CAD tab posts into that thread; from the
   sidebar page it goes to the page's own chat tab.
-- **Host-neutral shared code.** Host specifics live here and in `cadgen/mcp`,
+- **Host-neutral shared code.** Host specifics live here and in `cad_server/mcp`,
   never in `packages/core` or `packages/ui`, which choose by capability (the
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy
   test enforces it: `tests/python/global/test_host_neutral_packages.py`.
@@ -299,7 +299,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
   day link — a page URL's `?token=`, good for 24 hours ([the web README](../web/README.md#launching))
   — a text client's `cad_show` gives, loopback only) and `engine`
-  (its origin), so the card needs no call to read them (`cadgen/mcp/server.py`, `_reach`); a
+  (its origin), so the card needs no call to read them (`cad_server/mcp/server.py`, `_reach`); a
   tab host's launches, and the shows its sync carries, carry `browser` alone (for Open in
   browser), its card always having its channel; the file handler's carry neither.
   With no channel, the card reads `GET <engine>/__cad/server` with the link's token as a
@@ -311,7 +311,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   `connectDomains` (a host must not allow an origin it was not given; a tab host's resource
   is unchanged), and the engine answers exactly that request's CORS: a day link in the
   `Authorization` header, from the origin that sent it, with no credentials
-  (`cadgen/viewer/engine_app.py`). A host may still refuse the origin (an `http:` loopback
+  (`cad_server/viewer/engine_app.py`). A host may still refuse the origin (an `http:` loopback
   one), block the fetch in its sandbox, or ask about local network access; any failure ends
   on the notice and its link.
 - **Nothing is held open, and a view makes one call a second.** A host relays
@@ -325,7 +325,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   (`show`, `capture`), and the catalog's revision, which the view reads again only
   when it moved. A sync that brought news (an event) is followed by the next sooner.
   A STEP or an `.xbf` the view shows asks the engine for its next version about once a
-  second, answered at once (`cadgen/mcp/tunnel.py`), and a document the engine is still
+  second, answered at once (`cad_server/mcp/tunnel.py`), and a document the engine is still
   reading answers `202` until it holds it: neither holds a call.
 
 - **A capture is of the model asked about, once it is drawn.** An agent captures
@@ -404,7 +404,7 @@ inline hosts (including full-size cards) retain the default bottom-right placeme
 
 ## Engine transport
 
-The engine exposes authenticated Streamable HTTP at `/mcp`. Its door (`cadgen.engine.door`: a
+The engine exposes authenticated Streamable HTTP at `/mcp`. Its door (`cad.engine.door`: a
 named pipe on POSIX, a localhost port and token file on Windows) supplies the endpoint and
 token; the shim sends Bearer authentication.
 Initialize creates an opaque `Mcp-Session-Id`, which accompanies subsequent POSTs
@@ -437,7 +437,7 @@ then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@text-to-cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
 `v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
 `dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
-(`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/mcp`,
+(`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 
 ## Live models

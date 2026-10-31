@@ -131,7 +131,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   // cadgen command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
-  // A newer text-to-cad, as the CAD app says it (`cadgen/updates.py`): the update button, an icon first
+  // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
   // in the navbar while this install is behind, from the notice read with the server's description
   // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back
   // often and says nothing of its going, and reloads into the new release once it answers.

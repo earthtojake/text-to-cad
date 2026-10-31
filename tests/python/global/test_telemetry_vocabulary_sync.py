@@ -1,7 +1,7 @@
 """The controls a CAD view counts are one vocabulary in three languages.
 
 The page names what a person used (`@text-to-cad/ui`'s `usage/controls.js`), cadgen notes only names it
-knows (`cadgen/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
+knows (`cad_server/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
 `CONTROLS`). A name one of them lacks is a count lost without a word: the page's never noted, or a whole
 batch refused. Read as text, so this needs nothing installed.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 PAGE = ROOT / "packages/ui/src/usage/controls.js"
-CADGEN = ROOT / "packages/cadgen/src/cadgen/analytics.py"
+CADGEN = ROOT / "packages/texttocad-server/src/cad_server/analytics.py"
 RECEIVER = ROOT / "apps/api/src/events.mjs"
 
 

@@ -6,7 +6,7 @@ import type { Launch } from './server';
  * server (`host/channel.ts`): the launch's `engine` origin, authenticated with the day link its
  * `browser` page carries (`?token=`), sent as a Bearer credential -- never a cookie, and never in a
  * URL. The engine answers a link-bearing request from another origin with that origin's CORS
- * allowance and nothing wider (`cadgen/viewer/engine_app.py`); the host's sandbox must also let
+ * allowance and nothing wider (`cad_server/viewer/engine_app.py`); the host's sandbox must also let
  * the page fetch it (the inline resource's `connectDomains` names the engine's origin), or the
  * probe fails and the card links the page instead.
  */

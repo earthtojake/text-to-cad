@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
+# Build cadgen's non-Python runtime INTO THE PACKAGE (packages/texttocad-server/src/cad_server/_runtime).
 #
 # cadgen ships two things it does not write in Python: the CAD Viewer's built client
 # (`cadgen viewer` serves it) and the one-file CAD app an agent host renders (`cadgen mcp`
@@ -29,7 +29,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
+RUNTIME_DIR="$REPO_ROOT/packages/texttocad-server/src/cad_server/_runtime"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
 VIEWER_APP_DIR="$REPO_ROOT/apps/web"
 MCP_DIR="$RUNTIME_DIR/mcp"
@@ -55,7 +55,7 @@ usage() {
 Usage:
   scripts/bundle/cadgen-runtime.sh [--check] [--clean] [--print-outputs] [stages...]
 
-Builds cadgen's packaged runtime assets into packages/cadgen/src/cadgen/_runtime.
+Builds the server's packaged runtime assets into packages/texttocad-server/src/cad_server/_runtime.
 None of it is committed; the wheel is where it ships.
 
 Stages (default: both):
@@ -113,7 +113,7 @@ prune_stale_runtime() {
     for stage in "${STAGE_DIRS[@]}"; do [ "$name" = "$stage" ] && known=1; done
     if [ "$known" -eq 0 ]; then
       rm -rf "$entry"
-      echo "Removed packages/cadgen/src/cadgen/_runtime/$name: no stage builds it."
+      echo "Removed packages/texttocad-server/src/cad_server/_runtime/$name: no stage builds it."
     fi
   done
 }
@@ -244,13 +244,13 @@ if [ "$MODE" = "check" ]; then
     local name gaps=0
     for name in "$@"; do
       if [ ! -f "$RUNTIME_DIR/$stage/$name" ]; then
-        echo "Missing runtime output: packages/cadgen/src/cadgen/_runtime/$stage/$name" >&2
+        echo "Missing runtime output: packages/texttocad-server/src/cad_server/_runtime/$stage/$name" >&2
         gaps=1
         missing=1
       fi
     done
     if [ "$gaps" -eq 0 ]; then
-      echo "packages/cadgen/src/cadgen/_runtime/$stage built ($# files)."
+      echo "packages/texttocad-server/src/cad_server/_runtime/$stage built ($# files)."
     fi
   }
   if [ "$STAGE_VIEWER" -eq 1 ]; then

@@ -1,7 +1,7 @@
 # CAD Viewer
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
-backend is the installation's engine, hosting the `cadgen.viewer` HTTP app.
+backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
 The built client ships inside the same wheel. `cadgen viewer [FILE ...]` opens the
 engine's one page and exits. The page addresses every document by path, `/<uuid>`: a
 model's id, or a file's id once a launcher (or the page itself) registers it, derived from
@@ -85,7 +85,7 @@ without changing that folder. It is only the folder a launch's relative files ar
 (`serverInfo.start`, the most recent launch's): the backend opens any file by its absolute path.
 
 Dev announces itself to the same engine with
-`python -m cadgen.viewer --api-only --json` (a launch, from its folder), then
+`python -m cad_server.viewer --api-only --json` (a launch, from its folder), then
 proxies `/__cad` with the engine token. Vite owns the client and closing it leaves the engine
 running. `VIEWER_PYTHON` names the interpreter with cadgen installed (default `python3`).
 `VIEWER_BACKEND_URL` and `CAD_ENGINE_TOKEN` attach to an existing engine
@@ -372,7 +372,7 @@ gutters, 44px under the navbar). It starts with one control row of 24px
 controls: "Recent" at the left, a 17px heading on the row's line, and at the right the type filter, a dropdown
 ("All ▾": All, Models, Files) where both kinds are listed, the search, the grid/list
 switch and, where the server's computer has a file chooser (`pick` in its info), **Open**,
-which opens the desktop's own chooser (`POST /__cad/pick`, `cadgen._internal.picker`) and shows
+which opens the desktop's own chooser (`POST /__cad/pick`, `cad_server._internal.picker`) and shows
 the file picked. The grid's tiles are transparent with a 1px border, at least 280px wide (three across
 the full column): a picture on the muted fill, then, in a compact caption, the kind's glyph (a model's cube, a
 file's plain file outline, whatever its kind) beside its name over its last activity with its verb ("Edited now",
@@ -413,12 +413,12 @@ from `GET /__cad/thumbnail`. A model's script is never read for any of it. The d
 screen says it was opened once the catalog has it (`{action: "open"}`: a file joins the
 library, a model's record notes the time), and its picture
 once it has settled — the model framed whole from the default direction, whatever the
-camera (`{action: "thumbnail"}`). `cadgen.viewer.recents` keeps the library in the
+camera (`{action: "thumbnail"}`). `cad_server.viewer.recents` keeps the library in the
 user's state directory, shared with the CAD app.
 
 ### Usage stats (telemetry)
 
-cadgen's usage stats (`cadgen/analytics.py`) are on by default once a `cadgen` command has said
+cadgen's usage stats (`cad_server/analytics.py`) are on by default once a `cadgen` command has said
 so, once, in its output; nothing in the Viewer asks. **Telemetry** in the app menu turns
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
@@ -433,7 +433,7 @@ builds wrote (`@text-to-cad/core/source-maps`). The wheel
 leaves the maps out and a release uploads them to PostHog, and the page
 carries each chunk's id by file name (`__cadChunkIds`), and a frame names its chunk by it. The page
 also reports the view controls a person used and how long each tool was up (`controls`, names
-from `cadgen.analytics.CONTROLS`, telemetry schema 7). The server holds all of it as counts in memory
+from `cad_server.analytics.CONTROLS`, telemetry schema 7). The server holds all of it as counts in memory
 -- a file once a day, by its format, never its name -- and sends them every five minutes.
 
 ### File storage and host actions

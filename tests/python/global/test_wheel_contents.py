@@ -19,7 +19,7 @@ class WheelContentsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
-            paths = ["src/cadgen/_runtime/viewer/new.js", "build/lib/cadgen/_runtime/viewer/old.js",
+            paths = ["src/cad_server/_runtime/viewer/new.js", "build/lib/cad_server/_runtime/viewer/old.js",
                      "src/cadgen.egg-info/SOURCES.txt", "src/cadgen/__pycache__/module.pyc"]
             for name in paths:
                 path = source / name
@@ -32,7 +32,7 @@ class WheelContentsTests(unittest.TestCase):
             self.assertTrue((source / paths[1]).exists(), "developer build scratch is not ours to remove")
 
     def test_runtime_requires_exact_paths_and_bytes(self):
-        name = "cadgen/_runtime/viewer/current.js"
+        name = "cad_server/_runtime/viewer/current.js"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "src" / name
@@ -40,7 +40,7 @@ class WheelContentsTests(unittest.TestCase):
             source.write_bytes(b"current bytes")
             cases = [
                 ([(name, b"current bytes")], None),
-                ([(name, b"current bytes"), ("cadgen/_runtime/viewer/old.js", b"stale")], "extra"),
+                ([(name, b"current bytes"), ("cad_server/_runtime/viewer/old.js", b"stale")], "extra"),
                 ([], "missing"),
                 ([(name, b"old bytes")], "different bytes"),
                 ([(name, b"current bytes"), (name, b"current bytes")], "duplicate"),
@@ -50,7 +50,7 @@ class WheelContentsTests(unittest.TestCase):
                     wheel = root / "test.whl"
                     with warnings.catch_warnings(), zipfile.ZipFile(wheel, "w") as archive:
                         warnings.simplefilter("ignore", UserWarning)
-                        archive.writestr("cadgen/__init__.py", b"# unrelated Python module")
+                        archive.writestr("cad/__init__.py", b"# unrelated Python module")
                         for filename, data in entries:
                             archive.writestr(filename, data)
                     if error:

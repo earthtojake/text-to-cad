@@ -18,7 +18,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 
 ## Index
 
-`bundle/` — cadgen's packaged runtime (`packages/cadgen/src/cadgen/_runtime`).
+`bundle/` — cadgen's packaged runtime (`packages/texttocad-server/src/cad_server/_runtime`).
 None of it is committed: the directory is gitignored end to end and the wheel is
 where those files ship, so these scripts are what produces them.
 
@@ -196,7 +196,7 @@ where those files ship, so these scripts are what produces them.
   passed on. The docs site copies both into its `public/` as it builds
   (`apps/docs/scripts/install-scripts.mjs`), and `release-publish.yml` attaches them, with their
   `SHA256SUMS`, to each GitHub Release. Their structure and behaviour are tested by
-  `tests/python/packages/cadgen/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
+  `tests/python/packages/texttocad_server/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
   `install.ps1` on a Windows runner.
 
 - `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
@@ -225,7 +225,7 @@ Run by hand when the brand changes; ordinary builds use the committed files. See
 [the brand recipe](brand/README.md).
 
 `look/` — `bake-environment.mjs` bakes the engine's look's reflection environment
-(`packages/cadgen/src/cadgen/engine/render/studio.hdr`, committed): core's neutral
+(`packages/texttocad/src/cad/engine/render/studio.hdr`, committed): core's neutral
 studio scene ray-cast into a small equirectangular Radiance image, which the viewer
 and the OCCT prototype both light an engine document's regular modes with. Run by
 hand when the studio or the look changes.

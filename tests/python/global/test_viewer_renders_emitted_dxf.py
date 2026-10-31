@@ -1,7 +1,7 @@
 """What the DXF engine writes is what the Viewer and the CLI can draw.
 
-Two halves of one product: the engine's DXF export (``cadgen.engine.export.dxf``)
-writes drawings through build123d's ``ExportDXF``, and ``cadgen.drawing_payload`` is
+Two halves of one product: the engine's DXF export (``cad.engine.export.dxf``)
+writes drawings through build123d's ``ExportDXF``, and ``cad_server.drawing_payload`` is
 what the Viewer's DXF pane gets them back through (`GET /__cad/drawing`). An entity
 the engine emits and the payload does not carry simply vanishes from the picture: a
 hole that is cut but not shown, which is the worst kind of silence in a cut file.
@@ -26,7 +26,7 @@ from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/cadgen/src")
+add_repo_path("packages/texttocad/src")
 
 # One layer per converter family, so a layer missing from the payload names the
 # geometry that vanished rather than "something".
@@ -36,7 +36,7 @@ EXPECTED_LAYERS = ("CUT", "CUT_HOLES", "ENGRAVE")
 def _emitted_document():
     import build123d as bd
 
-    from cadgen.engine.export.dxf import _emit
+    from cad.engine.export.dxf import _emit
 
     with bd.BuildSketch() as blank:
         bd.Rectangle(60, 40)
@@ -62,7 +62,7 @@ def _emitted_entity_types() -> collections.Counter:
 
 
 def _payload_for_emitted_drawing() -> dict:
-    from cadgen.drawing_payload import build_drawing_payload
+    from cad_server.drawing_payload import build_drawing_payload
 
     document = _emitted_document()
     # A fresh temp directory of its own: the payload is read from a FILE, which

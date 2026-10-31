@@ -64,7 +64,7 @@ def _stop_engine(engine: str) -> None:
         return
     from unittest import mock
 
-    from cadgen.engine import api
+    from cad.engine import api
 
     with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine}):
         api.stop()
@@ -257,7 +257,7 @@ def engine_pid(env: dict[str, str]) -> int | None:
     """The pid of the engine ``env`` names, or None when none answers."""
     from unittest import mock
 
-    from cadgen.engine.client import request
+    from cad.engine.client import request
 
     with mock.patch.dict(os.environ, env, clear=True):
         answer = request({"op": "pid"}, start=False)

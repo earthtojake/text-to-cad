@@ -6,8 +6,9 @@ set -euo pipefail
 #   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
 #
 # --select picks one group instead of all of them:
-#   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time)
-#   viewer   the CAD Viewer backend alone (tests/python/packages/cadgen/viewer)
+#   cadgen   the packages' suites: the library's, the server's (the CAD Viewer backend included)
+#            and the shim's (92% of the time)
+#   viewer   the CAD Viewer backend alone (tests/python/packages/texttocad_server/viewer)
 #   skills   every skill's suite
 #   all      cadgen + skills (the default)
 #
@@ -57,18 +58,21 @@ run_suite() {
 
 cd "$REPO_ROOT"
 
-# The cadgen package suite includes the CAD Viewer backend (tests/python/packages/cadgen/viewer):
-# the server is cadgen.viewer, and this is the one runner that reaches every pull request.
-# Windows matters most of all for the viewer: path handling, locks, subprocesses and file
-# URLs are precisely the class of bug that has only ever shown up there.
+# The packages' suites, one each: the library's (texttocad), the server's (texttocad-server: the CAD
+# Viewer backend, cad_server.viewer, among them) and the shim's (texttocad-mcp). This is the one
+# runner that reaches every pull request. Windows matters most of all for the viewer: path
+# handling, locks, subprocesses and file URLs are precisely the class of bug that has only ever
+# shown up there.
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "cadgen" ]; then
-  run_suite "cadgen package Python tests" "tests/python/packages/cadgen" "packages/cadgen/src"
+  run_suite "texttocad (the library) Python tests" "tests/python/packages/texttocad" "${PACKAGE_SOURCES[@]}"
+  run_suite "texttocad-server Python tests" "tests/python/packages/texttocad_server" "${PACKAGE_SOURCES[@]}"
+  run_suite "texttocad-mcp (the shim) Python tests" "tests/python/packages/texttocad_mcp" "${PACKAGE_SOURCES[@]}"
 fi
 
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under
-# apps/web is read by any other cadgen test.
+# apps/web is read by any other package test.
 if [ "$SELECT" = "viewer" ]; then
-  run_suite "CAD Viewer backend Python tests" "tests/python/packages/cadgen/viewer" "packages/cadgen/src"
+  run_suite "CAD Viewer backend Python tests" "tests/python/packages/texttocad_server/viewer" "${PACKAGE_SOURCES[@]}"
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
@@ -76,11 +80,11 @@ if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
     skill="$(basename "$(dirname "$skill_md")")"
     test_dir="tests/python/skills/$skill"
     if [ -d "$test_dir" ]; then
-      # Skills no longer vendor cadgen; they import the distribution. In a checkout that is
-      # the repo's own source, so put it on the path rather than depending on whatever the
+      # Skills vendor none of the packages; they import the distributions. In a checkout those
+      # are the repo's own source, so put it on the path rather than depending on whatever the
       # interpreter happens to have installed.
       run_suite "$skill skill Python tests" "$test_dir" \
-        "skills/$skill/scripts" "packages/cadgen/src"
+        "skills/$skill/scripts" "${PACKAGE_SOURCES[@]}"
     fi
   done
 fi

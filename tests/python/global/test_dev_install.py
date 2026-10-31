@@ -73,7 +73,7 @@ class DevPluginTests(unittest.TestCase):
                         self.assertIn("`cadgen` below means `cadgen +1.2.3-dev.1`", text)
                         self.assertIn("`python` below means `cadgen +1.2.3-dev.1 run`", text)
                         self.assertIn("it says 1.2.3-dev.1 is not installed", text)
-                        self.assertIn("/w/.venv/bin/python -m cadgen.cli doctor`", text)
+                        self.assertIn("/w/.venv/bin/python -m cad_server.cli doctor`", text)
 
     def test_wheel_mode_registers_one_wheel_for_the_server_and_the_skills(self) -> None:
         import argparse
@@ -122,7 +122,7 @@ class DevPluginTests(unittest.TestCase):
             note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
             self.assertIn(f"```bash\n# {note}\n```\n", copied)
             self.assertIn(f"On Windows, in PowerShell: `{note}`. Restart the\n", copied)
-            self.assertIn("/w/python -m cadgen.cli doctor", copied)
+            self.assertIn("/w/python -m cad_server.cli doctor", copied)
             self.assertIn(f"cadgen.cmd +{named}", copied)
             self.assertIn(f"`cadgen +{named}`", (plugin / "skills/fixture/SKILL.md").read_text(encoding="utf-8"))
             # A migration reference may name an old release on purpose: copied as it is.
@@ -131,9 +131,11 @@ class DevPluginTests(unittest.TestCase):
     def test_this_scripts_launcher_and_install_command_are_cadgens(self) -> None:
         import sys
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen._internal.launch import LAUNCHER
-        from cadgen.updates import INSTALL, INSTALL_WINDOWS
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server._internal.launch import LAUNCHER
+        from cad_server.updates import INSTALL, INSTALL_WINDOWS
 
         self.assertEqual(dev_install.LAUNCHER, LAUNCHER)
         self.assertEqual(dev_install.INSTALL_COMMANDS, (INSTALL, INSTALL_WINDOWS))
@@ -141,7 +143,7 @@ class DevPluginTests(unittest.TestCase):
     def test_it_reads_the_apps_through_cadgens_providers(self) -> None:
         # One reading of the agent apps for both installers: the development one loads cadgen's by path.
         self.assertEqual(Path(dev_install.providers.__file__).resolve(),
-                         REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "providers.py")
+                         REPO_ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "_internal" / "providers.py")
         self.assertIs(dev_install.loose_skills, dev_install.providers.loose_skills)
         self.assertEqual(dev_install.skill_folders("codex"), dev_install.providers.skill_folders("codex"))
 

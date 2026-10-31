@@ -24,14 +24,13 @@ import shlex
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import PROJECTS, add_sources, repo_path
 
-add_repo_path("packages/cadgen/src")
+add_sources()
 
-from cadgen import cli  # noqa: E402
+from cad_server import cli  # noqa: E402
 
 SKILLS = Path(repo_path("skills"))
-PACKAGE_DOCS = Path(repo_path("packages/cadgen"))
 
 FENCE = re.compile(r"^\s*```")
 
@@ -84,7 +83,7 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
 def _documented_forms() -> list[tuple[Path, list[str], bool]]:
     found: list[tuple[Path, list[str], bool]] = []
     # The package's TOP-LEVEL markdown only: that is what the wheel ships.
-    for path in (*sorted(SKILLS.rglob("*.md")), *sorted(PACKAGE_DOCS.glob("*.md"))):
+    for path in (*sorted(SKILLS.rglob("*.md")), *(path for project in PROJECTS for path in sorted(project.glob("*.md")))):
         for argv, elided in _command_forms(path.read_text(encoding="utf-8")):
             found.append((path.relative_to(SKILLS.parent), argv, elided))
     return found

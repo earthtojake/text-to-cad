@@ -322,12 +322,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
     def test_every_server_runs_the_one_launch_command(self) -> None:
-        # The plugins' servers and the skills run cadgen as one command (cadgen._internal.launch),
+        # The plugins' servers and the skills run cadgen as one command (cad_server._internal.launch),
         # so they share one installation and one warm daemon: no config may spell it differently.
         import sys
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen._internal.launch import LAUNCHER
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server._internal.launch import LAUNCHER
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
@@ -348,8 +350,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # branch and the OpenAI ZIP stamp their own.
         import sys
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen._internal.channel import is_channel
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server._internal.channel import is_channel
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
                 for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}

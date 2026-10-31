@@ -1,6 +1,6 @@
 export type CadJson = null | boolean | number | string | CadJson[] | { [key: string]: CadJson };
 export interface CadEntry {
-  /** The document's id (`cadgen.engine.ids`): rows join by it, so one file is one row however its path is spelled. */
+  /** The document's id (`cad.engine.ids`): rows join by it, so one file is one row however its path is spelled. */
   id?: string;
   /** The file's absolute path, `/`-separated; a document known by its id alone (a model's): its id. */
   file: string;
@@ -57,7 +57,7 @@ export interface CadRecent {
 export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the release offered, and this install's. */
 export interface CadUpdateNotice { latest: string; version: string }
-/** Where an update the update button started is (`cadgen/_internal/update.py`). */
+/** Where an update the update button started is (`cad_server/_internal/update.py`). */
 export interface CadUpdateState {
   state: 'idle' | 'working' | 'restarting' | 'failed';
   target?: string | null;
@@ -144,7 +144,7 @@ export interface CadEngineDocument {
  * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
- * links and joints, as written. See `packages/cadgen/src/cadgen/robot_payload.py`.
+ * links and joints, as written. See `packages/texttocad-server/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;
@@ -223,7 +223,7 @@ export interface CadWorkspaceService {
   reportActivity(activity: CadActivity): void;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
-  /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
+  /** `GET /__cad/robot`: a robot description resolved for the page (`cad_server.robot_payload`). */
   robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   /**
    * `GET /__cad/xbf`: where the page reads a document the cadgen engine serves (an `.xbf`, a STEP),

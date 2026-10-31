@@ -63,7 +63,7 @@ MARK = "corpus-bench:"  # the line the build process answers on
 DRIVER = """
 import json, runpy, sys
 from pathlib import Path
-from cadgen.engine import api
+from cad.engine import api
 builds = []
 script = sys.argv[1]
 build_script = api.build_script
@@ -84,7 +84,7 @@ except BaseException as error:
 finally:
     print("\\n" + MARK + json.dumps(answer), flush=True)
 """.replace("MARK", repr(MARK))
-PROBE = "import json, sys, cadgen; print(json.dumps({'cadgen': cadgen.__file__, 'python': sys.version.split()[0]}))"
+PROBE = "import json, sys, cad; print(json.dumps({'cadgen': cad.__file__, 'python': sys.version.split()[0]}))"
 
 
 # --- the config ---------------------------------------------------------------------------------
@@ -582,12 +582,12 @@ class Bench:
         return done, time.perf_counter() - started
 
     def stop(self, model: Model) -> None:
-        done, _wall = self.run(model, ["-m", "cadgen.cli", "stop"], timeout=300)
+        done, _wall = self.run(model, ["-m", "cad_server.cli", "stop"], timeout=300)
         if done is None or done.returncode:
             raise RuntimeError(f"its daemon did not stop: {done.stderr[-500:] if done else 'no answer'}")
 
     def status(self, model: Model) -> Any:
-        done, _wall = self.run(model, ["-m", "cadgen.cli", "status", "--json"], timeout=120)
+        done, _wall = self.run(model, ["-m", "cad_server.cli", "status", "--json"], timeout=120)
         if done is None or done.returncode:
             raise RuntimeError(f"status failed: {done.stderr[-500:] if done else 'no answer'}")
         found = json.loads(done.stdout)
@@ -602,7 +602,7 @@ class Bench:
 
     def daemon(self, model: Model) -> list[int]:
         """The pid of the model's own engine daemon, if one holds its door open."""
-        done, _wall = self.run(model, ["-c", "from cadgen.engine.daemon import address; print(address())"], 60)
+        done, _wall = self.run(model, ["-c", "from cad_server.engine.daemon import address; print(address())"], 60)
         path = done.stdout.strip() if done is not None and done.returncode == 0 else ""
         if not path or not os.path.exists(path):
             return []
@@ -653,7 +653,7 @@ class Bench:
         ident = self.ids[model.name]
         inside(model.work, model.document)
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cadgen.cli", "export", ident, str(model.document), "--json"], timeout=1800)
+        done, wall = self.run(model, ["-m", "cad_server.cli", "export", ident, str(model.document), "--json"], timeout=1800)
         report = last_json(done.stdout) if done is not None else None
         files = report.get("files") if isinstance(report, dict) else None
         if (done is None or done.returncode or not report or report.get("ok") is not True
@@ -667,7 +667,7 @@ class Bench:
         self.step(model, "export", wall, load, ok=True, document_id=ident,
                   xbf_bytes=files[0]["bytes"], xbf_seconds=files[0]["seconds"], written=files[0]["written"])
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cadgen.cli", "serve", ident], timeout=600)
+        done, wall = self.run(model, ["-m", "cad_server.cli", "serve", ident], timeout=600)
         url = (done.stdout.strip().splitlines() or [""])[-1] if done is not None else ""
         page = urllib.parse.urlsplit(url)
         if (done is None or done.returncode or page.hostname not in ("127.0.0.1", "localhost", "::1")
@@ -720,7 +720,7 @@ class Bench:
         for step in ("snapshot-first", "snapshot"):
             png = pictures / f"{model.name}{'-first' if step == 'snapshot-first' else ''}.png"
             load = self.quiet(model)
-            done, wall = self.run(model, ["-m", "cadgen.cli", "snapshot", ident, str(png), "--json"],
+            done, wall = self.run(model, ["-m", "cad_server.cli", "snapshot", ident, str(png), "--json"],
                                   timeout=1800)
             report = last_json(done.stdout) if done is not None else None
             report = report if isinstance(report, dict) else {}
@@ -848,7 +848,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-dir", type=Path, default=Path(tempfile.gettempdir()) / "cadgen-bench",
                         help="parent for a fresh batch folder containing each model's private engine door")
     parser.add_argument("--python", default=sys.executable, help="the interpreter that builds (default: this one)")
-    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/cadgen/src",
+    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/texttocad/src",
                         help="the cadgen it imports (default: this checkout's)")
     parser.add_argument("--max-load", type=float, help="before each step, wait until the 1-minute load is at most this and no other cadgen build "
                         "uses more than 5%% of a core")

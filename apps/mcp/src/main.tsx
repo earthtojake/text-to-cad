@@ -12,7 +12,7 @@ import { createTunnelClient, createTunnelFetch } from './host/tunnel';
 import './styles.css';
 
 // The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to the CAD
-// app's server for its telemetry (`cadgen/analytics.py`), each once a page and never its message.
+// app's server for its telemetry (`cad_server/analytics.py`), each once a page and never its message.
 // There is no way to the server until the host has answered (`start`): until then they wait. A frame
 // names its chunk, which the page's loader made a blob URL of and kept which is which (vite.config.mjs).
 const waiting: CadPageCrash[] = [];
