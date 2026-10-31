@@ -21,6 +21,7 @@ from pathlib import Path
 from unittest import mock
 from urllib.parse import quote
 
+import cadgen
 from cadgen._internal.picker import FilePicker, PickerFailed
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
@@ -216,7 +217,9 @@ class ServerInfo(HttpLayerTestCase):
         # Where the explorer starts with nowhere else to: the person's home folder, spelled with "/".
         self.assertEqual(info["home"], os.path.expanduser("~").replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
-        self.assertEqual(list(info), ["app", "identityToken", "platform", "user", "home",
+        # The release the engine runs: a page that reconnects to another reloads into it.
+        self.assertEqual(info["release"], cadgen.__version__)
+        self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
                                       "start", "pick", "port", "pid"])
         self.assertEqual(headers["cache-control"], "no-store")
 

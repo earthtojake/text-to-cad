@@ -2552,7 +2552,7 @@ def _can_listen() -> None:
 
 
 def lock(path: Path | None = None) -> Any:
-    """The daemon's lock (or another protocol's, at ``path``), held for its life; None when
+    """The daemon's lock (or the one at ``path``), held for its life; None when
     another daemon holds it. A lock file is removed by whoever holds it (``let_go``, ``sweep_dead``),
     so a lock taken on a file whose name has gone, or names another file now, is no lock: it is let
     go and the file the name names now is taken instead (``_names``)."""

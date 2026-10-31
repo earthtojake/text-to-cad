@@ -649,23 +649,16 @@ def _status(args: argparse.Namespace, _prog: str) -> int:
 
 
 def _told_swept(swept: dict[str, list[str]]) -> None:
-    """What a sweep found besides this protocol's server, on stderr (stdout is the answer's): the
-    stale files it removed, and a server of an older protocol, which ``stop`` stops."""
+    """The stale engine files a sweep removed, on stderr (stdout is the answer's)."""
     for path in swept["removed"]:
         print(f"removed stale engine file {path}", file=sys.stderr)
-    from cadgen.engine.daemon import address
-
-    current = str(address())
-    for address in swept["running"]:
-        if address != current:
-            print(f"an engine server of an older cadgen runs at {address}; cadgen stop stops it", file=sys.stderr)
 
 
 def _stop(args: argparse.Namespace, prog: str) -> int:
     from cadgen.engine.client import sweep
 
-    # Every server of this installation, whatever protocol it speaks; stopped means gone: the next
-    # command starts a fresh one, never reaches these.
+    # The engine, whatever release runs it; stopped means gone: the next command starts a fresh one,
+    # the current installation's.
     try:
         swept = sweep(stop=True)
     except ConnectionError as error:
