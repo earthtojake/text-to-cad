@@ -201,10 +201,10 @@ _HERE = Path(__file__).resolve().parent
 _ENGINE = _HERE.parent
 _OWN = (_ENGINE,)
 # The functions a model calls (``cadgen.engine.model``: its decorators, ``read_step``,
-# ``paint``; ``cadgen.engine.refs``: ``select``; ``cadgen.engine.reader``: ``read_mesh``) count
-# as build123d does: what they run for the model is the model's call (a document ``select``
-# reads is the model's read).
-_API = frozenset({_ENGINE / "model.py", _ENGINE / "refs.py", _ENGINE / "reader.py"})
+# ``paint``; ``cadgen.engine.refs``: ``select``; ``cadgen.engine.reader``: ``read_mesh``;
+# ``cadgen.engine.implicit``: ``solid``) count as build123d does: what they run for the model is
+# the model's call (a document ``select`` reads is the model's read).
+_API = frozenset({_ENGINE / "model.py", _ENGINE / "refs.py", _ENGINE / "reader.py", _ENGINE / "implicit.py"})
 _NOT_IDENTIFIER = re.compile(r"[^A-Za-z0-9_]+")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # What a digest of a name looks like at its end, which a name written as it is never has.

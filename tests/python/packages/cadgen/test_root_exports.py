@@ -28,6 +28,7 @@ NAMESPACES = {
     "cadgen.ap242": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
                      "posed"),
     "cadgen.gltf": ("animation",),
+    "cadgen.implicit": ("solid",),
 }
 
 
@@ -73,11 +74,11 @@ class RootExports(unittest.TestCase):
     def test_each_namespace_is_exactly_its_declared_names(self):
         import importlib
 
-        from cadgen.engine import mechanism, model
+        from cadgen.engine import implicit, mechanism, model
 
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model,
                    "gear_pair": mechanism, "rack_and_pinion_pair": mechanism, "screw_pair": mechanism,
-                   "posed": mechanism}
+                   "posed": mechanism, "solid": implicit}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
             self.assertEqual(sorted(names), sorted(module.__all__))
@@ -113,7 +114,7 @@ class RootExports(unittest.TestCase):
     def test_importing_cadgen_does_not_import_the_cad_stack(self):
         """Run in a subprocess: this one almost certainly has OCP loaded already."""
         code = (
-            "import sys, cadgen, cadgen.ap242, cadgen.gltf;"
+            "import sys, cadgen, cadgen.ap242, cadgen.gltf, cadgen.implicit;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"
         )
         proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
