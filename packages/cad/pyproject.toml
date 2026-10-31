@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "texttocad"
+name = "cad"
 version = "0.9.0"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
@@ -24,9 +24,9 @@ classifiers = [
 # Two sets. The required dependencies are what the server imports of the library -- the document
 # model, the protocol a client speaks, the build's words -- none of which imports the CAD kernel (a
 # test holds that): numpy alone, the meshes' arrays. The `build123d` extra is what a model runs on: the
-# server installs `texttocad[build123d]` at its own release into the one environment every worker starts
+# server installs `cad[build123d]` at its own release into the one environment every worker starts
 # from (the base), and a person who installs the library by hand to run models installs
-# `texttocad[build123d]`.
+# `cad[build123d]`.
 dependencies = [
   # The library's meshes are numpy arrays end to end: the engine packs each part's triangles into
   # its wire format, and the STL/3MF/GLB writers read them back. The server's own process reads the

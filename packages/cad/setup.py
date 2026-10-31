@@ -1,6 +1,6 @@
-"""texttocad builds from pyproject.toml; this adds one file to the wheel's root.
+"""cad builds from pyproject.toml; this adds one file to the wheel's root.
 
-``texttocad-lazy-kernel.pth`` makes ``import build123d`` lazy in the environment the library is installed
+``cad-lazy-kernel.pth`` makes ``import build123d`` lazy in the environment the library is installed
 into (``cad/_internal/lazy_kernel.py``): the interpreter runs a ``.pth`` file's import line at
 start only from a site-packages directory, so the file must sit at the wheel's root, which an
 installer unpacks into site-packages. setuptools' ``data-files`` cannot put it there -- a wheel's
@@ -18,7 +18,7 @@ import os
 from setuptools import setup
 from setuptools.command.build_py import build_py
 
-PTH = "texttocad-lazy-kernel.pth"
+PTH = "cad-lazy-kernel.pth"
 
 
 class build_py_with_pth(build_py):  # noqa: N801 - setuptools' command naming

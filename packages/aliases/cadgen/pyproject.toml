@@ -1,6 +1,6 @@
 # The distribution named cadgen, the library's earlier name, kept so a project that declares it
-# resolves: the text-to-cad library, texttocad, at this very release, and nothing of its own (no
-# module, no command; texttocad carries the `cadgen` import name). Released with every release.
+# resolves: the text-to-cad library, cad, at this very release, and nothing of its own (no
+# module, no command; cad carries the `cadgen` import name). Released with every release.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
@@ -8,18 +8,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cadgen"
 version = "0.9.0"
-description = "The text-to-cad library under its earlier name: installs texttocad, whose import name is cad (and cadgen, an alias of it)."
+description = "The text-to-cad library under its earlier name: installs cad, imported as cad (and as cadgen, an alias of it)."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 authors = [{ name = "earthtojake" }]
-dependencies = ["texttocad==0.9.0"]
+dependencies = ["cad==0.9.0"]
 
 [project.optional-dependencies]
 # `cadgen[build123d]`: the library's own build123d extra. `cadgen[kernel]` is its 0.8 spelling, the way 0.8
 # installed the CAD kernel by hand, kept: the same stack.
-build123d = ["texttocad[build123d]==0.9.0"]
-kernel = ["texttocad[build123d]==0.9.0"]
+build123d = ["cad[build123d]==0.9.0"]
+kernel = ["cad[build123d]==0.9.0"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

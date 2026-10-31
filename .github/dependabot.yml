@@ -2,8 +2,8 @@
 # noise is one review, not twenty. Majors stay individual. Every PR carries the
 # `dependencies` label, which .github/release.yml files under Maintenance.
 #
-# The Python packages' pins (the library's, packages/texttocad, the server's,
-# packages/texttocad-server; the shim, packages/texttocad-mcp, has none) are the floor a
+# The Python packages' pins (the library's, packages/cad, the server's,
+# packages/cad-server; the shim, packages/cad-mcp, has none) are the floor a
 # released wheel is built against, so they are reviewed like any other change;
 # @text-to-cad/core/viewer/docs are the three npm trees CI installs (.github/actions/setup-deps).
 version: 2
@@ -66,8 +66,8 @@ updates:
 
   - package-ecosystem: pip
     directories:
-      - /packages/texttocad
-      - /packages/texttocad-server
+      - /packages/cad
+      - /packages/cad-server
     schedule:
       interval: weekly
     labels:

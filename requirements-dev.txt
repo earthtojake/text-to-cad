@@ -5,13 +5,13 @@
 # exactly the pinned version. Installing a skill's requirements.txt WITHOUT this file fetches the
 # last published release from PyPI instead of the checkout -- this file is the development door.
 # The library with its build123d extra: this environment runs models itself, so it is its own base
-# environment and the server makes none (packages/texttocad-server/src/cad_server/_internal/base.py).
---editable ./packages/texttocad[build123d]
---editable ./packages/texttocad-server
---editable ./packages/texttocad-mcp
+# environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py).
+--editable ./packages/cad[build123d]
+--editable ./packages/cad-server
+--editable ./packages/cad-mcp
 
 # pip installs the Python; it cannot build the JavaScript that ships beside it.
-# packages/texttocad-server/src/cad_server/_runtime is gitignored and produced by
+# packages/cad-server/src/cad_server/_runtime is gitignored and produced by
 # `scripts/bundle/bundle.sh`, so run that once after installing this file --
 # without it the packaged Viewer and the CAD app have no client to serve; the server
 # names this command when it finds none.

@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "texttocad-mcp"
+name = "cad-mcp"
 version = "0.9.0"
 description = "The stdio transport an agent app starts for text-to-cad's CAD app: MCP carried to the device's CAD server, with the standard library alone."
 readme = "README.md"
