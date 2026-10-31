@@ -240,7 +240,9 @@ RULES: tuple[Rule, ...] = (
 
     # The Windows installer rehearsal: a workflow of its own, dispatched by hand or by a push to main
     # that changes the installer; no test reads it and no test.yml job runs it.
-    Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
+    Rule((".github/workflows/install-windows.yml",
+          # TEMPORARY, with the workflow it names: the pull request 739 rehearsal, removed before the merge.
+          ".github/workflows/e2e-rehearsal.yml",), NOTHING, final=True),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((
