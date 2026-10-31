@@ -7,17 +7,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.8.4"
+version = "0.9.0"
 description = "The text-to-cad library under its earlier name: installs texttocad, whose import name is cad (and cadgen, an alias of it)."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 authors = [{ name = "earthtojake" }]
-dependencies = ["texttocad==0.8.4"]
+dependencies = ["texttocad==0.9.0"]
 
 [project.optional-dependencies]
 # `cadgen[kernel]`, the way 0.8 installed the CAD kernel by hand: the library's own kernel extra.
-kernel = ["texttocad[kernel]==0.8.4"]
+kernel = ["texttocad[kernel]==0.9.0"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

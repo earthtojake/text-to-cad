@@ -24,7 +24,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. On a computer 0.8 was set up on, moves what 0.9 keeps of 0.8's state folder
    into its own, once: your telemetry answer and language, the installations'
@@ -164,7 +164,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "texttocad-mcp==0.8.4", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "texttocad-mcp==0.9.0", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }

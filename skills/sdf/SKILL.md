@@ -21,8 +21,8 @@ The `.sdf` file is the source of truth: author and edit the XML directly.
 Run the server through the `cad` command its installation writes, so this skill's commands
 share one installation, and its server, with the CAD app's:
 
-- `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.8.4 run`
+- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.9.0 run`
 
 For first-time setup or an update, a missing `cad` command, a release it says is not
 installed, a server that is not running, or an installation or kernel load error, read

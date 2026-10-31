@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "texttocad"
-version = "0.8.4"
+version = "0.9.0"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its kernel extra."
 readme = "README.md"
 license = "MIT"

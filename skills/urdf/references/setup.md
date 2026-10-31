@@ -2,7 +2,7 @@
 
 Read this for first-time setup, an update, a missing `cad` command, or an
 installation, kernel or server error. `cad` means the command this skill's
-`SKILL.md` defines, `cad +0.8.4`.
+`SKILL.md` defines, `cad +0.9.0`.
 
 ## Install or update text-to-cad
 
@@ -24,8 +24,8 @@ a sandbox that refuses either, or with that sandbox's permission.
 
 ## Register this skill's release
 
-If `cad` is not on your PATH, or it says 0.8.4 is not installed, run
-`uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad doctor` once,
+If `cad` is not on your PATH, or it says 0.9.0 is not installed, run
+`uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad doctor` once,
 outside any sandbox or with its permission: it installs the server, registers it, writes the
 `cad` command, makes the CAD kernel environment models run in and starts the server.
 With the CAD app running, nothing else needs the sandbox's permission: it starts the
@@ -33,9 +33,9 @@ server and holds it. Without it, a sandboxed shell cannot start the server; when
 command says no engine server is running, run `cad server` outside the sandbox once.
 
 The `cad` command lives in `~/.local/bin` (on Windows, `%USERPROFILE%\.local\bin`,
-where it is run as `cad.cmd +0.8.4`); `CAD_LAUNCHER_DIR` moves the folder. A
+where it is run as `cad.cmd +0.9.0`); `CAD_LAUNCHER_DIR` moves the folder. A
 project venv can put its own `cad` ahead of it on PATH, even when `~/.local/bin` is
-on PATH. Run `~/.local/bin/cad +0.8.4 doctor` to diagnose
+on PATH. Run `~/.local/bin/cad +0.9.0 doctor` to diagnose
 that case and use that full path for commands until PATH is corrected.
 
 ## Diagnose a failure
