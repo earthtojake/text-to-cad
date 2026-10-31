@@ -5,9 +5,9 @@ out again.
 
 The install command runs it (``cad_server.updates.INSTALL``: ``curl -fsSL https://texttocad.dev/install.sh |
 sh``; on Windows ``INSTALL_WINDOWS``, ``irm https://www.texttocad.dev/install.ps1 | iex``) after finding or
-installing uv: the newest release's server (``texttocad-server``), run through ``uvx``. Running it again
+installing uv: the newest release's server (``cad-server``), run through ``uvx``. Running it again
 is the update, and ``cad update`` and the update button take the same steps. Each app's plugin pins the
-release its CAD app's transport runs (``texttocad-mcp==X``), which attaches to the device's engine, the
+release its CAD app's transport runs (``cad-mcp==X``), which attaches to the device's engine, the
 current installation's
 (``cad_server._internal.installations``), whatever release it is. In order, each step said as it runs:
 
@@ -30,7 +30,7 @@ current installation's
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
 5. **build123d.** The environment every build and the engine's own kernel processes start from,
-   ``texttocad[build123d]`` at this release (``cad_server._internal.base``), made now when it is not, so the
+   ``cad[build123d]`` at this release (``cad_server._internal.base``), made now when it is not, so the
    first build after an install or an update waits on nothing: its line said while uv works, and a step
    that fails when it cannot be made. An installation that carries the kernel itself makes none.
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
@@ -504,8 +504,8 @@ class Installer:
             return {**row, "subject": f"unknown ({error})"}
         shown = self.providers.shown(str(folder), self.machine)
         if found is not None:
-            return {**row, "subject": f"texttocad[{base.EXTRA}] {installation.release} in {shown}"}
-        return {**row, "action": "make", "subject": f"texttocad[{base.EXTRA}] {installation.release} in {shown}, once"}
+            return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
+        return {**row, "action": "make", "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}, once"}
 
     def _make_kernel(self) -> bool:
         """The CAD kernel environment made (``_kernel``'s ``make``), each line uv's work says as it goes;
@@ -810,7 +810,7 @@ class Installer:
             # command fails fails the run too, and the rest goes on: the switch among it.
             kernel_failed = False
             if made:
-                self.stage("build123d", f"texttocad[build123d] {self.release}")
+                self.stage("build123d", f"cad[build123d] {self.release}")
                 kernel_failed = not self._make_kernel()
             failed = kernel_failed
             self.stage("apps")

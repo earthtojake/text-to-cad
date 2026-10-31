@@ -41,7 +41,7 @@ WINDOWS = os.name == "nt"
 NAME = "engine"
 # The server's distribution, whose release is this transport's own, its import name, the module it
 # registers an installation by and the one it runs its engine as.
-SERVER = "texttocad-server"
+SERVER = "cad-server"
 SERVER_PACKAGE = "cad_server"
 REGISTER = "cad_server._internal.installations"
 DAEMON_MODULE = "cad_server._internal.engine_daemon"

@@ -2,7 +2,7 @@
 (``cad run model.py``), ``-m`` or ``-c``.
 
 The environment is the installation's base (``cad_server._internal.base``): the library with the CAD
-kernel (``texttocad[build123d]``), on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
+kernel (``cad[build123d]``), on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
 while it is made: by the device's engine when one runs (an agent's sandbox may not let this command write
 the cache folder; the engine a host's CAD app started runs outside it), else here; an installation that
 carries the kernel itself is its own. Its Python runs the

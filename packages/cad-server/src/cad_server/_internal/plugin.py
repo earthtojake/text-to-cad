@@ -9,7 +9,7 @@ server configs they name, the icons, the licence, and ``skills/`` -- written fro
 of them (``source``: ``_runtime/plugin`` in its wheel, which ``scripts/bundle`` builds; a checkout's
 root in a source tree). Three things change on the way (``tree``): every version is this
 distribution's, the catalog is a local one of its own (``MARKETPLACE``), and each host's CAD server
-is the line the installer gives that host: ``uvx ... --from texttocad-mcp==<version> cad-mcp``, told
+is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp``, told
 the install channel it always was (``CHANNELS``). There is no root ``.mcp.json``: Claude Code reads
 one in place of the server config its manifest names.
 
@@ -81,7 +81,7 @@ CHANNELS = {
 CHANNEL_ENV = "CAD_INSTALL_CHANNEL"
 AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
 # The CAD app's transport, as the plugin's server configs run it (``cad_server._internal.launch``).
-SHIM, SHIM_COMMAND = "texttocad-mcp", "cad-mcp"
+SHIM, SHIM_COMMAND = "cad-mcp", "cad-mcp"
 # The lock two writers of the folder take, beside it.
 LOCK = "plugin.lock"
 # What a checkout's skills folder may hold that the plugin never carries: a wheel's package data

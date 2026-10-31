@@ -59,7 +59,7 @@ def _shared_providers():
     """The server's agent-app providers (``cad_server._internal.providers``), loaded by its path: this script
     runs on any Python 3 and must not import the packages, whose floor is newer, and that module imports
     nothing of them, so both installers read the apps one way."""
-    path = REPO_ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "_internal" / "providers.py"
+    path = REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server" / "_internal" / "providers.py"
     spec = importlib.util.spec_from_file_location("text_to_cad_providers", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module  # its dataclasses look their module up by name
@@ -126,7 +126,7 @@ VERSION_ENV = "CAD_INSTALLATION_VERSION"
 
 def launch(tool: str, version: str) -> str:
     """The uvx command for ``tool`` (``cad`` or ``python``), as the release stamps it in the skills."""
-    return " ".join((*LAUNCHER, f"texttocad-server=={version}", tool))
+    return " ".join((*LAUNCHER, f"cad-server=={version}", tool))
 
 
 def launcher_dir() -> str:
@@ -321,7 +321,7 @@ def copy_page(host: str, build: bool, version: str, prune: bool = True) -> Path:
 def uvx_from(wheel: Path) -> list[str]:
     """``uvx ... --from`` the server's ``wheel``, with the library's wheel built beside it: the uvx
     command an install by wheel runs, up to the command it runs."""
-    library = sorted(wheel.parent.glob("texttocad-*.whl"))
+    library = sorted(wheel.parent.glob("cad-[0-9]*.whl"))
     return [*LAUNCHER[:-1], *(["--with", str(library[0])] if library else []), LAUNCHER[-1], str(wheel)]
 
 
@@ -337,10 +337,10 @@ def build_wheel(host: str, bundle: bool) -> Path:
         subprocess.run([str(REPO_ROOT / "scripts" / "bundle" / "bundle.sh")], cwd=REPO_ROOT, check=True)
     wheels = dev_root(host) / "wheels"
     out = wheels / time.strftime("%Y%m%d%H%M%S")
-    for project in ("texttocad", "texttocad-server", "texttocad-mcp"):
+    for project in ("cad", "cad-server", "cad-mcp"):
         run(uv, "build", "--wheel", "--out-dir", str(out), str(REPO_ROOT / "packages" / project))
-    built = sorted(out.glob("texttocad_server-*.whl"))
-    if not built or not list(out.glob("texttocad-*.whl")):
+    built = sorted(out.glob("cad_server-*.whl"))
+    if not built or not list(out.glob("cad-[0-9]*.whl")):
         raise Refused(f"uv build wrote no server or library wheel to {out}.")
     # A server already running keeps the installation it started from; only new starts read the
     # wheel, and they read this one.
@@ -360,7 +360,7 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
     released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if args.wheel:
         wheel = build_wheel(host, args.build)
-        shim = sorted(wheel.parent.glob("texttocad_mcp-*.whl"))
+        shim = sorted(wheel.parent.glob("cad_mcp-*.whl"))
         if not shim:
             raise Refused(f"no shim wheel beside {wheel}.")
         server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"], "env": dict(CHANNEL)}

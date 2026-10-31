@@ -48,7 +48,7 @@ LIBRARY_REQUIRED=(
   # `import build123d` made lazy at interpreter start: the finder, and the .pth at the root of
   # site-packages that installs it.
   "cad/_internal/lazy_kernel.py"
-  "texttocad-lazy-kernel.pth"
+  "cad-lazy-kernel.pth"
   # The robot validators' library: a packaging regression here would ship a server whose
   # `urdf validate` cannot import.
   "cad/urdf_source.py"
@@ -194,20 +194,20 @@ wheel, version, extras = sys.argv[1], sys.argv[2], sys.argv[3].split()
 with zipfile.ZipFile(wheel) as archive:
     metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
 requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
-wanted = [f"Requires-Dist: texttocad=={version}",
-          *(f'Requires-Dist: texttocad[build123d]=={version}; extra == "{extra}"' for extra in extras)]
+wanted = [f"Requires-Dist: cad=={version}",
+          *(f'Requires-Dist: cad[build123d]=={version}; extra == "{extra}"' for extra in extras)]
 if requires != wanted:
     sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its build123d extra "
              f"({wanted}) alone")
 PY
 }
 
-check texttocad texttocad "cad|cadgen|texttocad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
-check texttocad-mcp texttocad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
+check cad cad "cad|cadgen|cad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
+check cad-mcp cad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
 check_alias cadgen cadgen "build123d kernel"
 check_alias text-to-cad text_to_cad build123d
 # The server's last: the runtime checks below read its wheel and listing.
-check texttocad-server texttocad_server "cad_server" "${SERVER_REQUIRED[@]}"
+check cad-server cad_server "cad_server" "${SERVER_REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
 # report the count too: it distinguishes "one file moved" from "package-data is not matching".
@@ -224,7 +224,7 @@ if [ "$shipped_runtime" != "$expected_runtime" ]; then
   exit 1
 fi
 
-"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/texttocad-server"
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/cad-server"
 # The skills and the plugin's files ship in the server's wheel: byte for byte the repository's, at this commit.
 plugin_files=()
 while IFS= read -r plugin_file; do plugin_files+=("$plugin_file"); done < <("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-plugin-files)

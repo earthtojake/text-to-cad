@@ -49,7 +49,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
-            print('CAD Viewer client is not built; build apps/web or install the texttocad-server wheel', file=sys.stderr)
+            print('CAD Viewer client is not built; build apps/web or install the cad-server wheel', file=sys.stderr)
             return 1
     try:
         answer = request({'op': 'viewer', **options})

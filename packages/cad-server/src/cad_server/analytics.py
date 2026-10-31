@@ -243,14 +243,14 @@ def _through_proxy(quote: Callable[[str], str]) -> str | None:
 def _installed_from() -> str | None:
     """What uvx installed this environment from, as ``uvx --from`` takes it again: the wheel, folder or URL its
     record of a direct install names (``direct_url.json``, PEP 610) while that is still there, else -- installed
-    from an index -- the release's requirement (``texttocad-server==<version>``). ``None`` when neither can be read."""
+    from an index -- the release's requirement (``cad-server==<version>``). ``None`` when neither can be read."""
     import sysconfig
     from urllib.parse import urlparse
     from urllib.request import url2pathname
 
     site = Path(sysconfig.get_path("purelib", vars={"base": sys.prefix, "platbase": sys.prefix}))
     try:
-        found = sorted((info.stat().st_mtime_ns, info) for info in site.glob("texttocad_server-*.dist-info"))
+        found = sorted((info.stat().st_mtime_ns, info) for info in site.glob("cad_server-*.dist-info"))
     except OSError:
         return None
     if not found:
@@ -259,7 +259,7 @@ def _installed_from() -> str | None:
     try:
         direct = json.loads((info / "direct_url.json").read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return f"texttocad-server=={info.name[len('texttocad_server-'):-len('.dist-info')]}"
+        return f"cad-server=={info.name[len('cad_server-'):-len('.dist-info')]}"
     except (OSError, ValueError):
         return None
     url = direct.get("url") if isinstance(direct, dict) else None
@@ -892,7 +892,7 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
              *(entry for entry in sys.path if entry.endswith(("site-packages", "dist-packages")))]
     places += [(os.path.realpath(entry), "site") for entry in sites if entry]
     places += [(os.path.realpath(paths[key]), "stdlib") for key in ("stdlib", "platstdlib")]
-    seen, todo = set(), ["texttocad-server"]
+    seen, todo = set(), ["cad-server"]
     while todo:
         name = _distribution(todo.pop())
         if name in seen:
@@ -906,7 +906,7 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
         # kernel, its `build123d` extra, which every environment a model runs in installs.
         todo += [re.split(r"[\s;<>=!~\[(]", requirement, maxsplit=1)[0] for requirement in requirements
                  if "extra" not in (marker := requirement.partition(";")[2])
-                 or (name == "texttocad" and re.search(r"""extra\s*==\s*["']build123d["']""", marker))]
+                 or (name == "cad" and re.search(r"""extra\s*==\s*["']build123d["']""", marker))]
     ours = frozenset(top for top, owners in metadata.packages_distributions().items()
                      if top != "__pycache__" and any(_distribution(owner) in seen for owner in owners))
     return tuple(sorted(set(places), key=lambda place: len(place[0]), reverse=True)), ours

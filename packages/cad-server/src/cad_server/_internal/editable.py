@@ -20,7 +20,7 @@ def editable_source() -> str | None:
     from importlib.metadata import PackageNotFoundError, distribution
 
     try:
-        recorded = distribution("texttocad-server").read_text("direct_url.json")
+        recorded = distribution("cad-server").read_text("direct_url.json")
     except (PackageNotFoundError, OSError):
         return None
     try:

@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 
 # The release's projects on PyPI, in the order they go up.
-PROJECTS = ("texttocad", "texttocad-server", "texttocad-mcp", "cadgen", "text-to-cad")
+PROJECTS = ("cad", "cad-server", "cad-mcp", "cadgen", "text-to-cad")
 INDEX = "https://pypi.org/pypi"
 SIMPLE = "https://pypi.org/simple"
 TIMEOUT = 60
@@ -53,8 +53,8 @@ def sha256(path: Path) -> str:
 
 
 def normalized(project: str) -> str:
-    """A project's name as its wheel's and sdist's file names spell it (``texttocad-server`` is
-    ``texttocad_server``)."""
+    """A project's name as its wheel's and sdist's file names spell it (``cad-server`` is
+    ``cad_server``)."""
     return re.sub(r"[-_.]+", "_", project).lower()
 
 

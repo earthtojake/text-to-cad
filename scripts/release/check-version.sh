@@ -11,9 +11,9 @@ Usage:
 
 Checks that VERSION contains a valid canonical release version, that the five
 distributions (the library, the server, the shim and the two aliases) are that
-version and pin each other at it (`texttocad==<version>`), that every skill's
+version and pin each other at it (`cad==<version>`), that every skill's
 SKILL.md and setup guide (references/setup.md) name exactly that version: its
-install command (`uvx ... --from texttocad-server==<version> cad doctor`) and the
+install command (`uvx ... --from cad-server==<version> cad doctor`) and the
 version it runs (`cad +<version>`, "it says <version> is not installed"), and
 that the one-line installer's scripts fall back to it. main is the source
 branch AND what installers clone, so a stale pin ships.
@@ -72,8 +72,12 @@ fi
 # distributions' versions and their pins of the library. The release PR stamps them (sync-version.mjs)
 # alongside VERSION; another version means the two moved separately.
 stale=0
-PIN='texttocad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?==[^[:space:]`"'"'"']+'
-for project in packages/texttocad packages/texttocad-server packages/texttocad-mcp packages/aliases/cadgen \
+# A pin names the library (`cad`, with an extra or not), the server or the shim, standing alone: `cad` at
+# the end of another name (`text-to-cad==`) is none of them. grep -o keeps the character before the name,
+# which `pins` takes off.
+PIN='(^|[^[:alnum:]_.-])cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?==[^[:space:]`"'"'"']+'
+pins() { grep -oE -- "$PIN" "$1" | sed -E 's/^[^c]//' || true; }
+for project in packages/cad packages/cad-server packages/cad-mcp packages/aliases/cadgen \
                packages/aliases/text-to-cad; do
   declared="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$project/pyproject.toml")"
   if [ "$declared" != "$version" ]; then
@@ -85,7 +89,7 @@ for project in packages/texttocad packages/texttocad-server packages/texttocad-m
       echo "$project/pyproject.toml pins $pin; expected ${pin%%==*}==$version" >&2
       stale=1
     fi
-  done < <(grep -oE -- "$PIN" "$project/pyproject.toml" || true)
+  done < <(pins "$project/pyproject.toml")
 done
 while IFS= read -r skill; do
   while IFS= read -r pin; do
@@ -93,7 +97,7 @@ while IFS= read -r skill; do
       echo "$skill pins $pin; expected ${pin%%==*}==$version" >&2
       stale=1
     fi
-  done < <(grep -oE -- "$PIN" "$skill" || true)
+  done < <(pins "$skill")
   while IFS= read -r named; do
     if [ "$named" != "$version" ]; then
       echo "$skill runs cad +$named; expected +$version" >&2

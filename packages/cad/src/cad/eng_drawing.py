@@ -1423,9 +1423,11 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
         from ezdxf.addons.drawing import Frontend, RenderContext, config
         from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
     except ImportError as exc:
+        from cad import __version__
+
         raise RuntimeError(
             "@eng_drawing writes a PDF and its renderer is missing: "
-            f"{exc}. Install the library with its kernel (pip install 'texttocad[build123d]')."
+            f"{exc}. Install the library with its kernel (pip install 'cad[build123d]=={__version__}')."
         ) from exc
     from cad._internal.atomic_replace import temp_suffix
 

@@ -15,7 +15,7 @@ run a process from it (Python imports lazily, so a folder must never vanish unde
 switch that fails goes back to it. The others go at that switch (``collect``), each once no process
 runs from it, with the bases made for it.
 
-What is made from where: a release on the index as ``texttocad-server==<version>`` (the library without
+What is made from where: a release on the index as ``cad-server==<version>`` (the library without
 its kernel comes with it, at the same release); one this installation was installed from as a wheel
 (``--from`` a file, ``direct_url.json``) from that wheel again. A folder of
 wheels a test names is read beside the index (``base.FIND_LINKS_ENV``).

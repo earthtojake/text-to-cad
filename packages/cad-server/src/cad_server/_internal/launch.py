@@ -1,8 +1,8 @@
 """How the server is run: installed by ONE ``uvx`` command, then run by the ``cad`` command it writes.
 
 The install command runs the server's ``cad setup`` with ``uvx`` and the exact requirement
-(``texttocad-server==<version>``), and an agent app starts the CAD app's transport the same way
-(``texttocad-mcp==<version>``, its ``cad-mcp``), outside any sandbox. uv keeps one installation per
+(``cad-server==<version>``), and an agent app starts the CAD app's transport the same way
+(``cad-mcp==<version>``, its ``cad-mcp``), outside any sandbox. uv keeps one installation per
 requirement and reuses it, so the same command means the same installation. ``--no-config`` keeps the
 user's own uv settings (an index, a cache policy) from resolving it differently, and ``--managed-python
 --python 3.14`` (``PYTHON``) makes the installation the first command creates the same on every machine,
@@ -28,12 +28,12 @@ from __future__ import annotations
 PYTHON = "3.14"
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")
 # The server's distribution and its command; the CAD app's transport (the shim's) and its command.
-SERVER, COMMAND = "texttocad-server", "cad"
-SHIM, SHIM_COMMAND = "texttocad-mcp", "cad-mcp"
+SERVER, COMMAND = "cad-server", "cad"
+SHIM, SHIM_COMMAND = "cad-mcp", "cad-mcp"
 
 
 def launch_command(tool: str = COMMAND, version: str | None = None) -> str:
-    """``uvx ... --from texttocad-server==<version> <tool>``: run ``tool`` (``cad`` or ``python``)
+    """``uvx ... --from cad-server==<version> <tool>``: run ``tool`` (``cad`` or ``python``)
     from this version's installation, installing it first if uv has none."""
     if version is None:
         from cad_server import __version__ as version
@@ -41,7 +41,7 @@ def launch_command(tool: str = COMMAND, version: str | None = None) -> str:
 
 
 def mcp_command(version: str | None = None) -> list[str]:
-    """``uvx ... --from texttocad-mcp==<version> cad-mcp``, as words: the CAD app's server the plugins and
+    """``uvx ... --from cad-mcp==<version> cad-mcp``, as words: the CAD app's server the plugins and
     Claude Desktop's entry start."""
     if version is None:
         from cad_server import __version__ as version

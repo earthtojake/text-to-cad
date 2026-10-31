@@ -25,7 +25,7 @@ a sandbox that refuses either, or with that sandbox's permission.
 ## Register this skill's release
 
 If `cad` is not on your PATH, or it says 0.9.0 is not installed, run
-`uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.9.0 cad doctor` once,
+`uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad doctor` once,
 outside any sandbox or with its permission: it installs the server, registers it, writes the
 `cad` command, makes the CAD kernel environment models run in and starts the server.
 With the CAD app running, nothing else needs the sandbox's permission: it starts the

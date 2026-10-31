@@ -150,7 +150,7 @@ main() {
         version=${argument#--version=}
         ;;
       --from)
-        [ "$count" -gt 0 ] || die "--from needs a wheel, a folder or a requirement, as in --from ./texttocad_server-$CAD_VERSION-py3-none-any.whl"
+        [ "$count" -gt 0 ] || die "--from needs a wheel, a folder or a requirement, as in --from ./cad_server-$CAD_VERSION-py3-none-any.whl"
         from=$1
         shift
         count=$((count - 1))
@@ -190,9 +190,9 @@ main() {
       fi
     fi
     release "$version" || die "not a release: $version"
-    requirement="texttocad-server==$version"
+    requirement="cad-server==$version"
     # The server, and the library it pins at its own release: uv reads both anew from the index.
-    refresh="--refresh-package texttocad-server --refresh-package texttocad"
+    refresh="--refresh-package cad-server --refresh-package cad"
   fi
 
   if ! uvx=$(find_uvx); then

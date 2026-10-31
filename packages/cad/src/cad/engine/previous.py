@@ -89,15 +89,15 @@ _PREFIX = f'{{"schema":"{SCHEMA}",'.encode()
 # How far into a document its main label's attributes are: right after the header.
 _HEAD_BYTES = 1 << 20
 # The library's distribution, whose release this code is.
-DISTRIBUTION = "texttocad"
+DISTRIBUTION = "cad"
 
 
 @functools.cache
 def version() -> str:
-    """The release declared beside this very code -- the library's (``texttocad``, the server's own
+    """The release declared beside this very code -- the library's (``cad``, the server's own
     release too: one release is one product) -- its source tree's ``pyproject.toml`` (stamped from
     ``VERSION`` by the release), else the ``.dist-info`` installed beside the package -- never the first
-    ``texttocad`` metadata on the path, which can be another install's. ``0+unknown`` with neither.
+    ``cad`` metadata on the path, which can be another install's. ``0+unknown`` with neither.
     (``cad._internal.version`` says it so for every package; the engine imports nothing but itself.)"""
     import tomllib
 

@@ -6,8 +6,8 @@ beside the package, else the ``.dist-info`` installed beside it. Never the first
 its distribution on ``sys.path``: a machine carries several (a stale editable install's
 egg-info, a wheel in site-packages, the checkout's own), and the one ``importlib.metadata``
 finds first is whichever install happens to sort first, not the code that was imported --
-which reported an older release as the version of this tree. The library (``texttocad``) and
-the server (``texttocad-server``) each answer this way for themselves.
+which reported an older release as the version of this tree. The library (``cad``) and
+the server (``cad-server``) each answer this way for themselves.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def declared_version(package_dir: Path, distribution: str = "texttocad") -> str:
+def declared_version(package_dir: Path, distribution: str = "cad") -> str:
     """The version declared beside the package at ``package_dir`` of ``distribution``: its source
     tree's ``pyproject.toml`` (``<tree>/pyproject.toml`` two levels up, as ``src/<package>``
     lies), else the newest ``<distribution>-*.dist-info`` beside it -- more than one only after

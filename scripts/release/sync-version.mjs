@@ -22,20 +22,21 @@ export const jsonTargets = [
 
 // The five distributions released together: the library, the server, the shim and the aliases.
 export const tomlTargets = [
-  "packages/texttocad/pyproject.toml",
-  "packages/texttocad-server/pyproject.toml",
-  "packages/texttocad-mcp/pyproject.toml",
+  "packages/cad/pyproject.toml",
+  "packages/cad-server/pyproject.toml",
+  "packages/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "packages/aliases/text-to-cad/pyproject.toml",
 ];
 
-// A requirement pinning one of the three distributions at a release: the library (`texttocad==`, with its
-// build123d extra or not), the server (`texttocad-server==`) and the shim (`texttocad-mcp==`).
-export const pinPattern = /(texttocad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
+// A requirement pinning one of the three distributions at a release: the library (`cad==`, with its
+// build123d extra or not), the server (`cad-server==`) and the shim (`cad-mcp==`). The name stands
+// alone: `cad` at the end of another name (`text-to-cad==`) pins no distribution of the release.
+export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
 // Every skill that runs the server names the version its installation registers as
 // (`cad +<version>`, run by the `cad` command it writes, and "it says <version> is not
-// installed") and the command that installs it (`uvx ... --from texttocad-server==<version> cad doctor`),
+// installed") and the command that installs it (`uvx ... --from cad-server==<version> cad doctor`),
 // in its SKILL.md and in its setup guide (references/setup.md). Its other references are history, and
 // keep the releases they name.
 function skillLaunchTargets() {
@@ -47,18 +48,18 @@ function skillLaunchTargets() {
     .filter((entry) => entry.isDirectory())
     .flatMap((entry) => ["SKILL.md", "references/setup.md"].map((file) => `skills/${entry.name}/${file}`))
     .filter((relative) => existsSync(path.join(repoRoot, relative)))
-    .filter((relative) => /texttocad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==|\bcad(?:\.cmd)? \+\d/.test(readFileSync(path.join(repoRoot, relative), "utf8")))
+    .filter((relative) => /(?<![\w.-])cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==|\bcad(?:\.cmd)? \+\d/.test(readFileSync(path.join(repoRoot, relative), "utf8")))
     .sort();
 }
 
 // Files that pin a release by a requirement string rather than a version field: the commands the
-// agent apps run to start the CAD app's transport (`texttocad-mcp==`), the install page's Claude Desktop
+// agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
 // config and the command it says the installer runs, every skill's install command and `cad +<version>`,
 // and the distributions that pin the library at their own release (the server, the aliases). A file may
 // also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
 // change, not over it.
 export const pinTargets = [
-  "packages/texttocad-server/pyproject.toml",
+  "packages/cad-server/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
   "packages/aliases/text-to-cad/pyproject.toml",
   "codex.mcp.json",
@@ -74,7 +75,7 @@ export const pinTargets = [
 ];
 
 // The one-line installer's scripts carry the release they were published with, which each installs
-// when the version feed cannot be read. Neither is a pin target: each runs `texttocad-server==$version`,
+// when the version feed cannot be read. Neither is a pin target: each runs `cad-server==$version`,
 // a variable a pin's stamp would overwrite.
 export const bootstrapTargets = [
   { path: "scripts/install/install.sh", pattern: /^(CAD_VERSION=")([^"\n]*)(")$/m },
@@ -238,7 +239,7 @@ function syncPinTarget(relativePath, version, text = readRequiredText(relativePa
   const matches = [...text.matchAll(pin)];
   const named = [...text.matchAll(skillVersionPattern)];
   if (matches.length === 0 && named.length === 0) {
-    throw new Error(`${relativePath} must pin texttocad[-server|-mcp]==<version> or run cad +<version>`);
+    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version> or run cad +<version>`);
   }
   const labels = [];
   if (!matches.every((match) => match[2] === version)) {

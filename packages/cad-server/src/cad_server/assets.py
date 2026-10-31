@@ -65,12 +65,12 @@ def runtime_build_hint(path: Path | str, *, overridable: bool = True) -> str:
 
 def checkout_root() -> Path | None:
     """The repository this cadgen is imported out of, or None: only the exact layout that
-    builds it -- this file at ``<root>/packages/texttocad-server/src/cad_server/assets.py``, with
+    builds it -- this file at ``<root>/packages/cad-server/src/cad_server/assets.py``, with
     ``<root>/packages/core`` beside it. An installed wheel, wherever it sits, matches nothing
     here: no folder above an installation is ever taken for a checkout."""
     here = Path(__file__).resolve()
     package, src, project, packages = here.parents[0], here.parents[1], here.parents[2], here.parents[3]
-    if (package.name, src.name, project.name, packages.name) != ("cad_server", "src", "texttocad-server", "packages"):
+    if (package.name, src.name, project.name, packages.name) != ("cad_server", "src", "cad-server", "packages"):
         return None
     if not (packages / "core" / "package.json").is_file() or not (project / "pyproject.toml").is_file():
         return None

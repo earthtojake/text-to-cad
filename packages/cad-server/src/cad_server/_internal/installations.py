@@ -404,7 +404,7 @@ for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2
 done
 case $1 in +?*) version=${{1#+}} ;; *) version= ;; esac
 echo "text-to-cad${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python {python} \\
---from texttocad-server${{version:+==$version}} cad doctor\\` once, outside any sandbox or with its permission" >&2
+--from cad-server${{version:+==$version}} cad doctor\\` once, outside any sandbox or with its permission" >&2
 exit 1
 """
 
@@ -441,7 +441,7 @@ for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') 
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-echo text-to-cad is not installed: run `uvx --no-config --managed-python --python {python} --from texttocad-server cad doctor` once, outside any sandbox or with its permission 1>&2\r
+echo text-to-cad is not installed: run `uvx --no-config --managed-python --python {python} --from cad-server cad doctor` once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
 endlocal & "%python%" -P -m cad_server._internal.proxy %*\r

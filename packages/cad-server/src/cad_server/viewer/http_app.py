@@ -97,7 +97,7 @@ def read_viewer_version() -> str:
     from importlib.metadata import PackageNotFoundError, version
 
     try:
-        return str(version("texttocad-server") or "")
+        return str(version("cad-server") or "")
     except PackageNotFoundError:
         return ""
     except Exception:  # noqa: BLE001 - a metadata read that fails tells us nothing

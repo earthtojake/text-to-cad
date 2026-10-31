@@ -266,7 +266,7 @@ class EngineApp:
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
-            return {'failed': 'CAD Viewer client is not built; build apps/web or install the texttocad-server wheel'}
+            return {'failed': 'CAD Viewer client is not built; build apps/web or install the cad-server wheel'}
         try:
             documents = [self.document(name, start) for name in options.get('files') or []]
         except ValueError as error:

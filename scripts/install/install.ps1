@@ -139,9 +139,9 @@ function Install-TextToCad {
             Write-Host "error: not a release: $version" -ForegroundColor Red
             return
         }
-        $requirement = "texttocad-server==$version"
+        $requirement = "cad-server==$version"
         # The server, and the library it pins at its own release: uv reads both anew from the index.
-        $refresh = @('--refresh-package', 'texttocad-server', '--refresh-package', 'texttocad')
+        $refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')
     }
 
     $uvx = Find-Uvx

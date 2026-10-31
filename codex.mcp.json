@@ -8,7 +8,7 @@
         "--python",
         "3.14",
         "--from",
-        "texttocad-mcp==0.9.0",
+        "cad-mcp==0.9.0",
         "cad-mcp"
       ],
       "startup_timeout_sec": 300,

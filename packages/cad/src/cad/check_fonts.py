@@ -77,9 +77,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         failures = check(dirs)
     except ImportError:
+        from cad import __version__
+
         sys.stderr.write(
             "fontTools is not installed, so the fonts cannot be checked.\n"
-            "Install the CAD requirements first: pip install 'texttocad[build123d]'\n"
+            f"Install the CAD requirements first: pip install 'cad[build123d]=={__version__}'\n"
         )
         return 2
 

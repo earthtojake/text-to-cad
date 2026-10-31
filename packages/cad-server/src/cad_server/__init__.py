@@ -32,4 +32,4 @@ def _version() -> str:
 
     from cad._internal.version import declared_version
 
-    return declared_version(pathlib.Path(__file__).resolve().parent, "texttocad-server")
+    return declared_version(pathlib.Path(__file__).resolve().parent, "cad-server")

@@ -557,10 +557,10 @@ def _toml(path: Path) -> Tuple[Optional[dict], Optional[str]]:
 
 
 # What a server entry of text-to-cad's names: the requirement uvx runs it from -- this release's transport
-# (``texttocad-mcp==X``), or an earlier release's server (``cadgen==X``) --, the command it runs (``cad-mcp``,
+# (``cad-mcp==X``), or an earlier release's server (``cadgen==X``) --, the command it runs (``cad-mcp``,
 # an earlier release's ``cadgen``), or the module a checkout's Python runs (``python -m cad_mcp``; an earlier
 # one's ``cad_server.cli`` or ``cadgen.cli``, with ``mcp``).
-PINS = ("texttocad-mcp==", "texttocad-server==", "cadgen==")
+PINS = ("cad-mcp==", "cad-server==", "cadgen==")
 ENTRY_WORDS = ("cad-mcp", "cadgen", "cad_mcp", "cad_server.cli", "cadgen.cli")
 
 
@@ -578,7 +578,7 @@ def runs_cadgen(entry: Any) -> bool:
 
 
 def server_pin(entry: Any) -> Optional[str]:
-    """The release a server entry runs (``texttocad-mcp==X``, or an earlier release's ``cadgen==X``, in its
+    """The release a server entry runs (``cad-mcp==X``, or an earlier release's ``cadgen==X``, in its
     arguments), or ``None``."""
     for word in (entry or {}).get("args") or []:
         if isinstance(word, str) and word.startswith(PINS):
@@ -1360,7 +1360,7 @@ def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:
 def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]] = None,
                   **_: Any) -> List[Step]:
     """Claude Desktop's config: ``mcpServers.cad`` set to ``desktop_entry``, this release's server,
-    where it has none or one that runs an older release (its pin, ``texttocad-mcp==X`` or an earlier
+    where it has none or one that runs an older release (its pin, ``cad-mcp==X`` or an earlier
     release's ``cadgen==X``, is what uvx runs) or differs otherwise (its uvx); one that pins a newer release
     is left alone. Every other entry that runs text-to-cad is taken out, in the same write of the file (one
     ``.bak``)."""

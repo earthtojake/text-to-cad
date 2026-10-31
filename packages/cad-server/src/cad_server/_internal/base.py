@@ -8,12 +8,12 @@ the kernel starts from it -- the script ``cad run`` runs, its worker, and the en
 processes (the standby, the documents worker, the meshing and reading pools, the render processes:
 ``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``).
 
-- **What it is**: ``texttocad[build123d]`` at the installation's own release -- or the source tree, or the
+- **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
   Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
   base are one Python. uv makes it at ``base/<key>`` in the cache folder, its files hard links into
   uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
-  extra: ``pip install 'texttocad[build123d]'``, a checkout's development environment) is its own base, and
+  extra: ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and
   none is made.
 - **The key** digests the installation (its environment, the version it runs as, its release and
   where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
@@ -61,9 +61,9 @@ MARKER = places.MARKER
 SCHEMA = places.MARKER_SCHEMA
 # The library, which the base installs with its kernel (its extra, ``EXTRA``), and the server, which a release
 # folder holds.
-LIBRARY = "texttocad"
+LIBRARY = "cad"
 EXTRA = "build123d"
-SERVER = "texttocad-server"
+SERVER = "cad-server"
 # The modules whose presence makes an environment carry the CAD kernel.
 KERNEL_MODULES = ("OCP", "build123d")
 # How the base's installed files are made from uv's cache: hard links, as uv makes them on Linux and
@@ -437,7 +437,7 @@ def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
 
 
 def recipe(installation: Installation) -> Recipe:
-    """The base's recipe: ``texttocad[build123d]`` as the installation installs it, on its own Python."""
+    """The base's recipe: ``cad[build123d]`` as the installation installs it, on its own Python."""
     return Recipe(what=WHAT, python=installation.executable, requirement=tuple(installation.requirement()),
                   release=installation.release, source=installation.source,
                   making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {installation.python}",
@@ -580,7 +580,7 @@ def halt() -> None:
 
 
 def _unlisted(done: subprocess.CompletedProcess, release: str) -> bool:
-    """Whether uv found no ``texttocad==<release>`` (or the server's) on its index."""
+    """Whether uv found no ``cad==<release>`` (or the server's) on its index."""
     said = " ".join((done.stderr or done.stdout or "").split())
     return any(f"no version of {name}=={release}" in said for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER))
 
