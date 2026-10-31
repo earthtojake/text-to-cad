@@ -295,10 +295,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // behind: the update button, an icon first among the navbar's controls (in the file handler, which
   // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from
   // under this card, another view's click -- the card asks for its release, and loads the engine's app
-  // of the new one in place of its own (the shell a host keeps: `host/shell.ts`).
+  // of the new one in place of its own (the shell a host keeps: `host/shell.ts`); should the switch fail
+  // and go back, the engine of its own release says so, and the button says it once and is offered again.
   const updater = useUpdate({ read: client.version, start: client.startUpdate }, initial.notice ?? null);
   useNextRelease({ read: client.version, release: initial.version, watching: updater.phase.phase === 'restarting' || Boolean(lost),
-    onNewRelease: loadNextRelease });
+    onNewRelease: loadNextRelease, onSameRelease: updater.settle });
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),

@@ -449,3 +449,21 @@ it('a newer release is the update button, an icon: a click updates through the e
   await waitFor(() => expect(reload).toHaveBeenCalledOnce(), { timeout: 3000 });
   expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
 });
+
+it('a switch that fails and goes back ends the card\'s restart: the update offered again, no other app loaded', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1' };
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  let update: Record<string, unknown> = { state: 'restarting', target: '0.9.0' };
+  server.answers['/__cad/update'] = () => ({ notice, release: '0.8.1', update });
+  server.answers['/__cad/version'] = () => ({ notice, release: '0.8.1', update });
+  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
+  const button = await findByRole('button', { name: 'Update to 0.9.0' });
+  await act(async () => button.click());
+  await findByRole('status', { name: 'Restarting with 0.9.0' });
+  // The engine the failed switch started again: the card's own release, its update failed (`Update.recall`).
+  update = { state: 'failed', target: '0.9.0', error: "text-to-cad 0.9.0's engine did not start" };
+  await findByRole('button', { name: 'Update to 0.9.0' }, { timeout: 3000 });
+  expect(reload).not.toHaveBeenCalled();
+});

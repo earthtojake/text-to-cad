@@ -51,8 +51,10 @@ const STAGES = 4;
  * export's: `sonner`), or to `onFailed` -- and the button is offered again; the engine keeps saying it
  * failed until the next click, and a page that comes back to it later says nothing. A page reloaded into
  * the engine its update restarted (`followed`: the host keeps that across the reload) follows it still:
- * it reads where the update ended once, and says a switch that failed and went back. A read that fails
- * changes nothing; one while the engine restarts is the restart.
+ * it reads where the update ended once, and says a switch that failed and went back. A host that keeps
+ * its page through the restart (a CAD card) reads the engine itself meanwhile and hands each answer of
+ * its own release to `settle`: one that says the switch failed and went back ends the restart the same
+ * way. A read that fails changes nothing; one while the engine restarts is the restart.
  */
 export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall },
   initial: UpdateNotice | null,
@@ -117,10 +119,15 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
     following.current = true;
     refresh();
   }, [refresh]);
+  // An answer the host read itself while the engine restarted: a switch that failed and went back ends the
+  // restart (said once, the button offered again); any other is the restart still going.
+  const settle = useCallback((reply: UpdateReply) => {
+    if (reply.update?.state === "failed") apply(reply);
+  }, [apply]);
   useEffect(() => {
     alive.current = true;
     window.addEventListener("focus", refresh);
     return () => { alive.current = false; window.removeEventListener("focus", refresh); stopPolling(); };
   }, [refresh]);
-  return { notice, phase, update };
+  return { notice, phase, update, settle };
 }

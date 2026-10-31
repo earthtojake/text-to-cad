@@ -152,7 +152,9 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   as the update goes, then a spinner while the engine restarts; once the engine answers
   with the new release, the card loads that release's app in its own place
   (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
-  fails says why in a toast, and the engine stays as it was.
+  fails says why in a toast, and the engine stays as it was; one whose switch fails brings
+  the release before back, and the card, reading its own release again with the update failed
+  (`useUpdate`'s `settle`), says why in the same toast and offers the button again.
   A text client gets one line with its first `cad_show` result instead, naming the install
   command. Where the
   install came from is its channel, which each plugin's startup config names in

@@ -7,17 +7,21 @@ export const RELEASE_POLL_MS = 500;
  * A card's update: while `watching` (its own click restarts the engine, or its engine went from under
  * it), the card asks the engine its release (`read`, `GET /__cad/version` through the host), and once
  * one answers with another release than the card's own (`release`), the card loads the engine's app
- * in place of its own (`onNewRelease`: the shell's `reload`, `host/shell.ts`). A read that fails is the
- * engine still away; the same release answering is a blip.
+ * in place of its own (`onNewRelease`: the shell's `reload`, `host/shell.ts`). An answer of the card's
+ * own release goes to `onSameRelease`: a switch that failed and went back says so there (the update's
+ * `failed` state, which `useUpdate`'s `settle` ends the restart on), else it is a blip. A read that
+ * fails is the engine still away.
  */
-export function useNextRelease({ read, release, watching, onNewRelease }: {
-  read: () => Promise<{ release?: string }>;
+export function useNextRelease<Reply extends { release?: string }>({ read, release, watching, onNewRelease,
+  onSameRelease }: {
+  read: () => Promise<Reply>;
   release: string | undefined;
   watching: boolean;
   onNewRelease: () => void;
+  onSameRelease?: (reply: Reply) => void;
 }) {
-  const latest = useRef({ read, release, onNewRelease });
-  latest.current = { read, release, onNewRelease };
+  const latest = useRef({ read, release, onNewRelease, onSameRelease });
+  latest.current = { read, release, onNewRelease, onSameRelease };
   useEffect(() => {
     if (!watching || !latest.current.release) return;
     let active = true;
@@ -31,7 +35,8 @@ export function useNextRelease({ read, release, watching, onNewRelease }: {
           latest.current.onNewRelease();
           return;
         }
-        timer = setTimeout(ask, RELEASE_POLL_MS);
+        latest.current.onSameRelease?.(reply);
+        if (active) timer = setTimeout(ask, RELEASE_POLL_MS);
       }, () => { if (active) timer = setTimeout(ask, RELEASE_POLL_MS); });
     };
     timer = setTimeout(ask, RELEASE_POLL_MS);

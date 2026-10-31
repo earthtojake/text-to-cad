@@ -71,6 +71,30 @@ it('a page reloaded into the engine its update restarted says the switch failed,
   expect(onFailed).toHaveBeenCalledOnce();
 });
 
+it('a host that keeps its page through the restart ends it on a switch that failed: said once, offered again', async () => {
+  // A CAD card keeps its frame while the engine restarts and reads the engine itself (`settle`): the engine
+  // the failed switch started again answers with the card's own release, the update failed.
+  const onFailed = vi.fn();
+  const restarting = reply({ state: 'restarting', target: '0.9.1' });
+  const failed = reply({ state: 'failed', target: '0.9.1', error: "text-to-cad 0.9.1's engine did not start" });
+  let settle: (answer: UpdateReply) => void = () => {};
+  function Card() {
+    const updater = useUpdate({ read: async () => restarting, start: async () => restarting }, NOTICE, { onFailed });
+    settle = updater.settle;
+    return <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} />;
+  }
+  render(<Card />);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
+  expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
+  await act(async () => { settle(restarting); });  // the engine before, still draining: the restart goes on
+  expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
+  await act(async () => { settle(failed); });
+  expect(onFailed).toHaveBeenCalledWith("text-to-cad 0.9.1's engine did not start");
+  expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
+  await act(async () => { settle(failed); });
+  expect(onFailed).toHaveBeenCalledOnce();
+});
+
 it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {
   const read = vi.fn<UpdateCall>(async () => reply(null, null as never));
   render(<Host read={read} start={read} />);
