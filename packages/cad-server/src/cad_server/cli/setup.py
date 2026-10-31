@@ -38,9 +38,10 @@ current installation's
    a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
    keeps a copy of it, which gets it again for this release; Claude Desktop's config gets CAD's server,
    this release's, written atomically with a ``.bak`` beside it; every second copy goes, an earlier
-   release's from the repository on GitHub among them. The agents with no plugin that the Skills CLI
-   knows get the skills, copied from the folder into their own skills folders by one ``npx skills add``
-   (Node needed); an app with a plugin never does. A command that fails is said with its output, and
+   release's from the repository on GitHub among them, and a plugin directory's, which this run replaces
+   with ours, unless no command here removes it (``providers``). The agents with no plugin that
+   the Skills CLI knows get the skills, copied from the folder into their own skills folders by one ``npx
+   skills add`` (Node needed); an app with a plugin never does. A command that fails is said with its output, and
    the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
    would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take
@@ -63,15 +64,17 @@ each stage a progress frame on stdout (``{"progress": ...}``) and its words on s
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
-Cursor's copy deleted, the skills removed by ``npx skills remove``; with no receipt, every copy of
-text-to-cad found but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the
-engine (``cad stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
+Cursor's copy deleted, the skills removed by ``npx skills remove``; a store's copy it removed is not put
+back, and a line says where to install it from again; with no receipt, every copy of text-to-cad found
+but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the engine (``cad
+stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
 removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
 command, the engine, the releases and the plugin folder alone). Neither asks: the plan is printed and
 done, and ``--dry-run`` prints it alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
-command that is not text-to-cad's, editing a config that is not plain JSON, touching a store's copy.
+command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
+command of the app's removes (an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
 
 Exit status: 0 done, or nothing to do; 1 a step failed; 2 bad arguments.
 """

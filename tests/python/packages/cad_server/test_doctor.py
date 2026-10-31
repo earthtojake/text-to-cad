@@ -360,7 +360,11 @@ class DoctorTests(unittest.TestCase):
             "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
                                                        source=folder, via="linked")),
             "grok": App("Grok Build", None, present=False)}
-        (self.state / "install-receipt.json").write_text(json.dumps({"schema": 1, "skills": {"windsurf": {
+        # The receipt: the app directory's copy `cad setup` replaced, and the skills it copied.
+        replaced = {"app": "codex", "action": "remove duplicate", "kind": "command", "ok": True, "at": "2026-10-31T02:39:00Z",
+                    "command": ["codex", "plugin", "remove", "text-to-cad@openai-curated"],
+                    "store": "text-to-cad@openai-curated (its app directory's)"}
+        (self.state / "install-receipt.json").write_text(json.dumps({"schema": 1, "actions": [replaced], "skills": {"windsurf": {
             "release": "1.1.0", "folder": "/h/.codeium/windsurf/skills", "skills": ["cad"], "at": "2026-10-31T02:40:00Z"}}}),
             encoding="utf-8")
         with mock.patch.object(providers.Machine, "here"), \
@@ -373,6 +377,8 @@ class DoctorTests(unittest.TestCase):
             f"app      Codex: text-to-cad@texttocad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
             "app      Cursor: /c/text-to-cad (the Cursor Marketplace's), which its store updates",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
+            "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "
+            "(2026-10-31 02:39)",
             "app      Windsurf: the skills of text-to-cad 1.1.0, copied into /h/.codeium/windsurf/skills by the Skills CLI "
             "(2026-10-31 02:40)"])
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):

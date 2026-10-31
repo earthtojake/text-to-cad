@@ -137,7 +137,8 @@ def _plugin() -> list[str]:
 def _apps() -> list[str]:
     """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
     read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
-    comparing nothing; and the agents the Skills CLI copied the skills for, as the receipt says."""
+    comparing nothing; and, as the receipt says, the store's copies ``cad setup`` replaced with ours and
+    the agents the Skills CLI copied the skills for."""
     try:
         import json
 
@@ -163,7 +164,11 @@ def _apps() -> list[str]:
         receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
         skills = receipt.get("skills") if isinstance(receipt, dict) else None
     except (OSError, ValueError):
-        skills = None
+        receipt, skills = None, None
+    for gone in providers.replaced(receipt if isinstance(receipt, dict) else None):
+        lines.append(f"app      {providers.label(gone['app'])}: {gone['store']}: the directory's copy, replaced by "
+                     "cad setup"
+                     + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
     for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
         if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
             lines.append(f"app      {providers.label(agent)}: the skills of text-to-cad {got.get('release') or '?'}, "
