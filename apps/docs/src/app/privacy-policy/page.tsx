@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 26, 2026">
+    <LegalPage title="Privacy Policy" updated="October 30, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -106,8 +106,10 @@ export default function PrivacyPolicyPage() {
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory,
-            the Cursor Marketplace or Gemini updates, and section 5 says how to turn it off.
+            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
+            or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
+            for (CAD’s update button, or <code>cadgen update</code>) asks again, then downloads the
+            release from PyPI, as the install command does.
           </li>
           <li>
             <strong>step.parts searches:</strong> when you ask your agent to find a part, the

@@ -152,7 +152,7 @@ the privacy policy. The site has the hero and the agents carousel. The page's co
 `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
 `/install` redirects to the hero's install box (`/#install`, `next.config.ts`): the stable address
-of the install instructions, which the CAD app's update card links to.
+of the install instructions.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 commands, what they do and the link to installing by hand to one text, and holds the `#install`
 anchor to the hero. The unboxed

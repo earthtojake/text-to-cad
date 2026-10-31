@@ -52,9 +52,11 @@ local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
 (Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
-`scripts/install/` runs the newest release's `cadgen setup` through uvx, which sets up the
-plugin in every agent app on the device (the skills alone, through the Skills CLI, for the
-agents without a plugin), asking nothing, and, run again, updates them. cadgen itself
+`scripts/install/` runs the newest release's `cadgen setup` through uvx, which installs that
+release in its own folder (`<state>/releases/<release>`), sets up the plugin in every agent app on
+the device (the skills alone, through the Skills CLI, for the agents without a plugin) and moves the
+device's engine to it, asking nothing, and, run again, updates them; the update button in the CAD
+Viewer and the CAD app, and `cadgen update`, take the same steps. cadgen itself
 installs as ONE uvx command, `uvx --no-config --managed-python --python
 3.14 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
 plugin server configs run: the wheel's core (engine, command, viewer server, MCP
@@ -65,9 +67,12 @@ one base environment per installation that every model and kernel process runs i
 `cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
 command can). The release stamps every pin and `+<VERSION>` (`sync-version.mjs`),
 with the installer's fallback release, and `scripts/release/check-version.sh` and the
-tests assert they all equal `VERSION`. One installation is one engine: the server, every thread and every
-skill command share one daemon ([CONTRIBUTING.md, "Development
-dependencies"](CONTRIBUTING.md#development-dependencies)). In a checkout, install
+tests assert they all equal `VERSION`. The device runs one engine, the current installation's
+(`<state>/installations/current`): the server, every thread and every skill command share one
+daemon whatever release each names, and only an update moves it to another
+([CONTRIBUTING.md, "Development dependencies"](CONTRIBUTING.md#development-dependencies)).
+A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR` and
+`CADGEN_ENGINE_DIR`. In a checkout, install
 `requirements-dev.txt` (the editable cadgen with its kernel extra: its own base) and test in agent apps with
 `scripts/install/dev_install.py`, which points both at the checkout.
 

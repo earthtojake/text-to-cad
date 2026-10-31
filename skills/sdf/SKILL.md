@@ -94,7 +94,7 @@ plugins or validate dynamics; keep simulator checks separate.
 
 ## Commands
 
-Run `cadgen` as Setup defines it. `cadgen doctor <skill-dir>` reports the installation in use and checks that it is the one this skill pins — docs drift silently on another. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cadgen <verb> --help` for the complete current interface.
+Run `cadgen` as Setup defines it. `cadgen doctor` reports the installation in use and the engine's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cadgen <verb> --help` for the complete current interface.
 
 ```bash
 cadgen sdf validate path/to/model.sdf

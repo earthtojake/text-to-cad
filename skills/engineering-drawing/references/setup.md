@@ -9,8 +9,10 @@ installation, kernel or engine error. `cadgen` means the command this skill's
 To install or update text-to-cad on this computer, run its install command. It
 installs uv if it is missing, then sets up the plugin (for an agent without one, the
 skills alone) in every agent app on the computer with each app's own commands,
-registers the `cadgen` command, and stops an older release's engine that nothing is
-using; run again, it updates them all and lists the apps to restart:
+registers the `cadgen` command, and moves the computer's CAD engine to that release;
+run again, it updates them all and lists the apps to restart. The update button the
+CAD Viewer and the CAD app show when a release is out, and `cadgen update`, do the
+same:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
@@ -38,10 +40,10 @@ that case and use that full path for commands until PATH is corrected.
 
 ## Diagnose a failure
 
-`cadgen doctor <skill-dir>` reports the installation in use, whether it is the one
-this skill pins, whether the CAD kernel loads, and whether the engine is running,
-starting it when none is; use it for installation or kernel load errors. Each
-command's `--help` lists its flags.
+`cadgen doctor` reports the installation in use and the current one, the releases on
+this computer and each agent app's plugin release, whether the CAD kernel loads, and
+whether the engine is running, starting it when none is; use it for installation or
+kernel load errors. Each command's `--help` lists its flags.
 
 The first launch downloads cadgen and may outlast a host's server start timeout
 (Claude Code: 30 s by default, raised by setting `MCP_TIMEOUT` in milliseconds;

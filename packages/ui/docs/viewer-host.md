@@ -544,15 +544,18 @@ host owns what each one does and where it is kept.
 has said so. The host supplies the call and where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
-first among the navbar's right-hand controls, an icon, over every file and over the home), which opens its card in a popover; `UpdateCard`, that card, which a host with no navbar shows as its notice instead (the CAD app's corner, closable for the view); and `useUpdateNotice(call, initial)`, which
-starts on the notice the host already has (a CAD app's launch carries it; the web page reads it with
-its server's description), so the button draws with the page, and reads the host's call again when
-the page regains focus. Nothing it does is an answer the server keeps: the button stays while the
-install is behind and goes once the update lands. The card sends its prompt
-to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
-`copy`, its button then Copy prompt; the prompt has a copy icon in its top-right corner either way; the host decides which it supplies. Its
-Manual installation link, the notice's `instructions`, opens through the host's `onLink`. The shell
-handles placement and hides the toolbar in
+first among the navbar's right-hand controls, over every file and over the home; a host with no
+navbar puts it in its corner, as the CAD app's file handler does), an icon and nothing else, with
+no popover; and `useUpdate(calls, initial)`, which starts on the notice the host already has (a CAD
+app's launch carries it; the web page reads it with its server's description), so the button draws
+with the page, and reads the host's `read` again when the page regains focus. A press is the update:
+the host's `start` (`POST /__cad/update`), after which the hook reads the update's state every half
+second (`UPDATE_POLL_MS`): the button is a ring that fills while the release installs and the apps
+update, then a spinner while the engine restarts, and a failure is a toast in the update's words, the
+button offered again. The host reloads its page once its engine answers with the new release, and
+only once nothing on it is unsaved (`reloadWhenClean`, with the host's own `reload`: the shared UI
+never navigates the page). Nothing it does is an answer the server keeps: the button stays while the
+install is behind and goes once the update lands. The shell handles placement and hides the toolbar in
 Preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 
@@ -575,7 +578,7 @@ hand's sub-toolbar under it, the file sidebar down the left edge, Quick Edit at 
 top-right, and the view cube at the bottom-right. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
-size, the update card) as its notice; the web viewer has none.
+size, the update button) as its notice; the web viewer has none.
 Quick Edit has no host preference or persisted enable/disable state.
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer

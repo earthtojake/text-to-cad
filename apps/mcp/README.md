@@ -139,29 +139,27 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   Both go to `api.texttocad.dev` (`apps/api`). Once a day at most, cadgen
   reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
-  a source tree). While this install is behind, the navbar shows the shared blue
-  `UpdateButton` (`@text-to-cad/ui/update`), first among its controls, over a file and over
-  the home; it opens the update card. The file handler, which has no navbar, shows the card
-  itself as a notice in its corner (`UpdateNotice` over the shared `UpdateCard`), under Full
-  size, until the person closes it or sends its prompt. A launch carries the
-  notice the server last read, so the button draws with the page; the page reads it
-  again (`/__cad/version`) when the person comes back to it. The card says: "A new version of text-to-cad
-  is available. Send a message to your agent asking it to update to the latest
-  version:", and a prompt worded like the install message, "Update text-to-cad to
-  0.9.0 from https://github.com/earthtojake/text-to-cad".
-  **Send to agent** posts it as the person's message (`ui/message`) where the host
-  takes messages (`chatReach`); elsewhere the card's button is **Copy prompt**.
-  The prompt has a copy icon in its top-right corner either way. **Manual installation** opens the docs site's
-  Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
-  person whose agent cannot do it. The agent does
-  the update, with the commands under its app's heading in the text-to-cad README;
-  nothing here updates anything.
-  A text client gets the same line with its first `cad_show` result. Where the
+  a source tree). A server of a newer release than the engine's -- an app whose plugin
+  moved ahead -- says a release is out too, with no request (`updates.see`). While this
+  install is behind, the navbar shows the shared blue `UpdateButton`
+  (`@text-to-cad/ui/update`), an icon and nothing else, first among its controls, over a
+  file and over the home; the file handler, which has no navbar, shows it in its corner,
+  under Full size. A launch carries the notice the server last read, so the button draws
+  with the page; the page reads it again (`/__cad/version`) when the person comes back to
+  it. A press is the update (`POST /__cad/update`, through `cad_http`): the engine installs
+  the release, updates each agent app's plugin and restarts on it, on the same port with
+  the same token (`cadgen/_internal/update.py`). Meanwhile the button is a ring that fills
+  as the update goes, then a spinner while the engine restarts; once the engine answers
+  with the new release, the card loads that release's app in its own place
+  (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
+  fails says why in a toast, and the engine stays as it was.
+  A text client gets one line with its first `cad_show` result instead, naming the install
+  command. Where the
   install came from is its channel, which each plugin's startup config names in
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
-  with `CADGEN_AUTO_UPDATED=1` where something else keeps the copy up to date: only a
+  with `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, and Gemini's extension to Gemini. The telemetry: the server
+  Marketplace) is left to its store. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --
@@ -248,12 +246,20 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   did. The server produces such a body once: each later part names it
   (`if-range: <etag>`) and is cut from the body the first part kept, never by
   running the route again.
-- **One file.** The build inlines scripts, styles and workers (as blobs) into
-  `dist/index.html`, and fails if anything would be left outside it: the host
+- **A shell the host keeps; the app the engine runs.** The resource a host fetches,
+  and may keep as long as it likes, is a small shell (`dist/shell.html`: `src/shell.ts`,
+  `host/shell.ts`, built by `vite.shell.config.mjs`), named by the engine's release and
+  its build (`ui://cad/<release>/<build>/app.html`). It loads the app from the engine that
+  answers it (`GET /__cad/mcp-app`, `dist/app.js`): through `cad_http` where the host
+  carries the card's calls, else straight from the engine with the launch's day link,
+  never a cookie. So a card a host kept runs the engine's release, and an update needs no
+  new resource. The app is one module, with its styles, scripts and workers (as blobs)
+  inside it, and the build fails if anything would be left outside the two: the host
   serves one resource and nothing beside it. Its scripts are still split where
   the app imports lazily (each renderer): each chunk is a gzip'd string
   that becomes a blob module only when something imports it, so a view parses
-  what it shows rather than all of the app (`vite.config.mjs`).
+  what it shows rather than all of the app (`vite.config.mjs`). `dist/index.html` is the
+  same app as one page, for development and the release's source maps.
 - **Nothing waits unseen.** While the home's list is read, placeholder cards (or
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
@@ -358,6 +364,8 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/__cad/mcp-app`), a long one a part at a time, else from the engine with the launch's day link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
+| `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,

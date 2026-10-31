@@ -137,7 +137,8 @@ describes the mechanism they constrain and cites them by that README's numbers -
 
 ## Architecture
 
-One server per installation owns the worker pool, served documents and HTTP listener.
+One server for the device -- the current installation's (**Starting and updating**) -- owns the worker
+pool, served documents and HTTP listener.
 `cadgen serve` and `cadgen viewer` launch or reuse that server and return its URL.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
@@ -211,27 +212,21 @@ keeps a session (`viewer.engine_app`: `EngineApp.link`, `sign`, `standing`). A r
 one cross-origin read answered, for the origin that sent it and with no credentials, as is its
 preflight (`EngineApp.preflight`); the cookie, a link in a URL, the token and `/mcp` never are. All routes
 retain the application's Host and cross-site mutation checks. Explicit host/port
-requests must match an existing listener. A second installed version has a different
-installation identity and therefore a different engine -- in another environment, and in the same
-one too: the door, lock and port file are named for the environment, the interpreter, the engine's
-folder, the protocol and the version the installation runs as (`daemon._tag`, `daemon.installation`:
-`CADGEN_INSTALLATION_VERSION`, else the version its environment is registered as when that record is
-of this release -- so `python model.py` run directly in a registered development environment dials
-the same engine as its CAD app's server --, else its release). So an upgrade into one environment (`pip install -U`, `uv tool upgrade`, a
-development install made again) starts its own engine, never dials the old one still running there,
-and retires that one when nothing uses it (**An upgrade converges**). What outlives an upgrade in an
-environment -- the port it rolled to -- is keyed by the environment alone.
+requests must match an existing listener. Every client reaches the one engine of the engine folder,
+whatever release the client is: its door, lock and port file are named `engine` (`daemon.NAME`), and a
+client that finds none running starts the current installation's (**Starting and updating**). What
+outlives an engine -- the port it rolled to -- is the engine's record, `engines/engine.json`.
 
-**A link outlives its engine.** The port is the installation's and the page token the user's, not
-one engine's (`daemon.bind`). A port named -- `--port` (`cadgen server --port`, or a `serve`/`viewer`
+**A link outlives its engine.** The port is the device's and the page token the user's, not one
+engine's (`daemon.bind`). A port named -- `--port` (`cadgen server --port`, or a `serve`/`viewer`
 request's), else `CADGEN_ENGINE_PORT` (0: any free port), read from the engine's own environment --
-is taken or refused. Else the installation's own port: 3245 (`daemon.DEFAULT_PORT`, 0xCAD) when it
-can, as Vite, Jupyter and Next.js take theirs; when another program holds it, the next free port
-(`daemon.PORTS_TRIED` above it, then any), which the installation remembers in its record and takes
-at every later start, so its links stay what they were. The start that rolls says so once, on the
+is taken or refused. Else the engine's own port: 3245 (`daemon.DEFAULT_PORT`, 0xCAD) when it can, as
+Vite, Jupyter and Next.js take theirs; when another program holds it, the next free port
+(`daemon.PORTS_TRIED` above it, then any), which the engine remembers in its record and takes at
+every later start, whatever release it runs, so its links stay what they were. The start that rolls says so once, on the
 stderr of the client whose request bound the port (a build's, when its page bound it; or `cadgen
 server`'s) and in `cadgen status`:
-`3245 is held by <name> (pid N); this installation serves on 3246 and keeps it`. A remembered port
+`3245 is held by <name> (pid N); the engine serves on 3246 and keeps it`. A remembered port
 that is free is used, and one held is rolled from the same way. When 3245 is free again at a start,
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
@@ -239,22 +234,42 @@ system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netsta
 `another process` where it does not say; a cadgen this one cannot reach is `another cadgen (<name>,
 pid N)`.
 
-**An upgrade converges.** As an engine binds its port, it first asks every other installation's
-engine in the engine folder (each door) its `status`, and tells every one to `stop` that nothing uses
--- no hold, no page watching a document, no build, draw or HTTP request underway -- and that is older
-than itself, wherever it serves, waiting until each has gone (`daemon.RETIRE_SECONDS` at most;
-`daemon.retire_older`). Older is by the installations' version ranking (`daemon.rank`, the order
-`packaging.version` gives and the `cadgen` command picks by): an installation's version is its
-`installation` in `status` (`daemon.installation`, above: a development install's
-`<version>-dev.<time>`, else its release), a release ranks above its own `-dev.*` builds, and a
-version that does not parse is older only when that engine's release (`version`) is lower. An
-engine whose `status` has no `installation` was built before engines said it, and is older than any
-that does, whatever its release. It says
-each, once, as it says a roll: `retired cadgen 0.8.0's idle engine (pid N) for this newer
-installation`. Then it binds as above. Another installation's engine still on the port is retired
-the same way when nothing uses it and it is not newer, and its port taken once it has gone, whether
-the port was named, the default or the remembered one. An older installation never retires a newer
-one's engine, nor one still in use: it rolls from it as from any other holder.
+**Starting and updating.** The device runs one release's engine at a time, the current
+installation's: `<state>/installations/current` names it (`cadgen._internal.installations`). Every
+client that finds no engine running -- an agent app's CAD server, whatever release its plugin pins; a
+skill's `cadgen` command; `cadgen run`; a model run directly -- starts that installation's, with its
+Python (`daemon.ENGINE`, `client._start`); one running is attached to, whatever its release. On a
+device with no current installation, the first client makes its own current, once
+(`installations.bootstrap`). No client starts its own release's engine beside the device's, and none
+stops an engine to start another: an engine runs on until `cadgen stop`, an update, or its door going.
+Each installation's bytecode is its own (`daemon.bytecode_tag`).
+
+An update moves the device to another release in one step, and only when the person asks: the update
+button in the CAD Viewer and the CAD app (`POST /__cad/update`, `cadgen._internal.update`), `cadgen
+update`, or the install command run again (both `cadgen setup`). Each installs the release in a folder
+of its own, `<state>/releases/<release>` (`cadgen._internal.releases`: made by uv, from its cache
+where it holds it), makes that release's base (**Running a model**), updates each agent app's plugin,
+and then switches (`cadgen._internal.switch`):
+
+1. The engine drains (`Daemon.drain`): once no build, draw, export or agent's MCP call is in flight --
+   open pages and held sessions do not count --, its door and its HTTP listener close, and it exits.
+2. A process that is not that engine -- the button's helper, `cadgen update --switch`, which the
+   engine starts detached as it exits; else `cadgen setup` itself -- waits for it to be gone, points
+   `current` at the release under the engine's lock (so no client starts the release before in the
+   gap), starts that release's engine on the same port, with the same token, and checks that it
+   answers from that release's folder.
+3. Should it not, `current` goes back, and the release before's engine starts again on that port.
+
+Every page and card keeps its link through it, and reloads once its engine answers with the new
+release. The release before's folder stays -- a process of it may still run, and it is the way back
+--; the others go at the next switch, once nothing runs from them (`releases.collect`). What a switch
+did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
+lines `update.log`.
+
+An earlier cadgen's engine (0.8's, its door named for its installation) on the port that nothing uses
+-- no hold, no page watching a document, no build, draw or HTTP request underway -- is asked to stop
+as the engine binds, and its port taken once it has gone (`daemon.RETIRE_SECONDS` at most); one still
+in use is named and refused (below).
 
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cadgen server` binds at its start, so the command fails at once with that line on stderr and exits
@@ -266,26 +281,22 @@ engine, which can never serve, leaves its note (`daemon.failure_path`) and exits
 
 - another program: `port 3245 is held by <name> (pid N): stop it, or start cadgen with another
   CADGEN_ENGINE_PORT` (`…or pass another --port` for a port `--port` named);
-- another installation's engine in use: `port 3245 is held by cadgen <version>'s engine (pid N),
-  still in use by 1 app server: quit that app or run `cadgen stop` with that version` (or `N open
-  pages`, `N requests`); an engine whose `status` does not say what uses it cannot be asked, and is
-  refused by name the same way;
-- a newer installation's engine: `port 3245 is held by cadgen <version>'s engine (pid N), a newer
-  installation's, which this one never retires: use that version, or start cadgen with another
-  CADGEN_ENGINE_PORT`.
+- an earlier cadgen's engine in use: `port 3245 is held by cadgen <version>'s engine (pid N), still
+  in use by 1 app server: quit that app or run `cadgen stop` with that version` (or `N open pages`,
+  `N requests`); an engine whose `status` does not say what uses it cannot be asked, and is refused by
+  name the same way.
 
-The token is made at the installation's first start and every start serves with it, in the
-installation's record, `engines/<installation>.json` in the state folder (`port` while the
-installation serves on a port it rolled to; `registry.Registry.engine`, its own
-`registry.ENGINE_SCHEMA`), and the token in the user's one file beside it, `engines/token`, which
-every installation's engine serves with (`registry.Registry.token`; both this user's alone, 0600),
-so a link outlives an upgrade too. So a page link
+The token is made at the first engine's start and every start serves with it: the engine's record,
+`engines/engine.json` in the state folder, keeps the port it rolled to (`registry.Registry.engine`,
+its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
+which every engine serves with, whatever its release (`registry.Registry.token`; both this user's
+alone, 0600), so a link outlives an update too. So a page link
 -- the `cadgen viewer` output, a model's `view:` line, the CAD app's card -- works across `cadgen
 stop`, a crash and a reboot for its day, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cadgen server --rotate-token` replaces the token, with no
-engine running (it refuses while this installation's or another's runs), and every link and session
+engine running (it refuses while one runs), and every link and session
 made before stops working. `cadgen status` says the
 port and where it came from: the default, `--port`, `CADGEN_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
@@ -337,8 +348,8 @@ A card's `cad_sync` renews its served document's warm-worker lease.
 The viewer launcher owns no server, reload watcher or process-reuse probe. It
 asks the existing engine for its page: each file it names, a relative one read from the launch's
 folder, is registered by its id (the id of its canonical path) and printed as its page, `/<id>`.
-Development client reload remains a browser concern; Python changes take effect when that
-installation's engine is explicitly restarted. What the page knows by id is memory
+Development client reload remains a browser concern; Python changes take effect when the engine is
+explicitly restarted. What the page knows by id is memory
 only, and a file's id is derived again from its path after a restart.
 
 
@@ -355,8 +366,9 @@ The base is `cadgen[kernel]` at the engine's own release -- or the source tree, 
 installation was made from -- on the engine's own Python, made by uv at `base/<key>` in the cache
 folder, its files hard links into uv's cache; uv is asked `--offline` first and goes to the network
 only for what its cache lacks, saying so first. One per installation, keyed by it (its environment,
-the version it runs as, its release and source), its Python and the architecture, so an upgrade
-makes a base of its own. Its marker, `cadgen-env.json`, written last, makes it complete, so a later
+the version it runs as, its release and source), its Python and the architecture, so an update
+makes a base of its own -- before it switches (**Starting and updating**), so the first build after
+it waits on nothing. Its marker, `cadgen-env.json`, written last, makes it complete, so a later
 use reads the marker and resolves nothing; a lock beside it makes one process make it while another
 waits. An installation whose own environment carries the kernel (installed with the extra, `pip
 install 'cadgen[kernel]'`) is its own base, and none is made.
@@ -364,9 +376,9 @@ install 'cadgen[kernel]'`) is its own base, and none is made.
 `cadgen run SCRIPT.py` (`-m`, `-c`) makes the base the first time it is asked for -- a line says so
 while uv works -- and runs the arguments with the base's Python, in the caller's folder and
 environment. The marker names the installation the base belongs to, which the distribution hands
-the engine as `daemon.HOME`: a process there reaches that installation's engine (`daemon._tag`) and
-starts it with that installation's Python (`client._start`), so the script, its worker and every
-other client share one engine. The project's own files and `.venv` are not read: the base is what
+the engine as `daemon.HOME`: a process there reaches the device's one engine, and starts the current
+installation's when none runs (`client._start`), so the script, its worker and every other client
+share one engine. The project's own files and `.venv` are not read: the base is what
 the script imports.
 
 Every process of the engine's that loads the kernel runs the base's Python (`daemon.kernel`, which the
@@ -402,12 +414,12 @@ base that cannot be made fails the request that needed it in one line
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
-| `daemon.py`, `worker.py`, `client.py` | one daemon per installation, one warm worker per model script, at most one per core alive (`Pool`), connect-or-start, a hold; a worker's memory cap |
+| `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script, at most one per core alive (`Pool`), connect-or-start, a hold; a worker's memory cap |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: cadgen's bounded Windows retry, kept in the engine |
 | `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
-| `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), each installation's engine record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); where the folder is, the distribution's (`FACTORY`) |
+| `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); where the folder is, the distribution's (`FACTORY`) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cadgen.engine VERB`) |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
@@ -616,11 +628,11 @@ which also avoids pybind11's unmatched profile events on Python 3.12 and later.
 
 ## The engine server and its workers
 
-One engine server per installation (`daemon.py`: a daemon, which `cadgen server` runs in the
-foreground), started on demand by the first command that needs it. **No timer stops it**: a
+One engine server for the device (`daemon.py`: a daemon, which `cadgen server` runs in the
+foreground), the current installation's, started on demand by the first command that needs it. **No timer stops it**: a
 person may be using a page or the CAD app for hours without a build. It stops in four ways: on
-`cadgen stop` (or a terminate); when a newer installation's engine starts, or another that needs its
-port, and retires it while nothing uses it (**A link outlives its engine**); when its door is gone -- its folder removed, a
+`cadgen stop` (or a terminate); for an update, once it has drained (**Starting and updating**); when
+its door is gone -- its folder removed, a
 temporary folder cleaned up, or another file put in the door's place -- so that no one can reach it
 (`Daemon.tend` sees it within a round, and it stops as `stop` does, saving what it holds to the
 cache); and with the machine. **No timer retires a worker either**: memory alone does. Idle
@@ -776,8 +788,8 @@ folder, with no engine asked). `--json` lists the documents as `models`, the cac
 `cache`, and `serving.documents` the files served, each `held` or `evicted` (out of memory for its
 budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
-(builds and draws running) and `active` (HTTP work underway) -- which another installation's engine
-asks before it retires this one (**A link outlives its engine**).
+(builds and draws running) and `active` (HTTP work underway) -- what a later cadgen's engine asks of
+an earlier one before it takes its port (**Starting and updating**).
 
 ## The door
 
@@ -845,14 +857,13 @@ the client that started it says that reason at once, never after a timeout.
 **A hold.** `cadgen mcp`, the stdio peer an agent host starts, connects to the engine as it starts
 (starting it when none runs) and holds it (`client.hold`, `{"op": "hold"}`: a connection the
 daemon answers and keeps until its client goes) for as long as the host runs it. While any hold
-is open, another installation that wants the engine's port never retires it: it rolls to the next
-free port, or refuses where that port was named (**A link outlives its engine**). So a sandboxed shell an agent host runs finds an engine whenever
-the host runs. An engine that goes while
+is open, the engine runs: an update's drain does not wait on a hold, and the host's next request
+holds the new release's engine (**Starting and updating**). So a sandboxed shell an agent host runs
+finds an engine whenever the host runs. An engine that goes while
 held (`cadgen stop`, a crash) is held again at the host's next request, never at once: a stop is
 obeyed. A hold names the host it serves (`{"op": "hold", "host": "codex"}`, as `cadgen.mcp.host.family`
 names it), and `cadgen status --json` says how many hold it (`holders`), per host (`hosts`), and the
-environment it runs in (`prefix`): what the `cadgen` command reads to run, in a host's shell, the
-installation that host's server holds.
+environment it runs in (`prefix`): the current installation's, which `cadgen doctor` names.
 
 ## Document lifetime
 
@@ -1134,13 +1145,9 @@ Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`):
 its type, state and command with its words (`daemon.refused`) and the caller raises it as that
 type (`api._failed`), so `cadgen inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
 
-`cadgen stop` stops every server of the installation, whatever protocol it speaks: the door and
-lock names carry the protocol (`daemon._tag`), and `daemon.endpoints()` lists this one's and each
-older one's, so a cadgen that bumps `PROTOCOL` still stops the server an earlier one started (from
-protocol 3, the first with a door: an earlier one listened on a Unix socket, which nothing reaches
-now, and leaves on that older cadgen's own idle timeout). Both `stop` and `status` remove the door and lock of a dead
-server (nothing reads the door and nobody holds its lock) and say so on stderr; `status` names an
-older protocol's live server, which `stop` stops. `stop` prints a line per server it stopped
+`cadgen stop` stops the engine, whatever release runs it (`daemon.endpoints()`: its one door).
+Both `stop` and `status` remove the door and lock of a dead server (nothing reads the door and nobody
+holds its lock) and say so on stderr. `stop` prints a line per server it stopped
 (`stopped the engine server at DOOR`), or `no engine server is running`; `--json` prints
 `{"ok": true, "stopped": [DOOR, ...]}` instead.
 

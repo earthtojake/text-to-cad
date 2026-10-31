@@ -26,28 +26,36 @@ checksum. It:
    release that is
    `uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen setup`.
    Its first run downloads the release, and Python 3.14 for it.
-3. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
+3. Installs the release in a folder of its own in cadgen's state folder
+   (`releases/<release>`), from uv's cache where it has it, and runs the rest from
+   there.
+4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
-4. Stops an older release's engine on CAD's port (3245, or `CADGEN_ENGINE_PORT`)
-   when nothing is using it, through that installation's own `cadgen stop`. One
-   still in use (an app session open on the older release, a page watching it, a
+5. Stops the engine of a cadgen from before 0.9 on CAD's port (3245, or
+   `CADGEN_ENGINE_PORT`) when nothing is using it, through that installation's own
+   `cadgen stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
-5. Installs or updates text-to-cad in each app with the app's own commands, the
+6. Installs or updates text-to-cad in each app with the app's own commands, the
    ones below, and removes duplicate copies. A copy that a plugin store manages is
    reported, never removed. The agents without a plugin get the skills alone, through
    the Skills CLI ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's
    server for this release, with a `.bak` of the file kept beside it.
-6. Registers the release and writes the `cadgen` command (`~/.local/bin/cadgen`; on
+7. Registers the release and writes the `cadgen` command (`~/.local/bin/cadgen`; on
    Windows `%USERPROFILE%\.local\bin\cadgen.cmd`), as the CAD server does when it
    starts.
-7. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
+8. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
    build123d and what they need, about 220 MB the first time) on the same Python,
    in cadgen's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
    first model builds without a download.
-8. Writes a receipt of everything it changed in cadgen's state folder, says what
-   each app has now, and lists the apps to restart to load what it installed or
-   updated.
+9. Writes a receipt of everything it changed in cadgen's state folder.
+10. Moves your computer's CAD engine to this release: a running engine finishes
+    what it is doing (a build, an export), stops, and this release's takes its place
+    on the same port, so every open page and card keeps its link and reloads itself;
+    should it not start, the release before comes back. With none running, the next
+    CAD session starts this release's.
+11. Says what each app has now, and lists the apps to restart to load what it
+    installed or updated.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
 to see the plan before anything changes. Run it again to update: an app that is up
@@ -250,11 +258,11 @@ grok plugin uninstall text-to-cad
 ### Gemini
 
 ```bash
-gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent --auto-update
+gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
 ```
 
-Gemini installs the plugin as an extension, with the skills and CAD's server, and
-keeps it up to date (`--auto-update`; `--consent` answers its security prompt). Like
+Gemini installs the plugin as an extension, with the skills and CAD's server
+(`--consent` answers its security prompt). Like
 Grok, it shows tool results as text, so asking it to show a model gives you a CAD
 Viewer link.
 
@@ -318,37 +326,37 @@ No plugin for your agent yet?
 
 ## Updates
 
-To update, run the install command again: it updates text-to-cad in every agent app
-on your computer and lists the apps to restart. To update one app by hand, run the
-update commands under its heading, then restart it. Or ask your agent to update
-text-to-cad.
+When a newer release is out, CAD shows an update button: a blue icon first in its
+navbar and on its home, and in the corner of a CAD card that has no navbar. Click
+it, and the engine installs the release, updates text-to-cad in every agent app on
+your computer as the install command does, and restarts on the new release; the
+page or the card reloads itself once the engine is back. An app that shows CAD's
+replies as text gets a line with its first reply instead, naming the install
+command. Nothing updates until you ask.
 
-An app runs the new release from the session it starts after its plugin is
-updated: the plugin's server line names the release, and the new release's cadgen
-is downloaded the first time it runs. A session already open keeps the release it
-started with. As the new release's engine starts, it stops every older release's
-engine that nothing is using. One still in use (a session open on the older
-release, a page watching it, a build) keeps running, and holds CAD's port: the new
-engine then serves on the next free port, says so once, and keeps that port until
-3245 is free at a later start
-([Port 3245](migrations/migrating-0.7-to-0.8.md#7-learn-the-one-engine-ids-pages-links-and-commands)).
-To stop an older engine yourself, run its own `cadgen stop`:
-`~/.local/bin/cadgen +<release> stop`, `<release>` being the release that engine
-runs.
+Running the install command again does the same, and so does `cadgen update` in a
+terminal: each installs the newest release, updates every app, moves the engine to
+it and lists the apps to restart. To update one app by hand, run the update
+commands under its heading, then restart it.
 
-When a newer release is out, a copy you installed yourself says so: a blue update
-button, first in CAD's navbar and on its home, whose **Send to agent** posts
-"Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
-your chat (the browser viewer's copies it instead), or, in an app that shows CAD's
-replies as text, a line with its reply. Your agent then updates it. The button also
-links to the [Quickstart](https://github.com/earthtojake/text-to-cad#-quickstart), to update by
-hand. Copies from a plugin directory or the Cursor Marketplace never show it, since
-their store updates them, and neither does Gemini's extension, which Gemini updates:
-for those there is nothing to run.
+Your computer runs one CAD engine, the current release's, whatever release each
+app's plugin names: an app whose plugin is behind or ahead uses that engine all the
+same. An app runs its updated plugin from the session it starts after the update.
+Each release is kept in a folder of its own in cadgen's state folder
+(`releases/<release>`): the one before the current stays, to go back to should the
+new one not start, and older ones go at the next update. `cadgen doctor` says
+which releases are there, which one is current, the release the engine runs, and
+each app's plugin's.
 
-To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
-one anonymous request, with no ID, path or anything about you, never in CI and
-never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it off.
+Copies from a plugin directory or the Cursor Marketplace never show the button,
+since their store updates them: for those there is nothing to run.
+
+To find out a release is out, cadgen fetches `api.texttocad.dev/v1/versions` at
+most once a day: one anonymous request, with no ID, path or anything about you,
+never in CI and never for a copy that something else updates.
+`CADGEN_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
+release says so too, with no request at all. A click on the button reads the feed
+again, for the newest release.
 
 Updating from 0.8.0 or 0.8.1, whose engine runs until it is stopped:
 [the migration guide](migrations/migrating-0.7-to-0.8.md#updating-from-080-or-081)

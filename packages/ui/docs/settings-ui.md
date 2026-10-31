@@ -133,8 +133,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   no ⋯, no Export and no Open in browser. What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
   the host can show the view full size, **Full size**; then, while its install is behind, the
-  update as a notice — the update card itself, Send to agent or Copy prompt, closable for the
-  view — rather than the blue button. In Preview it is gone with the rest of the column.
+  blue update button, the navbar's own: an icon, no text and no popover, which updates when
+  pressed. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,
   **Models** and **Files**, in the explorer's type (`text-xs`, a 28px list) and each as wide as its

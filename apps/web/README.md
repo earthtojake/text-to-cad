@@ -477,8 +477,11 @@ supplies the links (`src/host/viewerLinks.js`): its version (with its build's id
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's
 daily version check, read from `/__cad/version` with the server's description as the page
-starts (`main.tsx`) and again whenever the person comes back to it, and its prompt copied for
-the person to paste into their agent's chat; its full install instructions open in a new tab.
+starts (`main.tsx`) and again whenever the person comes back to it. A press updates
+(`POST /__cad/update`): the engine installs the release, updates each agent app and restarts on it,
+on the same port with the same token; the button fills while it works and spins while the engine
+restarts, the page reconnects every quarter second meanwhile (`useEngineReconnect`), and it reloads
+once the engine answers with the new release and nothing on the page is unsaved.
 A Viewer the CAD app's server opens is told of a release only where its install channel allows
 it (a store's copy, which its store updates, hears nothing); one a skill opens names no channel
 — a skills-only install — and is told. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
