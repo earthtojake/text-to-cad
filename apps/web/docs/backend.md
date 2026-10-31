@@ -1,16 +1,16 @@
 # Backend
 
 The browser host talks to `cad_server.viewer`, the HTTP application hosted by the engine in the
-`cadgen` Python distribution. Its source lives in
+`texttocad-server` Python distribution. Its source lives in
 `packages/texttocad-server/src/cad_server/viewer/`; this app owns the React host and its build.
 The wheel includes that build at `cad_server/_runtime/viewer`, beside the CAD app's one-file
-page (`cad_server/_runtime/mcp`); cadgen's snapshots are OCCT's and need no browser. Skills
+page (`cad_server/_runtime/mcp`); the engine's snapshots are OCCT's and need no browser. Skills
 invoke the installed distribution.
 
 The HTTP layer uses Python's standard library and the distribution's Python floor.
 It never imports the CAD kernel at module scope. Viewing renders existing files;
 model source changes never trigger a rebuild. A STEP and an `.xbf` are documents
-the cadgen engine serves (`cad.engine`, its daemon): the viewer asks the
+the engine serves (`cad.engine`, its daemon): the viewer asks the
 engine to serve one; the page reads its routes directly, and the engine
 reads, meshes and measures it in processes of its own.
 
@@ -25,8 +25,8 @@ cad viewer --host 127.0.0.1 --json
 ```
 
 The equivalent Python entry point is `python -m cad_server.viewer`, using the
-interpreter where cadgen is installed. The launcher serves the client bundled
-with cadgen. To use a checkout's client, build it from the repository root and
+interpreter where the server is installed. The launcher serves the client bundled
+with the server. To use a checkout's client, build it from the repository root and
 select it explicitly:
 
 ```bash
@@ -111,7 +111,7 @@ shared slots) compares the revision it is told with the client's
 
 Every format's row is its file's: `kind` (its extension), `url`, `hash` and
 `bytes`, and an SRDF's paired URDF. A STEP's and an `.xbf`'s say no more than that:
-they are drawn from what the cadgen engine serves of them (below), and their rows
+they are drawn from what the engine serves of them (below), and their rows
 are what a view watches for a change of the file. A row's digest is the file's
 sha256, computed once per version of the file (its mtime and size). Reading a
 file to hash it never holds up its deletion: the catalog opens models with delete
@@ -143,7 +143,7 @@ are answered for the origin that sent them, with no credentials
 ## Engine documents: a STEP and an `.xbf`
 
 A STEP (`.step`, `.stp`) and an `.xbf` open in the engine document renderer
-(`@text-to-cad/ui`'s `renderers/xbf`), drawn from what the cadgen engine serves
+(`@text-to-cad/ui`'s `renderers/xbf`), drawn from what the engine serves
 of them (`cad_server.viewer.documents`). `GET /__cad/xbf?file=<abs or id>` acquires the
 file, or the document of that id as the engine holds it (never built), in the already-running
 engine and answers `{doc, url}`, where `url` is
@@ -178,10 +178,10 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 | `GET /__cad/folder?path=...` | One folder's subfolders and CAD files. |
 | `GET /__cad/search?path=...&q=...` | The CAD files under a folder whose path holds `q`, bounded. |
 | `GET /__cad/asset?file=...` | A CAD file's bytes. |
-| `GET /__cad/xbf?file=...` | A STEP, an `.xbf` or a document id, served by the cadgen engine: `{doc, url}`, `202 {state: "reading", retryMs}` while the engine reads it, or the engine's refusal (400). `&held=1`: `{held}`, without starting a read. |
+| `GET /__cad/xbf?file=...` | A STEP, an `.xbf` or a document id, served by the engine: `{doc, url}`, `202 {state: "reading", retryMs}` while the engine reads it, or the engine's refusal (400). `&held=1`: `{held}`, without starting a read. |
 | `GET /__cad/api/...` | Direct engine routes: document structure, part buffers, element facts, groups, volume, look, image and version wait. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
-| `GET /__cad/robot?file=...&mesh=...` | A robot description's payload (`cad_server.robot_payload`: its articulation, its visuals at rest), and with `mesh=<hash>` a primitive cadgen meshed, by its digest. |
+| `GET /__cad/robot?file=...&mesh=...` | A robot description's payload (`cad_server.robot_payload`: its articulation, its visuals at rest), and with `mesh=<hash>` a primitive the engine meshed, by its digest. |
 | `GET /__cad/recents` | The model library every CAD view shares: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it). |
 | `POST /__cad/recents` | `{action, path, png?}`: `open` (an existing CAD file on screen, counted for analytics; a model's id, whose record notes the time), `pin`, `unpin`, `remove` (a file's record, the file kept), `delete` (a model's document and record: the engine's `delete`), `thumbnail`; answers the library as it now is. |
 | `GET /__cad/thumbnail?name=...` | A library picture, by its content name. |
@@ -284,7 +284,7 @@ going first; nothing is written. A second request for unchanged bytes (the file
 touched, copied or put back) is answered from memory without entering — or
 importing — ezdxf, and other bytes are rendered from the bytes read, so an
 answer is always the payload of the bytes it is held by. Every DXF takes this one
-path, one a cadgen model wrote and a vendor's alike.
+path, one a model wrote and a vendor's alike.
 
 Bytes it holds no answer for are rendered OFF the request
 (`cad_server/viewer/drawings.py`): the request starts the render on a thread of its

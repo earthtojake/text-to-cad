@@ -26,15 +26,19 @@ checksum. It:
    release that is
    `uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
-3. Installs the release in a folder of its own in cadgen's state folder
+3. On a computer 0.8 was set up on, moves what 0.9 keeps of 0.8's state folder
+   into its own, once: your telemetry answer and language, the installations'
+   records, the page token, the documents' records and Recents
+   ([Migrating from 0.8](migrations/migrating-0.8-to-0.9.md#folders)). Then installs
+   the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
    there.
 4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
-5. Stops the engine of a cadgen from before 0.9 on CAD's port (3245, or
-   `CAD_ENGINE_PORT`) when nothing is using it, through that installation's own
-   `cad stop`. One still in use (an app session open on it, a page watching it, a
+5. Stops the server of a release from before 0.9 (0.8's cadgen) on CAD's port
+   (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
+   own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
 6. Installs or updates text-to-cad in each app with the app's own commands, the
    ones below, and removes duplicate copies. A copy that a plugin store manages is
@@ -46,10 +50,10 @@ checksum. It:
    starts.
 8. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
    build123d and what they need, about 220 MB the first time) on the same Python,
-   in cadgen's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
+   in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
    first model builds without a download.
-9. Writes a receipt of everything it changed in cadgen's state folder.
-10. Moves your computer's CAD engine to this release: a running engine finishes
+9. Writes a receipt of everything it changed in text-to-cad's state folder.
+10. Moves your computer's CAD server to this release: a running server finishes
     what it is doing (a build, an export), stops, and this release's takes its place
     on the same port, so every open page and card keeps its link and reloads itself;
     should it not start, the release before comes back. With none running, the next
@@ -73,8 +77,8 @@ the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsur
 `goose` and so on; `cad setup --help` lists them).
 `--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
 the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
-store's, removes the `cad` command and stops the engine; `--purge` with it also
-removes cadgen's state and cache folders. `--version <release>` installs that release
+store's, removes the `cad` command and stops the server; `--purge` with it also
+removes text-to-cad's state and cache folders. `--version <release>` installs that release
 instead of the latest; a release from before the install command has no
 `cad setup` to run. To read the script before it runs, download it first, then
 run it:
@@ -112,7 +116,7 @@ and the app installs `main`.
 
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new
-release's cadgen is downloaded the first time it runs, and the skills and the
+release is downloaded the first time it runs, and the skills and the
 server share it. Earlier releases stay in uv's cache until you run `uv cache prune`.
 
 ### Claude Code
@@ -167,9 +171,9 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
 }
 ```
 
-The config pins a cadgen release in `args`, and uvx keeps the version it first
+The config pins a release in `args`, and uvx keeps the version it first
 downloads. To update, change that version to the
-[latest release](https://pypi.org/project/cadgen/), then restart Claude Desktop.
+[latest release](https://pypi.org/project/texttocad-mcp/), then restart Claude Desktop.
 The install command writes this entry, with uvx's full path, and moves its release
 to the new one each time it updates.
 
@@ -305,8 +309,8 @@ The command asks which agents to install for, and where. To skip the questions,
 name the agent and install for your user:
 `npx skills add earthtojake/text-to-cad#latest -g -a <agent> -y`.
 
-Each skill runs cadgen through uv with the same pinned command the plugin's server
-uses, so uv must be installed. Without the plugin there is no CAD server, so the
+Each skill runs text-to-cad's server through uv, pinned to the skill's release, as
+the plugin's server is, so uv must be installed. Without the plugin there is no CAD server, so the
 skills open models in the CAD Viewer in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
@@ -328,37 +332,41 @@ No plugin for your agent yet?
 
 When a newer release is out, CAD shows an update button: a blue icon first in its
 navbar and on its home, and in the corner of a CAD card that has no navbar. Click
-it, and the engine installs the release, updates text-to-cad in every agent app on
+it, and the server installs the release, updates text-to-cad in every agent app on
 your computer as the install command does, and restarts on the new release; the
-page or the card reloads itself once the engine is back. An app that shows CAD's
+page or the card reloads itself once the server is back. An app that shows CAD's
 replies as text gets a line with its first reply instead, naming the install
 command. Nothing updates until you ask.
 
 Running the install command again does the same, and so does `cad update` in a
-terminal: each installs the newest release, updates every app, moves the engine to
+terminal: each installs the newest release, updates every app, moves the server to
 it and lists the apps to restart. To update one app by hand, run the update
 commands under its heading, then restart it.
 
-Your computer runs one CAD engine, the current release's, whatever release each
-app's plugin names: an app whose plugin is behind or ahead uses that engine all the
+Your computer runs one CAD server, the current release's, whatever release each
+app's plugin names: an app whose plugin is behind or ahead uses that server all the
 same. An app runs its updated plugin from the session it starts after the update.
-Each release is kept in a folder of its own in cadgen's state folder
+Each release is kept in a folder of its own in text-to-cad's state folder
 (`releases/<release>`): the one before the current stays, to go back to should the
 new one not start, and older ones go at the next update. `cad doctor` says
-which releases are there, which one is current, the release the engine runs, and
+which releases are there, which one is current, the release the server runs, and
 each app's plugin's.
 
 Copies from a plugin directory or the Cursor Marketplace are not told of a release
 from the feed, since their store updates their plugin. Once the store has moved an
-app's plugin ahead of your engine, the button shows for them too, and moves the
-engine to it.
+app's plugin ahead of your server, the button shows for them too, and moves the
+server to it.
 
-To find out a release is out, cadgen fetches `api.texttocad.dev/v1/versions` at
+To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
 most once a day: one anonymous request, with no ID, path or anything about you,
 never in CI and never for a copy that something else updates.
 `CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
 release says so too, with no request at all. A click on the button reads the feed
 again, for the newest release.
+
+Updating from 0.8: [Migrating from 0.8 to 0.9](migrations/migrating-0.8-to-0.9.md) says
+what 0.9 renames (the `cad` command, `CAD_*`, the folders, the packages) and what the
+install command moves for you.
 
 Updating from 0.8.0 or 0.8.1, whose engine runs until it is stopped:
 [the migration guide](migrations/migrating-0.7-to-0.8.md#updating-from-080-or-081)
@@ -370,26 +378,26 @@ step, and an agent with the CAD skill can follow it.
 
 ## What a model runs in
 
-The release the install command runs, and each app's CAD server, is cadgen's core:
-the engine, the `cad` command, the CAD Viewer's server and CAD's MCP server,
-without the CAD kernel. A model runs where the kernel is: in one environment cadgen
-makes with uv in its cache folder and keeps, the release with its kernel
-(`cadgen[kernel]`) on the engine's Python, 3.14. Every model runs there, and so do
-the engine's own kernel processes: exports, snapshots and the meshes the viewer
-shows. The install command makes it; otherwise the first model or the first view
-does. A model imports what that environment holds: cadgen, build123d and what they
-bring.
+The release the install command runs is text-to-cad's server (`texttocad-server`): the
+`cad` command, the CAD Viewer's server and the engine every build goes through, without
+the CAD kernel. Each app's CAD server is the smaller `texttocad-mcp` (`cad-mcp`), which
+reaches it. A model runs where the kernel is: in one environment the server makes with uv
+in its cache folder and keeps, the library with its kernel (`texttocad[kernel]`) on the
+server's Python, 3.14. Every model runs there, and so do the server's own kernel
+processes: exports, snapshots and the meshes the viewer shows. The install command makes
+it; otherwise the first model or the first view does. A model imports what that
+environment holds: the library (`cad`), build123d and what they bring.
 
-To run models with a Python of your own instead, install cadgen with its kernel
-into it: `pip install 'cadgen[kernel]'` (`pip install cadgen` is the core alone, and
-`import build123d` fails there). That environment is then the one models run in.
+To run models with a Python of your own instead, install the library with its kernel
+into it: `pip install 'texttocad[kernel]'` (`pip install texttocad` is the library alone,
+and `import build123d` fails there). That environment is then the one models run in.
 
 ## Windows 11: Smart App Control
 
 The CAD kernel behind the `cad`, `dxf`, `urdf`, `srdf` and `sdf`
 skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
 native module. Windows 11's Smart App Control blocks unsigned native code, so
-on a machine where it is on (the default on a fresh install) every `cadgen`
+on a machine where it is on (the default on a fresh install) every `cad`
 command and `import build123d` fails with
 `ImportError: DLL load failed while importing OCP`, and Event Viewer records
 the refusal as Event ID 3077 under CodeIntegrity › Operational. `cad doctor`

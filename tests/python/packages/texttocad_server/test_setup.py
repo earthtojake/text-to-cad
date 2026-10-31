@@ -327,8 +327,9 @@ class InstallUpdateAndUninstall(Fixture):
             self.serving = {**self.older_installation(), "holders": 2}
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
+        console = self.root / "env-0.0.1" / "bin" / "cad"
         self.assertIn(f"text-to-cad 0.0.1's engine (pid 4242) on port {PORT}: in use by 2 app servers, left running; "
-                      "once that is closed, `cad +0.0.1 stop` stops it", out)
+                      f"once that is closed, `{console} stop` stops it", out)
         setup.stop_installation.assert_not_called()
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual(self.receipt()["stopped"], [])
@@ -338,7 +339,7 @@ class InstallUpdateAndUninstall(Fixture):
             self.serving = {**self.older_installation(), "prefix": str(self.root / "elsewhere")}
             code, out, _err = self.run_setup("--dry-run")
         self.assertEqual(code, 0, out)
-        self.assertIn(f"idle, and no installation record names it; `cad stop` run by that installation "
+        self.assertIn(f"idle, and no installation record names it; the stop command of that installation "
                       f"({self.root / 'elsewhere'}) stops it", out)
         self.serving, self.held = None, "node (pid 77)"
         code, out, _err = self.run_setup("--dry-run")

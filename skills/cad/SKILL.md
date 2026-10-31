@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that cadgen's engine builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
+description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
 license: MIT
 ---
 
@@ -9,8 +9,8 @@ license: MIT
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files for the current interface.
 
-A model is a Python function; running its script rebuilds it in cadgen's warm engine, and the
-page the person has open updates. Files are exports, made when asked.
+A model is a Python function; running its script rebuilds it in text-to-cad's warm server, and
+the page the person has open updates. Files are exports, made when asked.
 
 ## Start with the task
 
@@ -27,7 +27,8 @@ page the person has open updates. Files are exports, made when asked.
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
 
-A project built with cadgen 0.7 may need migrating: see [migrations](references/migrations.md).
+A project built with cadgen 0.7 may need migrating; one built with 0.8 runs as it is: see
+[migrations](references/migrations.md).
 
 For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
 Use the corresponding robot-description skill for URDF, SRDF or SDF.
@@ -35,19 +36,19 @@ Use the corresponding robot-description skill for URDF, SRDF or SDF.
 ## Setup and paths
 
 Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+share one installation, and its server, with the CAD app's:
 
 - `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
 - `python` below means `cad +0.8.4 run`
 
 For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
+installed, a server that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
-One engine serves the installation: the first run starts it, every run and every
+One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
 and the documents it holds; `cad stop` stops it, and any older one left running.
-A build cut off by the shell's time limit keeps running in the engine; run the same
+A build cut off by the shell's time limit keeps running in the server; run the same
 command again and it waits for that build and replays it (`cad status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background. A command that ends with 'the system denies text-to-cad's local engine' is
@@ -117,16 +118,16 @@ user the page once ([Show the model](#show-the-model)) and use the id for every 
 after it. The id comes from the
 script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
 so it is the same run after run, and the open page follows every run. A model's name is its identity
-within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
+within its namespace, the function's name by default, `name=` gives it another. The namespace
 is the script's folder; two explicit names in it must differ.
 
-- **Running the script is the rebuild.** It writes no file. The engine's warm worker for
+- **Running the script is the rebuild.** It writes no file. The server's warm worker for
   the script replays every operation an edit did not reach, so a comment re-runs nothing
   and a dimension edit re-runs what reads it
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Decoration only
   declares: keep the calls under `if __name__ == "__main__":` so other scripts can import
   the models.
-- **`@memo` marks stages, never parts.** The engine already replays every kernel call, so
+- **`@memo` marks stages, never parts.** The server already replays every kernel call, so
   mark only a function holding seconds of kernel work that an edit elsewhere leaves
   alone, such as a whole sub-assembly stage; never a part, never a helper called many
   times ([`@memo`](references/model-contract.md#memo-marks-stages)).
@@ -150,7 +151,7 @@ is the script's folder; two explicit names in it must differ.
   doubt ([references](references/inspection-and-validation.md#references)).
 - **A shape with no function** (a notebook cell, a REPL) is handed over:
   `model(shape, name="plate")` returns the same handle, and no command builds it again.
-- **The engine never reruns code.** A restart reopens every document from the engine's
+- **The server never reruns code.** A restart reopens every document from the server's
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
   saved), the page, `cad inspect <id>` and `cad_show` print the command that brings it
   back (`cad run src/bracket.py`). Run it.
@@ -162,7 +163,7 @@ is the script's folder; two explicit names in it must differ.
 
 ## Files, when asked
 
-A file is an action on the document the engine holds, never part of the model: no code
+A file is an action on the document the server holds, never part of the model: no code
 change and no rebuild, written at once. It holds what the document held when it was
 written, so a change made after it is in the file only once it is written again. Write one
 when the person asks for it:
@@ -177,9 +178,9 @@ calls `export(x, path, ...)` on each (`x` a model call's handle); running it rew
 and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model.
 
-The xbf, cadgen's own document, is Save As: export one only to share a model without its
+The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
-engine's own cache reopens every document it built, as last built. A vendor STEP is
+server's own cache reopens every document it built, as last built. A vendor STEP is
 converted to an xbf once
 (`cad export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
 times faster than parsing the STEP.
@@ -229,7 +230,7 @@ grid, pose (`--pose open`) and size. It shows arrangement and appearance, not di
 ## Prompt references and inspection
 
 A reference such as `0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7` names geometry
-in a document by the engine's own names: the document (a model's id, or a file's
+in a document by the server's own names: the document (a model's id, or a file's
 absolute path), `#`, a part or an assembly by the labels on its way from the root
 (`hand/finger.2` is the second component labelled `finger` in `hand`), then, after a
 slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The CAD
@@ -337,7 +338,7 @@ own work; review with `cad snapshot`.
   cad viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command ensures this installation's server, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.

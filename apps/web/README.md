@@ -13,7 +13,7 @@ the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
 persistence, the file menu's reveal route, and the app menu's links (the update notice is
-cadgen's, read from `/__cad/version`).
+the server's, read from `/__cad/version`).
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@text-to-cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
@@ -49,12 +49,13 @@ and assets, so the app does not scan another package's source.
 
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
-  The backend is not here: its code, its tests and its laws live with cadgen.
+  The backend is not here: its code, its tests and its laws live with the server
+  (`texttocad-server`).
 - **Document boundary**: everything renders from the file. A STEP and an `.xbf`
-  render from what the cadgen engine serves of them — the structure (names,
+  render from what the engine serves of them — the structure (names,
   colours, materials, the mechanism) and one buffer per part, read through the
   viewer (`/__cad/xbf`, [docs/backend.md](docs/backend.md)) — and every other
-  format from its own bytes or what cadgen resolved from them. The viewer never
+  format from its own bytes or what the server resolved from them. The viewer never
   reads model source and never triggers a source build: a build of a document a
   view shows reaches it as the engine's next version, at once, and only the parts
   the edit changed are fetched. A part and an element are named as the engine
@@ -87,7 +88,7 @@ without changing that folder. It is only the folder a launch's relative files ar
 Dev announces itself to the same engine with
 `python -m cad_server.viewer --api-only --json` (a launch, from its folder), then
 proxies `/__cad` with the engine token. Vite owns the client and closing it leaves the engine
-running. `VIEWER_PYTHON` names the interpreter with cadgen installed (default `python3`).
+running. `VIEWER_PYTHON` names the interpreter with the server installed (default `python3`).
 `VIEWER_BACKEND_URL` and `CAD_ENGINE_TOKEN` attach to an existing engine
 using its `apiUrl` and `token`. The token is named outside `VIEWER_`, the prefix Vite hands
 to the page (dev refuses a `VIEWER_` variable named like a token), and the dev server sends
@@ -139,7 +140,7 @@ cookie from before `cad server --rotate-token`) that the page needs its link, an
 run `cad viewer` and open the link it prints. A
 loaded page whose engine stops under it says the engine is not running, in the person's
 language, over the page until a read answers again. One whose engine runs and refuses its token
-(after `cad server --rotate-token`) says instead that its link was replaced, and to run `cadgen
+(after `cad server --rotate-token`) says instead that its link was replaced, and to run `cad
 viewer` and open the link it prints; it keeps asking, never reloads for the refusal, and heals
 once that link, opened beside it, has left the new cookie.
 
@@ -155,14 +156,14 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   a hidden folder opens like any other. The explorer reads one folder at a
   time, and its search skips hidden folders and `__cadgen__`, `__pycache__`,
   `build`, `coverage`, `dist`, `node_modules` and `viewer` (exact case) — except the folders
-  on the way to the engine's cache (`~/.cache/cadgen`, each model's
+  on the way to the engine's cache (`~/.cache/texttocad`, each model's
   `documents/<id>/document.xbf`), which it lists.
   [docs/backend.md](docs/backend.md) has the rules.
 - **Verify a link by loading the page**, never by curling `/__cad/asset` —
   that route serves raw files; an engine document is read through `/__cad/xbf` and
   `/__cad/api/doc/<id>`, so probing it 404s whether or not anything is wrong.
 - **Warm work survives navigation.** The app retains one client across navigation, so the
-  caches keyed to its resources stay valid across file switches. The cadgen engine holds
+  caches keyed to its resources stay valid across file switches. The engine holds
   every document it served and each part's mesh under one memory budget (a quarter of the
   machine's memory by default, `CAD_ENGINE_MEMORY_MB`), and the last STEP reads by their
   bytes: within it, reopening a document reads and meshes nothing again; past it the least
@@ -252,7 +253,7 @@ npm run test         # client + app tooling (node:test, beside the code)
 ```
 
 CI runs both through `scripts/test/test-js.sh --select web`. The backend's suite
-lives with cadgen and is not collected here; running only `npm run test` leaves
+lives with the server and is not collected here; running only `npm run test` leaves
 that half unchecked.
 
 The UI's browser specs run in npm's Playwright Chromium: Metal on macOS, SwiftShader
@@ -324,7 +325,7 @@ it requires changing the source model or annotations. The viewer has no Material
 or Theme editor. These controls live in `@text-to-cad/ui`; see the UI package's
 Render and loading playbooks.
 
-A STEP or an `.xbf` loads its structure, then its parts, each at the mesh the cadgen engine
+A STEP or an `.xbf` loads its structure, then its parts, each at the mesh the engine
 made of it, and a new version fetches only the parts it changed (the shared
 [loading](../../packages/ui/docs/loading.md) playbook). The
 viewport carries opening/update status, centred at its top (a progress icon on
@@ -418,7 +419,7 @@ user's state directory, shared with the CAD app.
 
 ### Usage stats (telemetry)
 
-cadgen's usage stats (`cad_server/analytics.py`) are on by default once a `cad` command has said
+The server's usage stats (`cad_server/analytics.py`) are on by default once a `cad` command has said
 so, once, in its output; nothing in the Viewer asks. **Telemetry** in the app menu turns
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
@@ -475,7 +476,7 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.8.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's
+links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
 daily version check, read from `/__cad/version` with the server's description as the page
 starts (`main.tsx`) and again whenever the person comes back to it. A press updates
 (`POST /__cad/update`): the engine installs the release, updates each agent app and restarts on it,

@@ -41,16 +41,17 @@ HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, S
 engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
-`import cadgen`) and the bundled runtime. Never app code, never JavaScript source at runtime.
-Its required dependencies are the core's -- uv, numpy, ezdxf and Pillow: the engine's server, the
-`cad` command, the viewer's server and the MCP shim, none of which imports the CAD kernel --
-and the kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its
-`kernel` extra, which the engine installs into the environments models run in (the engine's
-**Running a model**). A person who installs cadgen by hand to run models with their own Python
-installs `cadgen[kernel]`.
+`import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
+Its one required dependency is numpy, the meshes' arrays: what the server imports of it -- the
+document model, the protocol a client speaks, the build's words -- imports no CAD kernel. The
+kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `kernel`
+extra, which the server installs into the environment models run in (the engine's **Running a
+model**). A person who installs the library by hand to run models with their own Python installs
+`texttocad[kernel]`.
 
-**DEPENDED ON BY** — every skill (as a pinned installed distribution). The CAD Viewer is not a
-dependent but a part: the engine serves `cad_server.viewer`’s client, HTTP application and
+**DEPENDED ON BY** — the server, `texttocad-server`, which pins it at its own release, and through
+the server every skill that runs `cad`; the aliases `cadgen` and `text-to-cad`, which install it.
+The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
 ## The rest of the package's documentation
@@ -76,8 +77,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
    a folder only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
-   `$TMPDIR`), else `/tmp/cadgen-<uid>` -- and cadgen's own
-   state in the user's state folder: settings, Recents' small previews, and the registry of the
+   `$TMPDIR`), else `/tmp/cadgen-<uid>` (the names releases before 0.9 used too, so each finds the
+   other's door) -- and the server's own
+   state in the user's state folder (`texttocad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
    program's; both this user's alone), each registered installation's record
@@ -86,14 +88,14 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    releases an update installed (`releases/<version>`: each one's environment, made by uv from its
    cache; the one before the current kept as the way back);
    never geometry and never source. In the
-   platform's cache folder (`~/.cache/cadgen`, by 0.7's rule) it keeps, under `documents/` and
+   platform's cache folder (`~/.cache/texttocad`; on Windows `%LOCALAPPDATA%\texttocad`) it keeps, under `documents/` and
    nowhere else there, each model document's bytes as it last built them: its own file, never a
    declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
    restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
    beside a library or a model; and under `base/` the environment models and the engine's kernel
-   processes run in, an installation's base, `cadgen[kernel]` at its release, made by uv from its
+   processes run in, an installation's base, `texttocad[kernel]` at its release, made by uv from its
    cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -106,9 +108,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 3. **Three sides, by where the code runs.** The library -- what a model imports and what runs in
    a worker: the model API, the kernel side of the engine, the document model and the protocol a
    client speaks -- imports nothing of the server's or the shim's, so a model runs where only it is
-   installed; its engine imports nothing of cadgen outside itself: OCP, build123d, bd_materials,
-   threejs_materials (and ezdxf, build123d's own DXF library), numpy, Pillow and the standard library
-   only. The server -- what runs in the daemon or a `cad` command: the daemon, the registry, the
+   installed; its engine imports nothing outside the library but OCP, build123d, bd_materials,
+   threejs_materials (and ezdxf, build123d's own DXF library), numpy, Pillow and the standard
+   library. The server -- what runs in the daemon or a `cad` command: the daemon, the registry, the
    CAD Viewer's and the CAD app's servers, every verb, the environment makers, telemetry -- imports
    the library's kernel-free modules and never the kernel. The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library alone. The server reaches into the library, never the
@@ -134,7 +136,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    (`ids.derived_id`): a model's script and function (`ids.model_id`), an opened file's path and
    no name (`ids.file_id`, inside the engine only: its public name stays its path), a shape handed
    over its calling script, or the working folder, and its name -- the same in every process,
-   worked out without asking the engine. Identity is namespace plus name: in 0.8 the namespace is
+   worked out without asking the engine. Identity is namespace plus name: the namespace is
    the script's folder, with no project detection. A model's name is its identity within its
    namespace, the function's name by default, `name=` gives it another. An explicit name uses the
    folder as the formula's scope; one that another file of the folder declared at its last run is
@@ -168,30 +170,31 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     GLB's animations are baked from the code when that GLB is written. A model with no file
     decorator writes nothing.
 11. **Decoration only declares; a model script is Python.** A script runs only when Python
-    runs it; no verb imports or builds a script. Importing cadgen or
+    runs it; no verb imports or builds a script. Importing the library or
     defining a decorated function never builds a model, writes its outputs, starts a
     worker, or exits the caller. An explicit call builds the model and writes its
     declared files, then returns to the caller. Python controls which calls run and
     in what order, including its `__main__` block and conditions; watchers never
-    change that control flow. cadgen consumes no script arguments. Engine switches
+    change that control flow. The library consumes no script arguments. Engine switches
     are environment variables.
 12. **A model is a Python script.** Decorated functions declare models; explicit calls
     build them; `python script.py` runs the program. No command builds source text.
-13. **The document's kinematics are AP242's, and cadgen stores no kinematic fact the
+13. **The document's kinematics are AP242's, and the library stores no kinematic fact the
     standard cannot name.** Every entity and attribute of the mechanism subtree is ISO
     10303-105's as Part 21 writes it (edition 4's domain model's where Part 21 has none);
     only the root says the schema and the units. What the standard cannot say is not
-    patched with an attribute of cadgen's own: it is dropped, or refused by name at document
+    patched with an attribute of its own: it is dropped, or refused by name at document
     time (the engine's **Kinematics**; a conformance test walks the subtree and holds it). The
     authoring functions are named after the entities they write: `mechanism_state`
     (`mechanism_state_representation`), `configuration_sequence`
     (`interpolated_configuration_sequence`), and `gear_pair`, `rack_and_pinion_pair` and
     `screw_pair`, each refusing a joint its pair does not relate.
-14. **The package ships alone.** The installed distribution is the whole world: the Python, the
-    bundled `_runtime/`, and this document. It works with the repository it was built from gone
-    -- and its markdown must read that way, referring to nothing outside the package.
-    *Pressure-test*: every sentence in the package's markdown must be true and actionable for
-    someone who only ran `pip install cadgen`. Naming a bundled thing ("the JavaScript runtime
+14. **Each distribution ships alone.** An installed distribution is the whole world: its Python,
+    what it bundles (the server's `_runtime/`), and its documents. It works with the repository it
+    was built from gone -- and its markdown must read that way, referring to nothing outside its
+    own distribution, another one's files included.
+    *Pressure-test*: every sentence in a distribution's markdown must be true and actionable for
+    someone who only ran `pip install texttocad` (or `texttocad-server`, or `texttocad-mcp`). Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
     repository workflow does not.
 15. **No backwards compatibility for authoring and runtime APIs.** Hard cutovers only.
@@ -203,9 +206,15 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name
     that never existed.
 
+    **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
+    the `cadgen` import is the library itself, every name and every module of it `cad`'s own
+    object (one copy, and nothing said of it), and the `cadgen` and `text-to-cad` distributions
+    install the library at their own release. Nothing else of 0.8's names is kept: the `cadgen`
+    command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
+
     **Persisted-document exception.** Saved documents have a separate compatibility contract:
     opening, viewing, importing and exporting supported formats must not require their source or
-    a rebuild just because cadgen was upgraded. The engine reads `xbf/8` and `xbf/9`; it converts
+    a rebuild just because text-to-cad was upgraded. The engine reads `xbf/8` and `xbf/9`; it converts
     `xbf/8` material metadata in memory, without executing model code or changing source or cache
     bytes. A separate migration record identifies the conversion while the original build closure
     and toolchain provenance remain unchanged. Explicit export to a different XBF path can save
@@ -220,12 +229,12 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 17. **Loud failure or correct output, nothing between.** The cardinal sin is plausible-wrong
     output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or render leaves
     no file this run wrote; an earlier file stays byte for byte.
-18. **Nothing waits on the network.** Once installed, cadgen works offline: every command,
+18. **Nothing waits on the network.** Once installed, text-to-cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (`analytics.py`, usage
     counts under a random id, sent by default once a `cad` command has said so, and never
     after the person's no) and the daily version check (`updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
-    An update waits on the network because a person asked for it -- the update button, `cadgen
+    An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
     and leaves everything as it was. Nothing updates on its own.
@@ -239,7 +248,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     kept beside the settings, and the next process that sends sends it, in the background. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
     The pages load nothing from the internet: everything they show ships in the wheel.
-    *Pressure-test*: with an installed cadgen and every request refused (a proxy on a closed
+    *Pressure-test*: with an installed server and every request refused (a proxy on a closed
     port), and again with every request hanging, start a server, open a view, call each tool,
     and run a build and a snapshot: each works, and nothing waits on a request beyond the one
     wait above.
@@ -277,8 +286,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** `export`, `snapshot` and `inspect` are functions of the root
-    (`cadgen.export`, ...) and commands that call them; serving, the engine's status, stopping it
-    and running it (`cad serve`, `status`, `stop`, `server`), and deleting a document (`cadgen
+    (`cad.export`, ...) and commands that call them; serving, the engine's status, stopping it
+    and running it (`cad serve`, `status`, `stop`, `server`), and deleting a document (`cad
     delete`, which the home's Delete is too), are commands only, with no function of the root. Every successful server-backed build reports its id and localhost
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
     URL.
@@ -349,14 +358,14 @@ expiry, revision checks and download delivery; running cancellation discards tha
 temporary artifact. Browser downloads choose the viewer user's local destination
 before starting. An agent's explicit host path is a different destination contract.
 
-`cad inspect`, `cadgen.inspect()` and `cad_inspect` read existing files or the
+`cad inspect`, `cad.inspect()` and `cad_inspect` read existing files or the
 documents the engine holds by id. They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
 `cad inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
-`--query closure`, and `cadgen.inspect()` with no reference, the closure alone);
+`--query closure`, and `cad.inspect()` with no reference, the closure alone);
 with a reference it returns geometry facts. No form meshes a part, and a part's volume and box
 are measured once and kept by its geometry, in memory alone.
 `query="build"` (`--query build`) returns saved-file metadata and closure or live
@@ -365,7 +374,7 @@ build metadata. File metadata does not imply a live worker.
 ## The shape of the package
 
 ```
-src/cadgen/
+src/cad/
   __init__.py            # the root, exactly: model, the decorators (xbf, step, glb, stl,
                          #   threemf, dxf), memo, paint, read_step,
                          #   read_xbf, read_mesh, and the operations on documents (export,
@@ -376,104 +385,29 @@ src/cadgen/
                          #   screw_pair (product and manufacturing information to join them)
   gltf.py                # animation: the document records its compiled tracks, and only a
                          #   GLB reads them (an exported GLB's clips)
-  engine/                # the engine: models, the server and its workers, documents,
-                         #   exports, the mesh, references, the OCCT stills (its README)
-  cli/                   # the `cad` command: a module per command, each a shell over
-                         #   the function or parser that does the work
-  viewer/                # engine HTTP application (engine_app), launcher (main), routes (http_app),
-                         #   files by absolute path (backend), a file's catalog row
-                         #   (scanner), the explorer's reads (folders), the model library
-                         #   every CAD view shares (recents), a STEP's and an .xbf's serve
-                         #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a robot's (robots), Quick Edit's packets
-                         #   (prompt_files)
-  mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
-                         #   engine sessions (http), tools and launches (server), the agent
-                         #   operations (operations), how a host presents CAD (host), open
-                         #   views (views), sidebar views shared in memory (sidebar), the
-                         #   viewer routes in-process (tunnel), the page (ui), and the CAD
-                         #   Viewer link for a host that renders no MCP Apps (browser)
+  engine/                # the engine's library half: models and the worker every build runs
+                         #   in, documents, exports, the mesh, references, the OCCT stills, the
+                         #   client every command reaches the server by, and where things are
+                         #   on this computer (places)
   urdf.py, sdf.py,       # the robot validators: one public namespace per format, its
   srdf.py                #   `validate` verb, and the checks behind it (*_source.py,
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
   results.py             # what a `validate` verb returns: the JSON line protocol, typed
-  robot_payload.py       # a robot description resolved for the viewer's page: its
-                         #   articulation, its visuals in rest space, the facts a person
-                         #   reads off it; held in memory
-  drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties
-  analytics.py           # telemetry: usage counts and crash reports, on by default once
-                         #   a command has said so, never after a no
-  settings.py            # the person's settings: settings.json in the state directory
-  language.py            # the language the person chose for the CAD views
-  updates.py             # the daily version check, for a copy nothing else keeps current,
-                         #   and the release an update moves to
-  assets.py              # where the bundled runtime is
   check_fonts.py         # `python -m cad.check_fonts`: the font that breaks
                          #   `import build123d`
-  _internal/             # the environment models run in (base: the installation's base,
-                         #   cadgen[kernel], made by uv),
-                         #   the launch command, the installations' registry, which one
-                         #   is current, and the proxy it writes (installations:
-                         #   ~/.local/bin/cad, which the skills run as `cadgen
-                         #   +<version>`; written as `cad-mcp` starts and by `cadgen
-                         #   doctor` and `cad setup`), the proxy (proxy), the releases
-                         #   an update installs (releases), the update the button starts
-                         #   (update) and its switch (switch), the font guard,
-                         #   the lazy kernel (lazy_kernel: `import build123d` binds, the
-                         #   kernel loads on first use; cadgen-lazy-kernel.pth, at the root
-                         #   of site-packages, installs it at interpreter start),
-                         #   the server's observer of the engine and the telemetry sender,
-                         #   what the library counts (counts), the install channel, atomic
-                         #   replace, file locks (the state folder's one lock:
-                         #   `file_lock.state`), the CLI derivation
-  _runtime/              # BUILT: the CAD Viewer client and the CAD app page -- produced
-                         #   when the wheel is packaged, never committed, never edited
-src/cad_mcp/             # the stdio transport an agent app starts (`cad-mcp`), the standard
-                         #   library alone: the host's JSON-RPC (protocol) carried to the
-                         #   engine's MCP endpoint (shim), the engine reached by its door and
-                         #   started, the current installation's, when none runs (engine),
-                         #   which host started it (host), and the browser a text host's
-                         #   `cad_show` opens (browser)
+  _internal/             # the runner `cad run` starts a program by (program: the program's
+                         #   folder last on its path), the lazy kernel (lazy_kernel: `import
+                         #   build123d` binds, the kernel loads on first use;
+                         #   texttocad-lazy-kernel.pth, at the root of site-packages, installs it
+                         #   at interpreter start), the font guard (font_scan), what the library
+                         #   counts (counts), atomic replace, the validators' door, the version
+src/cadgen/              # the earlier import name: every name and every module of it is cad's
+                         #   own (law 15's earlier name)
 ```
 
-Commands: `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and
-`server` are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
-robot among them); `cad urdf|sdf|srdf validate` the validators; `cadgen
-doctor` the setup (the installation registered, the `cad` command written, the CAD kernel
-environment made, the engine started; the releases on disk, the current one, the engine's and each
-app's plugin's) and what cadgen left behind that nothing needs,
-which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of an older format,
-the bytecode of installations no longer registered, cache folders no record names; none written in
-the last seven days); `cad run` a model script in the CAD kernel environment (the base:
-`_internal/base.py`); `cad viewer` the engine page launcher;
-`cad-mcp` the stateless proxy an agent host starts; `cad setup`, which the install command
-`curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets up or updates text-to-cad in every agent
-app it finds, each by its own command (`_internal/providers.py`), installs its release's folder, makes
-the CAD kernel environment models run in and moves the device's engine to its release; `cadgen
-update` runs the newest release's `cad setup`, as the update button does; `cad uninstall`
-takes text-to-cad out; and `cad telemetry` the person's answer. A
-model builds by running its script: `cad run model.py`, or `cad +<version> run model.py` through
-the `cad` command, which runs the current installation, else the one registered last
-(`_internal/proxy.py`; a `+<version>` is taken off).
-
-Coming from 0.7: cadgen 0.7.x kept a cache store, which can hold gigabytes, at
-`~/.cache/cadgen` (macOS and Linux; `$XDG_CACHE_HOME/cadgen` when that is set),
-`%LOCALAPPDATA%\cadgen` (Windows) or the folder `CAD_CACHE_DIR` named: its `objects/` and
-`index/`. 0.8 keeps its document cache in that folder's `documents/` and its engine's bytecode in
-`pycache/`, and neither reads nor writes 0.7's store beside it, nor the state files only 0.7 writes
-(its sidebar views, its snapshot browser's lock, its viewer's log, its Recents log). Whether a 0.7
-is still installed cannot be told from here (0.7 never registered itself; it lives in uv's
-environments and the agent apps' plugin configs), so they retire themselves: `cad doctor` says
-they are there, with their size and when they were last written, and `cad doctor --prune`
-removes them once nothing has written them for seven days -- a 0.7 in use writes its store at
-every build -- or at once with `--all-versions`, once no 0.7 is left in any agent app. 0.8 loses
-nothing by it. Settings, the telemetry answer and recents live in the state directory, and stay.
-
-The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
-uses the same host and custom-header POST gates as other mutation routes, limits
-images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
-reads the clipboard. Unsupported desktop clipboard environments return an error.
+The server, `texttocad-server`, and the shim, `texttocad-mcp`, say their own shapes and commands in
+their own READMEs.

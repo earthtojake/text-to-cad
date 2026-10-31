@@ -1,6 +1,6 @@
 ---
 name: dxf
-description: Generates, regenerates and validates 2D DXF drawings from Python build123d models, exported by cadgen. Use for DXF files, `.py` drawing scripts, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Opens and visually reviews existing DXF files in the CAD Viewer.
+description: Generates, regenerates and validates 2D DXF drawings from Python build123d models, exported by text-to-cad. Use for DXF files, `.py` drawing scripts, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Opens and visually reviews existing DXF files in the CAD Viewer.
 license: MIT
 ---
 
@@ -13,16 +13,16 @@ repository link is only for provenance and release review.
 ## Setup
 
 Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+share one installation, and its server, with the CAD app's:
 
 - `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
 - `python` below means `cad +0.8.4 run`
 
 For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
+installed, a server that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
-Drawings are build123d geometry, so a drawing builds in the engine's warm worker
+Drawings are build123d geometry, so a drawing builds in the server's warm worker
 like any model: the first run of a script loads the CAD kernel (a few seconds),
 and later runs reuse it.
 
@@ -34,7 +34,7 @@ of truth is a Python file named `<name>.py` defining a parameterless `@model` fu
 that returns planar geometry.
 
 **A drawing is a model.** It builds as any `$cad` model does: `python <name>.py`
-rebuilds it in the engine, prints its document's `id:` and page, and writes nothing.
+rebuilds it in the server, prints its document's `id:` and page, and writes nothing.
 The DXF is exported from that document, by build123d's own exporter, once the drawing
 checks pass: `cad export <id> drawing.dxf`. A drawing that calls a part model
 (`bracket()` in its body) builds that part in the same run. The CAD Viewer and
@@ -192,7 +192,7 @@ SendCutSend-specific upload preflight.
 
 Use these defaults unless the user specifies otherwise:
 
-- Units: millimeters. The engine sets them; a drawing never declares units.
+- Units: millimeters. The server sets them; a drawing never declares units.
 - Geometry lives at 1:1 scale in the XY plane.
 - Cut profiles close. Open contours belong on bend/engrave/reference layers:
   the drawing checks enforce this (see Validation).
@@ -297,7 +297,7 @@ own work; review with `cad snapshot`.
   cad viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command ensures this installation's server, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.

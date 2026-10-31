@@ -14,7 +14,7 @@ that support the applications in `apps/docs`, `apps/web` and `apps/mcp`:
 
 The web app and the CAD app (`apps/mcp`) both consume the same FileViewer; their
 adapters own browser and host services and application state. Docs consumes core for
-its hero, an animated GLB cadgen exported.
+its hero, an animated GLB the engine exported.
 
 Apps import compiled public package exports. UI may depend on core; core never
 depends on React or UI. Shared packages never import application source, and

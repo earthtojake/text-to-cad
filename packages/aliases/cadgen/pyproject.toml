@@ -15,6 +15,10 @@ requires-python = ">=3.14"
 authors = [{ name = "earthtojake" }]
 dependencies = ["texttocad==0.8.4"]
 
+[project.optional-dependencies]
+# `cadgen[kernel]`, the way 0.8 installed the CAD kernel by hand: the library's own kernel extra.
+kernel = ["texttocad[kernel]==0.8.4"]
+
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
 

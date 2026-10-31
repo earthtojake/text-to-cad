@@ -7,6 +7,21 @@ migration is the guide, followed top to bottom:
 - [Migrating a CAD project from cadgen 0.7 to 0.8](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.7-to-0.8.md)
   (in a text-to-cad checkout, `docs/migrations/migrating-0.7-to-0.8.md`)
 
+## A 0.8 project
+
+A project written for 0.8 runs on 0.9 as it is; 0.9 renames what is around it
+([Migrating from 0.8 to 0.9](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.8-to-0.9.md),
+in a checkout `docs/migrations/migrating-0.8-to-0.9.md`):
+
+- `from cadgen import ...` is the library under its earlier name and keeps working; its
+  name is `cad` (`from cad import model`), which new code uses.
+- A model script named `cad.py` or `cadgen.py`, or one in a package folder of that name,
+  is refused, with a line that says so: rename it.
+- Project notes that run `cadgen ...` commands move to this skill's `cad` and `python`
+  ([Setup and paths](../SKILL.md#setup-and-paths)); one that pins
+  `uvx ... --from cadgen==0.8.x` keeps building with 0.8.
+- `CADGEN_*` environment variables are `CAD_*`.
+
 ## A 0.7 project
 
 Any one of these says the project was written for 0.7:

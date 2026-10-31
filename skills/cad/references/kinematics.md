@@ -129,7 +129,7 @@ if __name__ == "__main__":
   no `connect_to` moved, and every part no joint places.
 - **A nested assembly is paired by label.** build123d's `connect_to` cannot place a part
   inside a nested assembly: put each part where it stands, write the two joints there
-  with one label, and the engine pairs the moving joint with the `RigidJoint` of the same
+  with one label, and the server pairs the moving joint with the `RigidJoint` of the same
   label nearest it in the tree. Two rigid joints of one label fasten their parts.
 - **The document keeps what STEP AP242 can say, and nothing else.** A pair the built
   parts contradict (its part moved after `connect_to`, connected after its compound was
@@ -157,7 +157,7 @@ sequences, with the asked values as its as-built state, so its page's Position a
 motions still work. An unknown state or joint is refused by name.
 
 `posed` takes the handle the model call returns, as every verb does. In a body it poses
-the child's shape. In a plain script (a check) it poses the document the engine holds and
+the child's shape. In a plain script (a check) it poses the document the server holds and
 returns the tree `.shape` would, at that pose: placed parts, no joints. A plain script's
 `.shape` carries no joints, so `posed(hinge().shape, ...)` there is refused with the call
 to make instead.

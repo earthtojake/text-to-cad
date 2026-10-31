@@ -21,7 +21,7 @@ export const support = {
 // backticks, which the page sets as code.
 export const howItWorks = [
   "Your agent writes each model as a Python script with build123d, built on Open CASCADE.",
-  "Running the script, `python model.py`, builds the model with cadgen's engine into an `.xbf` document (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The engine keeps each model's work in memory, so an edit rebuilds only what it changed.",
+  "Running the script, `python model.py`, builds the model with text-to-cad's server into an `.xbf` document (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each model's work in memory, so an edit rebuilds only what it changed.",
   "The CAD viewer shows the model in your agent app or your browser, and follows every rebuild.",
 ];
 
@@ -34,7 +34,7 @@ export const installCommands = [
 // What the command does, and that running it again is the update, under the commands. The command
 // name is in backticks, which the page sets as code.
 export const installSummary =
-  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone), registers the `cad` command, and moves CAD's engine to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
+  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone), registers the `cad` command, and moves CAD's server to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
 // Installing by hand, each app's own commands, and updates: a page in the repository (the README's
 // Quickstart links it too), which the site does not repeat.
 export const manualInstall = { label: "Installing by hand, app by app, and updates", path: "docs/install.md" };

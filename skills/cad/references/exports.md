@@ -16,10 +16,10 @@ converted for use in a model. 2D DXF belongs to `$dxf`.
 
 ## A file is an action
 
-A model's document lives in the engine; a file is written from it when asked. In the
-viewer, Export is the download button at the navbar's right: pick a format, the engine
+A model's document lives in the server; a file is written from it when asked. In the
+viewer, Export is the download button at the navbar's right: pick a format, the server
 prepares the file, the browser saves it. No code changes, nothing rebuilds, and every
-destination is written from the document the engine holds, by its suffix:
+destination is written from the document the server holds, by its suffix:
 
 ```bash
 cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
@@ -27,7 +27,7 @@ cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3
 
 `$ID` is the `id:` line the model's run printed. The output folders are generated on
 request and gitignored by default ([version control](project-layout.md#version-control)). The source can also be a file the
-engine reads as a document, an `.xbf` or a `.step`:
+server reads as a document, an `.xbf` or a `.step`:
 
 ```bash
 cad export vendor/motor.step vendor/motor.xbf
@@ -71,7 +71,7 @@ supplier) keeps one script beside its models that imports them and exports each.
 Python the one spelling is `export(x, path, ...)`, where `x` is what a model call returns
 (the document's handle), a document id, or a file. The model function itself is taken
 too: it is called as the script's own call is, so an unchanged model comes from the
-engine's cache or is replayed, and the file is written from that call's document.
+server's cache or is replayed, and the file is written from that call's document.
 
 ```python
 # src/exports.py
@@ -127,16 +127,16 @@ part where it should sit, which the assembly calls and places; export that model
 
 ## The xbf is Save As
 
-The `.xbf` is cadgen's own document: the parts and placements, names, colours,
+The `.xbf` is text-to-cad's own document: the parts and placements, names, colours,
 materials, element names and mechanism, read back losslessly, and the compiled tracks of
 the model's animations, which only a GLB exported from it reads. Export one only:
 
 - to share a model without its code;
 - to compose it in another project, where `read_xbf` reads it as an input.
 
-An engine restart needs none: the engine keeps each model document it built in its own
+A server restart needs none: the server keeps each model document it built in its own
 cache, so after a restart the document's id opens in the viewer, answers `cad inspect`,
-exports and snapshots without a rebuild. It is the last built state: the engine never
+exports and snapshots without a rebuild. It is the last built state: the server never
 checks the code against it and nothing reruns, so after an edit run the script to build it
 again.
 

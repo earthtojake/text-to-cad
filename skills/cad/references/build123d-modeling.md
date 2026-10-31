@@ -75,7 +75,7 @@ A project's material is a native `FinishedMaterial`, with physics in `.material`
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad inspect` reports kilograms.
-There is no cadgen material class, catalogue or adapter.
+There is no text-to-cad material class, catalogue or adapter.
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,
@@ -115,7 +115,7 @@ handles placement itself.
 ## Kernel pitfalls
 
 - **Build with build123d's constructions** (`bd.Cylinder`, not OCCT's
-  `BRepPrimAPI_MakeCylinder`). The engine keys and names build123d's operations, and
+  `BRepPrimAPI_MakeCylinder`). The server keys and names build123d's operations, and
   of the OCCT makers a model drives itself only the transforms, `BRepBuilderAPI_Copy`,
   `ShapeFix_Shape`, `ShapeUpgrade_UnifySameDomain` and `BRepFilletAPI_MakeFillet`; a
   body built with another cannot be replayed. Where build123d has no construction for

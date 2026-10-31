@@ -1,6 +1,6 @@
 # Models
 
-The corpus of models built with cadgen 0.8: plain files, one flat level of
+The corpus of models built with text-to-cad: plain files, one flat level of
 self-contained projects, built by running their scripts; nothing installs it.
 Automated tests never read, build or import anything here: they make their own
 fixtures in fresh temporary directories. The manual-validation cases live in
@@ -49,7 +49,7 @@ project delivers them and because something outside the model reads them:
 
 ## Build and snapshot
 
-From a model's `src/` folder, with the engine's environment (cadgen on the path):
+From a model's `src/` folder, with the engine's environment (the library on the path):
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
@@ -69,10 +69,9 @@ cache.
 The migration a user makes ([the migration guide](../docs/migrations/migrating-0.7-to-0.8.md)),
 and nothing more:
 
-- `from cad import step` -> `from cad import model` (and `memo`,
-  `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); cadgen's
-  build123d proxy -> `import build123d as bd`; `cad.ap242` for the mechanism and
-  `cad.gltf` for a GLB's animations.
+- `from cadgen import step` -> `from cad import model` (`from cadgen import model` in 0.8; and
+  `memo`, `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); 0.7's build123d proxy ->
+  `import build123d as bd`; `cad.ap242` for the mechanism and `cad.gltf` for a GLB's animations.
 - `@step(out=...)` -> `@model`, and nothing else, but where the table above keeps a file.
   Every script calls its models under `__main__`; a module of `@memo` stages or plain
   helpers calls nothing there.

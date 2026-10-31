@@ -14,7 +14,7 @@ from enclosure import HOLES, L, H, W, enclosure
 
 @eng_drawing(out="../PDF/enclosure_drawing.pdf")
 def enclosure_drawing():
-    part = enclosure().shape    # the model, built by the engine (a replay when it holds it)
+    part = enclosure().shape    # the model, built by the server (a replay when it holds it)
     sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
                   revision="A", general_tolerance="ISO 2768-m",
                   notes=["BREAK SHARP EDGES."])
@@ -37,7 +37,7 @@ Declares the drawing. The function returns a `Sheet` or a list of them. Calling
 it renders one PDF at `out`, a page per sheet, and returns `[path]`.
 
 `out` is required and must name a `.pdf`; a relative path resolves against the
-script. cadgen has no default location — where a document belongs is the
+script. text-to-cad has no default location — where a document belongs is the
 caller's decision. Both are checked when the module is imported, not when the
 drawing runs.
 
@@ -47,7 +47,7 @@ argument list carries that, so the decorator is the whole surface.
 
 ## The part
 
-Call the model: `enclosure()` is built by cadgen's engine, a replay when the engine
+Call the model: `enclosure()` is built by text-to-cad's server, a replay when the server
 already holds it, and its `.shape` is the part as a build123d tree. A part with no model is
 read from its file instead:
 

@@ -7,12 +7,12 @@ same shared runtime the viewer uses.
 **PURPOSE** — the public documentation and marketing site.
 
 **MAY DEPEND ON** — compiled `@text-to-cad/core` exports and this app's own
-npm dependencies. Never another app or the running cadgen Python service.
+npm dependencies. Never another app or the running CAD server.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
 **DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install.
-`api.texttocad.dev`, which cadgen talks to, is its own project: [`apps/api`](../api/README.md).
+`api.texttocad.dev`, which the CAD server talks to, is its own project: [`apps/api`](../api/README.md).
 
 Normal development, checks and deployment use existing static assets and do not
 start Python; regenerating an asset is an explicit operation. The hero reads one
@@ -194,7 +194,7 @@ as well.
 
 ## api.texttocad.dev
 
-cadgen's version feed and its telemetry receiver are their own Vercel project:
+The version feed and the telemetry receiver are their own Vercel project:
 [`apps/api/README.md`](../api/README.md). This site's part is the privacy policy
 (`src/app/privacy-policy/page.tsx`), which describes every event the receiver passes
 on: a new field is a change to it in the same PR.

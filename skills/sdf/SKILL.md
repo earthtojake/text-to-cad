@@ -19,13 +19,13 @@ The `.sdf` file is the source of truth: author and edit the XML directly.
 ## Setup
 
 Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+share one installation, and its server, with the CAD app's:
 
 - `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
 - `python` below means `cad +0.8.4 run`
 
 For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
+installed, a server that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
 ## Core rules
@@ -71,7 +71,7 @@ own work; review with `cad snapshot`.
   cad viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command ensures this installation's server, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.
@@ -94,7 +94,7 @@ plugins or validate dynamics; keep simulator checks separate.
 
 ## Commands
 
-Run `cad` as Setup defines it. `cad doctor` reports the installation in use and the engine's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cad <verb> --help` for the complete current interface.
+Run `cad` as Setup defines it. `cad doctor` reports the installation in use and the server's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cad <verb> --help` for the complete current interface.
 
 ```bash
 cad sdf validate path/to/model.sdf
@@ -142,7 +142,7 @@ cad snapshot path/to/robot.sdf review.png
 cad snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 ```
 
-cadgen resolves the description first: the frame graph (`relative_to`,
+The server resolves the description first: the frame graph (`relative_to`,
 `attached_to`) into every link's rest placement, a model nested in the model
 included, its links and joints named by scope (`arm::elbow`, the name `--pose`
 takes). The robot opens where the CAD Viewer opens it, every joint at zero. `--pose`
@@ -152,7 +152,7 @@ has none), or the request is refused before anything renders: a fixed joint or a
 mimic follower is refused by name (a follower follows its leader). Each link is
 drawn in one colour of the Parts palette.
 
-A visual is a `box`, `cylinder`, `sphere` or `capsule`, which cadgen meshes itself,
+A visual is a `box`, `cylinder`, `sphere` or `capsule`, which the server meshes itself,
 or a mesh `<uri>` naming an STL, 3MF or GLB file beside the description, or a
 `package://NAME/...` file of the ROS package the description is in (the nearest
 folder above it named NAME, or holding a `package.xml` that names it). A `plane`,

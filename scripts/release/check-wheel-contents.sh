@@ -175,7 +175,7 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
 }
 
 # An alias, packages/aliases/PROJECT: its dist-info alone, and the library at the release (a project that
-# declares the earlier name gets the library it names).
+# declares the earlier name gets the library it names), its `kernel` extra the library's.
 check_alias() {
   local project="$1" distribution="$2"
   check "aliases/$project" "$distribution" ""
@@ -186,8 +186,10 @@ wheel, version = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(wheel) as archive:
     metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
 requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
-if requires != [f"Requires-Dist: texttocad=={version}"]:
-    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release (texttocad=={version}) alone")
+wanted = [f"Requires-Dist: texttocad=={version}", f'Requires-Dist: texttocad[kernel]=={version}; extra == "kernel"']
+if requires != wanted:
+    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its kernel extra "
+             f"({wanted}) alone")
 PY
 }
 

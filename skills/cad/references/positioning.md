@@ -33,7 +33,7 @@ own files or reuse across assemblies; a shared factory in `lib/` serves both han
 ## Native joints
 
 Joints express a relationship between datums without hand-solving the placement,
-and the engine keeps them as the assembly's mechanism. Call `connect_to()` on the
+and the server keeps them as the assembly's mechanism. Call `connect_to()` on the
 joint that stays, with the moving part's joint as its argument.
 
 For example, `src/enclosure.py` seats a lid on a base with a gasket gap:
@@ -71,7 +71,7 @@ Position, a snapshot's `--pose` and the model's motions drive ([kinematics](kine
 
 Connect parts before putting them in the compound that holds them. `connect_to`
 cannot place a part inside a nested assembly: there, put each part where it stands
-and give the two joints one label, and the engine pairs them by it. A child model's
+and give the two joints one label, and the server pairs them by it. A child model's
 joints stay in its own document, so the joints an assembly needs are authored in the
 assembly's body, on the parts it places.
 

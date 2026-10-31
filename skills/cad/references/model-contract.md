@@ -12,7 +12,7 @@ why a run ran what it ran.
 - [Assemblies call their parts](#assemblies-call-their-parts)
 - [What a run runs](#what-a-run-runs)
 - [Inputs](#inputs)
-- [Documents and the engine](#documents-and-the-engine)
+- [Documents and the server](#documents-and-the-server)
 - [Progress and the report](#progress-and-the-report)
 
 ## A model is a function
@@ -37,9 +37,9 @@ if __name__ == "__main__":
 ```
 
 - **`@model` declares, a call builds.** Importing the script or defining the function
-  builds nothing. A call the script's `__main__` makes builds the model in the engine
+  builds nothing. A call the script's `__main__` makes builds the model in the server
   and prints its `id:` and `view:`; a call another model's body makes builds it as a
-  child, in the same run. Python decides which calls run; cadgen reads no script
+  child, in the same run. Python decides which calls run; the server reads no script
   arguments.
 - **A call returns the document, not the shape**: a handle with `.id`, `.url` (its
   page), `.name`, `.shape` and `.export(...)`. `.shape` is the built shape, brought into
@@ -61,7 +61,7 @@ if __name__ == "__main__":
   imports (`from ..lib.dims import WIDTH`) work under `python proj/parts/block.py` and
   `python -m proj.parts.block` alike. An edit to any module it imports is read on the
   next run.
-- **`import build123d as bd` costs nothing until it is used.** cadgen makes the import of
+- **`import build123d as bd` costs nothing until it is used.** The library makes the import of
   `build123d` (and `OCP`) lazy: the module binds at once and the kernel loads on the
   first attribute anything reads from it, in the worker that builds the model. `from
   build123d import Box` reads the name, so it loads the kernel at that line; so does a
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 - **A body that raises fails its model**: the run prints the model's frames, exits 1,
   and the model's page says the run failed (a page of a file it declares follows the file
   alone).
-- **Called from a plain script** (a check, a drawing), a model is built in the engine
+- **Called from a plain script** (a check, a drawing), a model is built in the server
   and its call's `.shape` is the result as a build123d tree: every assembly a `Compound`,
   every part placed, named, coloured and given its material (its joints stay in the
   document: measure a pose by `posed(handle, state)`, which poses the document). It is the
@@ -108,17 +108,17 @@ def standoff_m4():
     return standoff_body(16, 10, 4.5)
 ```
 
-The helper needs no marking: the engine keeps every kernel operation it runs, keyed by
+The helper needs no marking: the server keeps every kernel operation it runs, keyed by
 its inputs, so a run after an edit elsewhere replays it.
 
 ## `@memo` marks stages
 
-`@memo` marks a function the engine may replay whole instead of running. A call of it in
+`@memo` marks a function the server may replay whole instead of running. A call of it in
 a run is keyed by its code and its arguments, and a later run with the same key replays
 it, names and all; a second call with the same arguments in one run is a new placement
 of the first one's result. Outside a run it is its function.
 
-- **Mark rarely.** The engine already replays every kernel call of any model, so a memo
+- **Mark rarely.** The server already replays every kernel call of any model, so a memo
   hit saves only the Python cost of those calls (0.1 to 0.4 ms each). Mark a function
   that holds seconds of kernel work an edit elsewhere leaves alone, roughly a thousand
   kernel calls or more: whole sub-assembly stages (measured: 1.3 to 3 s each, twice as
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
 ## What a run runs
 
-Each script has a warm worker in the engine, and the worker keeps every kernel
+Each script has a warm worker in the server, and the worker keeps every kernel
 operation its models ran, keyed by its inputs. A hit hands back the objects the first
 run made; a miss makes everything downstream of it miss. So an edit costs what it
 changed, and an element keeps the name its feature history gave it.
@@ -214,19 +214,19 @@ is made of is unchanged:
   docstrings), and the values it reads (module constants, defaults, data classes),
   through every first-party module it imports;
 - every file it reads, by its bytes ([inputs](#inputs));
-- the engine's own code and versions.
+- the server's own code and versions.
 
 A comment, a blank line or a docstring re-runs nothing. An edit to a constant re-runs
 the bodies that read it and the bodies that hold their results. A changed input file
-re-runs the body that reads it. What the engine cannot see is yours to keep out of a
+re-runs the body that reads it. What the server cannot see is yours to keep out of a
 body: the clock, environment variables, randomness, a file only tested for
 (`Path.exists`), a folder listed (`glob`, `os.listdir`), and state one body leaves in a
 module for another. A body must be a function of its inputs.
 
-A run after the engine restarted, or after the script's worker retired, starts a fresh
+A run after the server restarted, or after the script's worker retired, starts a fresh
 worker and builds cold. Every run says how each body went: `bodies 2 run, 1 replayed`.
 
-`bracket.build(verify=True)` runs every body the engine would replay and compares each
+`bracket.build(verify=True)` runs every body the server would replay and compares each
 fresh result with the logged one (`.models[0]["verify"]`); a body whose result differs
 runs on every call for the worker's life. `bracket.build(profile=True)` adds function
 timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
@@ -254,11 +254,11 @@ re-runs the body that read it:
 - **Every file the body's Python opens** for reading is an input too: `open`,
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's
-  bytes as the engine's readers are. Prefer `read_step` (names, colours, materials, the
+  bytes as the server's readers are. Prefer `read_step` (names, colours, materials, the
   assembly tree) and `read_xbf` (fastest); `import_stl` makes a mesh, which no model
   holds: measure it with `read_mesh`.
-- **A read past the engine runs the body on every run**: OCCT's readers driven directly
-  (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the engine cannot hear
+- **A read past the server runs the body on every run**: OCCT's readers driven directly
+  (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the server cannot hear
   them. Use `read_step`, `read_xbf`, `read_mesh` or build123d's importers.
 - **Compose project models by calling them.** A file the project exported is a
   deliverable, not an input: reading it ties a model to an export's moment.
@@ -284,9 +284,9 @@ def rig():
     return bd.Compound(children=[tray, bd.Pos(0, 0, 20) * motor], label="rig")
 ```
 
-## Documents and the engine
+## Documents and the server
 
-Every model a run builds is one document in the engine, with one id: a UUID derived
+Every model a run builds is one document in the server, with one id: a UUID derived
 from the script's path and the function's name, the same in every process
 (`bracket.id` in Python, and the handle's `.id`). Two scripts may use the same function
 name. `@model(name="bracket")` (or `name=` on a file decorator) derives the id from the
@@ -294,10 +294,10 @@ script's folder and that name, independent of which file in the folder declares 
 names in one folder are refused with both declaration locations. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
 is the script's folder, with no project detection. Moving a named model to another file of its folder
-keeps its id: run the file it left with `cad run` (or delete it) first, since until then the engine
+keeps its id: run the file it left with `cad run` (or delete it) first, since until then the server
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
-`/<id>` on the engine's address; `cad export`, `snapshot` and `inspect`, and the
-CAD app's tools, take the id and read the document as the engine holds it. No command
+`/<id>` on the server's address; `cad export`, `snapshot` and `inspect`, and the
+CAD app's tools, take the id and read the document as the server holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
 it again.
 
@@ -305,21 +305,21 @@ it again.
   retires (`cad status`: `live` with its worker, `held` without one, where `made_by`
   is null), under one memory budget (`CAD_ENGINE_MEMORY_MB`, default a quarter of the
   machine's) that never drops a document a page watches.
-- **The engine never reruns code.** A document it no longer holds (its file in the engine's
+- **The server never reruns code.** A document it no longer holds (its file in the server's
   cache deleted, or never saved) is refused with the command that
   brings it back, `cad run <the script that defines it>`, by the page, `cad inspect`
   and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
-- **Each document has a record** in cadgen's state folder (`documents/<uuid>/document.json`:
+- **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:
   the script and function that build it (the rebuild command is always `cad run` of that script); never
   geometry). The home lists the records, models and files alike, pinned first, then by
   last activity. A record whose
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.
-- **A restart reopens what was built.** The engine keeps each model document's bytes in
-  the platform's cache folder (`~/.cache/cadgen/documents/`), once it is idle, so after a
+- **A restart reopens what was built.** The server keeps each model document's bytes in
+  the platform's cache folder (`~/.cache/texttocad/documents/`), once it is idle, so after a
   restart its id answers every verb as last built (`cad status`: `held`, on `disk`).
-  A document is what its last run made: the engine never checks the code on disk against
+  A document is what its last run made: the server never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
   (`cad run /work/arm.py`) to update the document and its open pages.
   The cache keeps every document until you delete it (`cad delete <id>`, or a script's
@@ -331,14 +331,14 @@ it again.
   whose `.shape` is the shape passed. Its id comes from the calling script (or the working
   folder) and the name. Joints, mechanism states and sequences on the
   shape go with it; a GLB's animations are passed as `animations=[...]`. Nothing builds
-  it again: its record says a program the engine did not run showed it, so run that
+  it again: its record says a program the server did not run showed it, so run that
   program again. A decorated function in no saved file is refused, with these words.
-- `cad status` lists the workers and the documents the engine holds (`--json` as
-  data); `cad stop` stops the engine and any older one still running. At most
+- `cad status` lists the workers and the documents the server holds (`--json` as
+  data); `cad stop` stops the server and any older one still running. At most
   `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
   and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
-  engine's door and lock (one engine per folder).
+  server's door and lock (one server per folder).
 
 ## Progress and the report
 

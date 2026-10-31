@@ -14,7 +14,7 @@ scripts, inputs and deliverables go.
 
 ## Layout
 
-cadgen infers nothing from folder names, so any layout works, and an existing
+text-to-cad infers nothing from folder names, so any layout works, and an existing
 project's layout is the one to extend. In a larger workspace, CAD work usually lives in
 its existing `models/`, `cad/` or `hardware/` area. For a new project of several models
 this is a good default; a one-off part can be one script in a flat folder.
@@ -128,7 +128,8 @@ cd src && python -m chassis.frame
 
 Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src python
 src/chassis/frame.py`), a relative entry read from the folder the command runs in, as
-Python reads it; cadgen adds no paths of its own. A module and a same-named
+Python reads it; the only path a run adds is the script's own folder, last, so nothing beside the
+script shadows an installed package. A module and a same-named
 model function shadow each other on import; an alias separates them.
 
 What a run re-runs follows what the code reaches: an edit to a `lib/` helper re-runs the

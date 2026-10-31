@@ -36,7 +36,7 @@ Checklist after export, before authoring:
 
 Keep mesh files under the same model directory tree as the URDF, so the file and its assets move together.
 
-What the CAD Viewer and `cad snapshot` draw is narrower than what the validator accepts: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which cadgen meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it.
+What the CAD Viewer and `cad snapshot` draw is narrower than what the validator accepts: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it.
 
 ## Visual vs Collision Assets
 

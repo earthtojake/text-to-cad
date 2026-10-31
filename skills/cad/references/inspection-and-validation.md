@@ -20,11 +20,11 @@ Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` 
 for ones worth keeping); `cad inspect` answers what a ref names. A check calls the
 model, so it measures the model as its code is now.
 
-A dimension the person gave is checked where the engine already holds the geometry: an
+A dimension the person gave is checked where the server already holds the geometry: an
 `assert` inside the model's body, on the shape it is about to return, or `cad inspect`
 (`cad inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
 check to the model's script after its call: reading `.shape` there brings the shape into the
-script's own process and loads the CAD kernel there, about 3 s, after the engine has answered,
+script's own process and loads the CAD kernel there, about 3 s, after the server has answered,
 on every run. A check script pays the same once, so it is for a derived number the person
 asked for.
 
@@ -63,7 +63,7 @@ def find_part(tree, label):
     return matches[0]
 ```
 
-These are project helpers, not cadgen imports. `find_part` requires a unique leaf label:
+These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
 it refuses both missing and repeated labels. For repeated components, walk a known branch
 while accumulating its parents' locations, or use an occurrence path with
 `cad inspect` ([references](#references)).
@@ -81,7 +81,7 @@ top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
 plate = find_part(read_step("kit.step"), "plate")
 ```
 
-- Calling a model from a plain script builds it in the engine (a replay when nothing
+- Calling a model from a plain script builds it in the server (a replay when nothing
   changed) and returns its document, whose `.shape` keeps each assembly's placement.
   Walk it by labels and select within a part with build123d
   (`faces()`, `edges()`, `sort_by`, `filter_by`).
@@ -94,7 +94,7 @@ plate = find_part(read_step("kit.step"), "plate")
 
 ## References
 
-A ref names a part, an assembly or one element of a document by the engine's own
+A ref names a part, an assembly or one element of a document by the server's own
 names, resolved in the document as the latest run left it:
 
 ```text
@@ -155,7 +155,7 @@ starts from, and a step for each feature that made it out of another:
   `plate + boss`), and a placed part keeps its prototype's names: its label names the
   occurrence.
 - **An element read from a file** keeps the name the file gives it (a STEP or an
-  `.xbf` cadgen wrote names every face), else it is named by the read and its
+  `.xbf` text-to-cad wrote names every face), else it is named by the read and its
   number within its part: `motor = read_step(...)` in `rig` names face 12 of a
   foreign STEP `f:rig.motor.12`.
 - A long name folds to its last feature and a digest (`f:plate.relief~5d1e0c2f9a3b`):
@@ -166,7 +166,7 @@ renames nothing.
 
 ### A picked element in a model's body
 
-A ref resolves in the engine (`cad inspect`, the viewer), never in a model: a
+A ref resolves in the server (`cad inspect`, the viewer), never in a model: a
 body selects from the live shape it is building with build123d, by what the element
 is. To change what a person picked, read the ref's answer and either edit the code
 its `made_by` names or pick the same element in the body:
@@ -253,7 +253,7 @@ closure
 { ...its script and function, the modules it reaches and the files it read, each by its digest... }
 ```
 
-The state is the engine's: `live` (a worker holds it), `held` (the engine holds it, no
+The state is the server's: `live` (a worker holds it), `held` (the server holds it, no
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
 closure alone. For the names alone, `--query structure` prints the same lists without the
 bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is

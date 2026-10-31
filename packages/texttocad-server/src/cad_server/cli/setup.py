@@ -443,7 +443,9 @@ class Installer:
         if status.get("device"):
             return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
         record = self._record_of(status)
-        stop = f"`cad +{record['version']} stop`" if record else f"`cad stop` run by that installation ({prefix})"
+        # Its own command's stop, the one that reaches it whatever its release: the `cad` command runs the
+        # current installation, and an earlier release's engine (0.8's) is no door the current one stops.
+        stop = f"`{record['cadgen']} stop`" if record else f"the stop command of that installation ({prefix})"
         uses = daemon._uses(status)
         if uses is None:
             return {**row, "subject": f"{who}: it cannot be asked whether it is in use; {stop} stops it"}

@@ -52,14 +52,14 @@ where those files ship, so these scripts are what produces them.
   runs its suite. `mcp` runs the CAD app's tests and builds it, since its one-file
   build is half its contract.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]`
-  — the cadgen package suite, then every skill's suite. Each test FILE runs in
+  — the package suites (the library's, the server's and the shim's), then every skill's suite. Each test FILE runs in
   its own interpreter with an engine daemon of its own, `CAD_TEST_JOBS` at a
   time (default: the core count; CI sets 4). `--keep-going` runs all suites and
   reports every failure. PATHs (repo-relative files or directories) narrow the
   run to the test files at or under them — CI passes what the change selected
   — and a PATH that holds no test fails the run.
-  - `--select` picks one group: `cadgen` (the package suite, CAD Viewer backend
-    included), `viewer` (that backend alone, ~11 s), `skills` (every skill's
+  - `--select` picks one group: `cadgen` (the package suites, CAD Viewer backend
+    included; the name CI's jobs keep), `viewer` (that backend alone, ~11 s), `skills` (every skill's
     suite), `all` (the default).
   - `--print-weights` prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file
     on stdout (everything else a run says goes to stderr): the first thing to
@@ -72,9 +72,9 @@ where those files ship, so these scripts are what produces them.
   `python -m unittest`, which would build on your own daemon.
   Each file's state, cache and `cad` command folders are its own too
   (`CAD_STATE_DIR`, `CAD_CACHE_DIR`, `CAD_LAUNCHER_DIR`), and a document,
-  engine or installation record the run's cadgen writes in your own state folder,
+  engine or installation record the run's server writes in your own state folder,
   or your `cad` command written, fails the run, naming the test that was running
-  (what another cadgen of yours writes there meanwhile is listed, and fails nothing).
+  (what another installation of yours writes there meanwhile is listed, and fails nothing).
   A file still running after 15 minutes is hung: it prints every thread's stack
   and fails.
 - `test-global.sh [PATH...]` — `tests/python/global`, the repo-wide policy
@@ -84,9 +84,9 @@ where those files ship, so these scripts are what produces them.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.
-- `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
-  the exact artifact already built), installs it into a scratch venv and
-  exercises cadgen from outside the repo, including `cad-mcp` serving the
+- `test-installed.sh` — builds the library's, the server's and the shim's wheels (or accepts
+  `--wheels DIR` to test the exact artifacts already built), installs them together into a
+  scratch venv and exercises them from outside the repo, including `cad-mcp` serving the
   packaged CAD app over stdio. Called by `test.yml` and `release-publish.yml`.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
