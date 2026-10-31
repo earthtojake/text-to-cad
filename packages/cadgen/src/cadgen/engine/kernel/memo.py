@@ -392,6 +392,9 @@ def install() -> bool:
             _patch(getattr(topology, cls_name), attr, label, "instance")
         for cls_name, attr, label in _CLASSMETHOD_TARGETS:
             _patch(getattr(topology, cls_name), attr, label, "classmethod")
+        placed = inspect.getattr_static(topology.Shape, "_placed", None)
+        if inspect.isfunction(placed) and not getattr(placed, "__kernel_memo__", False):
+            topology.Shape._placed = _noting_placement(placed)
         for cls_name, _slot in _CONSTRUCTOR_TARGETS:
             _patch(getattr(topology, cls_name), "__init__", cls_name, "constructor")
         for module_name, attr, slot in _HELPER_TARGETS:
@@ -1537,6 +1540,21 @@ def _sharing(function: Any) -> Any:
 
     __deepcopy__.__kernel_original__ = function
     return __deepcopy__
+
+
+def _noting_placement(function: Any) -> Any:
+    """build123d's ``Shape._placed`` (0.14), behind ``moved``, ``located`` and ``copy.copy``
+    in place of a deep copy: a new object on the SAME TShape, as ``_sharing`` makes one, so
+    the TShape is noted as placed (``_note_placed``) the same way."""
+    @functools.wraps(function)
+    def _placed(self: Any, wrapped: Any) -> Any:
+        own = _wrapped(self)
+        if own is not None:
+            _note_placed(own.TShape())
+        return function(self, wrapped)
+
+    _placed.__kernel_memo__ = True
+    return _placed
 
 
 def _note_placed(tshape: Any) -> None:
@@ -3521,7 +3539,10 @@ def _key_args(label: str, kind: str, args: tuple) -> tuple:
 def _wrapped(shape: Any) -> Any:
     """The shape's ``TopoDS_Shape`` from its own state, or None for an empty shape."""
     state = getattr(shape, "__dict__", None)
-    return None if state is None else state.get("_wrapped")
+    wrapped = None if state is None else state.get("_wrapped")
+    if wrapped is not None and getattr(shape, "is_empty", False):
+        return None  # build123d 0.14: the zero of a shape class holds an empty compound
+    return wrapped
 
 
 # --- keys -----------------------------------------------------------------------------------

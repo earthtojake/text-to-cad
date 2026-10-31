@@ -30,6 +30,17 @@ def _nodes(shape):
     return found
 
 
+def _held(shape):
+    """The TShapes a compound holds, in order."""
+    from OCP.TopoDS import TopoDS_Iterator
+
+    held, parts = [], TopoDS_Iterator(shape.wrapped, False, False)
+    while parts.More():
+        held.append(parts.Value().TShape())
+        parts.Next()
+    return held
+
+
 class MemoCase(unittest.TestCase):
     def setUp(self) -> None:
         memo.install()
@@ -72,7 +83,11 @@ class PlacementTest(MemoCase):
             self.assertEqual([node.label for node in nodes], [node.label for node in sources])
             for node, source in zip(nodes, sources):
                 self.assertIsNot(node, source)
-                self.assertTrue(node.wrapped.TShape() == source.wrapped.TShape(), node.label)
+                if node.children:
+                    # build123d 0.14 rebuilds a placed assembly's compound from its children.
+                    self.assertTrue(_held(node) == [child.wrapped.TShape() for child in node.children], node.label)
+                else:
+                    self.assertTrue(node.wrapped.TShape() == source.wrapped.TShape(), node.label)
                 self.assertEqual(node.wrapped.Orientation(), source.wrapped.Orientation())
             self.assertEqual(tuple(nodes[2].color), tuple(sources[2].color))
         moved, located = placements[:2]
