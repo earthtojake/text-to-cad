@@ -88,32 +88,44 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
 
     def test_the_readme_and_the_docs_site_install_alike(self) -> None:
-        # The README and the docs site's homepage are one copy (apps/docs/README.md): the message an
-        # agent is sent, what it sends, and every install, update and remove command say the same, word
-        # for word, in both.
+        # The README and the docs site's homepage are one copy (apps/docs/README.md): the install
+        # command for each system, first in Quickstart, what it does, what text-to-cad sends and the page
+        # for installing by hand say the same, word for word, in both.
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
-        message = re.search(r'const agentInstallMessage = "([^"]+)"', page).group(1)
-        self.assertIn(f"```text\n{message}\n```", readme)
-        # What it sends, said under the message: the same sentence, however the README wraps it.
-        note = re.search(r'const telemetryNote =\s*"([^"]+)"', page).group(1)
-        self.assertIn(note, " ".join(readme.split()))
-        commands = [command.replace("\\n", "\n")
-                    for command in re.findall(r'\b(?:command|update|remove):\s*"([^"]+)"', page)]
-        self.assertGreaterEqual(len(commands), 16)
-        for command in commands:
-            with self.subTest(command=command.splitlines()[0]):
-                self.assertIn(command, readme)
+        commands = re.findall(r'system: "([^"]+)", language: "([^"]+)", command: "([^"]+)"', page)
+        self.assertEqual([command for _, _, command in commands],
+                         ["curl -fsSL https://texttocad.dev/install.sh | sh", "irm https://www.texttocad.dev/install.ps1 | iex"])
+        install = readme.split("\n## 🚀 Quickstart\n\n", 1)[1]
+        self.assertTrue(install.startswith(f"{commands[0][0]}:\n"), "the README's Quickstart leads with the command")
+        for system, language, command in commands:
+            with self.subTest(system=system):
+                self.assertIn(f"{system}:\n\n```{language}\n{command}\n```", install)
+        # What it does: the same sentence, however the README wraps it.
+        for name in ("installSummary",):
+            with self.subTest(copy=name):
+                self.assertIn(re.search(rf'const {name} =\s*"([^"]+)"', page).group(1), " ".join(readme.split()))
+        label, path = re.search(r'const manualInstall = \{ label: "([^"]+)", path: "([^"]+)" \}', page).groups()
+        self.assertIn(f"{label}: [{path}]({path})", readme)
+        self.assertTrue((REPO_ROOT / path).is_file(), path)
 
-    def test_the_update_cards_instructions_link_reaches_the_docs_install_section(self) -> None:
-        # cadgen's update card links to texttocad.dev/install; the docs site redirects that to its
-        # Install section, so renaming the section or dropping the redirect breaks every card.
+    def test_the_update_cards_instructions_link_reaches_the_readmes_quickstart(self) -> None:
+        # cadgen's update card links to the README's Quickstart on GitHub, by the anchor GitHub makes
+        # from the heading (lowercased; anything but letters, digits, spaces and hyphens dropped; spaces
+        # to hyphens: "🚀 Quickstart" is `-quickstart`), so renaming the heading breaks every card.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        quickstart = next(text for text in re.findall(r"^## (.+)$", readme, re.M) if "Quickstart" in text)
+        anchor = re.sub(r"[^a-z0-9 -]", "", quickstart.lower()).replace(" ", "-")
         updates = (REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "updates.py").read_text(encoding="utf-8")
-        self.assertIn('INSTRUCTIONS = "https://www.texttocad.dev/install"', updates)
+        self.assertIn(f'INSTRUCTIONS = f"{{REPOSITORY}}#{anchor}"', updates)
+
+    def test_the_install_short_link_reaches_the_homepage_install_box(self) -> None:
+        # texttocad.dev/install is the short link to the install box in the hero (`#install`): the docs
+        # site redirects it, so moving the anchor or dropping the redirect breaks the link.
         config = (REPO_ROOT / "apps" / "docs" / "next.config.ts").read_text(encoding="utf-8")
         self.assertIn('{ source: "/install", destination: "/#install"', config)
-        page = (REPO_ROOT / "apps" / "docs" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
-        self.assertIn('<section id="install"', page)
+        hero = (REPO_ROOT / "apps" / "docs" / "src" / "components" / "hero-section.tsx").read_text(encoding="utf-8")
+        self.assertIn('id="install"', hero)
 
     def test_plugin_manifests_link_the_same_pages(self) -> None:
         # The listing links every directory shows: homepage, docs, support, privacy policy and terms.
@@ -221,8 +233,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             self.assertIn(entry.get("source"), VALID_ROOT_SOURCES)
 
     def test_the_documented_commands_install_latest(self) -> None:
-        # The preferred install is `latest`, the plugin alone, written once a release is on PyPI: every
-        # command in the README and on the docs site names it, each in its app's own syntax.
+        # Installing by hand takes `latest`, the plugin alone, written once a release is on PyPI: every
+        # app's command on the install page names it, each in its app's own syntax.
         commands = (
             "claude plugin marketplace add earthtojake/text-to-cad#latest",
             "codex plugin marketplace add earthtojake/text-to-cad --ref latest",
@@ -231,12 +243,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest",
             "npx skills add earthtojake/text-to-cad#latest",
         )
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        site = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
         for command in commands:
             with self.subTest(command=command):
-                self.assertIn(command, readme)
-                self.assertIn(command, site)
+                self.assertIn(command, page)
 
     def test_codex_starts_the_cad_server_pinned_in_the_threads_workspace(self) -> None:
         # One uniquely named server (a host allowlists servers by name), run by uvx from the
@@ -335,8 +345,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", readme)
+        # So does the Claude Desktop config the install page has a person write by hand.
+        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
+        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", page)
 
     def test_every_plugin_on_main_names_its_own_channel(self) -> None:
         # Each plugin's startup config names where its installs come from, in its server's
@@ -352,15 +363,15 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
                 for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        said["README.md"] = json.loads(re.search(r'"env": (\{"CADGEN_INSTALL_CHANNEL"[^}]*\})', readme).group(1))
+        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
+        said["docs/install.md"] = json.loads(re.search(r'"env": (\{"CADGEN_INSTALL_CHANNEL"[^}]*\})', page).group(1))
         self.assertEqual(said, {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-marketplace", "CADGEN_AUTO_UPDATED": "1"},
             "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
             "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},
-            "README.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
+            "docs/install.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
         })
         # Every channel any package names is one the analytics receiver takes.
         receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")

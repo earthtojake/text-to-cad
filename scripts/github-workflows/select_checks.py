@@ -222,6 +222,10 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
+    # The Windows installer rehearsal: a workflow of its own, dispatched by hand or by a push to main
+    # that changes the installer; no test reads it and no test.yml job runs it.
+    Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
+
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole
@@ -278,6 +282,10 @@ RULES: tuple[Rule, ...] = (
          select(flags=["web_viewer", "packaging"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
+
+    # The one-line installer: its tests read both scripts, and the docs site serves copies of them.
+    Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
+         select(flags=["docs"], cadgen=[f"{CADGEN_SUITE}/test_setup.py"])),
 
     # What builds and checks the wheel: bundle.sh stamps metadata with sync-version.mjs.
     Rule((

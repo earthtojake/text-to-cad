@@ -224,15 +224,15 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   in the person's browser, for Open in browser. Only the clipboard stays the host's: a
   view copies through its frame. `cad_sync`, `cad_capture_reply` and `cad_http` are
   app-only and absent in text-only hosts. Every
-  page launch includes a session capability in result `_meta["dev.texttocad/httpToken"]`,
+  page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
   carry it. The page sends `x-cadgen-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
   without it: a host is asked to keep app-only tools from the model, and the server
   does not rely on it. The server validates
   it before routing or serving cached ranges. An arbitrary guard header, view
-  id, or caller assertion cannot grant app access; another session's capability
-  fails. The local host itself retains installation-level authority.
+  id, or caller assertion cannot grant app access; another host connection's
+  capability fails. The local host itself retains installation-level authority.
   The fetch is a distinct function, so workers are handed bytes rather than URLs.
 - **No reply a host cannot read.** A reply is one JSON-RPC message, its body
   base64 (4/3 of its size), and a host that caps one message closes the
@@ -404,8 +404,11 @@ no SSE stream, so GET returns 405. Missing sessions return 400; expired sessions
 When the engine restarts or a session's idle hour passes, the shim opens a new session
 with the host's own initialize and sends again only the request the engine refused
 unseen (404, a 403 from an engine whose token is not this shim's, or a refused connection);
-the host never reconnects. Views, operations
-and the app capability start over with the new session, and mutations are never replayed.
+the host never reconnects. Views and operations start over with the new session, and
+mutations are never replayed. The app capability does not: the shim makes one for its host
+and gives it to every session it opens, so the views the host shows sync again with the new
+session at their next call. Only a view from before the host restarted the shim carries one
+no session takes.
 Host-specific capability corrections live in `mcp/shim.py`. Version polls use `wait=0`
 in the page’s tunnel so they never occupy a host call slot. The engine has no such
 host-specific timing rule. The manifests continue to launch `cadgen mcp`.

@@ -182,6 +182,15 @@ so they need cadgen like everything else.
 
 ## Test In Agent Apps
 
+A person installs and updates text-to-cad, in every agent app on the computer, with
+the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Windows
+`irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and
+`install.ps1`, which run the newest release's `cadgen setup` through uvx
+(`cadgen.cli.setup`; `cadgen uninstall` takes it out). It reads the apps through
+`cadgen._internal.providers`, as the development installer below does, and takes a
+development install out of an app as a second copy (its plan, or `--dry-run`, says so
+first).
+
 Test the skills the way users get them: as the plugin, with CAD's server. One
 script installs this checkout into an agent app, and running it again replaces
 that install with the current checkout:
@@ -826,7 +835,13 @@ green: that is the release. `Publish Release`, on the merge commit:
    `pypi` job's artifact, `cadgen-<version>-released`),
    the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
-   install channel; the release page is the provenance copy).
+   install channel; the release page is the provenance copy), and beside them the
+   one-line installer, `install.sh` and `install.ps1`, with their `SHA256SUMS`: the
+   copy pinned to the release (`Deploy Docs` serves the newest at texttocad.dev).
+   Also after the branches, the `feed` job purges the CDN cache that keeps the version
+   feed's answer an hour (`api.texttocad.dev`), five minutes after them, when no
+   instance of the feed's function still holds what it read from PyPI before: best
+   effort, and nothing waits on it.
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheel. Only an install of `main` itself sees that: a command that names no
@@ -879,7 +894,7 @@ What each store and installer reads:
 | Where | Reads |
 | ----- | ----- |
 | Claude Code | `latest` (`earthtojake/text-to-cad#latest`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
-| Codex | its plugin directory listing, the preferred install: the plugin ZIP a person uploads to OpenAI's portal (below). By hand, `latest` (`earthtojake/text-to-cad --ref latest`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
+| Codex | `latest` (`earthtojake/text-to-cad --ref latest`), as the install command and `docs/install.md` add it; `main` without it. Its plugin directory listing, the plugin ZIP a person uploads to OpenAI's portal (below), trails the releases, so nothing suggests it for now. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
 | Grok Build | `latest` (`earthtojake/text-to-cad@latest`; its registry keeps the ref); `main` without it |
 | Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
@@ -980,8 +995,9 @@ skill and policy scans still run after upload.
 cadgen's daily version check reads `api.texttocad.dev/v1/versions`
 (`apps/api/src/versions.mjs`): `latest` is the newest release PyPI's simple
 index lists, the index uv resolves every pin through, so the feed names a
-release the moment it can be installed (within the hour Vercel's edge keeps a
-reply), and no release deploys it. Only a copy nothing else updates reads it (its channel, "The plugin
+release the moment it can be installed (Vercel's edge keeps a reply an hour, which
+`Publish Release` purges once the install branches carry the release), and no release
+deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The plugin
 branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
 store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every

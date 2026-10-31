@@ -4,7 +4,7 @@ import { UpdateButton, useUpdateNotice, type UpdateCall } from './index.js';
 
 const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
   prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad',
-  instructions: 'https://www.texttocad.dev/install' };
+  instructions: 'https://github.com/earthtojake/text-to-cad#-quickstart' };
 
 function Host({ call = async () => ({ notice: NOTICE }), initial = NOTICE, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
   call?: UpdateCall; initial?: typeof NOTICE | null; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
@@ -76,9 +76,9 @@ it('links to manual installation through the host, and the card stays', async ()
   render(<Host call={async () => ({ notice: NOTICE })} onLink={onLink} />);
   await openCard();
   const link = screen.getByRole('link', { name: 'Manual installation' }) as HTMLAnchorElement;
-  expect([link.href, link.target]).toEqual(['https://www.texttocad.dev/install', '_blank']);
+  expect([link.href, link.target]).toEqual(['https://github.com/earthtojake/text-to-cad#-quickstart', '_blank']);
   fireEvent.click(link);
-  expect(onLink).toHaveBeenCalledWith('https://www.texttocad.dev/install');
+  expect(onLink).toHaveBeenCalledWith('https://github.com/earthtojake/text-to-cad#-quickstart');
   expect(screen.getByRole('dialog', { name: 'Update available' })).toBeTruthy();
 });
 

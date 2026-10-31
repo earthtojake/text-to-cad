@@ -107,8 +107,9 @@ class VersionSyncMirrorTests(unittest.TestCase):
     def test_a_file_with_a_version_and_a_pin_takes_both(self) -> None:
         """The Gemini extension is a JSON target and a pin target: stamping one must keep the other."""
         targets = json.loads(_node(
-            "const { jsonTargets, pinTargets } = await import(%s);\n"
-            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets]));"
+            "const { jsonTargets, pinTargets, bootstrapTargets } = await import(%s);\n"
+            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets,"
+            " ...bootstrapTargets.map((t) => t.path)]));"
             % json.dumps(SYNC_SCRIPT.as_uri())))
         self.assertIn("gemini-extension.json", targets)
         with tempfile.TemporaryDirectory() as scratch:
@@ -117,6 +118,17 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if repo_path(relative).is_file():
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
+            # A skill's setup guide is stamped with its main file; its other references are history.
+            fixture = root / "skills/fixture"
+            (fixture / "references").mkdir(parents=True)
+            (fixture / "SKILL.md").write_text("`cadgen` below means `cadgen +1.2.3`\n"
+                                               "[Setup](references/setup.md) [Migration](references/migrations.md)\n",
+                                               encoding="utf-8")
+            (fixture / "references/setup.md").write_text("uvx --from cadgen==1.2.3 cadgen doctor\n"
+                                                          r"%USERPROFILE%\.local\bin\cadgen.cmd +1.2.3" + "\n",
+                                                          encoding="utf-8")
+            historical = "An older release used cadgen==0.1.0 and cadgen +0.1.0.\n"
+            (fixture / "references/migrations.md").write_text(historical, encoding="utf-8")
             (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
             result = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
                                     capture_output=True, text=True, timeout=120)
@@ -124,16 +136,56 @@ class VersionSyncMirrorTests(unittest.TestCase):
             manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["version"], "9.9.9")
             self.assertIn("cadgen==9.9.9", manifest["mcpServers"]["cad"]["args"])
-            # Every cadgen skill's launch command moves with the server's, so they stay one installation.
+            # The one-line installer falls back to the release it ships with, and pins nothing else:
+            # its `cadgen==$version` is the release it found.
+            installer = (root / "scripts/install/install.sh").read_text(encoding="utf-8")
+            self.assertIn('\nCADGEN_VERSION="9.9.9"\n', installer)
+            self.assertIn('--from "$requirement" cadgen "$verb"', installer)
+            self.assertIn('\n    $CadgenVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
+            self.assertIn("`cadgen +9.9.9`", (fixture / "SKILL.md").read_text(encoding="utf-8"))
+            guide = (fixture / "references/setup.md").read_text(encoding="utf-8")
+            self.assertIn("--from cadgen==9.9.9 cadgen doctor", guide)
+            self.assertIn("cadgen.cmd +9.9.9", guide)
+            self.assertEqual((fixture / "references/migrations.md").read_text(encoding="utf-8"), historical)
+            # Every cadgen skill's launch command moves with the server's, so they stay one installation:
+            # the version it runs by the `cadgen` command in its main file, and in its setup guide the
+            # command that installs it and the refusal it names.
             skill = (root / "skills/cad/SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("--from cadgen==9.9.9 cadgen doctor`", skill)
-            # And so does the version it runs by the `cadgen` command, and the refusal it names.
             self.assertIn("`cadgen +9.9.9`", skill)
             self.assertIn("`python` below means `cadgen +9.9.9 run`", skill)
-            self.assertIn("it says 9.9.9 is not installed", skill)
-            # So does the turn-off command the README and the docs site print.
-            for page in ("README.md", "apps/docs/src/lib/content.ts", "apps/docs/src/app/privacy-policy/page.tsx"):
-                self.assertIn("--from cadgen==9.9.9 cadgen telemetry off", (root / page).read_text(encoding="utf-8"))
+            guide = (root / "skills/cad/references/setup.md").read_text(encoding="utf-8")
+            self.assertIn("--from cadgen==9.9.9 cadgen doctor`", guide)
+            self.assertIn("it says 9.9.9 is not installed", guide)
+            self.assertIn("`cadgen.cmd +9.9.9`", guide)
+            # So does the turn-off command the privacy policy prints.
+            self.assertIn("--from cadgen==9.9.9 cadgen telemetry off",
+                          (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
+            # The README and the docs site's homepage are prose and no pin target: a pin there would
+            # never be stamped.
+            for page in ("README.md", "apps/docs/src/lib/content.ts"):
+                self.assertNotIn("cadgen==", repo_path(page).read_text(encoding="utf-8"), page)
+            # And the install page's Claude Desktop config and the installer it says the command runs.
+            page = (root / "docs/install.md").read_text(encoding="utf-8")
+            self.assertIn('"--from", "cadgen==9.9.9", "cadgen", "mcp"', page)
+            self.assertIn("--from cadgen==9.9.9 cadgen setup", page)
+
+    def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
+        """check-version.sh refuses an installer script that would fall back to another release."""
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch).resolve()
+            for relative in ("scripts/release/check-version.sh", "scripts/install/install.sh", "scripts/install/install.ps1"):
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(repo_path(relative), root / relative)
+            (root / "skills").mkdir()
+            shutil.copy2(repo_path("VERSION"), root / "VERSION")
+            check = [str(root / "scripts/release/check-version.sh")]
+            passed = subprocess.run(check, capture_output=True, text=True, timeout=60)
+            self.assertEqual(0, passed.returncode, passed.stdout + passed.stderr)
+            (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+            stale = subprocess.run(check, capture_output=True, text=True, timeout=60)
+            self.assertEqual(1, stale.returncode, stale.stdout + stale.stderr)
+            for script in ("install.sh", "install.ps1"):
+                self.assertIn(f"scripts/install/{script} falls back to cadgen", stale.stderr)
 
     def test_derived_metadata_is_synced_at_the_current_version(self) -> None:
         """The gate the release workflows run, at the version in VERSION."""

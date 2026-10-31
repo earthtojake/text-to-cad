@@ -8,7 +8,7 @@
         "--python",
         "3.13",
         "--from",
-        "cadgen==0.8.3",
+        "cadgen==0.8.4",
         "cadgen",
         "mcp"
       ],

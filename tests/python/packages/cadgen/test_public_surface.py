@@ -72,6 +72,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "stop": frozenset({"json"}),
     "delete": frozenset({"documents", "json"}),
     "server": frozenset({"port", "rotate_token"}),
+    # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
+    # for which apps; and `uninstall`, which takes it out again.
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "json"}),
+    "update": frozenset({"dry_run", "only", "no_telemetry", "json"}),
+    "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
 }
 
 # Commands that own their parser outright and mirror no function.
@@ -134,10 +139,12 @@ class Manifest(unittest.TestCase):
         # No backwards compatibility: a retired command has no entry and no module, so it gets the
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "step snapshot", "stl build", "stl snapshot", "3mf build",
-                        "3mf snapshot", "glb build", "glb snapshot", "store", "daemon", "daemon status", "xbf", "where"):
+                        "3mf snapshot", "glb build", "glb snapshot", "store", "daemon", "daemon status", "xbf", "where",
+                        "install"):
             self.assertNotIn(command, cli._COMMANDS)
         for module in ("cadgen.cli.build", "cadgen.engine.shape_input", "cadgen.cli.step_build", "cadgen.cli.step_snapshot", "cadgen.cli.stl_build",
-                       "cadgen.cli.where", "cadgen.cli.store", "cadgen.cli.daemon", "cadgen.cli.daemon_status", "cadgen.step", "cadgen.store", "cadgen.daemon"):
+                       "cadgen.cli.where", "cadgen.cli.store", "cadgen.cli.daemon", "cadgen.cli.daemon_status", "cadgen.step", "cadgen.store", "cadgen.daemon",
+                       "cadgen.cli.install"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 

@@ -71,7 +71,7 @@ can reach the port.
 
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
-per-session capability. The server delivers it in tool-result metadata, which
+capability, one for each host connection. The server delivers it in tool-result metadata, which
 MCP Apps hosts keep out of the model's context, and refuses a call without it
 before anything routes the request. Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.
@@ -82,6 +82,15 @@ processes and bounds its work: assembly, node and block expansion, archive
 unpacking, and buffer reads. It fetches nothing a file names over the network.
 `cadgen sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
+
+**The install command.** `curl -fsSL https://texttocad.dev/install.sh | sh` (on
+Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the docs
+site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with
+uv's own installer when uv is missing, and runs the newest cadgen release from PyPI
+through uvx, which installs the plugin in each agent app with that app's own
+command and edits Claude Desktop's config (keeping a `.bak`). To read the script
+first, or to keep to one release, take the copy attached to that release on GitHub
+and check it against the release's `SHA256SUMS`.
 
 ### What we treat as a vulnerability
 

@@ -7,9 +7,8 @@ readers (OCCT's, driven directly) runs its body on every build, and the build na
 from __future__ import annotations
 
 import json
+import math
 import shutil
-import subprocess
-import sys
 import tempfile
 import textwrap
 import unittest
@@ -140,104 +139,24 @@ class ImportTest(unittest.TestCase):
             started.append(process)
             return process
 
-        with mock.patch.object(reader.Reader, "_start", start):
-            self.built("twice")
+        with mock.patch.object(reader.Reader, "_start", start), \
+                mock.patch.object(reader, "_parse", side_effect=AssertionError("STEP parsed in build worker")):
+            structure = self.built("twice")
         # One reader for two files (the second read of one file is the memo's), gone with the build.
         self.assertEqual(len(started), 1)
         self.assertIsNotNone(started[0].poll(), "the reader exited when the build ended")
         self.assertFalse(reader._SESSION)
+        self.assertEqual({part["name"] for part in structure["prototypes"]}, {"base", "peg"})
+        self.assertEqual(len(structure["instances"]), 9)
+        self.assertEqual(sorted(round(instance["matrix"][14], 6) for instance in structure["instances"]),
+                         [0] * 6 + [50] * 3)
+        # The parts handed back preserve the solids, not merely their names and placements.
+        import build123d as bd
 
-    def test_a_step_parse_leaves_the_worker_only_its_result(self) -> None:
-        """Measured: the peak resident memory a parse adds to the process that reads, in the
-        reader process against in this one (the XCAF reader's working memory)."""
-        step = self.folder / "big.step"
-        code = textwrap.dedent("""
-            import build123d as bd
-            parts = []
-            for i in range(500):
-                part = bd.Pos(i * 30 % 600, (i // 20) * 30, 0) * bd.Cylinder(5 + (i % 7) * 0.1, 10 + i * 0.01)
-                part.label = f"p{i}"
-                parts.append(part)
-            bd.export_step(bd.Compound(children=parts, label="big"), __import__("sys").argv[1])
-        """)
-        subprocess.run([sys.executable, "-c", code, str(step)], check=True, capture_output=True)
-        measure = textwrap.dedent("""
-            import sys, json
-            import build123d, OCP.STEPCAFControl, OCP.BinTools
-            from cadgen.engine import reader
-            build123d.Shape  # the kernel loaded before the measure, where cadgen's .pth makes the import lazy
-
-            def parse():
-                if sys.argv[2] == "reader":
-                    return reader.read_step(sys.argv[1])
-                header, data = reader._parse(sys.argv[1])
-                shapes, locations = reader.unpack(data, header["shapes"])
-                del data
-                return reader.assemble(header, shapes, locations)
-
-            try:
-                import resource
-            except ImportError:  # Windows
-                resource = None
-            if resource is not None:
-                # The process's peak resident memory: what the parse lifted it by.
-                before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                shape = parse()
-                grown = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before
-            else:
-                # Windows keeps no peak a parse can lift past the imports' own (the peak working set
-                # and the peak commit both read 0 growth on the runner), so the process's committed
-                # private memory (PROCESS_MEMORY_COUNTERS.PagefileUsage) is sampled while it parses.
-                import ctypes
-                import threading
-                from ctypes import wintypes
-
-                class Counters(ctypes.Structure):
-                    _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
-                                *((name, ctypes.c_size_t) for name in (
-                                    "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
-                                    "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
-                                    "PagefileUsage", "PeakPagefileUsage"))]
-
-                # Typed: the current process's pseudo-handle is -1, a HANDLE, not a C int.
-                current = ctypes.windll.kernel32.GetCurrentProcess
-                current.restype = wintypes.HANDLE
-                info = ctypes.windll.psapi.GetProcessMemoryInfo
-                info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
-                info.restype = wintypes.BOOL
-
-                def committed():
-                    counters = Counters()
-                    counters.cb = ctypes.sizeof(Counters)
-                    assert info(current(), ctypes.byref(counters), counters.cb), ctypes.WinError()
-                    return counters.PagefileUsage
-
-                before = committed()
-                highest = [before]
-                finished = threading.Event()
-
-                def sample():
-                    while not finished.wait(0.002):
-                        highest[0] = max(highest[0], committed())
-
-                sampler = threading.Thread(target=sample)
-                sampler.start()
-                try:
-                    shape = parse()
-                finally:
-                    finished.set()
-                    sampler.join()
-                grown = max(highest[0], committed()) - before
-            assert len(shape.children) == 500
-            print(json.dumps(grown))
-        """)
-        grown = {}
-        for where in ("here", "reader"):
-            done = subprocess.run([sys.executable, "-c", measure, str(step), where], capture_output=True, text=True)
-            self.assertEqual(done.returncode, 0, done.stderr)
-            grown[where] = json.loads(done.stdout.strip().splitlines()[-1])
-        # Measured 62 MB here against 14 MB with the reader: the parse's memory is the reader's.
-        self.assertLess(grown["reader"], grown["here"] * 0.5, grown)
+        loaded = document.Loaded(self.folder / "XBF/twice.xbf")
+        volumes = {part.name: bd.Solid(part.shape).volume for part in loaded.prototypes}
+        self.assertAlmostEqual(volumes["base"], 500)
+        self.assertAlmostEqual(volumes["peg"], 72 * math.pi)
 
 
 READS = """

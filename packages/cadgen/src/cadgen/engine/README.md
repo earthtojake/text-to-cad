@@ -296,7 +296,7 @@ Each session owns its tool server, view registry and immutable UI resource. `cad
 the page's requests of the viewer's routes, dispatches into the same application in
 process. It is app-only, as `cad_sync` and `cad_capture_reply` are, and absent where
 no page is drawn: no agent reaches a viewer route. Launch results carry the app
-capability in UI-only `_meta["dev.texttocad/httpToken"]`, never content, structured
+capability (the stdio peer's, one for its host, which every session it opens is given) in UI-only `_meta["dev.texttocad/httpToken"]`, never content, structured
 content or the resource. The page sends it in `x-cadgen-app`; the server checks it
 before dispatch and strips it, and refuses a call without it. Authorization precedes
 the range cache. This is an MCP host/model boundary, not a sandbox against the
@@ -2418,7 +2418,11 @@ arguments -- is one coarse entry above its calls, kept in the worker's memory
   arrays, first-party dataclass and class instances. Each global binding the
   code reads counts as what it is bound to, by the module that holds it, so
   rebinding a name is an edit. The walk stops at what is not first-party (the
-  standard library, build123d, OCP, numpy): the engine's own code covers those;
+  standard library, build123d, OCP, numpy): the engine's own code covers those.
+  Library code is what lies in the interpreter's library folders
+  (`trace._library_roots`), never its whole prefix: a project inside its own
+  virtual environment's folder is first-party, and a model script that does lie
+  in a library folder is said on the build's log, since its edits rebuild nothing;
 - every file it reads through the engine, by its bytes: `read_step`, `read_xbf`, `read_mesh`,
   and build123d's importers (`import_step`, `import_brep`, `import_stl`), which the memo keys
   as it keys the engine's readers;

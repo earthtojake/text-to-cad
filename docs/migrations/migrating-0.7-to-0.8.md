@@ -55,6 +55,32 @@ channels (`cadgen.gltf`). Colours are sRGB hex. `import build123d as bd` is free
 is used. The 0.7 store, sidecars, STEP-format commands, staleness checks and `?file=` links
 are gone.
 
+## Updating from 0.8.0 or 0.8.1
+
+This section is for a project already on 0.8; it has nothing to port. An engine from
+0.8.0 or 0.8.1 runs until it is stopped, so after an update it may still be running.
+Update with the install command, which stops that engine when nothing is using it,
+through its own installation's `cadgen stop`, and installs the new release in every
+agent app:
+
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
+
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. A plugin
+updated through its app gets the same as the new release's engine starts: it stops
+every older release's engine that nothing is using. An older engine still in use (a
+session still open on the older plugin, a page watching it, a build) keeps running,
+and while it holds port 3245 the new engine serves on the next free port and says so
+once (`3245 is held by cadgen 0.8.1's engine (pid N); this installation serves on 3246
+and keeps it`), coming back to 3245 at a later start once it is free
+([Port 3245](#7-learn-the-one-engine-ids-pages-links-and-commands)). To stop the older
+engine yourself, run its own command, then restart the agent app:
+
+```bash
+~/.local/bin/cadgen +0.8.1 stop
+```
+
 ## Prerequisites
 
 1. **Update the plugin, or the pin.** The plugin starts its server through

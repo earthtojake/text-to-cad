@@ -418,7 +418,10 @@ doctor` the setup (the installation registered, the `cadgen` command written, th
 a skill's pin and what cadgen left behind that nothing needs, which `cadgen doctor --prune` removes
 (`_internal/leftovers.py`: engine records of an older format, the bytecode of installations no longer
 registered, cache folders no record names; none written in the last seven days); `cadgen run` a model script by the installation's python; `cadgen viewer` the engine page launcher;
-`cadgen mcp` the stateless proxy an agent host starts; and `cadgen telemetry` the person's answer. A
+`cadgen mcp` the stateless proxy an agent host starts; `cadgen setup` (also `cadgen update`), which
+the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets up or updates
+text-to-cad in every agent app it finds, each by its own command (`_internal/providers.py`), and
+`cadgen uninstall` takes it out; and `cadgen telemetry` the person's answer. A
 model builds by running its script: `python model.py`, or `cadgen +<version> run model.py` through
 the `cadgen` command, which picks the installation by the first that names one, in this order
 (`_internal/proxy.py`): `+<version>`, `CADGEN_VERSION`, the engine held by this shell's host,

@@ -24,8 +24,8 @@ first-party module and package they name, as the module search path finds it. A 
 is first-party as the trace counts a frame (not the standard library, not an installed
 package, not cadgen).
 
-Files are read by their bytes, hashed once per version of the file (its stat); their
-imports and dynamic spots are parsed once per digest; a code object is read once per
+Reached source files are hashed from their bytes; their imports and dynamic spots are
+parsed once per digest; a code object is read once per
 value of it. All in this process's memory.
 """
 
@@ -39,6 +39,8 @@ import dis
 import enum
 import functools
 import hashlib
+import importlib.machinery
+import importlib.util
 import inspect
 import os
 import sys
@@ -50,21 +52,13 @@ from typing import Any
 __all__ = ["Symbols", "assigned", "closure", "closure_files", "digest", "returning", "skeleton"]
 
 _HELD = 4096
-# (device, inode, size, mtime) -> the file's digest; digest -> the imports its source makes.
-_DIGESTS: "OrderedDict[tuple, str]" = OrderedDict()
+# Source digest -> its imports.
 _IMPORTS: "OrderedDict[str, tuple]" = OrderedDict()
 
 
 def digest(path: Path) -> str:
-    """A file's bytes, hashed once per version of the file."""
-    stat = os.stat(path)
-    version = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
-    found = _DIGESTS.get(version)
-    if found is None:
-        found = _DIGESTS[version] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-        while len(_DIGESTS) > _HELD:
-            _DIGESTS.popitem(last=False)
-    return found
+    """The bytes now: filesystem timestamps can collide even after an in-place source edit."""
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _imports(path: Path, file_digest: str) -> tuple:
@@ -95,30 +89,41 @@ def _first_party(path: Path) -> bool:
 
 def _files(name: str) -> list[tuple[str, Path]]:
     """The first-party files importing ``name`` runs, each with its module name: every
-    package ``__init__`` on the way, then the module -- as the first search-path entry
-    holding its top level finds them. Nothing for a module that is not first-party."""
+    package ``__init__`` on the way, then the module. Resolve through import hooks without
+    executing packages just to discover their children. Nothing for non-first-party files."""
+    from cadgen.engine.build import _FirstPartyFromSource
+
     parts = name.split(".")
-    for entry in sys.path:
-        root = Path(entry or os.getcwd())
-        top = root / parts[0]
-        if not (top.with_suffix(".py").is_file() or (top / "__init__.py").is_file()):
-            continue
-        found = []
-        folder = root
-        for depth, part in enumerate(parts, 1):
-            package = folder / part / "__init__.py"
-            module = (folder / part).with_suffix(".py")
-            dotted = ".".join(parts[:depth])
-            if package.is_file():
-                found.append((dotted, package))
-                folder = folder / part
-            elif module.is_file():
-                found.append((dotted, module))
-                break
+    found, locations = [], None
+    for depth in range(1, len(parts) + 1):
+        dotted = ".".join(parts[:depth])
+        spec = None
+        for finder in tuple(sys.meta_path):
+            if isinstance(finder, _FirstPartyFromSource):  # a loader adapter, not a resolver
+                continue
+            if finder is importlib.machinery.PathFinder:
+                # find_spec wraps namespaces in _NamespacePath, which requires an imported
+                # parent. The underlying path lookup needs no parent execution or fake modules.
+                spec = finder._get_spec(dotted, sys.path if locations is None else locations)
+                if spec.loader is None and not spec.submodule_search_locations:
+                    spec = None
             else:
+                method = getattr(finder, "find_spec", None)
+                if method is None:
+                    loader = finder.find_module(dotted, locations)
+                    spec = importlib.util.spec_from_loader(dotted, loader) if loader else None
+                else:
+                    spec = method(dotted, locations, None)
+            if spec is not None:
                 break
-        return [(dotted, path.resolve()) for dotted, path in found if _first_party(path)]
-    return []
+        if spec is None:
+            break
+        if spec.origin and _first_party(Path(spec.origin)) and Path(spec.origin).is_file():
+            found.append((dotted, Path(spec.origin).resolve()))
+        locations = spec.submodule_search_locations
+        if locations is None:
+            break
+    return found
 
 
 def closure(path: Path, module: str, resolved: dict[str, list] | None = None) -> str:

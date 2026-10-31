@@ -75,9 +75,9 @@ class UpdatesTest(unittest.TestCase):
         text = "A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)"
         prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
         self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1", "text": text, "prompt": prompt,
-                                 "instructions": "https://www.texttocad.dev/install"})
+                                 "instructions": "https://github.com/earthtojake/text-to-cad#-quickstart"})
         self.assertEqual(updates.line(found), f'{text}. Ask your agent to update to the latest version ("{prompt}"), '
-                                              'or install manually (https://www.texttocad.dev/install).')
+                                              'or install manually (https://github.com/earthtojake/text-to-cad#-quickstart).')
         # The same words in the CAD Viewer a skill opens, which no plugin names a channel for.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):

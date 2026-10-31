@@ -47,6 +47,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),
+    # text-to-cad in every agent app here, and the cadgen command with it; again to update.
+    # `uninstall` is the same module's uninstall path, with a parser of its own.
+    "setup": ("cadgen.cli.setup", "set up or update text-to-cad in every agent app here"),
+    "update": ("cadgen.cli.setup", "the same as setup: bring every agent app up to date"),
+    "uninstall": ("cadgen.cli.uninstall", "take text-to-cad out of every agent app here"),
     # A page session on the installation engine; the launcher exits.
     "viewer": ("cadgen.cli.viewer", "open a viewer page on the installation engine"),
     # CAD inside an agent host's panels. The host starts a stateless stdio peer per session.
@@ -240,9 +245,9 @@ def _report(error: Exception) -> None:
 
 
 # Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
-# reads; the engine's server, writing nowhere; `telemetry`, which says it its own way; and `run`, which is
-# only the python it runs, as the `cadgen` command's `run` is.
-_UNTOLD = frozenset({"mcp", "server", "telemetry", "run"})
+# reads; the engine's server, writing nowhere; `telemetry` and `setup` (`update`), which say it their own
+# way; `uninstall`; and `run`, which is only the python it runs, as the `cadgen` command's `run` is.
+_UNTOLD = frozenset({"mcp", "server", "telemetry", "setup", "update", "uninstall", "run"})
 
 
 def _tell() -> None:

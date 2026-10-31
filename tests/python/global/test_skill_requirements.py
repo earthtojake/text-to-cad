@@ -7,8 +7,10 @@ The CAD plugin's server is one command,
 registers itself and writes the `cadgen` command, `~/.local/bin/cadgen`
 (cadgen._internal.installations), which every skill runs as `cadgen +<release>` -- uvx cannot start
 in an agent's sandbox, the command can. The same installation, so the same warm daemon. A skill
-names the uvx command once, as `cadgen doctor`, which installs cadgen, registers it and writes the
-command when they are missing. A skill that runs cadgen any other way -- a `pip install -r
+defines that command in its SKILL.md and names the uvx command once, in its setup guide
+(`references/setup.md`, which the SKILL.md links), as `cadgen doctor`, which installs cadgen,
+registers it and writes the command when they are missing; the guide gives the install command
+too, which sets text-to-cad up in every agent app. A skill that runs cadgen any other way -- a `pip install -r
 requirements.txt` into the project's interpreter -- makes a second installation with a daemon of
 its own, and its docs may describe a cadgen that is not the one running.
 
@@ -89,15 +91,26 @@ class SkillLaunchCommand(unittest.TestCase):
         self.assertGreaterEqual(len(SKILLS), 8, "the skills/ glob found almost nothing")
 
     def test_every_skill_that_uses_cadgen_names_its_version_and_install_command(self) -> None:
+        import sys
+
+        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
+        from cadgen.updates import INSTALL as INSTALL_COMMAND, INSTALL_WINDOWS
+
         for skill in SKILLS:
             text = (skill / "SKILL.md").read_text(encoding="utf-8")
+            setup = skill / "references" / "setup.md"
             with self.subTest(skill=skill.name):
                 if not _teaches_cadgen(skill):
                     self.assertNotIn("--from cadgen==", text, "a skill that never runs cadgen downloads nothing")
+                    self.assertFalse(setup.exists(), "a skill that never runs cadgen has no setup guide")
                     continue
                 self.assertIn(DEFINITIONS.format(version=VERSION), text)
+                self.assertIn("](references/setup.md)", text)
+                guide = setup.read_text(encoding="utf-8")
                 self.assertIn(INSTALL.format(version=VERSION, command=LAUNCH.format(version=VERSION, tool="cadgen doctor")),
-                              text)
+                              guide)
+                self.assertIn(f"```bash\n{INSTALL_COMMAND}\n```", guide)
+                self.assertIn(f"`{INSTALL_WINDOWS}`", guide)
 
     def test_no_skill_installs_cadgen_any_other_way(self) -> None:
         # A requirements.txt naming cadgen is a second installation, with a daemon of its own.

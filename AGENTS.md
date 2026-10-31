@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Installing text-to-cad rather than developing it? Follow the Install section of
+Installing text-to-cad rather than developing it? Follow the Quickstart in
 [README.md](README.md).
 
 This repo is a workbench for CAD-related agent skills. Treat `skills/` as the
@@ -50,14 +50,19 @@ pipeline; the standalone `Deploy Docs` workflow redeploys the docs site from a
 ref without a release. The full flow, the resume path, the rehearsal and the
 local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
-cadgen installs as ONE uvx command, `uvx --no-config --managed-python --python
+People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
+(Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
+`scripts/install/` runs the newest release's `cadgen setup` through uvx, which sets up the
+plugin in every agent app on the device (the skills alone, through the Skills CLI, for the
+agents without a plugin), asking nothing, and, run again, updates them. cadgen itself
+installs as ONE uvx command, `uvx --no-config --managed-python --python
 3.13 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`), which the
 plugin server configs run. That installation registers itself and writes the
 `cadgen` command, `~/.local/bin/cadgen`; every cadgen skill's SKILL.md runs
 `cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
 command can). The release stamps every pin and `+<VERSION>` (`sync-version.mjs`),
-and `scripts/release/check-version.sh` and the tests assert they all equal
-`VERSION`. One installation is one engine: the server, every thread and every
+with the installer's fallback release, and `scripts/release/check-version.sh` and the
+tests assert they all equal `VERSION`. One installation is one engine: the server, every thread and every
 skill command share one daemon ([CONTRIBUTING.md, "Development
 dependencies"](CONTRIBUTING.md#development-dependencies)). In a checkout, install
 `requirements-dev.txt` (the editable cadgen) and test in agent apps with
@@ -73,7 +78,8 @@ dependencies"](CONTRIBUTING.md#development-dependencies)). In a checkout, instal
   `scripts/release/plugin_branch.py` builds from this tree at each release.
 - `models/` ([README](models/README.md)): the corpus of engine models, plain files, each
   built with `python model.py`; nothing installs it.
-- `docs/migrations/`: the hand-migration guides between releases
+- `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
+  `docs/migrations/`: the hand-migration guides between releases
   ([0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the engine
   hosts `cadgen.viewer`'s HTTP app).
@@ -120,9 +126,9 @@ dependencies"](CONTRIBUTING.md#development-dependencies)). In a checkout, instal
   package — enforced by `tests/python/global/test_package_boundaries.py`.
   Repo-development guidance for it goes in `CONTRIBUTING.md`.
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
-  share their structure, install message and commands: change them together.
-  The README says more: the steps to install it yourself, and fuller notes under each install
-  (`apps/docs/README.md`).
+  share their structure, install commands, summary, the link to `docs/install.md` and
+  Contributing: change them together. The per-app installs, updates and reinstalls live in
+  `docs/install.md` alone, never in the docs app (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
