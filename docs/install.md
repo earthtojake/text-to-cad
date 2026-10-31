@@ -396,7 +396,7 @@ app's plugin ahead of your server, the button shows for them too, and moves the
 server to it.
 
 To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
-most once a day: one anonymous request, with no ID, path or anything about you,
+most once an hour: one anonymous request, with no ID, path or anything about you,
 never in CI and never for a copy that something else updates.
 `CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
 release says so too, with no request at all. A click on the button reads the feed
@@ -420,14 +420,14 @@ The release the install command runs is text-to-cad's server (`texttocad-server`
 `cad` command, the CAD Viewer's server and the engine every build goes through, without
 the CAD kernel. Each app's CAD server is the smaller `texttocad-mcp` (`cad-mcp`), which
 reaches it. A model runs where the kernel is: in one environment the server makes with uv
-in its cache folder and keeps, the library with its kernel (`texttocad[kernel]`) on the
+in its cache folder and keeps, the library with its kernel (`texttocad[build123d]`) on the
 server's Python, 3.14. Every model runs there, and so do the server's own kernel
 processes: exports, snapshots and the meshes the viewer shows. The install command makes
 it; otherwise the first model or the first view does. A model imports what that
 environment holds: the library (`cad`), build123d and what they bring.
 
 To run models with a Python of your own instead, install the library with its kernel
-into it: `pip install 'texttocad[kernel]'` (`pip install texttocad` is the library alone,
+into it: `pip install 'texttocad[build123d]'` (`pip install texttocad` is the library alone,
 and `import build123d` fails there). That environment is then the one models run in.
 
 ## Windows 11: Smart App Control

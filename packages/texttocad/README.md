@@ -44,10 +44,13 @@ engineering drawings (`@eng_drawing`).
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
 Its one required dependency is numpy, the meshes' arrays: what the server imports of it -- the
 document model, the protocol a client speaks, the build's words -- imports no CAD kernel. The
-kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `kernel`
+kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `build123d`
 extra, which the server installs into the environment models run in (the engine's **Running a
 model**). A person who installs the library by hand to run models with their own Python installs
-`texttocad[kernel]`.
+`texttocad[build123d]`. The library's layer over that kernel -- the model API and the engine's
+`kernel/` (the memo, element naming, the determinism settings) -- is the build123d integration: a
+third-party technology and the application layer over it are an integration, named for the
+technology, and its extra carries the same name.
 
 **DEPENDED ON BY** — the server, `texttocad-server`, which pins it at its own release, and through
 the server every skill that runs `cad`; the aliases `cadgen` and `text-to-cad`, which install it.
@@ -95,7 +98,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
    beside a library or a model; and under `base/` the environment models and the engine's kernel
-   processes run in, an installation's base, `texttocad[kernel]` at its release, made by uv from its
+   processes run in, an installation's base, `texttocad[build123d]` at its release, made by uv from its
    cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -232,7 +235,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 18. **Nothing waits on the network.** Once installed, text-to-cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (`analytics.py`, usage
     counts under a random id, sent by default once a `cad` command has said so, and never
-    after the person's no) and the daily version check (`updates.py`). Both run in the
+    after the person's no) and the hourly version check (`updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release

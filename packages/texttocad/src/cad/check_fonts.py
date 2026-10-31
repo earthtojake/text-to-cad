@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         sys.stderr.write(
             "fontTools is not installed, so the fonts cannot be checked.\n"
-            "Install the CAD requirements first: pip install 'texttocad[kernel]'\n"
+            "Install the CAD requirements first: pip install 'texttocad[build123d]'\n"
         )
         return 2
 

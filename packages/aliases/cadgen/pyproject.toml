@@ -16,8 +16,10 @@ authors = [{ name = "earthtojake" }]
 dependencies = ["texttocad==0.9.0"]
 
 [project.optional-dependencies]
-# `cadgen[kernel]`, the way 0.8 installed the CAD kernel by hand: the library's own kernel extra.
-kernel = ["texttocad[kernel]==0.9.0"]
+# `cadgen[build123d]`: the library's own build123d extra. `cadgen[kernel]` is its 0.8 spelling, the way 0.8
+# installed the CAD kernel by hand, kept: the same stack.
+build123d = ["texttocad[build123d]==0.9.0"]
+kernel = ["texttocad[build123d]==0.9.0"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

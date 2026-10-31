@@ -901,10 +901,10 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
         except metadata.PackageNotFoundError:
             continue
         # What it needs to run, not an extra nobody asked for (a test runner, say) -- but the library's own
-        # kernel, its `kernel` extra, which every environment a model runs in installs.
+        # kernel, its `build123d` extra, which every environment a model runs in installs.
         todo += [re.split(r"[\s;<>=!~\[(]", requirement, maxsplit=1)[0] for requirement in requirements
                  if "extra" not in (marker := requirement.partition(";")[2])
-                 or (name == "texttocad" and re.search(r"""extra\s*==\s*["']kernel["']""", marker))]
+                 or (name == "texttocad" and re.search(r"""extra\s*==\s*["']build123d["']""", marker))]
     ours = frozenset(top for top, owners in metadata.packages_distributions().items()
                      if top != "__pycache__" and any(_distribution(owner) in seen for owner in owners))
     return tuple(sorted(set(places), key=lambda place: len(place[0]), reverse=True)), ours

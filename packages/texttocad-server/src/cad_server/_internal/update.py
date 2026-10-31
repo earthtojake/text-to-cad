@@ -18,7 +18,7 @@ own: no fetch and no switch without that click, ``cad update`` or the install co
    token, and goes back to this one should it fail.
 
 Where it is goes as progress frames of kind ``update`` (``cad.engine.progress``): ``install`` while
-the release's folder is made, ``kernel`` while its base is, ``apps`` while the apps' plugins are
+the release's folder is made, ``build123d`` while its base is, ``apps`` while the apps' plugins are
 updated, ``restart`` once the engine drains. A step that fails ends it, said in one line, and the
 engine stays as it was.
 """
@@ -35,7 +35,7 @@ from typing import Any
 __all__ = ["UPDATE", "Update"]
 
 # The stages of an update, in order, as its progress frames count them (``cad.engine.progress``).
-STAGES = ("install", "kernel", "apps", "restart")
+STAGES = ("install", "build123d", "apps", "restart")
 
 
 class Update:
@@ -93,7 +93,7 @@ class Update:
         try:
             self._frame("install", f"text-to-cad {target}")
             made = releases.make(target, told=lambda _line: None)
-            self._frame("kernel")
+            self._frame("build123d")
             code, said = self._setup(made["cadgen"])
             if code != 0:
                 self._failed(said or f"text-to-cad {target}'s setup failed (exit status {code})")

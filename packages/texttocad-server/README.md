@@ -7,7 +7,7 @@ installs them all.
 
 Models are written against the library, `texttocad` (imported as `cad`), which the server imports without
 its CAD kernel: the kernel lives in the environment the server makes for models and its own kernel
-processes, `texttocad[kernel]` at the server's own release.
+processes, `texttocad[build123d]` at the server's own release.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -43,11 +43,11 @@ src/cad_server/
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the state directory
   language.py            # the language the person chose for the CAD views
-  updates.py             # the daily version check, for a copy nothing else keeps current,
+  updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
   assets.py              # where the bundled runtime is
   _internal/             # the environment models run in (base: the installation's base,
-                         #   texttocad[kernel], made by uv), the launch commands (launch), the
+                         #   texttocad[build123d], made by uv), the launch commands (launch), the
                          #   installations' registry, which one is current, and the proxy it
                          #   writes (installations: ~/.local/bin/cad, which the skills run as
                          #   `cad +<version>`; written by `cad doctor`, `cad setup` and a CAD

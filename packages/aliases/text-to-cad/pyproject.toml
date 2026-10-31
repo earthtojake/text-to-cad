@@ -16,8 +16,8 @@ authors = [{ name = "earthtojake" }]
 dependencies = ["texttocad==0.9.0"]
 
 [project.optional-dependencies]
-# `text-to-cad[kernel]`: the library's own kernel extra.
-kernel = ["texttocad[kernel]==0.9.0"]
+# `text-to-cad[build123d]`: the library's own build123d extra.
+build123d = ["texttocad[build123d]==0.9.0"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

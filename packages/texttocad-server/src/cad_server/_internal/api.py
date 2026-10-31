@@ -1,6 +1,6 @@
 """api.texttocad.dev: the one service cadgen talks to.
 
-Two things use it: telemetry (``cad_server/analytics.py``: ``/events`` and ``/forget``) and the daily
+Two things use it: telemetry (``cad_server/analytics.py``: ``/events`` and ``/forget``) and the hourly
 version check (``cad_server/updates.py``: ``/versions``). It is ours,
 so the service behind it can change without a release. ``CAD_API_URL`` points both at another
 -- a local receiver -- when it is http(s).

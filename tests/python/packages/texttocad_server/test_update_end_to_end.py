@@ -6,7 +6,7 @@ then the button's request (``POST /__cad/update``, ``cad_server.viewer.http_app`
 the same port, with the same token, running B -- the answer a page reloads on --, A's folder kept as
 the way back.
 
-Each release is this source tree's library and server as wheels, the library's ``kernel`` extra naming
+Each release is this source tree's library and server as wheels, the library's ``build123d`` extra naming
 nothing: the update's path is what is tested, and the kernel's install is uv's (the base's own tests
 make it). uv takes their dependencies from its cache where it holds them, as an update does on a
 person's machine; the wheels it keeps there, under versions of this run's own, are taken out again
@@ -69,7 +69,7 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
     """This source tree's ``distribution`` as a wheel of release ``version``: its packages and package data
     but the built runtime (``_runtime``: nothing here serves a page; the plugin is the test's own,
     ``plugin_files``), what it carries at its root, its dependencies -- the library pinned at ``version``
-    -- and command as ``pyproject.toml`` declares them, and a ``kernel`` extra that names nothing."""
+    -- and command as ``pyproject.toml`` declares them, and a ``build123d`` extra that names nothing."""
     source, packages, roots = DISTRIBUTIONS[distribution]
     project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     stem = distribution.replace("-", "_")
@@ -88,7 +88,7 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
                     for requirement in project["dependencies"]]
     metadata = ["Metadata-Version: 2.4", f"Name: {distribution}", f"Version: {version}",
                 f"Requires-Python: {project['requires-python']}",
-                *(f"Requires-Dist: {requirement}" for requirement in requirements), "Provides-Extra: kernel"]
+                *(f"Requires-Dist: {requirement}" for requirement in requirements), "Provides-Extra: build123d"]
     files[f"{info}/METADATA"] = ("\n".join(metadata) + "\n").encode("utf-8")
     files[f"{info}/WHEEL"] = b"Wheel-Version: 1.0\nGenerator: text-to-cad tests\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
     files[f"{info}/entry_points.txt"] = ("[console_scripts]\n" + "".join(
@@ -358,7 +358,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         switched = json.loads((self.work / "state" / "update.json").read_text(encoding="utf-8"))
         self.assertEqual((switched["ok"], switched["from"], switched["to"], switched["port"]), (True, A, B, self.port),
                          switched)
-        order = ("install", "kernel", "apps", "restart")  # cad_server._internal.update.STAGES: as the page saw them
+        order = ("install", "build123d", "apps", "restart")  # cad_server._internal.update.STAGES: as the page saw them
         self.assertEqual(stages, sorted(stages, key=order.index))
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from

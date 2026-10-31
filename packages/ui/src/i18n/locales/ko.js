@@ -168,7 +168,7 @@ export default {
   "progress.snapshot.write": "그림 쓰는 중",
   "progress.inspect-measure.measure": "부품 측정 중",
   "progress.update.install": "업데이트 설치 중",
-  "progress.update.kernel": "CAD 커널 설치 중",
+  "progress.update.build123d": "build123d 설치 중",
   "progress.update.apps": "앱 업데이트 중",
   "progress.update.restart": "다시 시작하는 중",
 

@@ -1,5 +1,5 @@
 """The core and the base, end to end, with the real uv: an installation of the server alone (this
-checkout's server and library, editable, without the library's kernel extra) runs a model -- ``cadgen
+checkout's server and library, editable, without the library's build123d extra) runs a model -- ``cadgen
 run`` makes the base once, the
 script and its worker run there, and so do the engine's documents worker and meshing pool, while the
 engine's daemon runs the core.
@@ -112,7 +112,7 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr)
         made = self.caller(first)
         self.assertEqual(made.parent, cache / base.BASE)
-        self.assertIn("cad run: making the CAD kernel environment, once: texttocad[kernel] ", first.stderr)
+        self.assertIn("cad run: making the CAD kernel environment, once: texttocad[build123d] ", first.stderr)
         self.assertEqual(Path((project / "worker.txt").read_text(encoding="utf-8")).resolve(), made,
                          "the model's worker runs in the base")
         self.assertEqual(self.asked(), ["venv", "pip"])

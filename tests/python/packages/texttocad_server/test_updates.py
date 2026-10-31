@@ -1,7 +1,7 @@
 """cadgen's version check (`cad_server/updates.py`): what each install is told about a newer text-to-cad,
-from a feed read at most once a day or an agent app's newer CAD server, said the same way wherever it
+from a feed read at most once an hour or an agent app's newer CAD server, said the same way wherever it
 shows, and which release an update moves to. No test reaches the real feed: each one is handed in, or
-kept as already read today."""
+kept as just read."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class UpdatesTest(unittest.TestCase):
         patched.start()
         self.addCleanup(patched.stop)
 
-    def read_today(self, feed: dict) -> None:
+    def just_read(self, feed: dict) -> None:
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
 
     def test_a_copy_that_is_told_is_offered_the_newest_release_while_behind(self) -> None:
@@ -74,7 +74,7 @@ class UpdatesTest(unittest.TestCase):
                 self.assertEqual(told(), expected)
 
     def test_the_notice_is_the_release_and_a_text_app_s_line_names_the_install_command(self) -> None:
-        self.read_today(FEED)
+        self.just_read(FEED)
         found = updates.notice()
         self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1"})
         self.assertEqual(updates.line(found, "posix"), "text-to-cad 0.9.0 is out (this is 0.8.1); to update every agent "
@@ -102,7 +102,7 @@ class UpdatesTest(unittest.TestCase):
         """A store updates the plugin, never the device's engine: a newer server's release is offered to
         its copy too (never the feed's), and an update the person asks for reads the feed; a development
         install is offered nothing."""
-        self.read_today({"latest": "0.9.5"})
+        self.just_read({"latest": "0.9.5"})
         updates.see("0.9.2")
         with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}):
             self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
@@ -114,7 +114,7 @@ class UpdatesTest(unittest.TestCase):
             self.assertIsNone(updates.notice())
 
     def test_an_update_reads_the_feed_now_and_moves_to_the_newest_it_knows(self) -> None:
-        self.read_today(FEED)  # read today: a click reads it again all the same
+        self.just_read(FEED)  # just read: a click reads it again all the same
         asked: list[str] = []
         with mock.patch.object(updates, "_get", lambda url: asked.append(url) or {"latest": "0.9.1"}):
             self.assertEqual(updates.newest(), "0.9.1")
@@ -126,16 +126,16 @@ class UpdatesTest(unittest.TestCase):
         with mock.patch.object(cad_server, "__version__", "0.10.0"), mock.patch.object(updates, "_get", return_value=None):
             self.assertIsNone(updates.newest(), "this is the newest")
 
-    def test_the_feed_is_read_at_most_once_a_day_and_kept_when_unreachable(self) -> None:
+    def test_the_feed_is_read_at_most_once_an_hour_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
         answers = [FEED, None, {"latest": "0.9.1"}]
         get = lambda url: asked.append(url) or answers.pop(0)  # noqa: E731
         start = 1_000_000.0
         self.assertEqual(updates.feed(get=get, now=start)["latest"], "0.9.0")
         self.assertEqual(asked, ["https://api.texttocad.dev/v1/versions"])
-        updates.feed(get=get, now=start + 3600)
+        updates.feed(get=get, now=start + updates.CHECK_SECONDS - 60)
         self.assertEqual(len(asked), 1)
-        # Unreachable a day later: the feed as last read stands, and is not asked again that day.
+        # Unreachable an hour later: the feed as last read stands, and is not asked again that hour.
         self.assertEqual(updates.feed(get=get, now=start + updates.CHECK_SECONDS)["latest"], "0.9.0")
         self.assertEqual(updates.feed(get=get, now=start + updates.CHECK_SECONDS + 60)["latest"], "0.9.0")
         self.assertEqual(len(asked), 2)
@@ -150,15 +150,15 @@ class UpdatesTest(unittest.TestCase):
 
     def test_the_newest_release_is_offered_until_the_install_has_it(self) -> None:
         # Nothing the person does with the update button is kept: the notice stays while behind.
-        self.read_today(FEED)
+        self.just_read(FEED)
         self.assertEqual([updates.notice()["latest"], updates.notice()["latest"]], ["0.9.0", "0.9.0"])
-        self.read_today({"latest": "0.9.1"})
+        self.just_read({"latest": "0.9.1"})
         self.assertEqual(updates.notice()["latest"], "0.9.1")
         with mock.patch.object(cad_server, "__version__", "0.9.1"):
             self.assertIsNone(updates.notice())
 
     def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_copy_that_is_not_told(self) -> None:
-        self.read_today(FEED)
+        self.just_read(FEED)
         for values in ({"CAD_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CAD_INSTALL_CHANNEL": "dev"},
                        {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
@@ -182,7 +182,7 @@ class UpdatesTest(unittest.TestCase):
             thread = updates.refresh()
             self.assertTrue(reading.wait(30))
             self.assertEqual(updates.notice()["latest"], "0.9.0")
-            self.assertIsNone(updates.refresh(), "a day's read is not asked for twice")
+            self.assertIsNone(updates.refresh(), "an hour's read is not asked for twice")
             answer.set()
             thread.join(30)
         self.assertEqual(updates.notice()["latest"], "0.9.1")

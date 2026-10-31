@@ -74,6 +74,6 @@ nowhere.
 update`, or the install command again. Nothing updates on its own.
 
 Installing the library into a Python of your own instead of the install command: it is
-`texttocad` on PyPI now (`pip install 'texttocad[kernel]'`), beside the server,
+`texttocad` on PyPI now (`pip install 'texttocad[build123d]'`), beside the server,
 `texttocad-server`, and the CAD app's, `texttocad-mcp`; `cadgen` and `text-to-cad` install
-`texttocad` at the same release (`cadgen[kernel]` as `texttocad[kernel]`).
+`texttocad` at the same release (`cadgen[kernel]`, 0.8's spelling, as `texttocad[build123d]`).

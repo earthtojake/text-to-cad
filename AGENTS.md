@@ -63,7 +63,7 @@ asking nothing, and, run again, updates them; the update button in the CAD Viewe
 and `cad update`, take the same steps.
 
 text-to-cad is three distributions from this repository at one `VERSION`: the library `texttocad`
-(import `cad`, the CAD kernel as its `kernel` extra; `cadgen` is an import alias of it), the server
+(import `cad`, the CAD kernel as its `build123d` extra; `cadgen` is an import alias of it), the server
 `texttocad-server` (import `cad_server`, command `cad`: the engine and its daemon, the commands, the
 CAD Viewer's server) and the shim `texttocad-mcp` (import `cad_mcp`, command `cad-mcp`: the stdio
 transport an agent app starts, the standard library alone). The alias distributions `cadgen` and
@@ -72,7 +72,7 @@ a worker, the library; run in the daemon or a command, the server; run inside th
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from texttocad-mcp==<VERSION> cad-mcp`, and the
 server runs as `uvx ... --from texttocad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
-The server installs the library with its kernel extra, with uv, into one base environment per
+The server installs the library with its `build123d` extra, with uv, into one base environment per
 installation that every model and kernel process runs in (`cad_server._internal.base`), a program's
 own folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad +<VERSION>` through it (uvx cannot
@@ -84,7 +84,7 @@ every skill command share one daemon whatever release each names, and only an up
 another ([CONTRIBUTING.md, "Development dependencies"](CONTRIBUTING.md#development-dependencies)).
 A test or an experiment gets a server of its own with its own `CAD_STATE_DIR` and
 `CAD_ENGINE_DIR`. In a checkout, install `requirements-dev.txt` (the three editable, the library
-with its kernel extra: its own base) and test in agent apps with `scripts/install/dev_install.py`,
+with its `build123d` extra: its own base) and test in agent apps with `scripts/install/dev_install.py`,
 which points both at the checkout.
 
 ## Repo Map

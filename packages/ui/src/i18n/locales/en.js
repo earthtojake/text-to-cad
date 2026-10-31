@@ -184,7 +184,7 @@ export default {
   "progress.snapshot.write": "Writing the picture",
   "progress.inspect-measure.measure": "Measuring parts",
   "progress.update.install": "Installing the update",
-  "progress.update.kernel": "Installing the CAD kernel",
+  "progress.update.build123d": "Installing build123d",
   "progress.update.apps": "Updating the apps",
   "progress.update.restart": "Restarting",
 

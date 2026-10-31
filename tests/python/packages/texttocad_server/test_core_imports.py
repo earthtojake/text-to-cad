@@ -8,7 +8,7 @@
 - **The server** (``texttocad-server``: ``cad_server``): what runs in the daemon or a command -- the
   daemon, the registry, the HTTP API, the CAD Viewer's and the CAD app's servers, every verb, the
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
-  importing every module of it loads no kernel module, not even bound lazily (the kernel extra lives in
+  importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
 - **The shim** (``texttocad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
   library alone.
@@ -31,7 +31,7 @@ add_sources()
 # Each distribution's source tree and the top-level packages it holds.
 TREES = {LIBRARY / "src": ("cad", "cadgen"), SERVER / "src": ("cad_server",), SHIM / "src": ("cad_mcp",)}
 SERVER_PACKAGE, SHIM_PACKAGE = "cad_server", "cad_mcp"
-# The kernel extra's distributions, as their modules are named, and what build123d brings.
+# The build123d extra's distributions, as their modules are named, and what build123d brings.
 KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib", "shapely", "lib3mf", "scipy",
           "sklearn", "IPython")
 # What a model's process and a worker import first: none of them may bring a module of the server's.

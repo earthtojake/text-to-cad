@@ -25,7 +25,7 @@ skills for. Registering the current installation writes the plugin folder again,
 that is gone.
 
 It makes the CAD kernel environment, the base every build and the engine's own kernel
-processes start from (``cad_server._internal.base``: ``texttocad[kernel]`` at this release),
+processes start from (``cad_server._internal.base``: ``texttocad[build123d]`` at this release),
 when it is not made -- an installation that carries the kernel itself is its own -- saying what uv
 does as it works, so the first build after an install waits on nothing; ``--no-server`` says only
 whether it is made. Then it proves the CAD kernel loads there. ``OCP`` is imported in a fresh

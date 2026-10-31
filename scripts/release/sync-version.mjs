@@ -30,7 +30,7 @@ export const tomlTargets = [
 ];
 
 // A requirement pinning one of the three distributions at a release: the library (`texttocad==`, with its
-// kernel extra or not), the server (`texttocad-server==`) and the shim (`texttocad-mcp==`).
+// build123d extra or not), the server (`texttocad-server==`) and the shim (`texttocad-mcp==`).
 export const pinPattern = /(texttocad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
 // Every skill that runs the server names the version its installation registers as

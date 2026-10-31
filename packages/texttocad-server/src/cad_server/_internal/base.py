@@ -2,18 +2,18 @@
 
 The ``cadgen`` wheel's required dependencies are the core -- the engine's server, the ``cadgen``
 command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
-its ``kernel`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
+its ``build123d`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
 processes (the standby, the documents worker, the meshing and reading pools, the render processes:
 ``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``).
 
-- **What it is**: ``texttocad[kernel]`` at the installation's own release -- or the source tree, or the
+- **What it is**: ``texttocad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
   Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
   base are one Python. uv makes it at ``base/<key>`` in the cache folder, its files hard links into
   uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
-  extra: ``pip install 'texttocad[kernel]'``, a checkout's development environment) is its own base, and
+  extra: ``pip install 'texttocad[build123d]'``, a checkout's development environment) is its own base, and
   none is made.
 - **The key** digests the installation (its environment, the version it runs as, its release and
   where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
@@ -46,7 +46,7 @@ from typing import Any, Callable
 
 from cad.engine import places
 
-__all__ = ["BASE", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
+__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
            "ensure", "failure", "find_uv", "interpreter", "kernel", "make", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
@@ -54,8 +54,10 @@ __all__ = ["BASE", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "R
 BASE = "base"
 MARKER = places.MARKER
 SCHEMA = places.MARKER_SCHEMA
-# The library, which the base installs with its kernel, and the server, which a release folder holds.
+# The library, which the base installs with its kernel (its extra, ``EXTRA``), and the server, which a release
+# folder holds.
 LIBRARY = "texttocad"
+EXTRA = "build123d"
 SERVER = "texttocad-server"
 # The modules whose presence makes an environment carry the CAD kernel.
 KERNEL_MODULES = ("OCP", "build123d")
@@ -117,10 +119,10 @@ class Installation:
         """What installs this installation's library with its kernel: the library's source tree editable,
         the wheel it was installed from, or its release."""
         if self.source is None:
-            return [f"{LIBRARY}[kernel]=={self.release}"]
+            return [f"{LIBRARY}[{EXTRA}]=={self.release}"]
         if os.path.isdir(self.source):
-            return ["-e", f"{self.source}[kernel]"]
-        return [f"{LIBRARY}[kernel] @ {self.source}"]
+            return ["-e", f"{self.source}[{EXTRA}]"]
+        return [f"{LIBRARY}[{EXTRA}] @ {self.source}"]
 
 
 @functools.cache
@@ -317,10 +319,10 @@ def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
 
 
 def recipe(installation: Installation) -> Recipe:
-    """The base's recipe: ``texttocad[kernel]`` as the installation installs it, on its own Python."""
+    """The base's recipe: ``texttocad[build123d]`` as the installation installs it, on its own Python."""
     return Recipe(what=WHAT, python=installation.executable, requirement=tuple(installation.requirement()),
                   release=installation.release, source=installation.source,
-                  making=f"making {WHAT}, once: {LIBRARY}[kernel] {installation.release} on Python {installation.python}",
+                  making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {installation.python}",
                   downloading="downloading the CAD kernel (about 220 MB) and what it needs, once")
 
 
@@ -436,7 +438,7 @@ def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
 def _unlisted(done: subprocess.CompletedProcess, release: str) -> bool:
     """Whether uv found no ``texttocad==<release>`` (or the server's) on its index."""
     said = " ".join((done.stderr or done.stdout or "").split())
-    return any(f"no version of {name}=={release}" in said for name in (LIBRARY, f"{LIBRARY}[kernel]", SERVER))
+    return any(f"no version of {name}=={release}" in said for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER))
 
 
 def _remove(env: Path, what: str = WHAT) -> None:
@@ -503,6 +505,6 @@ def failure(step: list[str], said: str, recipe: Recipe) -> str:
         return f"uv cannot make {what} on {recipe.python}: {words}"
     release = recipe.release
     if recipe.source is None and any(f"no version of {name}=={release}" in explained
-                                     for name in (LIBRARY, f"{LIBRARY}[kernel]", SERVER)):
+                                     for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER)):
         return f"release {release} is on no package index uv reads: {explained}"
     return f"uv could not make {what}: {words}"

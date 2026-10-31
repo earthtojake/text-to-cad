@@ -80,7 +80,7 @@ def surface() -> dict:
     installations.register("9.9.9", (str(console), str(python), str(folder)))
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
-    frame = progress.event("update", "kernel", job="9.9.9", detail="d", done=1, total=4)
+    frame = progress.event("update", "build123d", job="9.9.9", detail="d", done=1, total=4)
     # What the helper runs of the release it leaves current: its own plugin folder's refresh.
     with mock.patch.object(subprocess, "run", side_effect=Started) as run:
         try:

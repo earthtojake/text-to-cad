@@ -477,7 +477,7 @@ supplies the links (`src/host/viewerLinks.js`): its version (with its build's id
 `v0.8.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
-daily version check, read from `/__cad/version` with the server's description as the page
+hourly version check, read from `/__cad/version` with the server's description as the page
 starts (`main.tsx`) and again whenever the person comes back to it. A press updates
 (`POST /__cad/update`): the engine installs the release, updates each agent app and restarts on it,
 on the same port with the same token; the button fills while it works and spins while the engine

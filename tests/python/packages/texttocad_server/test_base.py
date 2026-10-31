@@ -1,4 +1,4 @@
-"""The base (``cad_server._internal.base``): the one environment, ``texttocad[kernel]`` at the installation's
+"""The base (``cad_server._internal.base``): the one environment, ``texttocad[build123d]`` at the installation's
 release on its Python, made once and reused; an installation that carries the kernel is its own; and
 ``cad run`` runs the script with its Python.
 
@@ -92,8 +92,8 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(venv, ["uv", "venv", "--no-project", "--python", self.installation.executable, str(env)],
                          "on the installation's own Python")
         self.assertEqual(pip, ["uv", "pip", "install", "--python", str(base.interpreter(env)), "--link-mode",
-                               "hardlink", f"texttocad[kernel]=={RELEASE}", "--offline"])
-        self.assertEqual(self.said, [f"making the CAD kernel environment, once: texttocad[kernel] {RELEASE} on Python "
+                               "hardlink", f"texttocad[build123d]=={RELEASE}", "--offline"])
+        self.assertEqual(self.said, [f"making the CAD kernel environment, once: texttocad[build123d] {RELEASE} on Python "
                                      f"3.14.2, in {env}"])
         # Its marker names the installation it belongs to: a process there reaches that engine.
         home = places.home(str(env))
@@ -129,8 +129,8 @@ class BaseTest(unittest.TestCase):
         tree = self.root / "checkout"
         tree.mkdir()
         wheel = "file:///wheels/texttocad-9.9.9-py3-none-any.whl"
-        for source, requirement in ((None, [f"texttocad[kernel]=={RELEASE}"]), (str(tree), ["-e", f"{tree}[kernel]"]),
-                                    (wheel, [f"texttocad[kernel] @ {wheel}"])):
+        for source, requirement in ((None, [f"texttocad[build123d]=={RELEASE}"]), (str(tree), ["-e", f"{tree}[build123d]"]),
+                                    (wheel, [f"texttocad[build123d] @ {wheel}"])):
             with self.subTest(source=source):
                 found = base.Installation(**{**base.dataclasses.asdict(self.installation), "source": source})
                 self.assertEqual(found.requirement(), requirement)

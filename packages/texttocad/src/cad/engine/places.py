@@ -15,7 +15,8 @@ engine and the same installation by the same rules, from the standard library al
   whose engine a client starts when none answers (``current``, ``engine``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
   starter (``detached``), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
-  environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base).
+  environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
+  the library with its ``build123d`` extra).
 """
 
 from __future__ import annotations

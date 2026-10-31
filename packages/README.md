@@ -5,7 +5,7 @@ that support the applications in `apps/docs`, `apps/web` and `apps/mcp`:
 
 | Directory | Identity | Responsibility |
 | --- | --- | --- |
-| [texttocad](texttocad/README.md) | Python distribution `texttocad`, imported as `cad` | The library: what a model imports and what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol a client speaks; the CAD kernel is its `kernel` extra |
+| [texttocad](texttocad/README.md) | Python distribution `texttocad`, imported as `cad` | The library: what a model imports and what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol a client speaks; the CAD kernel is its `build123d` extra |
 | [texttocad-server](texttocad-server/README.md) | Python distribution `texttocad-server`, imported as `cad_server` | The server: the engine's daemon, the command, the CAD Viewer's and the CAD app's servers, the installations, and the bundled runtime outputs |
 | [texttocad-mcp](texttocad-mcp/README.md) | Python distribution `texttocad-mcp`, imported as `cad_mcp` | The shim: the stdio transport an agent app starts, the standard library alone |
 | `aliases/` | Python distributions `cadgen` and `text-to-cad` | The library under its earlier and the product's names: each a pin of `texttocad` at the same release, nothing of its own |

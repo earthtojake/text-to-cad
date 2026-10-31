@@ -168,7 +168,7 @@ export default {
   "progress.snapshot.write": "画像を書き込んでいます",
   "progress.inspect-measure.measure": "パーツを計測しています",
   "progress.update.install": "アップデートをインストールしています",
-  "progress.update.kernel": "CAD カーネルをインストールしています",
+  "progress.update.build123d": "build123d をインストールしています",
   "progress.update.apps": "アプリを更新しています",
   "progress.update.restart": "再起動しています",
 

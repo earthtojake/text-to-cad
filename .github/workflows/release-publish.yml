@@ -587,7 +587,7 @@ jobs:
           git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"
 
   # The version feed (api.texttocad.dev/v1/versions, apps/api) names the newest release PyPI lists, and
-  # the install command and every copy's daily update check read it; but Vercel's edge keeps each answer
+  # the install command and every copy's hourly update check read it; but Vercel's edge keeps each answer
   # an hour (s-maxage=3600), so for up to an hour after a release the feed can still name the one before.
   # Once the install branches carry the release -- the plugin every install takes -- this purges the API
   # project's CDN cache, and the feed names the release at once. Its own job, after the branches: the

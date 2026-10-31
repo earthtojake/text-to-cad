@@ -462,7 +462,7 @@ class InstallUpdateAndUninstall(Fixture):
 
         def ensure(installation=None, *, make=True, told=None):
             if make and "env" not in made:
-                told("making the CAD kernel environment, once: texttocad[kernel] in the cache folder")
+                told("making the CAD kernel environment, once: texttocad[build123d] in the cache folder")
                 made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
             return made.get("env")
 
@@ -473,14 +473,14 @@ class InstallUpdateAndUninstall(Fixture):
             first = self.run_setup()
             again = self.run_setup()
         self.assertEqual(planned[0], 0)
-        self.assertRegex(planned[1], rf"\n  CAD kernel\s+make\s+texttocad\[kernel\] {re.escape(core.release)} in "
+        self.assertRegex(planned[1], rf"\n  build123d\s+make\s+texttocad\[build123d\] {re.escape(core.release)} in "
                                      rf"{re.escape(where)}, once\n")
         self.assertNotIn("making", planned[1], "a dry run makes nothing")
         self.assertEqual(first[0], 0, first[1])
-        self.assertIn("kernel   making the CAD kernel environment, once: texttocad[kernel] in the cache folder\n", first[1])
+        self.assertIn("build123d making the CAD kernel environment, once: texttocad[build123d] in the cache folder\n", first[1])
         self.assertEqual(again[0], 0)
         self.assertNotIn("making", again[1])
-        self.assertRegex(again[1], r"CAD kernel\s+leave\s+texttocad\[kernel\] ")
+        self.assertRegex(again[1], r"build123d\s+leave\s+texttocad\[build123d\] ")
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")

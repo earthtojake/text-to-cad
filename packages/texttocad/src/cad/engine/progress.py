@@ -44,7 +44,7 @@ counted, the file's name its detail. A snapshot says ``scene`` while the documen
 and its scene made, ``draw`` while the frame is drawn, and ``write`` as the picture is written. A
 measurement says ``measure``, counted as the engine has each part's facts: the ones it holds at
 once, the rest as the pool answers their batches (``serve.Server.measure``). An update says
-``install`` while the release's folder is made, ``kernel`` while its base is, ``apps`` while the agent
+``install`` while the release's folder is made, ``build123d`` while its base is, ``apps`` while the agent
 apps' plugins are updated and ``restart`` as the engine drains for the switch, counted of the four
 (``cad_server._internal.update``); its frames are read by the page that asked, from the update's state.
 
@@ -77,7 +77,7 @@ STAGES: dict[str, dict[str, str]] = {
     "export": {"read": "Reading the document", "write": "Writing files"},
     "snapshot": {"scene": "Making the scene", "draw": "Drawing the picture", "write": "Writing the picture"},
     "inspect-measure": {"measure": "Measuring parts"},
-    "update": {"install": "Installing the update", "kernel": "Installing the CAD kernel",
+    "update": {"install": "Installing the update", "build123d": "Installing build123d",
                "apps": "Updating the apps", "restart": "Restarting"},
 }
 KINDS = tuple(STAGES)

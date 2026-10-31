@@ -22,7 +22,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 # None of it imports the CAD kernel (a test holds that): the server makes the environment the kernel
-# runs in (the base, `texttocad[kernel]` at this release) and starts its kernel processes there.
+# runs in (the base, `texttocad[build123d]` at this release) and starts its kernel processes there.
 dependencies = [
   # The library at this very release, without its kernel: the document model, the protocol, the
   # words the verbs say. Exact: one release of the two is one product.

@@ -1,6 +1,6 @@
 """Whether a newer text-to-cad is out, which the update button says, and which release an update moves to.
 
-At most once a day, cadgen reads the version feed (``GET /versions``, ``cad_server/_internal/api.py``)::
+At most once an hour, cadgen reads the version feed (``GET /versions``, ``cad_server/_internal/api.py``)::
 
     {"latest": "0.9.0"}
 
@@ -31,8 +31,8 @@ every agent app on the computer (``cad setup``). A skill's ``cadgen`` command sa
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
 the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
-or tool call waits on it -- what is told comes from the feed as last read. Each day's attempt is
-spent before it is made, so a feed that cannot be reached is tried once a day.
+or tool call waits on it -- what is told comes from the feed as last read. Each hour's attempt is
+spent before it is made, so a feed that cannot be reached is tried once an hour.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ LOG = logging.getLogger("cad_server.updates")
 INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
 INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
 FILE = "versions.json"  # the feed as last read, in the state directory
-CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again
+CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
 _RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
@@ -116,7 +116,7 @@ def _save(path: Path, checked: float, feed: dict[str, Any] | None) -> None:
 
 
 def _due(kept: dict[str, Any], key: str, now: float) -> bool:
-    """Whether a day has passed since ``key`` (a clock set back counts as a day)."""
+    """Whether an hour has passed since ``key`` (a clock set back counts as an hour)."""
     then = kept.get(key)
     return not isinstance(then, (int, float)) or not 0 <= now - then < CHECK_SECONDS
 
@@ -129,22 +129,22 @@ def _get(url: str) -> Any:
         request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "cadgen"})
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - http(s) only (`api_url`)
             return json.loads(response.read(MAX_BYTES))
-    except Exception:  # noqa: BLE001 - a check that fails is tried again tomorrow
+    except Exception:  # noqa: BLE001 - a check that fails is tried again in an hour
         LOG.debug("could not read the version feed at %s", url, exc_info=True)
         return None
 
 
 def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, path: Path | None = None,
          get: Callable[[str], Any] | None = None, asked: bool = False) -> dict[str, Any] | None:
-    """The feed as last read, read again first (``fetch``) when that was a day ago or more -- or now,
+    """The feed as last read, read again first (``fetch``) when that was an hour ago or more -- or now,
     ``force``: an update a person ``asked`` for."""
     path = path or _cache()
     kept = _load(path)
     known = parse_feed(kept.get("feed"))
     now = time.time() if now is None else now
     if fetch and checking(asked=asked) and (force or _due(kept, "checked", now)):
-        # The day's attempt is spent before it is made: a process that exits mid-request, or a feed
-        # that never answers, costs one wait a day.
+        # The hour's attempt is spent before it is made: a process that exits mid-request, or a feed
+        # that never answers, costs one wait an hour.
         _save(path, now, known)
         fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
         if fresh is not None:

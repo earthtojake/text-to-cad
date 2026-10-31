@@ -2,7 +2,7 @@
 (``cad run model.py``), ``-m`` or ``-c``.
 
 The environment is the installation's base (``cad_server._internal.base``): the library with the CAD
-kernel, on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
+kernel (``texttocad[build123d]``), on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
 while it is made; an installation that carries the kernel itself is its own. Its Python runs the
 arguments, in the caller's folder and environment, with the program's own folder last on its module
 search path, not first (the library's ``cad._internal.program``): a project's ``cad.py`` never stands in

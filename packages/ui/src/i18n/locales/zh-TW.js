@@ -169,7 +169,7 @@ export default {
   "progress.snapshot.write": "正在寫入圖片",
   "progress.inspect-measure.measure": "正在測量零件",
   "progress.update.install": "正在安裝更新",
-  "progress.update.kernel": "正在安裝 CAD 核心",
+  "progress.update.build123d": "正在安裝 build123d",
   "progress.update.apps": "正在更新應用程式",
   "progress.update.restart": "正在重新啟動",
 

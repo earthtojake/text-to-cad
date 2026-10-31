@@ -19,7 +19,7 @@ current installation's
 2. **Plan.** Under a lock in the state folder, every agent app is read (``cad_server._internal.providers``),
    and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
-   3245); and the CAD kernel. ``--dry-run`` stops there and writes nothing. Nothing is asked.
+   3245); and build123d, the CAD kernel. ``--dry-run`` stops there and writes nothing. Nothing is asked.
 3. **An earlier release's engine.** An engine of an earlier release serving that port (one whose door
    is not the device's engine's) that nothing uses (no app server holds it, no page watches it, no
    request is underway) is stopped by that installation's own ``stop``, found by its record -- an 0.8
@@ -29,8 +29,8 @@ current installation's
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
-5. **The CAD kernel.** The environment every build and the engine's own kernel processes start from,
-   ``texttocad[kernel]`` at this release (``cad_server._internal.base``), made now when it is not, so the
+5. **build123d.** The environment every build and the engine's own kernel processes start from,
+   ``texttocad[build123d]`` at this release (``cad_server._internal.base``), made now when it is not, so the
    first build after an install or an update waits on nothing: its line said while uv works, and a step
    that fails when it cannot be made. An installation that carries the kernel itself makes none.
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
@@ -119,7 +119,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
-                        "as the update button does: its release folder, the CAD kernel, each app's own command, and "
+                        "as the update button does: its release folder, build123d, each app's own command, and "
                         "the engine switched to it. With the version feed out of reach, this release's setup.",
             epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
@@ -128,7 +128,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
-                        "date there: its release folder, the CAD kernel, each app's own command, Claude Desktop's "
+                        "date there: its release folder, build123d, each app's own command, Claude Desktop's "
                         "config, second copies removed, and the engine switched to this release. `cad update` "
                         "runs the newest release's; `cad uninstall` takes it out.",
             epilog=f"The install command runs this with the newest release: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
@@ -475,7 +475,7 @@ class Installer:
         after an install waits on nothing. None for an installation that carries the kernel itself."""
         from cad_server._internal import base
 
-        row: dict[str, Any] = {"app": "kernel", "label": "CAD kernel", "action": "leave"}
+        row: dict[str, Any] = {"app": "build123d", "label": "build123d", "action": "leave"}
         try:
             installation = base.Installation.here()
             if installation.kernel:
@@ -486,8 +486,8 @@ class Installer:
             return {**row, "subject": f"unknown ({error})"}
         shown = self.providers.shown(str(folder), self.machine)
         if found is not None:
-            return {**row, "subject": f"texttocad[kernel] {installation.release} in {shown}"}
-        return {**row, "action": "make", "subject": f"texttocad[kernel] {installation.release} in {shown}, once"}
+            return {**row, "subject": f"texttocad[{base.EXTRA}] {installation.release} in {shown}"}
+        return {**row, "action": "make", "subject": f"texttocad[{base.EXTRA}] {installation.release} in {shown}, once"}
 
     def _make_kernel(self) -> bool:
         """The CAD kernel environment made (``_kernel``'s ``make``), each line uv's work says as it goes;
@@ -495,9 +495,9 @@ class Installer:
         from cad_server._internal import base
 
         try:
-            base.ensure(told=lambda line: self.say(f"kernel   {line}"))
+            base.ensure(told=lambda line: self.say(f"build123d {line}"))
         except base.Refused as refused:
-            self.say(f"kernel   {refused}")
+            self.say(f"build123d {refused}")
             return False
         return True
 
@@ -790,7 +790,7 @@ class Installer:
             # command fails fails the run too, and the rest goes on: the switch among it.
             kernel_failed = False
             if made:
-                self.stage("kernel", f"texttocad[kernel] {self.release}")
+                self.stage("build123d", f"texttocad[build123d] {self.release}")
                 kernel_failed = not self._make_kernel()
             failed = kernel_failed
             self.stage("apps")

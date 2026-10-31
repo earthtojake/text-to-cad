@@ -4,13 +4,13 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports) and its daily version check, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports) and its hourly version check, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 30, 2026">
+    <LegalPage title="Privacy Policy" updated="October 31, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
-            <strong>The version check:</strong> at most once a day, text-to-cad (the CAD app or the CAD viewer)
+            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
@@ -204,7 +204,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us, apart from the daily version check. step.parts
+            The plugin works without contacting us, apart from the hourly version check. step.parts
             receives a request only when you ask your agent to search for or download a part.
           </li>
           <li>
@@ -241,7 +241,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.9) where text-to-cad
-            runs turns the daily version check
+            runs turns the hourly version check
             off; CAD then never says when there is an update.
           </li>
           <li>

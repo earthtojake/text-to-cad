@@ -182,28 +182,30 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
 }
 
 # An alias, packages/aliases/PROJECT: its dist-info alone, and the library at the release (a project that
-# declares the earlier name gets the library it names), its `kernel` extra the library's.
+# declares the earlier name gets the library it names), its extras the library's `build123d` extra under
+# each name it keeps (`build123d`, and for cadgen `kernel` too, its 0.8 spelling).
 check_alias() {
-  local project="$1" distribution="$2"
+  local project="$1" distribution="$2" extras="$3"
   check "aliases/$project" "$distribution" ""
-  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" <<'PY'
+  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" "$extras" <<'PY'
 import sys, zipfile
 
-wheel, version = sys.argv[1], sys.argv[2]
+wheel, version, extras = sys.argv[1], sys.argv[2], sys.argv[3].split()
 with zipfile.ZipFile(wheel) as archive:
     metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
 requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
-wanted = [f"Requires-Dist: texttocad=={version}", f'Requires-Dist: texttocad[kernel]=={version}; extra == "kernel"']
+wanted = [f"Requires-Dist: texttocad=={version}",
+          *(f'Requires-Dist: texttocad[build123d]=={version}; extra == "{extra}"' for extra in extras)]
 if requires != wanted:
-    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its kernel extra "
+    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its build123d extra "
              f"({wanted}) alone")
 PY
 }
 
 check texttocad texttocad "cad|cadgen|texttocad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
 check texttocad-mcp texttocad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
-check_alias cadgen cadgen
-check_alias text-to-cad text_to_cad
+check_alias cadgen cadgen "build123d kernel"
+check_alias text-to-cad text_to_cad build123d
 # The server's last: the runtime checks below read its wheel and listing.
 check texttocad-server texttocad_server "cad_server" "${SERVER_REQUIRED[@]}"
 

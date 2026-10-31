@@ -1425,7 +1425,7 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
     except ImportError as exc:
         raise RuntimeError(
             "@eng_drawing writes a PDF and its renderer is missing: "
-            f"{exc}. Install the library with its kernel (pip install 'texttocad[kernel]')."
+            f"{exc}. Install the library with its kernel (pip install 'texttocad[build123d]')."
         ) from exc
     from cad._internal.atomic_replace import temp_suffix
 

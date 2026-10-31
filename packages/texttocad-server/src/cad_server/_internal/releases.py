@@ -1,7 +1,7 @@
 """The releases of cadgen this device keeps, each the folder an update installs it in.
 
 ``<state>/releases/<version>`` is a release's core -- the ``cadgen`` command, the engine, the CAD
-Viewer's server, the MCP shim, without the kernel (its ``kernel`` extra goes in the base,
+Viewer's server, the MCP shim, without the kernel (its ``build123d`` extra goes in the base,
 ``cad_server._internal.base``) -- in a virtual environment of the engine's own interpreter, made by uv
 as the base is (``base.make``): its files hard links into uv's cache, asked of the cache first
 (``--offline``) and of the network only for what it does not hold, its marker

@@ -39,7 +39,7 @@ redeploys. Nothing about it follows a release.
 
 ## Routes
 
-Its `/v1` routes serve the version feed cadgen's daily check reads (`cad_server/updates.py` in
+Its `/v1` routes serve the version feed cadgen's hourly check reads (`cad_server/updates.py` in
 `packages/texttocad-server`), and receive its telemetry (`cad_server/analytics.py`): the usage
 counts the CAD app, the browser viewer and a `cad` command's sender (and 0.7's build
 daemon) send, which it checks and passes on to PostHog. Clients know only
