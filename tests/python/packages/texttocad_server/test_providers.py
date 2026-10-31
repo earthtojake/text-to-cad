@@ -276,7 +276,7 @@ class Home:
         environ.update({"PATH": str(self.bin), "HOME": str(self.home), "USERPROFILE": str(self.home),
                         "FAKE_WORLD": str(self.world), "FAKE_HOME": str(self.home),
                         "CLAUDE_DESKTOP_CONFIG": str(self.desktop)})
-        self.machine = providers.Machine(self.home, environ, bundled={})
+        self.machine = providers.Machine(self.home, environ, bundled={}, homebrew=())
         self.set(skills=list(providers.SKILLS), skills_folders={
             agent: str(providers.skills_folder(agent, self.machine)) for agent in providers.SKILLS_AGENTS})
 
@@ -566,6 +566,31 @@ class DetectionAndPlan(Fixture):
         installed.write_text("", encoding="utf-8")
         installed.chmod(0o755)
         self.assertEqual(providers.uvx(home.machine), str(installed))
+
+    def test_an_engine_a_gui_app_started_finds_uvx_where_uv_s_installer_or_homebrew_put_it(self) -> None:
+        # An app opened from the Dock, and the engine it starts, have none of the person's PATH: Claude
+        # Desktop's entry still gets a uvx that stays, from uv's installer's folders, else Homebrew's.
+        home = self.make()
+        home.machine.environ.pop("XDG_DATA_HOME", None)
+        home.machine.environ["PATH"] = str(self.root / "usr-bin")
+        name = "uvx.exe" if os.name == "nt" else "uvx"
+
+        def put(folder: Path) -> Path:
+            folder.mkdir(parents=True)
+            (folder / name).write_text("", encoding="utf-8")
+            (folder / name).chmod(0o755)
+            return folder / name
+
+        brew = self.root / "opt" / "homebrew" / "bin"
+        home.machine.homebrew = (str(brew),)
+        self.assertIsNone(providers.uvx(home.machine))
+        if os.name != "nt":  # Homebrew is not Windows'
+            found = put(brew)
+            self.assertEqual(providers.uvx(home.machine), str(found))
+        data = self.root / "xdg" / "share"
+        home.machine.environ["XDG_DATA_HOME"] = str(data)
+        installed = put(data.parent / "bin")
+        self.assertEqual(providers.uvx(home.machine), str(installed), "uv's installer's folder before Homebrew's")
 
 
 class ApplyReadBackAndTakeBack(Fixture):

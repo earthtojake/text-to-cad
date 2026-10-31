@@ -15,8 +15,9 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
   (``FED_BY``), so where Claude Code has the plugin they need none of their own, and a copy of
   theirs is a second copy.
 - **Claude Desktop** (its chat): CAD's server alone, ``mcpServers.cad`` in its config file, run by
-  ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx,
-  never one uv keeps in its cache or a release folder holds (``transient``), which go from under it.
+  ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx
+  (on PATH, else where uv's installer or Homebrew puts it), never one uv keeps in its cache or a release
+  folder holds (``transient``), which go from under it.
   A switch of the engine moves it to the release it leaves current, back as much as forward
   (``refresh_plan``).
 - **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
@@ -128,6 +129,9 @@ RESTART = {
 }
 # The CLIs an app bundles, for an app whose terminal command may be missing or older.
 BUNDLED = {"codex": ("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",)}
+# Where Homebrew puts the commands it installs (Apple silicon's, Intel macOS's, Linux's): never on the PATH of
+# an app opened from the Dock or a menu, nor of the engine such an app starts (``uvx``).
+HOMEBREW = ("/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin")
 # A native command may clone a repository; a listing answers at once or is broken.
 COMMAND_SECONDS = 900
 LIST_SECONDS = 120
@@ -179,15 +183,18 @@ def _subprocess(argv: List[str], environ: Dict[str, str], timeout: float) -> Ran
 
 class Machine:
     """Where the apps live and how a command runs: the home, the environment (its PATH finds the
-    apps' commands), the platform, the CLIs apps bundle, and the runner. :meth:`here` is this one."""
+    apps' commands), the platform, the CLIs apps bundle, Homebrew's folders, and the runner.
+    :meth:`here` is this one."""
 
     def __init__(self, home: Any, environ: Mapping[str, str], platform: str = sys.platform,
                  bundled: Optional[Mapping[str, Sequence[str]]] = None,
-                 runner: Optional[Callable[[List[str], Dict[str, str], float], Ran]] = None) -> None:
+                 runner: Optional[Callable[[List[str], Dict[str, str], float], Ran]] = None,
+                 homebrew: Optional[Sequence[str]] = None) -> None:
         self.home = Path(home)
         self.environ = dict(environ)
         self.platform = platform
         self.bundled = BUNDLED if bundled is None else bundled
+        self.homebrew = HOMEBREW if homebrew is None else homebrew
         self._runner = runner or _subprocess
 
     @classmethod
@@ -468,20 +475,31 @@ def lasting(path: str) -> str:
 def uvx(machine: Optional[Machine] = None) -> Optional[str]:
     """uvx at its absolute path, which an app opened from the Dock or the Start menu needs, and one that
     stays (never ``transient``: a ``uv cache clean`` or an update would take it from under the app): the
-    first on PATH, else where uv's installer puts it."""
+    first on PATH, else where uv's own installer puts it, else where Homebrew does (``uv_folders``) --
+    an engine a GUI app started has none of the person's PATH."""
     machine = _machine(machine)
     name = "uvx.exe" if machine.windows else "uvx"
     for folder in lasting(machine.environ.get("PATH", os.defpath)).split(os.pathsep):
         found = shutil.which("uvx", path=folder) if folder else None
         if found and not transient(found):
             return os.path.abspath(found)
-    environ, home = machine.environ, machine.home
-    for folder in (environ.get("UV_INSTALL_DIR"), environ.get("XDG_BIN_HOME"), str(home / ".local" / "bin"),
-                   str(home / ".cargo" / "bin")):
-        for candidate in ((Path(folder) / name, Path(folder) / "bin" / name) if folder else ()):
+    for folder in uv_folders(machine):
+        for candidate in (Path(folder) / name, Path(folder) / "bin" / name):
             if candidate.is_file() and os.access(candidate, os.X_OK) and not transient(candidate):
                 return str(candidate)
     return None
+
+
+def uv_folders(machine: Optional[Machine] = None) -> List[str]:
+    """Where uv is when PATH has no say, in order: where its own installer puts it (``UV_INSTALL_DIR``,
+    ``XDG_BIN_HOME``, ``$XDG_DATA_HOME/../bin``, ``~/.local/bin``; ``~/.cargo/bin`` before uv 0.5), then
+    Homebrew's folders (``Machine.homebrew``), but on Windows."""
+    machine = _machine(machine)
+    environ, home = machine.environ, machine.home
+    data = environ.get("XDG_DATA_HOME")
+    folders = [environ.get("UV_INSTALL_DIR"), environ.get("XDG_BIN_HOME"), str(Path(data).parent / "bin") if data else None,
+               str(home / ".local" / "bin"), str(home / ".cargo" / "bin"), *(() if machine.windows else machine.homebrew)]
+    return [folder for folder in folders if folder]
 
 
 def codex_cli(machine: Optional[Machine] = None) -> Optional[str]:
