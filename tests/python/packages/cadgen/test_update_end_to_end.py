@@ -8,7 +8,8 @@ the way back.
 
 Both wheels are this source tree's cadgen, with a ``kernel`` extra that names nothing: the update's
 path is what is tested, and the kernel's install is uv's (the base's own tests make it). uv takes
-cadgen's dependencies from its cache where it holds them, as an update does on a person's machine."""
+cadgen's dependencies from its cache where it holds them, as an update does on a person's machine;
+the two wheels it keeps there, under versions of this run's own, are taken out again (``forget``)."""
 
 from __future__ import annotations
 
@@ -38,7 +39,10 @@ add_repo_path("packages/cadgen/src")
 from cadgen._internal import base, providers  # noqa: E402
 
 SOURCE = REPO_ROOT / "packages" / "cadgen"
-A, B = "9.0.0", "9.0.1"
+# Releases of this run alone (the process's id in them): what uv keeps of their wheels is this run's
+# to take out again, and a run beside it in another checkout builds others.
+_RUN = os.getpid() % 100_000
+A, B = f"9.{_RUN}.0", f"9.{_RUN}.1"
 # The ports the person's own engines and other sessions' serve on: never this test's.
 TAKEN = range(3245, 3251)
 WINDOWS = os.name == "nt"
@@ -96,6 +100,32 @@ class Feed(http.server.ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), Handler)
 
 
+def forget(uv_cache: Path, versions: tuple[str, ...]) -> list[str]:
+    """This run's wheels taken out of uv's cache: uv keeps each wheel a folder of wheels served it --
+    its unpacked archive, and the index entry that names it -- after the folder is gone, about 5 MB a
+    wheel. Found by what they are (``cadgen-<version>.dist-info``, the entries named by the version), so
+    nothing else of the cache is touched, and nothing at all where uv lays its cache out otherwise."""
+    removed: list[str] = []
+    root = uv_cache.resolve()
+    for version in versions:
+        for found in root.glob(f"archive-v*/*/cadgen-{version}.dist-info"):
+            shutil.rmtree(found.parent, ignore_errors=True)
+            removed.append(str(found.parent))
+        for entry in root.glob(f"wheels-v*/index/*/cadgen/{version}-*"):
+            try:
+                entry.unlink()  # a link to the archive, or its lock or revision file
+            except OSError:
+                shutil.rmtree(entry, ignore_errors=True)
+            removed.append(str(entry))
+    for folder in root.glob("wheels-v*/index/*/cadgen"):
+        for empty in (folder, folder.parent):
+            try:
+                empty.rmdir()  # only an empty one: an index another run shares keeps its entries
+            except OSError:
+                break
+    return removed
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -145,6 +175,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         command on PATH, nor the Codex app's; the feed and the folder of wheels; the port; no telemetry."""
         uv_cache = os.environ.get("UV_CACHE_DIR") or subprocess.run(
             [base.find_uv(), "cache", "dir"], capture_output=True, text=True, check=True).stdout.strip()
+        self.addCleanup(forget, Path(uv_cache), (A, B))
         dropped = ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "CONDA_PREFIX", "CI", "CODEX_HOME",
                    "CLAUDE_CONFIG_DIR", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
                    "XDG_BIN_HOME", "UV_INSTALL_DIR")
