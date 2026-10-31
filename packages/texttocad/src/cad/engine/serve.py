@@ -718,6 +718,9 @@ class Mesher:
             job.future.set_result(done.result())
 
     def stop(self) -> None:
+        """Every job waiting cancelled and the pool's processes ended, a busy one too: a pool process
+        hears its engine gone only when its watch thread runs (``exit_with_parent``), which a load of the
+        kernel, holding the interpreter, keeps from running for as long as the load takes."""
         with self._wake:
             self._stopped = True
             waiting = [job for queue in self._queued.values() for job in queue]
@@ -728,7 +731,7 @@ class Mesher:
             job.future.cancel()
         self._inline.shutdown(wait=False, cancel_futures=True)
         if self._processes is not None:
-            self._processes.shutdown(wait=False, cancel_futures=True)
+            self._processes.terminate_workers()  # shut down, its queued jobs cancelled, and each process ended
 
 
 def _triangles(data: bytes) -> int:
@@ -1139,7 +1142,7 @@ class Server:
         with self.foreign_lock:
             reader, self.reader = self.reader, None
         if reader is not None:
-            reader.shutdown(wait=False, cancel_futures=True)
+            reader.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
 
     # --- documents -------------------------------------------------------------------
 

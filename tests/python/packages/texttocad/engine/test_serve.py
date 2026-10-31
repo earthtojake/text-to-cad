@@ -628,6 +628,9 @@ class PoolQueueTest(unittest.TestCase):
             def shutdown(self, *args, **kwargs) -> None:
                 pass
 
+            def terminate_workers(self) -> None:
+                pass
+
         def handed_by(count: int) -> None:
             with changed:
                 self.assertTrue(changed.wait_for(lambda: len(handed) >= count, timeout=30), [name for name, _ in handed])
@@ -645,6 +648,28 @@ class PoolQueueTest(unittest.TestCase):
             handed[4][1].set_result(5)
         self.assertEqual([name for name, _future in handed], ["mesh 1", "fact 1", "fact 2", "mesh 2", "mesh 3"])
         self.assertEqual((running.result(1), jobs["fact 1"].result(1), jobs["mesh 3"].result(1)), (1, 2, 5))
+
+
+class PoolStopTest(unittest.TestCase):
+    def test_stop_ends_a_busy_pool_process_rather_than_leave_it_to_notice_its_engine_gone(self) -> None:
+        # A process at work when the engine stops -- on Windows, loading the kernel, its watch thread held off
+        # meanwhile (``exit_with_parent``) -- once outlived the engine's stop and its test's folder. Here the
+        # parent lives on, so only the stop can end it.
+        from tests.python.support import engine_daemon
+
+        mesher = serve.Mesher("processes", workers=1)
+        self.addCleanup(mesher.stop)
+        pid = mesher.run(os.getpid).result(120)
+        busy = mesher.run(time.sleep, 600)
+        deadline = time.monotonic() + 30
+        while not busy.running():  # handed to the one process
+            self.assertLess(time.monotonic(), deadline, "the pool took the job")
+            time.sleep(0.05)
+        mesher.stop()
+        deadline = time.monotonic() + 30
+        while engine_daemon._alive(pid):
+            self.assertLess(time.monotonic(), deadline, "the stop ended the busy pool process")
+            time.sleep(0.05)
 
 
 class MeshCacheTest(unittest.TestCase):
