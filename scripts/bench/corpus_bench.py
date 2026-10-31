@@ -602,7 +602,7 @@ class Bench:
 
     def daemon(self, model: Model) -> list[int]:
         """The pid of the model's own engine daemon, if one holds its door open."""
-        done, _wall = self.run(model, ["-c", "from cad_server.engine.daemon import address; print(address())"], 60)
+        done, _wall = self.run(model, ["-c", "from cad.engine.places import address; print(address())"], 60)
         path = done.stdout.strip() if done is not None and done.returncode == 0 else ""
         if not path or not os.path.exists(path):
             return []
