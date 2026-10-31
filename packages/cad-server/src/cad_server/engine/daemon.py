@@ -1532,26 +1532,50 @@ def _no_kernel(error: BaseException) -> bool:
 # How long a connection to the Windows loopback port has to show its token: anyone on the machine can
 # connect there, so nothing more is read, or waited for, until it has.
 AUTH_SECONDS = 10.0
+# How a request line from a client before the door protocol starts on Windows: its token first.
+_TOKEN_FIRST = b'{"token": "'
 
 
-def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> bytes | None:
-    """On Windows, the request line's first bytes: the client puts its token first
-    (``{"token": "<token>", ...``, ``client._exchange``), so a peer without it is refused after
-    those few bytes and ``AUTH_SECONDS`` at most, before the line is read or parsed. None: refused."""
+def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> tuple[bytes, int] | None:
+    """On Windows, a connection's token shown, and the door protocol it speaks: the door's hello with
+    the token where a pair's id goes (``<token> <protocol>``, ``door.hello``), greeted on the
+    connection as the door greets (``door.greeting``); or, from a client of an earlier release, which
+    says no hello, the request line's first bytes, the token first (``{"token": "<token>", ...``,
+    ``client._exchange``): protocol 0, ungreeted. A peer without the token is refused after a line of
+    ``door.HELLO_LIMIT`` bytes and ``AUTH_SECONDS`` at most, before a request is read or parsed. What
+    was read of the request line, and the protocol; None: refused."""
     import hmac
 
-    expected = b'{"token": "' + daemon.token.encode("ascii") + b'"'
-    connection.settimeout(AUTH_SECONDS)
-    prefix = stream.read(len(expected))
-    if not daemon.token or not hmac.compare_digest(prefix, expected):
+    from cad.engine import door
+
+    if not daemon.token:
         return None
+    token = daemon.token.encode("ascii")
+    connection.settimeout(AUTH_SECONDS)
+    head = stream.read(len(_TOKEN_FIRST))
+    if head == _TOKEN_FIRST:
+        expected = _TOKEN_FIRST + token + b'"'
+        prefix = head + stream.read(len(expected) - len(head))
+        if not hmac.compare_digest(prefix, expected):
+            return None
+        connection.settimeout(None)
+        return prefix, 0
+    line = head + stream.readline(door.HELLO_LIMIT - len(head))
+    ident = door.hello_id(line.removesuffix(b"\n")) if line.endswith(b"\n") else None
+    if ident is None or not hmac.compare_digest(ident.encode("ascii"), token):
+        return None
+    protocol = door.hello_protocol(line.removesuffix(b"\n")) or 0
+    stream.write(door.greeting(min(protocol, door.DOOR_PROTOCOL)))
+    stream.flush()
     connection.settimeout(None)
-    return prefix
+    return b"", protocol
 
 
-def _serve(daemon: Daemon, reader: Any, writer: Any, prefix: bytes = b"") -> None:
+def _serve(daemon: Daemon, reader: Any, writer: Any, prefix: bytes = b"", protocol: int = 0) -> None:
     """One connection: its request line (after ``prefix``, what the Windows check read of it), and
-    every answer line the request sends. A hold keeps the connection until its client goes."""
+    every answer line the request sends. A hold keeps the connection until its client goes.
+    ``protocol``: the door protocol the client's hello spoke (0 for the bare form), carried for the
+    request's handling once a later protocol number changes what it may say."""
     line = prefix + reader.readline()
     if not line:
         return
@@ -1583,28 +1607,31 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, prefix: bytes = b"") -> Non
             daemon.stopping.set()  # its answer sent: the engine whose port is another's stops
 
 
-def _serve_door(daemon: Daemon, ident: str) -> None:
-    """A connection through the door (POSIX): the hello's pair answered (``door.answer``)."""
+def _serve_door(daemon: Daemon, ident: str, protocol: int) -> None:
+    """A connection through the door (POSIX): the hello's pair answered (``door.answer``) in the
+    protocol the hello spoke."""
     from cad.engine import door
 
     def serve(reader: Any, writer: Any) -> None:
         try:
-            _serve(daemon, reader, writer)
+            _serve(daemon, reader, writer, protocol=protocol)
         except (OSError, ValueError):
             pass  # the client went, or sent no request
 
-    door.answer(engine_dir() / door.CLIENTS, ident, serve)
+    door.answer(engine_dir() / door.CLIENTS, ident, serve, protocol)
 
 
 def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
-    """A connection to the Windows loopback port: its token shown first (``_admitted``), then served."""
+    """A connection to the Windows loopback port: its token shown first (``_admitted``: in its hello, or
+    an earlier release's client's request line), then served."""
     with connection:
         stream = connection.makefile("rwb")
         try:
             admitted = _admitted(daemon, connection, stream)
             if admitted is None:
                 return
-            _serve(daemon, stream, stream, admitted)
+            prefix, protocol = admitted
+            _serve(daemon, stream, stream, prefix, protocol)
         except (OSError, ValueError):
             pass
         finally:
@@ -1888,7 +1915,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             from cad.engine.door import Door
 
             try:
-                daemon.door = Door(door_path(), lambda ident: _serve_door(daemon, ident))
+                daemon.door = Door(door_path(), lambda ident, protocol: _serve_door(daemon, ident, protocol))
                 daemon.reached_by(door_path())
             except OSError as error:
                 _note_failure(f"the engine server cannot make its door {door_path()}", error)

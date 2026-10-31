@@ -860,8 +860,8 @@ A client reaches the daemon on POSIX through named pipes in the engine's folder,
 (macOS Seatbelt, deny by default, answers `EPERM` to a Unix socket's connect and to a loopback
 port's bind), while they let a command make and open files in its temporary folder, where the
 engine's folder is, FIFOs among them. Windows keeps its loopback port and port file, the token
-shown first (`daemon._admitted`). The engine's folder (law 2; `daemon.default_state_dir`) is one only the
-user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
+shown first, in the same hello (`daemon._admitted`, **The door's protocol** below). The engine's
+folder (law 2; `daemon.default_state_dir`) is one only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
 the one the system names, `/var/folders/...`, whatever `$TMPDIR` a sandbox sets, so a sandboxed client
 finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cadgen-<uid>`; on Windows, in the
 temporary folder.
@@ -873,15 +873,29 @@ temporary folder.
   or probed: the sandbox refuses `kill` on a process outside it.
 - **A connection.** A client makes a pair of FIFOs in `clients/`, named by a random id (`<id>.up`,
   `<id>.down`), opens each for reading and writing (never blocking, never reading as closed before
-  the daemon has opened it), and writes one hello into the door: its id and a newline, far below
-  `PIPE_BUF` (512 bytes on macOS), so hellos written at once never interleave. The daemon reads the
-  door in one thread and answers each hello in a thread of its own: it opens the pair without
-  blocking or following a link, refuses either end unless it is a FIFO of its own user's, and
-  greets on `down`. The client then opens each pipe again for its one direction, lets the
-  read-write ends go and unlinks the pair's names. From there the connection is the request and
+  the daemon has opened it), and writes one hello into the door: its id, a space, the door protocol
+  it speaks and a newline (`<id> 1\n`), far below `PIPE_BUF` (512 bytes on macOS), so hellos written
+  at once never interleave. The daemon reads the door in one thread and answers each hello in a
+  thread of its own: it opens the pair without blocking or following a link, refuses either end
+  unless it is a FIFO of its own user's, and greets on `down` (`ok 1\n`). The client then opens
+  each pipe again for its one direction, lets the read-write ends go and unlinks the pair's names. From there the connection is the request and
   answer lines a socket carried, through the same code (`daemon._serve`): every verb is untouched.
   Either side leaving is the other's end of file; the daemon ignores `SIGPIPE`, so a client gone
   mid-answer is a write's `BrokenPipeError`.
+- **The door's protocol.** The hello and the greeting carry a number, `door.DOOR_PROTOCOL` (1), so
+  that either can change without a cutover: an app keeps an older plugin's `cad-mcp` for long, and a
+  release gone back to pairs a newer one with an older engine. Within one number, only additions --
+  to the hello, the greeting and the operations -- each a field at the end of its line, which a
+  reader of that number skips; a removal or a rename takes a new number. Each side reads the other's
+  number first: the daemon greets with the number the connection speaks, the lower of its own and
+  the hello's, and the client speaks that one or hangs up (`door.greeted`; `cad-mcp` keeps a copy,
+  as it imports nothing of the library's). The bare forms, `<id>\n` and `ok\n`, are protocol 0,
+  0.8's: the daemon answers a bare hello with a bare greeting, and a client says the bare hello at an
+  earlier release's door, which it asks to stop before it takes the port (**Starting and updating**;
+  `client._protocol`, by the door's name). On Windows the hello goes first on the loopback
+  connection, the port file's token where a pair's id goes, and the greeting comes back on it; a
+  request line that starts with its token instead is an earlier release's client's, protocol 0,
+  ungreeted, and a client says no hello at an earlier release's port.
 - **Leftovers.** A client killed before its greeting leaves its pair: the daemon sweeps pairs no
   connection of its own holds once they are two minutes old, looking at their names and ages
   alone, never opening one, so a sweep never waits. A stopping daemon takes its door away first:

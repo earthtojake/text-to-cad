@@ -677,10 +677,11 @@ class DefaultEngineFolderTest(unittest.TestCase):
 
 class WindowsTokenFirstTest(unittest.TestCase):
     """On Windows the daemon listens on loopback TCP, which any local user can reach: a connection
-    shows its token in its first bytes (the client puts it first), and one that does not is refused
-    before the rest of its line is read or parsed."""
+    shows its token first -- in the door's hello, the token where a pair's id goes, or, from an earlier
+    release's client, in its request line's first bytes -- and one that does not is refused before the
+    rest of its line is read or parsed."""
 
-    def serve(self, payload: bytes):
+    def serve(self, payload: bytes, said: list | None = None):
         import socket
         import threading
         import types
@@ -702,7 +703,27 @@ class WindowsTokenFirstTest(unittest.TestCase):
                 pass  # refused after the first bytes, the rest never read (macOS may say ENOTCONN)
             done.join(timeout=30)
         self.assertFalse(done.is_alive(), "the connection was answered or refused, not held")
+        if said is not None:
+            client_side.settimeout(5)
+            stream = client_side.makefile("rb")
+            said.extend(iter(stream.readline, b""))
         return handled, engine.token
+
+    def test_a_hello_with_the_token_is_greeted_in_its_protocol_and_served_and_one_without_is_refused(self) -> None:
+        from cad.engine import door
+
+        token = "ab" * 16
+        request = b'{"token": "' + token.encode() + b'", "op": "status"}\n'
+        for hello, greeting in ((door.hello(token), b"ok 1\n"), (door.hello(token, 0), b"ok\n"),
+                                (token.encode() + b" 9 later\n", b"ok 1\n")):
+            said: list[bytes] = []
+            handled, _token = self.serve(hello + request, said)
+            self.assertEqual(handled, [{"token": token, "op": "status"}], hello)
+            self.assertEqual(said, [greeting, b'{"ok":true}\n'], hello)
+        for hello in (door.hello("0" * 32), b"ab" * 300 + b"\n", b"not a hello\n"):
+            said = []
+            handled, _token = self.serve(hello + request, said)
+            self.assertEqual((handled, said), ([], []), hello)
 
     def test_a_connection_without_the_token_first_is_refused_before_its_line_is_read(self) -> None:
         handled, _token = self.serve(b'{"token": "' + b"0" * 32 + b'", "op": "status", "pad": "' + b"x" * 200_000)
@@ -756,6 +777,47 @@ class WindowsTokenFirstTest(unittest.TestCase):
         self.assertTrue(sent[0].startswith(b'{"token": "' + token.encode() + b'", "op": "status"'))
         handled, _token = self.serve(sent[0])
         self.assertEqual(handled, [{"token": token, "op": "status"}])
+
+    def test_the_client_says_hello_at_the_engine_s_port_and_none_at_an_earlier_release_s(self) -> None:
+        import socket
+        import threading
+        import types
+        from unittest import mock
+
+        from cad.engine import client, door, places
+        from cad_server.engine import daemon
+
+        token = "ab" * 16
+        folder = Path(tempfile.mkdtemp(prefix="eng-port-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        listener = socket.create_server(("127.0.0.1", 0))  # any free port, never the engine's
+        self.addCleanup(listener.close)
+        engine = types.SimpleNamespace(token=token, refusal=None, unsaid="",
+                                       handle=lambda request, send: send({"ok": True}))
+        spoken: list[int] = []
+        serving = daemon._serve
+
+        def serve(*args, **kwargs) -> None:
+            spoken.append(args[4] if len(args) > 4 else kwargs.get("protocol", 0))
+            serving(*args, **kwargs)
+
+        def accept() -> None:
+            connection, _address = listener.accept()
+            daemon._serve_connection(engine, connection)
+
+        for name, protocol in ((places.NAME, door.DOOR_PROTOCOL), ("0123456789ab", 0)):
+            port_file = folder / f"{name}.port"
+            port_file.write_text(f"{listener.getsockname()[1]} {token}\n", encoding="utf-8")
+            accepting = threading.Thread(target=accept)
+            accepting.start()
+            with mock.patch.object(places, "WINDOWS", True), mock.patch.object(daemon, "WINDOWS", True), \
+                    mock.patch.object(daemon, "_serve", serve):
+                connection = client._connect(port_file)
+                self.assertIsNotNone(connection, name)
+                self.assertEqual(connection.protocol, protocol, name)
+                self.assertEqual(client._exchange(connection, {"op": "status"}, address=port_file), {"ok": True})
+            accepting.join(timeout=30)
+            self.assertEqual(spoken.pop(), protocol, f"the daemon carries the hello's protocol: {name}")
 
 
 class NoTimerTest(unittest.TestCase):

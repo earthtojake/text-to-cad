@@ -9,12 +9,13 @@ reading and for writing (its own writer, so the door never reads as closed). A c
    ``<id>.up`` (client to daemon) and ``<id>.down`` (daemon to client), and opens each for
    reading and writing, which never blocks and keeps either from reading as closed before the
    daemon has opened it;
-2. writes one hello into the door, its id and a newline: far below ``PIPE_BUF`` (512 bytes on
-   macOS), so hellos written at once never interleave. A door nobody reads refuses the open
-   (``ENXIO``): no engine;
-3. waits for the daemon's greeting on ``down``, then opens each FIFO again for its one direction
-   alone and lets the read-write ends go, so either side's leaving is the other's end of file,
-   as a socket's would be; and unlinks the pair's names, which no one opens again.
+2. writes one hello into the door, its id, a space, the door protocol it speaks and a newline
+   (``<id> <protocol>\n``, ``hello``): far below ``PIPE_BUF`` (512 bytes on macOS), so hellos
+   written at once never interleave. A door nobody reads refuses the open (``ENXIO``): no engine;
+3. waits for the daemon's greeting on ``down`` (``ok <protocol>\n``, ``greeting``), then opens each
+   FIFO again for its one direction alone and lets the read-write ends go, so either side's leaving
+   is the other's end of file, as a socket's would be; and unlinks the pair's names, which no one
+   opens again.
 
 The daemon reads the door in one thread and answers each hello in a thread of its own: it opens
 ``down`` for writing and ``up`` for reading without blocking or following a link, refuses either
@@ -22,6 +23,21 @@ unless it is a FIFO of its own user's, greets, and serves the request and respon
 connection. A pair left by a client killed before its greeting is swept, by its age, without being
 opened. Nothing here signals or probes a process: liveness is end of file, and a door that refuses
 a writer.
+
+Windows has no FIFOs: a client connects to the daemon's loopback port (its port file names it and a
+token) and sends the same hello there, the port file's token where a pair's id goes, and the daemon
+greets it on the same connection.
+
+The door protocol (``DOOR_PROTOCOL``) is how the hello and greeting can change without a cutover,
+since a client and an engine of different releases meet on every device that has kept an app's copy
+of an older plugin, or gone back a release. Within one number, only additions: to the hello, to the
+greeting and to the operations a connection carries, each new field at the end of its line, which a
+reader of that number skips. A removal or a rename takes a new number. Each side reads the other's
+number first: the daemon greets with the number the connection speaks, the lower of its own and the
+hello's (one it no longer serves: no greeting, the connection closed), and the client speaks that one
+or hangs up. The bare forms, ``<id>\n`` and ``ok\n``, are protocol 0: what engines and clients
+before the number spoke (0.8's), which both sides still read, and which the daemon answers a bare
+hello with.
 """
 
 from __future__ import annotations
@@ -35,10 +51,12 @@ import time
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
-__all__ = ["CLIENTS", "GREETING", "Connection", "Door", "answer", "answering", "dial", "hello", "hello_id", "sweep"]
+__all__ = ["CLIENTS", "DOOR_PROTOCOL", "Connection", "Door", "answer", "answering", "dial", "greeted", "greeting",
+           "hello", "hello_id", "hello_protocol", "sweep"]
 
 CLIENTS = "clients"
-GREETING = b"ok\n"
+# The door protocol this side speaks: the hello's and the greeting's number (the module's docstring).
+DOOR_PROTOCOL = 1
 ID_CHARACTERS = 32  # a hello's id: 16 random bytes, in lower-case hex
 HELLO_LIMIT = 512  # POSIX's PIPE_BUF floor, macOS's own: a write this size or smaller is atomic
 # A pair no connection holds, older than this, is a killed client's: past any client's wait.
@@ -51,18 +69,61 @@ _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 
 
-def hello(ident: str) -> bytes:
-    """A client's hello: its pair's id and a newline, one atomic write into the door."""
-    line = f"{ident}\n".encode("ascii")
+def hello(ident: str, protocol: int = DOOR_PROTOCOL) -> bytes:
+    """A client's hello: its pair's id, a space and the door protocol it speaks, and a newline, one
+    atomic write into the door. Protocol 0 is the bare form, the id alone, which engines before the
+    number read."""
+    line = (f"{ident} {protocol}\n" if protocol else f"{ident}\n").encode("ascii")
     assert len(line) < HELLO_LIMIT
     return line
 
 
-def hello_id(line: bytes) -> str | None:
-    """The pair id a hello names (the line without its newline), or None for a line that is no hello."""
-    if len(line) != ID_CHARACTERS or line.strip(b"0123456789abcdef"):
+def _number(field: bytes) -> int | None:
+    """A protocol number: ASCII digits, a few of them."""
+    return int(field) if 0 < len(field) <= 6 and field.isdigit() else None
+
+
+def _hello(line: bytes) -> tuple[str, int] | None:
+    """A hello's id and protocol (0 for the bare id), or None for a line that is no hello. Fields
+    after the protocol are a later release's additions, skipped."""
+    ident, spaced, rest = line.partition(b" ")
+    if len(ident) != ID_CHARACTERS or ident.strip(b"0123456789abcdef"):
         return None
-    return line.decode("ascii")
+    if not spaced:
+        return ident.decode("ascii"), 0
+    protocol = _number(rest.split(b" ", 1)[0])
+    return None if protocol is None else (ident.decode("ascii"), protocol)
+
+
+def hello_id(line: bytes) -> str | None:
+    """The pair id a hello names (the line without its newline), or None for a line that is no hello:
+    ``<id>`` (protocol 0) or ``<id> <protocol>``."""
+    found = _hello(line)
+    return None if found is None else found[0]
+
+
+def hello_protocol(line: bytes) -> int | None:
+    """The door protocol a hello speaks (the line without its newline): 0 for the bare id, None for a
+    line that is no hello."""
+    found = _hello(line)
+    return None if found is None else found[1]
+
+
+def greeting(protocol: int = DOOR_PROTOCOL) -> bytes:
+    """The daemon's greeting for a connection that speaks ``protocol``: ``ok <protocol>`` and a
+    newline; protocol 0's is the bare ``ok``, the greeting a bare hello's client reads."""
+    return f"ok {protocol}\n".encode("ascii") if protocol else b"ok\n"
+
+
+def greeted(line: bytes) -> int | None:
+    """The door protocol a greeting says the connection speaks (with or without its newline): 0 for
+    the bare ``ok``, None for a line that is no greeting. Fields after the protocol are a later
+    release's additions, skipped."""
+    line = line.removesuffix(b"\n")
+    if line == b"ok":
+        return 0
+    word, spaced, rest = line.partition(b" ")
+    return _number(rest.split(b" ", 1)[0]) if word == b"ok" and spaced else None
 
 
 def pair(folder: Path, ident: str) -> tuple[Path, Path]:
@@ -107,12 +168,14 @@ def answering(door: Path) -> bool:
 
 
 class Connection:
-    """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``)."""
+    """One connection to the daemon: the lines it reads (``reader``) and writes (``writer``), and the
+    door protocol it speaks (``protocol``, the greeting's)."""
 
-    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any) -> None:
+    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL) -> None:
         self.reader = reader
         self.writer = writer
         self.closing = closing or (reader, writer)
+        self.protocol = protocol
 
     def close(self) -> None:
         for each in self.closing:
@@ -128,10 +191,11 @@ class Connection:
         self.close()
 
 
-def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
-    """A connection to the daemon reading ``door``, or None when none reads it or it never greets.
-    ``PermissionError`` when this process may not make its pair in the engine's folder (a sandbox
-    that forbids writing there)."""
+def dial(door: Path, timeout: float = GREETING_SECONDS, protocol: int = DOOR_PROTOCOL) -> Connection | None:
+    """A connection to the daemon reading ``door``, or None when none reads it, it never greets, or
+    it greets in a protocol this side does not speak. ``protocol``: the hello's, 0 for the bare form
+    an earlier release's engine reads. ``PermissionError`` when this process may not make its pair in
+    the engine's folder (a sandbox that forbids writing there)."""
     folder = door.parent / CLIENTS
     ident = secrets.token_hex(ID_CHARACTERS // 2)
     up, down = pair(folder, ident)
@@ -149,7 +213,10 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
         os.mkfifo(down, 0o600)
         hold = take(down, os.O_RDWR)  # reads the greeting; never end of file before it
         early = take(up, os.O_RDWR)  # a writer before the daemon reads: its reads wait, never end
-        if not _knock(door, ident, timeout) or not _greeted(hold, door, timeout):
+        if not _knock(door, hello(ident, protocol), timeout):
+            return None
+        spoken = _greeted(hold, door, timeout)
+        if spoken is None or spoken > DOOR_PROTOCOL:
             return None
         reader = take(down, os.O_RDONLY | os.O_NONBLOCK)
         writer = take(up, os.O_WRONLY | os.O_NONBLOCK)  # the daemon reads up before it greets
@@ -161,7 +228,7 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
             opened.remove(fd)
             os.close(fd)
         opened.clear()
-        return Connection(open(reader, "rb"), open(writer, "wb"))
+        return Connection(open(reader, "rb"), open(writer, "wb"), protocol=spoken)
     except PermissionError:
         raise
     except OSError:
@@ -176,8 +243,8 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
                 pass
 
 
-def _knock(door: Path, ident: str, timeout: float) -> bool:
-    """The hello written into ``door``; False when no daemon reads it."""
+def _knock(door: Path, line: bytes, timeout: float) -> bool:
+    """The hello ``line`` written into ``door``; False when no daemon reads it."""
     try:
         fd = _open(door, os.O_WRONLY | os.O_NONBLOCK)
     except PermissionError:
@@ -187,7 +254,6 @@ def _knock(door: Path, ident: str, timeout: float) -> bool:
     try:
         if not _ours(fd):
             return False
-        line = hello(ident)
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -200,38 +266,43 @@ def _knock(door: Path, ident: str, timeout: float) -> bool:
         os.close(fd)
 
 
-def _greeted(fd: int, door: Path, timeout: float) -> bool:
-    """The daemon's greeting read from ``fd``. While it waits, a door that went (its daemon is
-    stopping, and reads no more hellos) ends the wait at once."""
+def _greeted(fd: int, door: Path, timeout: float) -> int | None:
+    """The door protocol of the daemon's greeting read from ``fd`` (``greeted``), or None. Read a
+    byte at a time, to its newline and never past it: what follows on ``down`` is the connection's.
+    While it waits, a door that went (its daemon is stopping, and reads no more hellos) ends the
+    wait at once."""
     try:
         identity = os.stat(door).st_ino
     except OSError:
-        return False
+        return None
     deadline = time.monotonic() + timeout
     got = b""
     with selectors.DefaultSelector() as selector:
         selector.register(fd, selectors.EVENT_READ)
-        while len(got) < len(GREETING):
+        while not got.endswith(b"\n"):
+            if len(got) >= HELLO_LIMIT:
+                return None  # no greeting is this long
             left = deadline - time.monotonic()
             if left <= 0:
-                return False
+                return None
             if selector.select(min(left, 0.2)):
-                got += os.read(fd, len(GREETING) - len(got))
+                got += os.read(fd, 1)
                 continue
             try:
                 if os.stat(door).st_ino != identity:
-                    return False
+                    return None
             except OSError:
-                return False
+                return None
             if not answering(door):
-                return False  # its daemon died after reading the hello: nobody reads the door now
-    return got == GREETING
+                return None  # its daemon died after reading the hello: nobody reads the door now
+    return greeted(got)
 
 
-def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None]) -> None:
-    """The daemon's half of a connection whose hello named ``ident``: its pair in ``folder`` opened
-    without blocking or following a link, each refused unless it is a FIFO of this user's, the
-    greeting sent, and ``serve(reader, writer)`` run over it. A client gone before its pair was
+def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None], protocol: int = DOOR_PROTOCOL) -> None:
+    """The daemon's half of a connection whose hello named ``ident`` and spoke ``protocol``: its pair
+    in ``folder`` opened without blocking or following a link, each refused unless it is a FIFO of
+    this user's, the greeting sent in the protocol the connection speaks (the lower of the hello's and
+    ``DOOR_PROTOCOL``), and ``serve(reader, writer)`` run over it. A client gone before its pair was
     opened is no connection. The pair's names go with it."""
     up, down = pair(folder, ident)
     opened: list[int] = []
@@ -246,7 +317,7 @@ def answer(folder: Path, ident: str, serve: Callable[[BinaryIO, BinaryIO], None]
                 return
             os.set_blocking(writer, True)
             os.set_blocking(reader, True)
-            os.write(writer, GREETING)
+            os.write(writer, greeting(min(protocol, DOOR_PROTOCOL)))
         except OSError:
             return  # ENXIO, ENOENT: the client is gone; ELOOP: a link where a pair should be
         opened.clear()
@@ -288,9 +359,9 @@ def sweep(folder: Path, holding: set[str], now: float | None = None, age: float 
 
 class Door:
     """The daemon's door at ``path``: made, read by one thread, each hello answered by
-    ``on_hello(ident)`` in a thread of its own; ``close`` takes it away."""
+    ``on_hello(ident, protocol)`` in a thread of its own; ``close`` takes it away."""
 
-    def __init__(self, path: Path, on_hello: Callable[[str], None]) -> None:
+    def __init__(self, path: Path, on_hello: Callable[[str, int], None]) -> None:
         self.path = path
         self.on_hello = on_hello
         self.clients = path.parent / CLIENTS
@@ -319,18 +390,19 @@ class Door:
             if len(pending) > HELLO_LIMIT:
                 pending = b""  # no hello is this long: dropped up to the next newline
             for line in lines:
-                ident = hello_id(line)
-                if ident is None or self.closed.is_set():
+                found = _hello(line)
+                if found is None or self.closed.is_set():
                     continue
+                ident, protocol = found
                 with self.lock:
                     if ident in self.holding:
                         continue  # one answer a pair: a second would greet twice and split its stream
                     self.holding.add(ident)
-                threading.Thread(target=self._answer, args=(ident,), daemon=True).start()
+                threading.Thread(target=self._answer, args=(ident, protocol), daemon=True).start()
 
-    def _answer(self, ident: str) -> None:
+    def _answer(self, ident: str, protocol: int) -> None:
         try:
-            self.on_hello(ident)
+            self.on_hello(ident, protocol)
         finally:
             with self.lock:
                 self.holding.discard(ident)

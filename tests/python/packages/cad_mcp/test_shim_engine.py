@@ -125,5 +125,84 @@ class StartTest(unittest.TestCase):
             engine._start()
 
 
+
+class DoorTest(unittest.TestCase):
+    """The transport's own copy of the door's client half (it does not import the library) says the
+    library's hello and reads its greeting: in protocol 1 through the door's pipes and on Windows' port,
+    a bare ``ok`` as protocol 0, and a protocol it does not speak refused."""
+
+    def test_its_hello_and_greeting_are_the_library_s(self) -> None:
+        from cad.engine import door
+
+        ident = "0123456789abcdef" * 2
+        self.assertEqual((engine.DOOR_PROTOCOL, engine.hello(ident)), (door.DOOR_PROTOCOL, door.hello(ident)))
+        for line in (b"ok\n", b"ok 1\n", b"ok 1", b"ok 2 later\n", b"ok \n", b"ok one\n", b"no\n", b""):
+            self.assertEqual(engine.greeted(line), door.greeted(line), line)
+
+    @unittest.skipIf(os.name == "nt", "the door's pipes are POSIX's")
+    def test_it_dials_the_door_in_its_protocol_and_takes_a_bare_greeting_as_protocol_0(self) -> None:
+        from cad.engine import door
+
+        folder = Path(tempfile.mkdtemp(prefix="shim-door-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        heard: list[int] = []
+
+        def library(ident: str, protocol: int) -> None:
+            heard.append(protocol)
+            door.answer(folder / door.CLIENTS, ident, lambda reader, writer: reader.readline(), protocol)
+
+        def greets(greeting: bytes):
+            def answer(ident: str, _protocol: int) -> None:
+                up, down = door.pair(folder / door.CLIENTS, ident)
+                writer = os.open(down, os.O_WRONLY | os.O_NONBLOCK)
+                os.close(os.open(up, os.O_RDONLY | os.O_NONBLOCK))
+                os.write(writer, greeting)  # an engine that greets so, and goes
+                os.close(writer)
+            return answer
+
+        for on_hello, protocol in ((library, 1), (greets(b"ok\n"), 0), (greets(b"ok 2\n"), None)):
+            opened = door.Door(folder / "engine.door", on_hello)
+            self.addCleanup(opened.close)
+            connection = engine.dial(opened.path, timeout=5)
+            if protocol is None:
+                self.assertIsNone(connection, "a protocol it does not speak")
+            else:
+                self.assertIsNotNone(connection)
+                self.assertEqual(connection.protocol, protocol)
+                connection.close()
+            opened.close()
+        self.assertEqual(heard, [1], "the engine heard protocol 1")
+
+    def test_on_windows_it_says_hello_at_the_port_and_is_greeted_and_served(self) -> None:
+        import socket
+        import types
+
+        from cad_server.engine import daemon
+
+        token = "ab" * 16
+        folder = Path(tempfile.mkdtemp(prefix="shim-port-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        port_file = folder / "engine.port"
+        listener = socket.create_server(("127.0.0.1", 0))  # any free port, never the engine's
+        self.addCleanup(listener.close)
+        port_file.write_text(f"{listener.getsockname()[1]} {token}\n", encoding="utf-8")
+        handled: list[dict] = []
+        server = types.SimpleNamespace(token=token, refusal=None, unsaid="",
+                                       handle=lambda request, send: handled.append(request) or send({"ok": True}))
+
+        def accept() -> None:
+            connection, _address = listener.accept()
+            daemon._serve_connection(server, connection)
+
+        accepting = threading.Thread(target=accept)
+        accepting.start()
+        with mock.patch.object(engine, "WINDOWS", True), mock.patch.object(daemon, "WINDOWS", True):
+            connection = engine._connect(port_file)
+            self.assertIsNotNone(connection)
+            self.assertEqual(connection.protocol, 1)
+            self.assertEqual(engine._exchange(connection, {"op": "status"}, port_file), {"ok": True})
+        accepting.join(timeout=30)
+        self.assertEqual(handled, [{"token": token, "op": "status"}])
+
 if __name__ == "__main__":
     unittest.main()

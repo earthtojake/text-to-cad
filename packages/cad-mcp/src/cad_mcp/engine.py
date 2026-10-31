@@ -204,7 +204,12 @@ def register() -> None:
 # --- the door: a client's half ----------------------------------------------------------------------
 
 CLIENTS = "clients"
-GREETING = b"ok\n"
+# The door protocol this transport speaks (the library's ``cad.engine.door``, which it does not import):
+# its hello is ``<id> <protocol>`` and a newline, and the server's greeting ``ok <protocol>`` and a newline,
+# the protocol the connection speaks; the bare ``ok`` is protocol 0. Within a number only additions, each
+# a field at the end of its line, which a reader of that number skips; a removal or a rename takes a new
+# number.
+DOOR_PROTOCOL = 1
 ID_CHARACTERS = 32
 HELLO_LIMIT = 512
 GREETING_SECONDS = 15.0
@@ -213,12 +218,14 @@ _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 
 
 class Connection:
-    """One connection to the server: the lines it reads (``reader``) and writes (``writer``)."""
+    """One connection to the server: the lines it reads (``reader``) and writes (``writer``), and the door
+    protocol it speaks (``protocol``, the greeting's)."""
 
-    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any) -> None:
+    def __init__(self, reader: BinaryIO, writer: BinaryIO, *closing: Any, protocol: int = DOOR_PROTOCOL) -> None:
         self.reader = reader
         self.writer = writer
         self.closing = closing or (reader, writer)
+        self.protocol = protocol
 
     def close(self) -> None:
         for each in self.closing:
@@ -264,6 +271,24 @@ def _door_answering(door: Path) -> bool:
         os.close(fd)
 
 
+def hello(ident: str) -> bytes:
+    """The hello: the pair's id (on Windows, the port file's token), a space, this transport's door
+    protocol and a newline."""
+    return f"{ident} {DOOR_PROTOCOL}\n".encode("ascii")
+
+
+def greeted(line: bytes) -> int | None:
+    """The door protocol the server's greeting says the connection speaks (with or without its
+    newline): 0 for the bare ``ok``, None for a line that is no greeting; fields after the number,
+    a later release's additions, skipped."""
+    line = line.removesuffix(b"\n")
+    if line == b"ok":
+        return 0
+    word, spaced, rest = line.partition(b" ")
+    field = rest.split(b" ", 1)[0]
+    return int(field) if word == b"ok" and spaced and 0 < len(field) <= 6 and field.isdigit() else None
+
+
 def _knock(door: Path, ident: str, timeout: float) -> bool:
     try:
         fd = _open(door, os.O_WRONLY | os.O_NONBLOCK)
@@ -274,7 +299,7 @@ def _knock(door: Path, ident: str, timeout: float) -> bool:
     try:
         if not _ours(fd):
             return False
-        line = f"{ident}\n".encode("ascii")
+        line = hello(ident)
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -287,30 +312,34 @@ def _knock(door: Path, ident: str, timeout: float) -> bool:
         os.close(fd)
 
 
-def _greeted(fd: int, door: Path, timeout: float) -> bool:
+def _greeted(fd: int, door: Path, timeout: float) -> int | None:
+    """The door protocol of the server's greeting (``greeted``), read a byte at a time to its newline
+    and never past it; None when none comes, or the door goes while it waits."""
     try:
         identity = os.stat(door).st_ino
     except OSError:
-        return False
+        return None
     deadline = time.monotonic() + timeout
     got = b""
     with selectors.DefaultSelector() as selector:
         selector.register(fd, selectors.EVENT_READ)
-        while len(got) < len(GREETING):
+        while not got.endswith(b"\n"):
+            if len(got) >= HELLO_LIMIT:
+                return None
             left = deadline - time.monotonic()
             if left <= 0:
-                return False
+                return None
             if selector.select(min(left, 0.2)):
-                got += os.read(fd, len(GREETING) - len(got))
+                got += os.read(fd, 1)
                 continue
             try:
                 if os.stat(door).st_ino != identity:
-                    return False
+                    return None
             except OSError:
-                return False
+                return None
             if not _door_answering(door):
-                return False
-    return got == GREETING
+                return None
+    return greeted(got)
 
 
 def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
@@ -334,7 +363,10 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
         os.mkfifo(down, 0o600)
         hold = take(down, os.O_RDWR)
         early = take(up, os.O_RDWR)
-        if not _knock(door, ident, timeout) or not _greeted(hold, door, timeout):
+        if not _knock(door, ident, timeout):
+            return None
+        spoken = _greeted(hold, door, timeout)
+        if spoken is None or spoken > DOOR_PROTOCOL:  # a protocol this transport does not speak
             return None
         reader = take(down, os.O_RDONLY | os.O_NONBLOCK)
         writer = take(up, os.O_WRONLY | os.O_NONBLOCK)
@@ -346,7 +378,7 @@ def dial(door: Path, timeout: float = GREETING_SECONDS) -> Connection | None:
             opened.remove(fd)
             os.close(fd)
         opened.clear()
-        return Connection(open(reader, "rb"), open(writer, "wb"))
+        return Connection(open(reader, "rb"), open(writer, "wb"), protocol=spoken)
     except PermissionError:
         raise
     except OSError:
@@ -383,11 +415,22 @@ def _connect(where: Path | None = None) -> Connection | None:
     device's), or None when none answers there."""
     try:
         if WINDOWS:
-            port, _token = _port_text(where or port_path()).split()
+            port, token = _port_text(where or port_path()).split()
             connection = socket.create_connection(("127.0.0.1", int(port)), timeout=5)
-            connection.settimeout(None)
             stream = connection.makefile("rwb")
-            return Connection(stream, stream, stream, connection)
+            try:  # the door's hello and greeting on the port: the token where a pair's id goes
+                connection.settimeout(GREETING_SECONDS)
+                stream.write(hello(token))
+                stream.flush()
+                spoken = greeted(stream.readline(HELLO_LIMIT))
+                connection.settimeout(None)
+            except OSError:
+                spoken = None
+            if spoken is None or spoken > DOOR_PROTOCOL:
+                stream.close()
+                connection.close()
+                return None
+            return Connection(stream, stream, stream, connection, protocol=spoken)
         door = where or door_path()
         if folder_refusal(door.parent) is not None or not door.exists():
             return None
@@ -511,7 +554,7 @@ def _started(timeout: float) -> Connection:
 
 
 def _exchange(connection: Connection, message: dict[str, Any], where: Path | None = None) -> dict[str, Any]:
-    if WINDOWS:  # the token first, so the server checks it in the line's first bytes
+    if WINDOWS:  # the token in the request too, first, which the server checks as it did the hello's
         message = {"token": (where or port_path()).read_text(encoding="utf-8").split()[1], **message}
     with connection:
         connection.writer.write((json.dumps(message) + "\n").encode())
