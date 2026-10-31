@@ -848,7 +848,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-dir", type=Path, default=Path(tempfile.gettempdir()) / "cadgen-bench",
                         help="parent for a fresh batch folder containing each model's private engine door")
     parser.add_argument("--python", default=sys.executable, help="the interpreter that builds (default: this one)")
-    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/texttocad/src",
+    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/cad/src",
                         help="the cadgen it imports (default: this checkout's)")
     parser.add_argument("--max-load", type=float, help="before each step, wait until the 1-minute load is at most this and no other cadgen build "
                         "uses more than 5%% of a core")

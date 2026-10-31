@@ -64,7 +64,7 @@ class DevPluginTests(unittest.TestCase):
                 setup = skill.parent / "references" / "setup.md"
                 text = skill.read_text(encoding="utf-8") + (setup.read_text(encoding="utf-8") if setup.is_file() else "")
                 with self.subTest(skill=skill.parent.name):
-                    self.assertNotIn("--from texttocad-server==", text)
+                    self.assertNotIn("--from cad-server==", text)
                     self.assertNotIn(f"+{released}`", text)
                     # Never the release's installer over this checkout's engine.
                     for command in dev_install.INSTALL_COMMANDS:
@@ -83,7 +83,7 @@ class DevPluginTests(unittest.TestCase):
             built = Path(scratch) / "wheels" / "1"
             built.mkdir(parents=True)
             library, wheel, shim = (built / f"{name}-1.2.3-py3-none-any.whl"
-                                    for name in ("texttocad", "texttocad_server", "texttocad_mcp"))
+                                    for name in ("cad", "cad_server", "cad_mcp"))
             for path in (library, wheel, shim):
                 path.write_bytes(b"")
             with mock.patch.object(dev_install, "build_wheel", return_value=wheel), \
@@ -151,7 +151,7 @@ class DevPluginTests(unittest.TestCase):
     def test_it_reads_the_apps_through_the_servers_providers(self) -> None:
         # One reading of the agent apps for both installers: the development one loads the server's by path.
         self.assertEqual(Path(dev_install.providers.__file__).resolve(),
-                         REPO_ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "_internal" / "providers.py")
+                         REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server" / "_internal" / "providers.py")
         self.assertIs(dev_install.loose_skills, dev_install.providers.loose_skills)
         self.assertEqual(dev_install.skill_folders("codex"), dev_install.providers.skill_folders("codex"))
 

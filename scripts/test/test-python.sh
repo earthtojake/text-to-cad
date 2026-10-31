@@ -8,7 +8,7 @@ set -euo pipefail
 # --select picks one group instead of all of them:
 #   cadgen   the packages' suites: the library's, the server's (the CAD Viewer backend included)
 #            and the shim's (92% of the time)
-#   viewer   the CAD Viewer backend alone (tests/python/packages/texttocad_server/viewer)
+#   viewer   the CAD Viewer backend alone (tests/python/packages/cad_server/viewer)
 #   skills   every skill's suite
 #   all      cad + skills (the default)
 #
@@ -58,21 +58,21 @@ run_suite() {
 
 cd "$REPO_ROOT"
 
-# The packages' suites, one each: the library's (texttocad), the server's (texttocad-server: the CAD
-# Viewer backend, cad_server.viewer, among them) and the shim's (texttocad-mcp). This is the one
+# The packages' suites, one each: the library's (cad), the server's (cad-server: the CAD
+# Viewer backend, cad_server.viewer, among them) and the shim's (cad-mcp). This is the one
 # runner that reaches every pull request. Windows matters most of all for the viewer: path
 # handling, locks, subprocesses and file URLs are precisely the class of bug that has only ever
 # shown up there.
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "cadgen" ]; then
-  run_suite "texttocad (the library) Python tests" "tests/python/packages/texttocad" "${PACKAGE_SOURCES[@]}"
-  run_suite "texttocad-server Python tests" "tests/python/packages/texttocad_server" "${PACKAGE_SOURCES[@]}"
-  run_suite "texttocad-mcp (the shim) Python tests" "tests/python/packages/texttocad_mcp" "${PACKAGE_SOURCES[@]}"
+  run_suite "cad (the library) Python tests" "tests/python/packages/cad" "${PACKAGE_SOURCES[@]}"
+  run_suite "cad-server Python tests" "tests/python/packages/cad_server" "${PACKAGE_SOURCES[@]}"
+  run_suite "cad-mcp (the shim) Python tests" "tests/python/packages/cad_mcp" "${PACKAGE_SOURCES[@]}"
 fi
 
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under
 # apps/web is read by any other package test.
 if [ "$SELECT" = "viewer" ]; then
-  run_suite "CAD Viewer backend Python tests" "tests/python/packages/texttocad_server/viewer" "${PACKAGE_SOURCES[@]}"
+  run_suite "CAD Viewer backend Python tests" "tests/python/packages/cad_server/viewer" "${PACKAGE_SOURCES[@]}"
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then

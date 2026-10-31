@@ -334,7 +334,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
             done = self.run_in("-m", "cad_server.cli", "export", ident, str(self.folder / f"{ident}.stl"))
             self.assertEqual(done.returncode, 0, done.stderr)
         self.assertNotEqual(self.run_in("-m", "cad_server.cli", "export", refused, str(self.folder / "x.stl")).returncode, 0)
-        from tests.python.packages.texttocad_server.engine.test_snapshot import gl
+        from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         try:
             gl()

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-// The backend is cad_server.viewer (Python, in packages/texttocad-server); its suite runs with
+// The backend is cad_server.viewer (Python, in packages/cad-server); its suite runs with
 // the server's package tests. What lives here is the client and its scripts.
 const defaultTestRoots = [
   path.join(packageRoot, "src"),

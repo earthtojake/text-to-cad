@@ -27,7 +27,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 import cad_server  # noqa: E402
 from cad_server.cli import doctor  # noqa: E402
@@ -273,7 +273,7 @@ class DoctorTests(unittest.TestCase):
         made = base.Environment("/cache/base/k/bin/python", "/cache/base/k", False, ("/cache/base/k/site",))
 
         def ensure(installation=None, *, make=True, told=None):
-            told("making the CAD kernel environment, once: texttocad[build123d] 9.9.9 on Python 3.14.0, in /cache/base/k")
+            told("making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in /cache/base/k")
             return made
 
         with mock.patch.object(base, "ensure", side_effect=ensure) as asked, TemporaryDirectory() as tmp:
@@ -282,7 +282,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [True, False],
                          "--no-server makes nothing: it says whether it is there")
-        self.assertIn("  kernel   making the CAD kernel environment, once: texttocad[build123d] 9.9.9 on Python 3.14.0, in "
+        self.assertIn("  kernel   making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in "
                       "/cache/base/k\n  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n",
                       out)
         doctor._probe_kernel.assert_called_with("/cache/base/k/bin/python")

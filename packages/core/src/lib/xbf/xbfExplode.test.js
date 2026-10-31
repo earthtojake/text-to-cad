@@ -1,7 +1,7 @@
 // Explode of an engine document, pinned to one layout for the viewer and cadgen's stills.
 //
 // `__fixtures__/explode.json` holds, for two documents the engine served -- the material fixture
-// (`tests/python/packages/texttocad/engine/test_materials.py`'s bench) and the corpus's motorbike --
+// (`tests/python/packages/cad/engine/test_materials.py`'s bench) and the corpus's motorbike --
 // what this scene explodes: the document's tree, each instance's prototype and matrix, and each
 // prototype's box (every node, edge point and vertex of its mesh, which is all of a part the layout
 // measures); and where each instance's carrier stood at each amount when the fixture was made, by
@@ -10,7 +10,7 @@
 // too the layout's nested branch, which an xbf scene does not reach (it hands the layout no
 // hierarchy), over a set of records with one. cadgen's stills port the layout to Python
 // (`cad/engine/render/explode.py`) and are held to this same file
-// (`tests/python/packages/texttocad/engine/test_render_explode.py`), so the two explode alike: a
+// (`tests/python/packages/cad/engine/test_render_explode.py`), so the two explode alike: a
 // deliberate change to the layout changes the fixture's offsets, and the port follows it.
 import assert from "node:assert/strict";
 import fs from "node:fs";

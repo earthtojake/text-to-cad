@@ -1,5 +1,5 @@
 """``import build123d`` binds a module the kernel loads into on its first attribute
-(``cad._internal.lazy_kernel``), installed by the library wheel's ``texttocad-lazy-kernel.pth``.
+(``cad._internal.lazy_kernel``), installed by the library wheel's ``cad-lazy-kernel.pth``.
 
 The finder's behaviour is tested on a stand-in package (its name put in ``KERNEL``), so the real
 kernel's ~2.5 s is paid only by the subprocess that shows the real one stays untouched."""
@@ -22,7 +22,7 @@ from cad._internal import lazy_kernel
 from tests.python.support.paths import LIBRARY as PACKAGE
 from tests.python.support.paths import SOURCE_PATH
 
-PTH = "texttocad-lazy-kernel.pth"
+PTH = "cad-lazy-kernel.pth"
 
 
 class FinderTest(unittest.TestCase):

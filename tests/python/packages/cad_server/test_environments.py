@@ -112,7 +112,7 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr)
         made = self.caller(first)
         self.assertEqual(made.parent, cache / base.BASE)
-        self.assertIn("cad run: making the CAD kernel environment, once: texttocad[build123d] ", first.stderr)
+        self.assertIn("cad run: making the CAD kernel environment, once: cad[build123d] ", first.stderr)
         self.assertEqual(Path((project / "worker.txt").read_text(encoding="utf-8")).resolve(), made,
                          "the model's worker runs in the base")
         self.assertEqual(self.asked(), ["venv", "pip"])

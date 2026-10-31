@@ -18,7 +18,7 @@ from cad.engine.render.look import LOOK
 from cad.engine.serve import Server
 
 FIXTURE = Path(__file__).resolve().parents[5] / "packages" / "core" / "src" / "lib" / "xbf" / "__fixtures__" / "look.json"
-REGENERATE = ("regenerate it: PYTHONPATH=packages/texttocad/src python -c \"import json; from cad.engine.render.look "
+REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import json; from cad.engine.render.look "
               "import LOOK; print(json.dumps(LOOK.json(), indent=2))\" > packages/core/src/lib/xbf/__fixtures__/look.json")
 
 

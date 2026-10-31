@@ -25,7 +25,7 @@ from unittest import mock
 from tests.python.support import engine_daemon
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 GOLDEN = Path(__file__).with_name("update_handshake.json")
 

@@ -1,4 +1,4 @@
-"""The base (``cad_server._internal.base``): the one environment, ``texttocad[build123d]`` at the installation's
+"""The base (``cad_server._internal.base``): the one environment, ``cad[build123d]`` at the installation's
 release on its Python, made once and reused; an installation that carries the kernel is its own; and
 ``cad run`` runs the script with its Python.
 
@@ -21,7 +21,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server._internal import base  # noqa: E402
 from cad.engine import places  # noqa: E402
@@ -93,8 +93,8 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(venv, ["uv", "venv", "--no-project", "--python", self.installation.executable, str(env)],
                          "on the installation's own Python")
         self.assertEqual(pip, ["uv", "pip", "install", "--python", str(base.interpreter(env)), "--link-mode",
-                               "hardlink", f"texttocad[build123d]=={RELEASE}", "--offline"])
-        self.assertEqual(self.said, [f"making the CAD kernel environment, once: texttocad[build123d] {RELEASE} on Python "
+                               "hardlink", f"cad[build123d]=={RELEASE}", "--offline"])
+        self.assertEqual(self.said, [f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python "
                                      f"3.14.2, in {env}"])
         # Its marker names the installation it belongs to: a process there reaches that engine.
         home = places.home(str(env))
@@ -142,7 +142,7 @@ class BaseTest(unittest.TestCase):
             self.assertIsNone(making.follow(heard.append), "made: nothing more to hear")
         env = base.where(self.installation)
         self.assertIsNotNone(base.complete(env))
-        line = f"making the CAD kernel environment, once: texttocad[build123d] {RELEASE} on Python 3.14.2, in {env}"
+        line = f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python 3.14.2, in {env}"
         self.assertEqual(heard, [line])
         self.assertEqual(log.getvalue(), f"cad: {line}\n", "the engine's log")
         self.assertEqual(fake.asked(), ["venv", "pip --offline"])
@@ -189,9 +189,9 @@ class BaseTest(unittest.TestCase):
     def test_where_the_installation_installs_from(self) -> None:
         tree = self.root / "checkout"
         tree.mkdir()
-        wheel = "file:///wheels/texttocad-9.9.9-py3-none-any.whl"
-        for source, requirement in ((None, [f"texttocad[build123d]=={RELEASE}"]), (str(tree), ["-e", f"{tree}[build123d]"]),
-                                    (wheel, [f"texttocad[build123d] @ {wheel}"])):
+        wheel = "file:///wheels/cad-9.9.9-py3-none-any.whl"
+        for source, requirement in ((None, [f"cad[build123d]=={RELEASE}"]), (str(tree), ["-e", f"{tree}[build123d]"]),
+                                    (wheel, [f"cad[build123d] @ {wheel}"])):
             with self.subTest(source=source):
                 found = base.Installation(**{**base.dataclasses.asdict(self.installation), "source": source})
                 self.assertEqual(found.requirement(), requirement)

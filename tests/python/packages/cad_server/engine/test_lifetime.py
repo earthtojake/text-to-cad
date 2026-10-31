@@ -416,7 +416,7 @@ class LifetimeDaemonTest(unittest.TestCase):
 
     def test_a_held_mechanism_exports_whole_from_the_hold(self) -> None:
         from cad.engine import document
-        from tests.python.packages.texttocad.engine.test_kinematics import _arm_tip, _has_point, _vertices
+        from tests.python.packages.cad.engine.test_kinematics import _arm_tip, _has_point, _vertices
 
         ident = self.built("hinge", script=HINGE)
         self.row(ident, "held")
@@ -446,7 +446,7 @@ class LifetimeDaemonTest(unittest.TestCase):
 
     def test_a_glb_from_the_hold_and_from_its_xbf_file_is_the_live_one(self) -> None:
         from cad.engine import document
-        from tests.python.packages.texttocad.engine.test_kinematics import _arm_tip, _has_point, _vertices
+        from tests.python.packages.cad.engine.test_kinematics import _arm_tip, _has_point, _vertices
 
         ident = self.built("hinge", script=ANIMATED)
         self.row(ident, "held")

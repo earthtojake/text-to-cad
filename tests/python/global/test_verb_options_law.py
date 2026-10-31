@@ -20,14 +20,14 @@ import unittest
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 import cad  # noqa: E402
 from cad_server.cli.export import build_parser  # noqa: E402
 from cad.engine.api import Document  # noqa: E402
 from cad.engine.model import Model  # noqa: E402
 
-LAW = ("law 22 (packages/texttocad/README.md): \"A verb's option is about the picture or the path, never the "
+LAW = ("law 22 (packages/cad/README.md): \"A verb's option is about the picture or the path, never the "
        "model. `export` takes a document and destinations: what the file holds, its parts and their "
        "placement, colours and motion, is what the code built, so no option selects a part or a state. "
        "[...] Anything that changes what a document is, is a function in the model's code.\"")

@@ -1,7 +1,7 @@
 """The engine's progress vocabulary is said in every language the viewer speaks.
 
 Every job the engine runs says where it is in one progress event, whose `kind` and `stage` are a
-closed vocabulary (`packages/texttocad/src/cad/engine/progress.py`: `STAGES`); the page says each
+closed vocabulary (`packages/cad/src/cad/engine/progress.py`: `STAGES`); the page says each
 stage in the view's language by the key `progress.<kind>.<stage>` (`packages/ui/src/i18n/locales`).
 A stage no locale names would read on screen as its key, and a key no stage has is dead. Read as
 text, so this needs nothing installed.
@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-ENGINE = ROOT / "packages/texttocad/src/cad/engine/progress.py"
+ENGINE = ROOT / "packages/cad/src/cad/engine/progress.py"
 LOCALES = ROOT / "packages/ui/src/i18n/locales"
 KEY = re.compile(r'^\s*"(progress\.[^"]+)":\s*"([^"]*)"', re.M)
 

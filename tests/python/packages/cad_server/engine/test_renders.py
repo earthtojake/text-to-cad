@@ -20,7 +20,7 @@ from cad.engine.snapshot import Still  # noqa: E402
 from cad_server.engine.renders import Renders  # noqa: E402
 from cad_server.engine.services import RENDER  # noqa: E402
 from cad_server.engine.supervisor import Process, Supervisor  # noqa: E402
-from tests.python.packages.texttocad.engine.test_render import BENCH, SIZE, build, drawn, gl, served, shapes  # noqa: E402
+from tests.python.packages.cad.engine.test_render import BENCH, SIZE, build, drawn, gl, served, shapes  # noqa: E402
 
 
 class RenderProcessTest(unittest.TestCase):

@@ -183,7 +183,7 @@ jobs:
 
       - name: Check the packages' types (basic)
         run: |
-          for project in texttocad texttocad-server texttocad-mcp; do
+          for project in cad cad-server cad-mcp; do
             python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
           done
 
@@ -225,7 +225,7 @@ jobs:
 
       - name: Check the packages' types (basic)
         run: |
-          for project in texttocad texttocad-server texttocad-mcp; do
+          for project in cad cad-server cad-mcp; do
             python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
           done
         shell: bash

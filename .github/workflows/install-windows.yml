@@ -18,12 +18,12 @@ on:
     paths:
       - .github/workflows/install-windows.yml
       - scripts/install/install.ps1
-      - packages/texttocad-server/src/cad_server/cli/setup.py
-      - packages/texttocad-server/src/cad_server/cli/uninstall.py
-      - packages/texttocad-server/src/cad_server/cli/doctor.py
-      - packages/texttocad-server/src/cad_server/_internal/providers.py
-      - packages/texttocad-server/src/cad_server/_internal/launch.py
-      - packages/texttocad-server/src/cad_server/_internal/installations.py
+      - packages/cad-server/src/cad_server/cli/setup.py
+      - packages/cad-server/src/cad_server/cli/uninstall.py
+      - packages/cad-server/src/cad_server/cli/doctor.py
+      - packages/cad-server/src/cad_server/_internal/providers.py
+      - packages/cad-server/src/cad_server/_internal/launch.py
+      - packages/cad-server/src/cad_server/_internal/installations.py
 
 permissions:
   contents: read
@@ -88,7 +88,7 @@ jobs:
       - name: The wheel to install from, and the release it is
         shell: pwsh
         run: |
-          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\texttocad_server-*.whl" | Select-Object -First 1).FullName
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\cad_server-*.whl" | Select-Object -First 1).FullName
           if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
           $release = (Get-Content VERSION -Raw).Trim()
           "CAD_WHEEL=$wheel" >> $env:GITHUB_ENV

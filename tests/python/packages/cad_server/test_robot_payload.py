@@ -22,7 +22,7 @@ from unittest import mock
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server import robot_payload  # noqa: E402
 from tests.python.support.articulation import joint_matrices, joint_values  # noqa: E402

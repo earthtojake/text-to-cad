@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the server's non-Python runtime INTO ITS PACKAGE (packages/texttocad-server/src/cad_server/_runtime).
+# Build the server's non-Python runtime INTO ITS PACKAGE (packages/cad-server/src/cad_server/_runtime).
 #
 # The server ships three things it does not write in Python: the CAD Viewer's built client
 # (`cad viewer` serves it), the one-file CAD app an agent host renders (`cad-mcp`
@@ -33,7 +33,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-RUNTIME_DIR="$REPO_ROOT/packages/texttocad-server/src/cad_server/_runtime"
+RUNTIME_DIR="$REPO_ROOT/packages/cad-server/src/cad_server/_runtime"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
 VIEWER_APP_DIR="$REPO_ROOT/apps/web"
 MCP_DIR="$RUNTIME_DIR/mcp"
@@ -83,7 +83,7 @@ usage() {
 Usage:
   scripts/bundle/cadgen-runtime.sh [--check] [--clean] [--print-outputs] [stages...]
 
-Builds the server's packaged runtime assets into packages/texttocad-server/src/cad_server/_runtime.
+Builds the server's packaged runtime assets into packages/cad-server/src/cad_server/_runtime.
 None of it is committed; the wheel is where it ships.
 
 Stages (default: all three):
@@ -150,7 +150,7 @@ prune_stale_runtime() {
     for stage in "${STAGE_DIRS[@]}"; do [ "$name" = "$stage" ] && known=1; done
     if [ "$known" -eq 0 ]; then
       rm -rf "$entry"
-      echo "Removed packages/texttocad-server/src/cad_server/_runtime/$name: no stage builds it."
+      echo "Removed packages/cad-server/src/cad_server/_runtime/$name: no stage builds it."
     fi
   done
 }
@@ -291,13 +291,13 @@ check_plugin_copy() {
   expected="$({ printf '%s\n' "${PLUGIN_FILES[@]}"; plugin_skill_files; } | LC_ALL=C sort)"
   copied="$(cd "$PLUGIN_DIR" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)"
   if [ "$expected" != "$copied" ]; then
-    echo "packages/texttocad-server/src/cad_server/_runtime/plugin does not hold exactly the plugin's files and skills:" >&2
+    echo "packages/cad-server/src/cad_server/_runtime/plugin does not hold exactly the plugin's files and skills:" >&2
     diff <(printf '%s\n' "$expected") <(printf '%s\n' "$copied") >&2 || true
     gaps=1
   else
     while IFS= read -r relative; do
       if ! cmp -s "$REPO_ROOT/$relative" "$PLUGIN_DIR/$relative"; then
-        echo "packages/texttocad-server/src/cad_server/_runtime/plugin/$relative differs from $relative" >&2
+        echo "packages/cad-server/src/cad_server/_runtime/plugin/$relative differs from $relative" >&2
         gaps=1
       fi
     done <<< "$expected"
@@ -305,7 +305,7 @@ check_plugin_copy() {
   if [ "$gaps" -ne 0 ]; then
     missing=1
   else
-    echo "packages/texttocad-server/src/cad_server/_runtime/plugin built ($(printf '%s\n' "$expected" | wc -l | tr -d ' ') files, each as the checkout holds it)."
+    echo "packages/cad-server/src/cad_server/_runtime/plugin built ($(printf '%s\n' "$expected" | wc -l | tr -d ' ') files, each as the checkout holds it)."
   fi
 }
 
@@ -344,13 +344,13 @@ if [ "$MODE" = "check" ]; then
     local name gaps=0
     for name in "$@"; do
       if [ ! -f "$RUNTIME_DIR/$stage/$name" ]; then
-        echo "Missing runtime output: packages/texttocad-server/src/cad_server/_runtime/$stage/$name" >&2
+        echo "Missing runtime output: packages/cad-server/src/cad_server/_runtime/$stage/$name" >&2
         gaps=1
         missing=1
       fi
     done
     if [ "$gaps" -eq 0 ]; then
-      echo "packages/texttocad-server/src/cad_server/_runtime/$stage built ($# files)."
+      echo "packages/cad-server/src/cad_server/_runtime/$stage built ($# files)."
     fi
   }
   if [ "$STAGE_VIEWER" -eq 1 ]; then

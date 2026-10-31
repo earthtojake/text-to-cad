@@ -25,7 +25,7 @@ from unittest import mock
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server._internal import providers  # noqa: E402
 
@@ -366,7 +366,7 @@ class Home:
 
 
 ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.14", "--from",
-                                          f"texttocad-mcp=={RELEASE}", "cad-mcp"],
+                                          f"cad-mcp=={RELEASE}", "cad-mcp"],
          "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
 
 

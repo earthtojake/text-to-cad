@@ -8,8 +8,8 @@ name: Publish Release
 # ships untested.
 #
 # The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle, and
-# the wheel and sdist of each of the release's five projects on PyPI (the library `texttocad`, the
-# server `texttocad-server`, the shim `texttocad-mcp`, and the aliases `cadgen` and `text-to-cad`) --
+# the wheel and sdist of each of the release's five projects on PyPI (the library `cad`, the
+# server `cad-server`, the shim `cad-mcp`, and the aliases `cadgen` and `text-to-cad`) --
 # and installs and exercises the three wheels together. The pypi job alone uploads them, in the
 # `release` environment, which deploys from main only and is the one each project's trusted publisher
 # names: one project at a time, the library first, each listed by PyPI's index before the next goes
@@ -283,7 +283,7 @@ jobs:
       - name: Build the five distributions
         run: |
           python3 -m pip install --upgrade build
-          for project in texttocad texttocad-server texttocad-mcp aliases/cadgen aliases/text-to-cad; do
+          for project in cad cad-server cad-mcp aliases/cadgen aliases/text-to-cad; do
             python3 -m build --outdir dist "packages/$project"
           done
 
@@ -293,7 +293,7 @@ jobs:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
           expected=()
-          for name in texttocad texttocad_server texttocad_mcp cadgen text_to_cad; do
+          for name in cad cad_server cad_mcp cadgen text_to_cad; do
             expected+=("$name-$VERSION-py3-none-any.whl" "$name-$VERSION.tar.gz")
           done
           found="$(cd dist && ls | sort)"
@@ -311,8 +311,8 @@ jobs:
       - name: Install the built wheels and exercise them
         run: |
           python3 -m venv "$RUNNER_TEMP/install-test"
-          "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps dist/texttocad-*.whl \
-            dist/texttocad_server-*.whl dist/texttocad_mcp-*.whl
+          "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps dist/cad-[0-9]*.whl \
+            dist/cad_server-*.whl dist/cad_mcp-*.whl
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad-mcp" --help >/dev/null)
@@ -325,7 +325,7 @@ jobs:
       # installs cleanly and then cannot serve a Viewer or the CAD app.
       - name: Assert the shipping server wheel carries its built runtime
         run: |
-          wheel="$(find dist -name 'texttocad_server-*.whl' -type f | head -n 1)"
+          wheel="$(find dist -name 'cad_server-*.whl' -type f | head -n 1)"
           [ -n "$wheel" ] || { echo "no server wheel under dist" >&2; exit 1; }
           listing="$(unzip -l "$wheel")"
           echo "$listing" | grep -E 'cad_server/_runtime/' || true
@@ -428,62 +428,62 @@ jobs:
       # holds that this run did not build stops the release. Each upload folder is in the workspace,
       # which the publishing action's container sees. uv resolves a pin through PyPI's simple index, so
       # the next project goes up only once the index lists this one -- usually seconds after the upload.
-      - name: Compare texttocad with what PyPI holds
+      - name: Compare cad with what PyPI holds
         id: library
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          python3 scripts/release/pypi_release.py --project texttocad --version "$VERSION" --built "$RUNNER_TEMP/built" \
-            --upload upload-to-pypi/texttocad --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+          python3 scripts/release/pypi_release.py --project cad --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/cad --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
 
-      - name: Publish texttocad to PyPI
+      - name: Publish cad to PyPI
         if: steps.library.outputs.upload == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: upload-to-pypi/texttocad
+          packages-dir: upload-to-pypi/cad
 
-      - name: Wait until PyPI's index lists texttocad
+      - name: Wait until PyPI's index lists cad
         env:
           VERSION: ${{ needs.gate.outputs.version }}
-        run: python3 scripts/release/pypi_release.py --project texttocad --version "$VERSION" --wait
+        run: python3 scripts/release/pypi_release.py --project cad --version "$VERSION" --wait
 
-      - name: Compare texttocad-server with what PyPI holds
+      - name: Compare cad-server with what PyPI holds
         id: server
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          python3 scripts/release/pypi_release.py --project texttocad-server --version "$VERSION" --built "$RUNNER_TEMP/built" \
-            --upload upload-to-pypi/texttocad-server --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+          python3 scripts/release/pypi_release.py --project cad-server --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/cad-server --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
 
-      - name: Publish texttocad-server to PyPI
+      - name: Publish cad-server to PyPI
         if: steps.server.outputs.upload == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: upload-to-pypi/texttocad-server
+          packages-dir: upload-to-pypi/cad-server
 
-      - name: Wait until PyPI's index lists texttocad-server
+      - name: Wait until PyPI's index lists cad-server
         env:
           VERSION: ${{ needs.gate.outputs.version }}
-        run: python3 scripts/release/pypi_release.py --project texttocad-server --version "$VERSION" --wait
+        run: python3 scripts/release/pypi_release.py --project cad-server --version "$VERSION" --wait
 
-      - name: Compare texttocad-mcp with what PyPI holds
+      - name: Compare cad-mcp with what PyPI holds
         id: shim
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          python3 scripts/release/pypi_release.py --project texttocad-mcp --version "$VERSION" --built "$RUNNER_TEMP/built" \
-            --upload upload-to-pypi/texttocad-mcp --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+          python3 scripts/release/pypi_release.py --project cad-mcp --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/cad-mcp --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
 
-      - name: Publish texttocad-mcp to PyPI
+      - name: Publish cad-mcp to PyPI
         if: steps.shim.outputs.upload == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: upload-to-pypi/texttocad-mcp
+          packages-dir: upload-to-pypi/cad-mcp
 
-      - name: Wait until PyPI's index lists texttocad-mcp
+      - name: Wait until PyPI's index lists cad-mcp
         env:
           VERSION: ${{ needs.gate.outputs.version }}
-        run: python3 scripts/release/pypi_release.py --project texttocad-mcp --version "$VERSION" --wait
+        run: python3 scripts/release/pypi_release.py --project cad-mcp --version "$VERSION" --wait
 
       - name: Compare cadgen with what PyPI holds
         id: alias_cadgen

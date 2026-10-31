@@ -64,7 +64,7 @@ class PluginZipTests(unittest.TestCase):
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
             (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
-            server = {"command": "uvx", "args": ["--from", "texttocad-mcp==1.0.0", "cad-mcp"]}
+            server = {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
 

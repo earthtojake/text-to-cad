@@ -13,7 +13,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 import cad_server  # noqa: E402
 from cad_server.mcp import ui  # noqa: E402

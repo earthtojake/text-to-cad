@@ -27,7 +27,7 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # The saved-format fixtures, the library's tests' (an old release's document).
-FIXTURES = Path(__file__).resolve().parents[2] / "texttocad" / "engine" / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "cad" / "engine" / "fixtures"
 
 from cad.engine.ids import file_id, model_id  # noqa: E402
 from cad_server.engine.registry import Registry  # noqa: E402

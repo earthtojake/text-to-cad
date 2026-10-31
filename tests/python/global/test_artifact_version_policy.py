@@ -26,7 +26,7 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     def test_viewer_server_info_schema_version_is_gone(self) -> None:
         self.assertNotIn(
             "VIEWER_SERVER_INFO_SCHEMA_VERSION",
-            (ROOT / "packages/texttocad-server/src/cad_server/viewer/http_app.py").read_text(encoding="utf-8"),
+            (ROOT / "packages/cad-server/src/cad_server/viewer/http_app.py").read_text(encoding="utf-8"),
         )
 
     def test_the_glb_container_is_declared_once(self) -> None:
@@ -36,7 +36,7 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
         # cad_server._internal.primitive_mesh. cad.engine is the one exception: it is standalone
         # by law (it imports nothing of the packages outside itself) and writes its own GLB, so it
         # declares the container once more, in its GLB writer.
-        sources = [ROOT / "packages" / project / "src" for project in ("texttocad", "texttocad-server", "texttocad-mcp")]
+        sources = [ROOT / "packages" / project / "src" for project in ("cad", "cad-server", "cad-mcp")]
         magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)
         declarations = sorted(
             path.relative_to(source).as_posix()

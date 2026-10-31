@@ -124,7 +124,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
             (fixture / "SKILL.md").write_text("`cad` below means `cad +1.2.3`\n"
                                                "[Setup](references/setup.md) [Migration](references/migrations.md)\n",
                                                encoding="utf-8")
-            (fixture / "references/setup.md").write_text("uvx --from texttocad-server==1.2.3 cad doctor\n"
+            (fixture / "references/setup.md").write_text("uvx --from cad-server==1.2.3 cad doctor\n"
                                                           r"%USERPROFILE%\.local\bin\cad.cmd +1.2.3" + "\n",
                                                           encoding="utf-8")
             historical = "An older release used cadgen==0.1.0 and cad +0.1.0.\n"
@@ -135,24 +135,24 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["version"], "9.9.9")
-            self.assertIn("texttocad-mcp==9.9.9", manifest["mcpServers"]["cad"]["args"])
+            self.assertIn("cad-mcp==9.9.9", manifest["mcpServers"]["cad"]["args"])
             # The five distributions are the release, and the server and the aliases pin the library at it.
-            for project in ("texttocad", "texttocad-server", "texttocad-mcp", "aliases/cadgen", "aliases/text-to-cad"):
+            for project in ("cad", "cad-server", "cad-mcp", "aliases/cadgen", "aliases/text-to-cad"):
                 text = (root / "packages" / project / "pyproject.toml").read_text(encoding="utf-8")
                 self.assertIn('\nversion = "9.9.9"\n', text, project)
-                if project not in ("texttocad", "texttocad-mcp"):
-                    self.assertIn('"texttocad==9.9.9"', text, project)
-                    self.assertNotRegex(text, r"texttocad==(?!9\.9\.9)", project)
+                if project not in ("cad", "cad-mcp"):
+                    self.assertIn('"cad==9.9.9"', text, project)
+                    self.assertNotRegex(text, r"cad==(?!9\.9\.9)", project)
             # The one-line installer falls back to the release it ships with, and pins nothing else:
-            # its `texttocad-server==$version` is the release it found.
+            # its `cad-server==$version` is the release it found.
             installer = (root / "scripts/install/install.sh").read_text(encoding="utf-8")
             self.assertIn('\nCAD_VERSION="9.9.9"\n', installer)
             self.assertIn('--from "$requirement" cad "$verb"', installer)
-            self.assertIn('requirement="texttocad-server==$version"', installer)
+            self.assertIn('requirement="cad-server==$version"', installer)
             self.assertIn('\n    $CadVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
             self.assertIn("`cad +9.9.9`", (fixture / "SKILL.md").read_text(encoding="utf-8"))
             guide = (fixture / "references/setup.md").read_text(encoding="utf-8")
-            self.assertIn("--from texttocad-server==9.9.9 cad doctor", guide)
+            self.assertIn("--from cad-server==9.9.9 cad doctor", guide)
             self.assertIn("cad.cmd +9.9.9", guide)
             self.assertEqual((fixture / "references/migrations.md").read_text(encoding="utf-8"), historical)
             # Every skill's launch command moves with the server's, so they stay one installation:
@@ -162,20 +162,20 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn("`cad +9.9.9`", skill)
             self.assertIn("`python` below means `cad +9.9.9 run`", skill)
             guide = (root / "skills/cad/references/setup.md").read_text(encoding="utf-8")
-            self.assertIn("--from texttocad-server==9.9.9 cad doctor`", guide)
+            self.assertIn("--from cad-server==9.9.9 cad doctor`", guide)
             self.assertIn("it says 9.9.9 is not installed", guide)
             self.assertIn("`cad.cmd +9.9.9`", guide)
             # So does the turn-off command the privacy policy prints.
-            self.assertIn("--from texttocad-server==9.9.9 cad telemetry off",
+            self.assertIn("--from cad-server==9.9.9 cad telemetry off",
                           (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
             # The README and the docs site's homepage are prose and no pin target: a pin there would
             # never be stamped.
             for page in ("README.md", "apps/docs/src/lib/content.ts"):
-                self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(cadgen|texttocad(-server|-mcp)?)==", page)
+                self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(?<![\w.-])(cadgen|cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?)==", page)
             # And the install page's Claude Desktop config and the installer it says the command runs.
             page = (root / "docs/install.md").read_text(encoding="utf-8")
-            self.assertIn('"--from", "texttocad-mcp==9.9.9", "cad-mcp"', page)
-            self.assertIn("--from texttocad-server==9.9.9 cad setup", page)
+            self.assertIn('"--from", "cad-mcp==9.9.9", "cad-mcp"', page)
+            self.assertIn("--from cad-server==9.9.9 cad setup", page)
 
     def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
         """check-version.sh refuses an installer script that would fall back to another release."""

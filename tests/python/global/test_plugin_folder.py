@@ -9,7 +9,7 @@ and Gemini CLI, run in a home of their own (`env -i`: HOME, CLAUDE_CONFIG_DIR an
 a temporary folder), are pointed at it as `cad setup` points them (cad_server/_internal/providers.py),
 read a regenerated folder in place, and let it go again. Without the command, that host's part is
 skipped. Codex and Cursor keep copies of the folder: their commands are the providers suite's, in dry
-run (tests/python/packages/texttocad_server/test_providers.py).
+run (tests/python/packages/cad_server/test_providers.py).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from pathlib import Path
 from tests.python.support.paths import REPO_ROOT
 from tests.python.support.tmp_root import temporary_directory
 
-INTERNAL = REPO_ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "_internal"
+INTERNAL = REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server" / "_internal"
 
 
 def _load(name: str, path: Path):

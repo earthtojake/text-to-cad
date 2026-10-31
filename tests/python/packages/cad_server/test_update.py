@@ -20,7 +20,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server._internal import installations, releases, switch, update  # noqa: E402
 from cad.engine import client  # noqa: E402

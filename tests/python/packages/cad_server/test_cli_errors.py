@@ -13,7 +13,7 @@ from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server._internal.cli_errors import report_cli_error  # noqa: E402
 

@@ -8,9 +8,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # The three distributions' projects: the library, the server and the shim (packages/README.md).
-LIBRARY = REPO_ROOT / "packages" / "texttocad"
-SERVER = REPO_ROOT / "packages" / "texttocad-server"
-SHIM = REPO_ROOT / "packages" / "texttocad-mcp"
+LIBRARY = REPO_ROOT / "packages" / "cad"
+SERVER = REPO_ROOT / "packages" / "cad-server"
+SHIM = REPO_ROOT / "packages" / "cad-mcp"
 PROJECTS = (LIBRARY, SERVER, SHIM)
 # Their source trees, and ``PYTHONPATH``'s spelling of them: a child a test starts imports this
 # checkout's packages, never whatever its interpreter has installed.

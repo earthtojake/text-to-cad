@@ -55,8 +55,8 @@ from typing import Callable, Iterable
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# The three packages' suites, one folder each under it: the library's (texttocad), the server's
-# (texttocad_server) and the shim's (texttocad_mcp). The cadgen jobs run them all.
+# The three packages' suites, one folder each under it: the library's (cad), the server's
+# (cad_server) and the shim's (cad_mcp). The cadgen jobs run them all.
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
@@ -148,14 +148,14 @@ def _test_file(suite: str, whole: str | None = None) -> Callable[[str], Select]:
 # that. So a change confined to one of them reaches only the package tests that import or
 # start it, which name it (or a support module that does), and the tests that read or import
 # all of the packages at once; and, for the viewer, the gates that serve the bundled client. The
-# skill suites and the heavy policy tests reach neither. The shim (texttocad-mcp) is a leaf too:
+# skill suites and the heavy policy tests reach neither. The shim (cad-mcp) is a leaf too:
 # nothing imports it but its own suite and the tests that name it.
-LIBRARY_SRC = "packages/texttocad/src/cad"
-SERVER_SRC = "packages/texttocad-server/src/cad_server"
+LIBRARY_SRC = "packages/cad/src/cad"
+SERVER_SRC = "packages/cad-server/src/cad_server"
 VIEWER_CODE = (f"{SERVER_SRC}/viewer/**", f"{SERVER_SRC}/cli/viewer.py")
 MCP_CODE = (f"{SERVER_SRC}/mcp/**",)
 VIEWER_SHARED = (f"{SERVER_SRC}/viewer/__init__.py", f"{SERVER_SRC}/viewer/recents.py")
-SHIM_CODE = ("packages/texttocad-mcp/**",)
+SHIM_CODE = ("packages/cad-mcp/**",)
 _NAMES_VIEWER = r"cad_server\.viewer|cad_server\.mcp|cli\.viewer|cli\.mcp|[\"'](?:viewer|mcp)[\"' ]"
 _NAMES_MCP = r"cad_server\.mcp|cli\.mcp|[\"']mcp[\"' ]"
 _NAMES_SHIM = r"\bcad_mcp\b"
@@ -182,15 +182,15 @@ def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
 
 def _viewer_change(path: str) -> Select:
     return select(flags=["web_viewer", "packaging"],
-                  cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("texttocad_server/viewer", "texttocad_server/mcp")))
+                  cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("cad_server/viewer", "cad_server/mcp")))
 
 
 def _mcp_change(path: str) -> Select:
-    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("texttocad_server/mcp",)))
+    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("cad_server/mcp",)))
 
 
 def _shim_change(path: str) -> Select:
-    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_SHIM, ("texttocad_mcp",)))
+    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_SHIM, ("cad_mcp",)))
 
 
 # The engine (cad.engine, and the server's half, cad_server.engine) is no leaf: every build,
@@ -199,7 +199,7 @@ def _shim_change(path: str) -> Select:
 # library's root names are its. A change to it reaches whatever the packages reach.
 ENGINE_CODE = (f"{LIBRARY_SRC}/engine/**", f"{SERVER_SRC}/engine/**")
 # The packages' projects, and the alias distributions (one-file projects, each a pin of the library).
-PACKAGE_PROJECTS = ("packages/texttocad", "packages/texttocad-server", "packages/texttocad-mcp")
+PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen", "packages/aliases/text-to-cad")
 
 _MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -277,7 +277,7 @@ RULES: tuple[Rule, ...] = (
     # The robot renderer's browser fixtures are the payloads cadgen resolves for its descriptions:
     # the payload suite asserts they are current.
     Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
-         select(cadgen=[f"{CADGEN_SUITE}/texttocad_server/test_robot_payload.py"])),
+         select(cadgen=[f"{CADGEN_SUITE}/cad_server/test_robot_payload.py"])),
     Rule(("tests/browser/**",), select(flags=["web_viewer", "packaging"])),
 
     # Tests: a test file runs itself.
@@ -304,7 +304,7 @@ RULES: tuple[Rule, ...] = (
 
     # The one-line installer: its tests read both scripts, and the docs site serves copies of them.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
-         select(flags=["docs"], cadgen=[f"{CADGEN_SUITE}/texttocad_server/test_setup.py"])),
+         select(flags=["docs"], cadgen=[f"{CADGEN_SUITE}/cad_server/test_setup.py"])),
 
     # What builds and checks the wheel: bundle.sh stamps metadata with sync-version.mjs.
     Rule((

@@ -30,7 +30,7 @@ picture differs from its own studio drawn without the model (``preview-<camera>-
 It writes each picture, ``metrics.json`` (``hue`` beside the rows) and a contact sheet per document
 (Chromium, OCCT and the ΔE map side by side, at most 1800 px wide), and prints both tables.
 
-    PYTHONPATH=packages/texttocad/src .venv/bin/python scripts/bench/occt_parity.py \\
+    PYTHONPATH=packages/cad/src .venv/bin/python scripts/bench/occt_parity.py \\
         --doc fixture=path/to/bench.xbf --doc motorbike=models/motorbike/XBF/motorbike.xbf \\
         --out tmp/bench/occt-parity/after
 

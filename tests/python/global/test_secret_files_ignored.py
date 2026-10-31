@@ -23,7 +23,7 @@ def ignored(*paths: str) -> set[str]:
 class SecretFilesIgnoredTest(unittest.TestCase):
     def test_environment_files_keys_and_certificates_are_ignored_everywhere(self) -> None:
         secrets = [".env", ".env.local", "apps/api/.env", "apps/api/.env.production.local",
-                   "apps/web/.env.development", "packages/texttocad/signing.key", "deploy/server.pem"]
+                   "apps/web/.env.development", "packages/cad/signing.key", "deploy/server.pem"]
         self.assertEqual(ignored(*secrets), set(secrets))
 
     def test_an_example_that_names_the_variables_stays_addable(self) -> None:

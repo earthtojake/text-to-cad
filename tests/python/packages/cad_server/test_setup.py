@@ -30,7 +30,7 @@ from unittest import mock
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 import cad_server  # noqa: E402
 from cad_server import analytics  # noqa: E402
@@ -88,7 +88,7 @@ elif args[:3] == ["plugin", "marketplace", "add"]:
 def plugin_source(root: Path) -> Path:
     """A plugin of the test's own, laid out as the server's wheel carries it: every file the folder is
     written from, and a skill."""
-    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "texttocad-mcp==0.0.1", "cad-mcp"],
+    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "cad-mcp==0.0.1", "cad-mcp"],
                                      "env": {"CAD_INSTALL_CHANNEL": "x"}}}}
     files = {name: b"bytes" for name in plugin.FILES}
     files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.1"}).encode() for name in plugin.MANIFESTS})
@@ -209,7 +209,7 @@ class Fixture(unittest.TestCase):
 
     def entry(self, release: str = RELEASE) -> dict:
         return {"command": os.path.abspath(self.machine.which("uvx")),
-                "args": [*LAUNCHER[1:], f"texttocad-mcp=={release}", "cad-mcp"],
+                "args": [*LAUNCHER[1:], f"cad-mcp=={release}", "cad-mcp"],
                 "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
 
     def older_installation(self, version: str = "0.0.1") -> dict:
@@ -470,7 +470,7 @@ class InstallUpdateAndUninstall(Fixture):
 
         def ensure(installation=None, *, make=True, told=None):
             if make and "env" not in made:
-                told("making the CAD kernel environment, once: texttocad[build123d] in the cache folder")
+                told("making the CAD kernel environment, once: cad[build123d] in the cache folder")
                 made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
             return made.get("env")
 
@@ -481,14 +481,14 @@ class InstallUpdateAndUninstall(Fixture):
             first = self.run_setup()
             again = self.run_setup()
         self.assertEqual(planned[0], 0)
-        self.assertRegex(planned[1], rf"\n  build123d\s+make\s+texttocad\[build123d\] {re.escape(core.release)} in "
+        self.assertRegex(planned[1], rf"\n  build123d\s+make\s+cad\[build123d\] {re.escape(core.release)} in "
                                      rf"{re.escape(where)}, once\n")
         self.assertNotIn("making", planned[1], "a dry run makes nothing")
         self.assertEqual(first[0], 0, first[1])
-        self.assertIn("build123d making the CAD kernel environment, once: texttocad[build123d] in the cache folder\n", first[1])
+        self.assertIn("build123d making the CAD kernel environment, once: cad[build123d] in the cache folder\n", first[1])
         self.assertEqual(again[0], 0)
         self.assertNotIn("making", again[1])
-        self.assertRegex(again[1], r"build123d\s+leave\s+texttocad\[build123d\] ")
+        self.assertRegex(again[1], r"build123d\s+leave\s+cad\[build123d\] ")
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
@@ -724,8 +724,8 @@ class TheOneLineInstaller(unittest.TestCase):
         self.assertEqual(depth, 0)
         launch = " ".join(LAUNCHER[1:-1])
         self.assertIn(f'exec "$uvx" {launch} $refresh --from "$requirement" cad "$verb" "$@"\n', text)
-        self.assertIn('requirement="texttocad-server==$version"', text)
-        self.assertIn('refresh="--refresh-package texttocad-server --refresh-package texttocad"', text)
+        self.assertIn('requirement="cad-server==$version"', text)
+        self.assertIn('refresh="--refresh-package cad-server --refresh-package cad"', text)
         # One way in, the same at a terminal or not: cad asks nothing, so it reads none.
         self.assertEqual(text.count('cad "$verb" "$@"'), 1)
         self.assertNotIn("cad install", text)
@@ -748,11 +748,11 @@ class TheOneLineInstaller(unittest.TestCase):
         self.assertEqual(re.findall(r'^\s*\$CadVersion = "([^"]*)"$', text, re.M), [VERSION])
         words = ", ".join(f"'{word}'" for word in LAUNCHER[1:-1])
         self.assertIn(f"@({words}) + $refresh + @('--from', $requirement, 'cad', $verb) + $rest", text)
-        self.assertIn('$requirement = "texttocad-server==$version"', text)
+        self.assertIn('$requirement = "cad-server==$version"', text)
         self.assertIn("$verb = 'setup'", text)
         self.assertIn("if ($argument -eq '--uninstall') { $verb = 'uninstall'; continue }", text)
         self.assertNotIn("cad install", text)
-        self.assertIn("$refresh = @('--refresh-package', 'texttocad-server', '--refresh-package', 'texttocad')", text)
+        self.assertIn("$refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')", text)
         self.assertNotIn("--yes", text)
         pwsh = shutil.which("pwsh")
         if pwsh:
@@ -785,40 +785,40 @@ class TheOneLineInstaller(unittest.TestCase):
                 given = arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
                 return done, given
 
-            head = [*LAUNCHER[1:-1], "--refresh-package", "texttocad-server", "--refresh-package", "texttocad", "--from"]
+            head = [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad", "--from"]
             done, given = run("--dry-run", "--only", "claude,codex")
             self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertEqual(given, [*head, "texttocad-server==9.9.9", "cad", "setup", "--dry-run", "--only", "claude,codex"])
+            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "setup", "--dry-run", "--only", "claude,codex"])
             self.assertIn("cad setup --dry-run --only claude,codex\n", done.stderr)  # the Running: line
             # A release asked for by name is the one installed; the device runs its newest release.
             done, given = run("--version", "1.2.3")
-            self.assertEqual(given, [*head, "texttocad-server==1.2.3", "cad", "setup"])
+            self.assertEqual(given, [*head, "cad-server==1.2.3", "cad", "setup"])
             done, given = run("--version", "0.0.1")  # older than the script's own, taken as asked
-            self.assertEqual(given, [*head, "texttocad-server==0.0.1", "cad", "setup"])
+            self.assertEqual(given, [*head, "cad-server==0.0.1", "cad", "setup"])
             # --uninstall picks the verb, wherever it is given; the rest goes to `cad uninstall`.
             done, given = run("--purge", "--uninstall", "--dry-run")
-            self.assertEqual(given, [*head, "texttocad-server==9.9.9", "cad", "uninstall", "--purge", "--dry-run"])
+            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "uninstall", "--purge", "--dry-run"])
             self.assertIn("cad uninstall --purge --dry-run\n", done.stderr)
             done, given = run("--version=1.2.4")
-            self.assertEqual(given[len(head)], "texttocad-server==1.2.4")
+            self.assertEqual(given[len(head)], "cad-server==1.2.4")
             done, given = run(feed="")  # the version feed cannot be read: the release the script was published with
-            self.assertEqual(given[len(head)], f"texttocad-server=={VERSION}")
+            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
             self.assertIn("the version feed could not be read", done.stderr)
             # The feed lags a release for up to an hour: never a release older than this script's own,
             # which has no `cad setup`; a newer one, and this very release, are taken as the feed says.
             done, given = run(feed='{"latest":"0.8.0"}')
-            self.assertEqual(given[len(head)], f"texttocad-server=={VERSION}")
+            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
             self.assertIn("the version feed still names 0.8.0", done.stderr)
             done, given = run(feed=f'{{"latest":"{VERSION}"}}')
-            self.assertEqual(given[len(head)], f"texttocad-server=={VERSION}")
+            self.assertEqual(given[len(head)], f"cad-server=={VERSION}")
             self.assertIn("the newest release", done.stderr)
             # A build named outright, for testing before its release: taken as it is, nothing refreshed.
             plain = [*LAUNCHER[1:-1], "--from"]
-            done, given = run("--from", "/builds/texttocad_server-9.9.9-py3-none-any.whl", "--dry-run")
-            self.assertEqual(given, [*plain, "/builds/texttocad_server-9.9.9-py3-none-any.whl", "cad", "setup", "--dry-run"])
+            done, given = run("--from", "/builds/cad_server-9.9.9-py3-none-any.whl", "--dry-run")
+            self.assertEqual(given, [*plain, "/builds/cad_server-9.9.9-py3-none-any.whl", "cad", "setup", "--dry-run"])
             self.assertIn("as --from asked", done.stderr)
-            done, given = run("--dry-run", CAD_INSTALL_FROM="/builds/texttocad-server")
-            self.assertEqual(given[:len(plain) + 1], [*plain, "/builds/texttocad-server"])
+            done, given = run("--dry-run", CAD_INSTALL_FROM="/builds/cad-server")
+            self.assertEqual(given[:len(plain) + 1], [*plain, "/builds/cad-server"])
             done, given = run("--from")
             self.assertEqual((done.returncode, given), (1, []))
             for argv in (("--version", "1.2.3;true"), ("--version",)):

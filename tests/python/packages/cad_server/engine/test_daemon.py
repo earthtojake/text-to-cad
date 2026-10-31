@@ -1436,7 +1436,7 @@ class DaemonTest(unittest.TestCase):
                          "a restart holds nothing: status lists what this server built")
 
     def test_a_snapshot_of_a_job_draws_a_memory_model_without_an_intermediate_document(self) -> None:
-        from tests.python.packages.texttocad_server.engine.test_snapshot import gl
+        from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         gl()
         address = self._bare()

@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
 python_candidate="${VIEWER_PYTHON:-$PYTHON_BIN}"
 PYTHON="$(command -v "$python_candidate" 2>/dev/null || true)"
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/texttocad-server/src/cad_server/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 HOST=127.0.0.1
 
 # The checkout's own packages (common.sh's PACKAGE_SOURCES), ahead of whatever is installed.

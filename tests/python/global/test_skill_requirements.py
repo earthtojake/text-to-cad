@@ -1,7 +1,7 @@
 """A skill that runs the server must run its version by the `cad` command, and name its install command,
 pinned to this release.
 
-The server is one command, `uvx --no-config --managed-python --python 3.14 --from texttocad-server==<release> cad`
+The server is one command, `uvx --no-config --managed-python --python 3.14 --from cad-server==<release> cad`
 (cad_server._internal.launch): uv keeps one installation per requirement, and that installation
 registers itself and writes the `cad` command, `~/.local/bin/cad`
 (cad_server._internal.installations), which every skill runs as `cad +<release>` -- uvx cannot start
@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-LAUNCH = "uvx --no-config --managed-python --python 3.14 --from texttocad-server=={version} {tool}"
+LAUNCH = "uvx --no-config --managed-python --python 3.14 --from cad-server=={version} {tool}"
 DEFINITIONS = ("- `cad` below means `cad +{version}` (`~/.local/bin/cad +{version}` where "
                "`~/.local/bin` is not on your PATH)\n- `python` below means `cad +{version} run`\n")
 INSTALL = ("If `cad` is not on your PATH, or it says {version} is not installed, run\n"
@@ -105,7 +105,7 @@ class SkillLaunchCommand(unittest.TestCase):
             setup = skill / "references" / "setup.md"
             with self.subTest(skill=skill.name):
                 if not _teaches_the_server(skill):
-                    self.assertNotIn("--from texttocad-server==", text, "a skill that never runs the server downloads nothing")
+                    self.assertNotIn("--from cad-server==", text, "a skill that never runs the server downloads nothing")
                     self.assertFalse(setup.exists(), "a skill that never runs the server has no setup guide")
                     continue
                 self.assertIn(DEFINITIONS.format(version=VERSION), text)
@@ -123,8 +123,8 @@ class SkillLaunchCommand(unittest.TestCase):
             with self.subTest(skill=skill.name):
                 if manifest.is_file():
                     lines = [line.split("#")[0].strip() for line in manifest.read_text(encoding="utf-8").splitlines()]
-                    self.assertFalse([line for line in lines if line.startswith(("cadgen", "texttocad", "text-to-cad"))],
-                                     manifest)
+                    names = {re.sub(r"[-_.]+", "-", re.match(r"[A-Za-z0-9._-]*", line).group(0)).lower() for line in lines}
+                    self.assertFalse(names & {"cad", "cad-server", "cad-mcp", "cadgen", "text-to-cad"}, manifest)
 
     def test_the_launch_command_and_the_refusal_are_the_servers_own(self) -> None:
         import os

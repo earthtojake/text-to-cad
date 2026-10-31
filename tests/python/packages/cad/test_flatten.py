@@ -18,7 +18,7 @@ import unittest
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 
 def _plate():

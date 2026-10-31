@@ -1,16 +1,16 @@
 """The three distributions, by where their code runs, and what each may import.
 
-- **The library** (``texttocad``: ``cad``, and ``cadgen``, its earlier name): what a model imports and
+- **The library** (``cad``, imported as ``cad``, and ``cadgen``, its earlier name): what a model imports and
   what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol
   a client speaks. It runs in the CAD kernel environment, where the server is not installed, so it
   imports no module of the server's or the shim's, not even lazily: every import a library module
   makes, at its top or in a function, is of the library.
-- **The server** (``texttocad-server``: ``cad_server``): what runs in the daemon or a command -- the
+- **The server** (``cad-server``: ``cad_server``): what runs in the daemon or a command -- the
   daemon, the registry, the HTTP API, the CAD Viewer's and the CAD app's servers, every verb, the
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
-- **The shim** (``texttocad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
+- **The shim** (``cad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
   library alone.
 """
 

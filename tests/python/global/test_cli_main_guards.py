@@ -22,7 +22,7 @@ from cad_server.cli import _COMMANDS
 from cad_server.cli import main as dispatch
 
 ROOT = Path(__file__).resolve().parents[3]
-CLI_DIR = ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "cli"
+CLI_DIR = ROOT / "packages" / "cad-server" / "src" / "cad_server" / "cli"
 
 MAIN_DEF = re.compile(r"^def main\(", re.MULTILINE)
 GUARD = re.compile(r"^if __name__ == \"__main__\":", re.MULTILINE)

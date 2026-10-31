@@ -3,7 +3,7 @@
 Every top-level name of ``cadgen`` is ``cad``'s own, and every module ``cadgen.<x>`` is the module object
 ``cad.<x>``: imported once, under its own name, and handed out as it is -- never a second copy whose
 classes and memo would be strangers to the first. Nothing is said when it is used. There is no
-``texttocad`` import name: the distribution is named so, the import is ``cad``.
+``text_to_cad`` import name: the distribution ``text-to-cad`` is named so, and installs ``cad``.
 
 Run in a fresh interpreter each: this one has imported ``cad`` already, and the alias must hold whichever
 name a process imports first.
@@ -80,9 +80,9 @@ class AliasTest(unittest.TestCase):
                 import cadgen.no_such_module_here
             except ModuleNotFoundError as error:
                 missing = error.name
-            print(json.dumps({"missing": missing, "texttocad": importlib.util.find_spec("texttocad") is None}))
+            print(json.dumps({"missing": missing, "text_to_cad": importlib.util.find_spec("text_to_cad") is None}))
         """)
-        self.assertEqual(found, {"missing": "cadgen.no_such_module_here", "texttocad": True})
+        self.assertEqual(found, {"missing": "cadgen.no_such_module_here", "text_to_cad": True})
 
 
 if __name__ == "__main__":

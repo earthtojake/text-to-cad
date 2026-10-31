@@ -22,8 +22,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # Where each package of the family lives: the library's and the server's source trees.
-LIBRARY_SRC = REPO_ROOT / "packages" / "texttocad" / "src"
-SERVER_SRC = REPO_ROOT / "packages" / "texttocad-server" / "src"
+LIBRARY_SRC = REPO_ROOT / "packages" / "cad" / "src"
+SERVER_SRC = REPO_ROOT / "packages" / "cad-server" / "src"
 OURS = ("cad", "cad_server", "cadgen")
 
 FAMILY = [
@@ -36,7 +36,7 @@ FAMILY = [
         "sdf_external.py",
         "findings.py",
         "xml_common.py",
-        # The public namespaces the CLIs are shells over (packages/texttocad/README.md, law 6).
+        # The public namespaces the CLIs are shells over (packages/cad/README.md, law 6).
         # They are the family's front door now, so they inherit its purity rule.
         "urdf.py",
         "srdf.py",

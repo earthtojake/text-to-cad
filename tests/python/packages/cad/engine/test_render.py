@@ -5,7 +5,7 @@ pictures of the material fixture.
 Every test that draws makes an OpenGL context (`render/context.py`) and is skipped, saying why,
 where none can be made -- but fails on CI with an X display, which was set up to draw
 (`tests/python/support/opengl.py`). macOS draws on a hidden Cocoa window. Linux needs an X server
-with GLX -- under Xvfb: `xvfb-run -a scripts/test/test-python.sh tests/python/packages/texttocad/engine/test_render.py`
+with GLX -- under Xvfb: `xvfb-run -a scripts/test/test-python.sh tests/python/packages/cad/engine/test_render.py`
 -- or an OCCT built with EGL; Windows draws on a hidden window.
 
 The golden pictures (`render_golden/*.png`) are the material fixture (`test_materials.py`'s bench,
@@ -17,7 +17,7 @@ and drivers apart, a line a pixel over still matches). Where a platform's OpenGL
 the row has a golden of that platform's own (`render_golden/<platform>/<row>.png`), held to the same
 bound; a row missed in CI prints the picture it drew (`GOLDEN <platform>/<row>`, base64), that
 platform's golden once a person has looked at it. A deliberate change to the look makes them
-again: `CAD_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/texttocad/engine/test_render.py`.
+again: `CAD_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/cad/engine/test_render.py`.
 """
 
 from __future__ import annotations

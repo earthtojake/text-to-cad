@@ -13,7 +13,7 @@ Usage:
   scripts/bundle/bundle.sh [--check] [--clean]
 
 The one bundle entry point: stamps derived version metadata from VERSION, then builds
-the server's packaged runtime (packages/texttocad-server/src/cad_server/_runtime) with
+the server's packaged runtime (packages/cad-server/src/cad_server/_runtime) with
 scripts/bundle/cadgen-runtime.sh. The runtime is gitignored and ships only inside the
 server's wheel, so this is what produces it -- in a checkout, in CI, and before `python -m build`.
 

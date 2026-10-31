@@ -1,5 +1,5 @@
 """The engine's rename waits out a Windows handle about to close and nothing else, as cadgen's
-own does (``tests/python/packages/texttocad/test_atomic_replace.py`` holds that policy)."""
+own does (``tests/python/packages/cad/test_atomic_replace.py`` holds that policy)."""
 
 from __future__ import annotations
 

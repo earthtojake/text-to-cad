@@ -4,7 +4,7 @@
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
 # sys.path and the apps' builds sit beside the packages. None of that is true after
-# `pip install texttocad-server`, so the failures this catches are exactly the ones no other
+# `pip install cad-server`, so the failures this catches are exactly the ones no other
 # check can: an asset left out of package-data, a module that resolves only because a sibling
 # directory happened to be adjacent. Those all pass locally and break for the person who
 # installed it.
@@ -14,8 +14,8 @@
 # editable ones, or this would silently test the source tree again. See _link_repo_deps.
 #
 # Usage: scripts/test/test-installed.sh [--wheels DIR]
-#   DIR holds the library's, the server's and the shim's wheels (texttocad, texttocad_server,
-#   texttocad_mcp), as scripts/release/check-wheel-contents.sh leaves them; without it they are built.
+#   DIR holds the library's, the server's and the shim's wheels (cad, cad_server,
+#   cad_mcp), as scripts/release/check-wheel-contents.sh leaves them; without it they are built.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,7 +94,7 @@ step() { printf '\n== %s\n' "$*"; }
 if [ -z "$WHEELS" ]; then
   step "Build the wheels"
   "$REPO_ROOT/scripts/bundle/bundle.sh" >/dev/null
-  for project in texttocad texttocad-server texttocad-mcp; do
+  for project in cad cad-server cad-mcp; do
     "$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/$project" >"$WORK/build.log" 2>&1 \
       || { cat "$WORK/build.log" >&2; fail "the $project wheel's build"; }
   done
@@ -104,7 +104,7 @@ else
 fi
 # One wheel of each distribution: a wheel's name spells a distribution's hyphens as underscores.
 installing=()
-for distribution in texttocad texttocad_server texttocad_mcp; do
+for distribution in cad cad_server cad_mcp; do
   found=("$WHEELS/$distribution"-[0-9]*.whl)
   [ "${#found[@]}" -eq 1 ] && [ -f "${found[0]}" ] || fail "expected one $distribution wheel in $WHEELS"
   installing+=("${found[0]}")
@@ -148,9 +148,9 @@ PY
 
 step "import build123d is lazy from interpreter start: the library wheel's .pth is in site-packages"
 scratch_sp="$("$VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')"
-PTH="$scratch_sp/texttocad-lazy-kernel.pth"
-[ -f "$PTH" ] || fail "texttocad-lazy-kernel.pth is not in $scratch_sp"
-[ "$(cat "$PTH")" = "import cad._internal.lazy_kernel" ] || fail "texttocad-lazy-kernel.pth does not import the finder"
+PTH="$scratch_sp/cad-lazy-kernel.pth"
+[ -f "$PTH" ] || fail "cad-lazy-kernel.pth is not in $scratch_sp"
+[ "$(cat "$PTH")" = "import cad._internal.lazy_kernel" ] || fail "cad-lazy-kernel.pth does not import the finder"
 # Bound, not loaded: the kernel is untouched until an attribute is read from it.
 lazy="$(cd "$EMPTY" && "$VENV/bin/python" -c "import build123d as bd; import sys; print('OCP' in sys.modules)")"
 [ "$lazy" = "False" ] || fail "import build123d loaded the kernel ($lazy)"

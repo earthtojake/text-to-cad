@@ -954,15 +954,15 @@ class NoticeTest(_Tmp):
         env = {"CAD_STATE_DIR": str(self.tmp / "state"), "CAD_LAUNCHER_DIR": str(launcher),
                "CAD_INSTALLATION_VERSION": "", "PATH": str(self.tmp / "nowhere")}
         made = self.tmp / "uv" / "archive-v0" / "abc"  # an environment uvx made
-        record = made / "lib" / "site-packages" / "texttocad_server-0.8.0.dist-info"
+        record = made / "lib" / "site-packages" / "cad_server-0.8.0.dist-info"
         record.mkdir(parents=True)
         with mock.patch.dict("os.environ", env), mock.patch("sys.prefix", str(made)), \
                 mock.patch("sysconfig.get_path", return_value=str(record.parent)) as site:
             # Installed from an index: the release's own requirement, which uvx reuses.
-            self.assertEqual(off_command(), f"{uvx} texttocad-server==0.8.0 cad telemetry off")
+            self.assertEqual(off_command(), f"{uvx} cad-server==0.8.0 cad telemetry off")
             self.assertEqual(site.call_args.kwargs["vars"], {"base": str(made), "platbase": str(made)})
             # From a wheel -- a development install's, whose number no index has: that wheel, while it is there.
-            wheel = self.tmp / "wheels" / "texttocad_server-0.8.0-py3-none-any.whl"
+            wheel = self.tmp / "wheels" / "cad_server-0.8.0-py3-none-any.whl"
             wheel.parent.mkdir()
             wheel.write_bytes(b"")
             (record / "direct_url.json").write_text(json.dumps({"url": wheel.as_uri(), "archive_info": {}}), encoding="utf-8")

@@ -22,7 +22,7 @@ import { acceleratedRaycast, computeBoundsTree } from "three-mesh-bvh";
 import { createStudioEnvironmentScene } from "../../packages/core/src/common/environmentMap.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT = process.argv[2] || path.join(REPO, "packages/texttocad/src/cad/engine/render/studio.hdr");
+const OUT = process.argv[2] || path.join(REPO, "packages/cad/src/cad/engine/render/studio.hdr");
 const WIDTH = 512;
 const HEIGHT = 256;
 const SAMPLES = 3;

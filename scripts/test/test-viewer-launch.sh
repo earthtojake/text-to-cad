@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOST="127.0.0.1"
 # VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
 # (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/texttocad-server/src/cad_server/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 
 echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 

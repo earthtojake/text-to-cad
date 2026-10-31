@@ -3,8 +3,8 @@
 Boundary law (packages/README.md and each package's README): apps import
 packages; packages never import apps (here for the Python distributions'; the JavaScript's
 direction, and core being framework-free, are scripts/test/check-dependencies.mjs's). Ships-alone
-law: each Python distribution (the library, texttocad; the server, texttocad-server; the shim,
-texttocad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
+law: each Python distribution (the library, cad; the server, cad-server; the shim,
+cad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
 models/ and whose packages/ is never installed; the server's wheel carries skills/ whole, and
 writes it into the plugin folder the agent apps read) each work in isolation outside
@@ -46,7 +46,7 @@ class PackagesNeverImportApps(unittest.TestCase):
 
 
 # The ships-alone law. Two surfaces leave this repo whole:
-#   - packages/texttocad, packages/texttocad-server and packages/texttocad-mcp each
+#   - packages/cad, packages/cad-server and packages/cad-mcp each
 #     build into a PyPI wheel (each README.md is its long description; the server's
 #     @text-to-cad/core and viewer client arrive already bundled under _runtime/).
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by

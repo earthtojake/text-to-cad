@@ -26,7 +26,7 @@ from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 # One layer per converter family, so a layer missing from the payload names the
 # geometry that vanished rather than "something".

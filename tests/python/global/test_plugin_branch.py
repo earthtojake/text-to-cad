@@ -21,7 +21,7 @@ branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
-SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "texttocad-mcp==1.0.0", "cad-mcp"]}}})
+SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}}})
 
 
 def git(root: Path, *args: str) -> str:

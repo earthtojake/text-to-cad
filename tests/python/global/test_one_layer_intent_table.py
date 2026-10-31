@@ -29,7 +29,7 @@ class OneLayerIntentTable(unittest.TestCase):
     def test_the_engine_still_holds_the_one_table(self) -> None:
         # The guard above looks for the table by its name (the JavaScript copy's was
         # LAYER_INTENT_BY_TOKEN): a rename of the engine's would leave it looking for nothing.
-        source = (REPO_ROOT / "packages/texttocad/src/cad/engine/export/dxf.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "packages/cad/src/cad/engine/export/dxf.py").read_text(encoding="utf-8")
         self.assertIn("_INTENT_BY_TOKEN = {", source)
 
 

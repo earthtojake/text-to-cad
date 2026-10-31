@@ -15,7 +15,7 @@ The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paire
   test's server answers as a 400, as the viewer's route does.
 
 So the browser test needs no Python, and the Python suite holds these files
-current (``tests/python/packages/texttocad_server/test_robot_payload.py``). Regenerate after changing a
+current (``tests/python/packages/cad_server/test_robot_payload.py``). Regenerate after changing a
 description or the payload shape, from the repository root:
 
     .venv/bin/python packages/ui/src/renderers/robot/__fixtures__/make_fixtures.py
@@ -70,7 +70,7 @@ def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes
 
 
 def main() -> None:
-    for project in ("texttocad-mcp", "texttocad-server", "texttocad"):  # the library first on the path
+    for project in ("cad-mcp", "cad-server", "cad"):  # the library first on the path
         sys.path.insert(0, str(HERE.parents[5] / "packages" / project / "src"))
     payloads, refusals, meshes = fixture_payloads()
     primitives = HERE / "primitives"

@@ -17,7 +17,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server._internal import installations, proxy  # noqa: E402
 from cad_server.engine.registry import Folder, Registry  # noqa: E402
@@ -259,7 +259,7 @@ class ProxyFileTests(Fixture):
         with self.assertRaises(proxy.Refused) as refused:
             proxy.choose(None, [])
         self.assertEqual(str(refused.exception), "text-to-cad is not installed: run `uvx --no-config --managed-python "
-                                                 "--python 3.14 --from texttocad-server cad doctor` once, outside any "
+                                                 "--python 3.14 --from cad-server cad doctor` once, outside any "
                                                  "sandbox or with its permission")
         for version in ("1.0.0", "2.0.0"):
             record = self.registered(version)

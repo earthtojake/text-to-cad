@@ -1,6 +1,6 @@
 """A missing packaged runtime must say how to get one, and assets resolve explicitly.
 
-``packages/texttocad-server/src/cad_server/_runtime`` is built, never committed, so the ordinary state
+``packages/cad-server/src/cad_server/_runtime`` is built, never committed, so the ordinary state
 of a fresh clone is that it does not exist. Every failure downstream of that is opaque --
 a page 404ing on its own script -- so what reaches for it answers with the fix instead,
 and the fix differs by where cadgen is running from: a checkout builds, an installation
@@ -20,7 +20,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 from cad_server import assets  # noqa: E402
 

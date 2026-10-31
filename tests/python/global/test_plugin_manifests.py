@@ -256,7 +256,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertIn("--no-config", args)
         self.assertEqual(args[-1], "cad-mcp")
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(args[args.index("--from") + 1], f"texttocad-mcp=={version}")
+        self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
     def test_claude_starts_the_cad_server_pinned_to_this_release(self) -> None:
         # Every plugin ships the skills with CAD's server, even where the host can only take its
@@ -272,7 +272,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertIn("--no-config", args)
         self.assertEqual(args[-1], "cad-mcp")
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(args[args.index("--from") + 1], f"texttocad-mcp=={version}")
+        self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
@@ -333,7 +333,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = mcp_command(version)[1:]
-        self.assertEqual(expected, [*LAUNCHER[1:], f"texttocad-mcp=={version}", "cad-mcp"])
+        self.assertEqual(expected, [*LAUNCHER[1:], f"cad-mcp=={version}", "cad-mcp"])
         for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]

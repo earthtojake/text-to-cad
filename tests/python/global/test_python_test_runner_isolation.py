@@ -17,7 +17,7 @@ from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 
-add_repo_path("packages/texttocad/src")
+add_repo_path("packages/cad/src")
 
 spec = importlib.util.spec_from_file_location("isolated_unittest_runner", REPO_ROOT / "scripts/test/unittest_files.py")
 runner = importlib.util.module_from_spec(spec)

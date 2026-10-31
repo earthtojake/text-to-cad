@@ -40,8 +40,8 @@ add_sources()
 from cad_server._internal import base, plugin, providers  # noqa: E402
 
 # Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root.
-DISTRIBUTIONS = {"texttocad": (LIBRARY, ("cad", "cadgen"), ("texttocad-lazy-kernel.pth",)),
-                 "texttocad-server": (SERVER, ("cad_server",), ())}
+DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen"), ("cad-lazy-kernel.pth",)),
+                 "cad-server": (SERVER, ("cad_server",), ())}
 # Releases of this run alone (the process's id in them): what uv keeps of their wheels is this run's
 # to take out again, and a run beside it in another checkout builds others.
 _RUN = os.getpid() % 100_000
@@ -54,7 +54,7 @@ WINDOWS = os.name == "nt"
 def plugin_files() -> dict[str, bytes]:
     """A plugin of the test's own where the server's wheel carries its plugin (``_runtime/plugin``): every
     file the plugin folder is written from, and a skill."""
-    server = {"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "texttocad-mcp==0.0.0", "cad-mcp"]}}}
+    server = {"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cad-mcp==0.0.0", "cad-mcp"]}}}
     files = {name: b"bytes" for name in plugin.FILES}
     files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.0"}).encode() for name in plugin.MANIFESTS})
     files.update({name: json.dumps(server).encode() for name in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json",
@@ -75,7 +75,7 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
     stem = distribution.replace("-", "_")
     info = f"{stem}-{version}.dist-info"
     files: dict[str, bytes] = {name: (source / name).read_bytes() for name in roots}
-    if distribution == "texttocad-server":
+    if distribution == "cad-server":
         files.update(plugin_files())
     for top in packages:
         package = source / "src" / top
@@ -84,7 +84,7 @@ def wheel(distribution: str, version: str, folder: Path) -> Path:
             if (path.is_file() and parts[0] != "_runtime" and "__pycache__" not in parts and path.suffix != ".pyc"
                     and not path.name.startswith(".")):
                 files["/".join((top, *parts))] = path.read_bytes()
-    requirements = [f"texttocad=={version}" if requirement.startswith("texttocad==") else requirement
+    requirements = [f"cad=={version}" if requirement.startswith("cad==") else requirement
                     for requirement in project["dependencies"]]
     metadata = ["Metadata-Version: 2.4", f"Name: {distribution}", f"Version: {version}",
                 f"Requires-Python: {project['requires-python']}",
@@ -303,7 +303,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), A)
         self.assertTrue(desktop.is_file(), set_up.stdout + set_up.stderr)
-        self.assertIn(f"texttocad-mcp=={A}", desktop.read_text(encoding="utf-8"))
+        self.assertIn(f"cad-mcp=={A}", desktop.read_text(encoding="utf-8"))
         # The plugin folder every app is pointed at, A's.
         folder = self.work / "state" / plugin.FOLDER
         self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], A)
@@ -363,7 +363,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
             self.assertTrue((self.release(version) / "cadgen-release.json").is_file(), version)
-        self.assertIn(f"texttocad-mcp=={B}", desktop.read_text(encoding="utf-8"))
+        self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
         proxy = self.work / "bin" / ("cad.cmd" if WINDOWS else "cad")  # the cad command runs current
         self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
         # The plugin folder is B's, written by B's setup; the helper, once B's engine answered, had B write it

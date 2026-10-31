@@ -151,7 +151,7 @@ class PreviousTest(unittest.TestCase):
 
         self.source()
         code = ("import json, sys; from pathlib import Path; from cad.engine import build; "
-                "from tests.python.packages.texttocad_server.engine.test_previous import keep; "
+                "from tests.python.packages.cad_server.engine.test_previous import keep; "
                 "script, cache = Path(sys.argv[1]), Path(sys.argv[2]); "
                 "report = build.build(script, ['kit'], cwd=script.parent, cache=str(cache))[0]; "
                 "keep(script, 'kit', cache); print(json.dumps(report))")

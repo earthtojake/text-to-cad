@@ -8,7 +8,7 @@ cannot drift into agreement with a bug on either side.
 
 Regenerate with::
 
-    node tests/python/packages/texttocad_server/viewer/golden/gen_golden.mjs
+    node tests/python/packages/cad_server/viewer/golden/gen_golden.mjs
 """
 
 from __future__ import annotations

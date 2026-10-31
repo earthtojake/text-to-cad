@@ -219,8 +219,8 @@ def _counts(output: str) -> dict[str, int]:
 
 # The three packages' source trees under the checkout, the library's first (common.sh's
 # PACKAGE_SOURCES): what the run's own helpers import.
-SOURCES = (("packages", "texttocad", "src"), ("packages", "texttocad-server", "src"),
-           ("packages", "texttocad-mcp", "src"))
+SOURCES = (("packages", "cad", "src"), ("packages", "cad-server", "src"),
+           ("packages", "cad-mcp", "src"))
 
 
 def _source_path(top: str) -> str:
