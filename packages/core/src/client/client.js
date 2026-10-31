@@ -292,8 +292,13 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return locale === undefined ? request('/__cad/language', { operation: 'language' })
         : request('/__cad/language', { method: 'POST', headers: JSON_POST, body: { locale }, operation: 'language' });
     },
+    // Whether a newer text-to-cad is out, the release the engine runs and where an update is
+    // (`GET /__cad/version`); and the update button's click (`POST /__cad/update`), which answers the same.
     version() {
       return request('/__cad/version', { operation: 'version' });
+    },
+    startUpdate() {
+      return request('/__cad/update', { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, operation: 'update' });
     },
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl('/__cad/analytics/activity', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});

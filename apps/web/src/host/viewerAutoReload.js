@@ -1,6 +1,10 @@
 /**
  * The browser half of "the server is no longer the one this page loaded from".
  *
+ * An update is followed: the engine that answers with another release (`/__cad/server`'s `release`)
+ * and admits this page's credential is the device's engine of the next release, and the page reloads
+ * into it (`reload`, deferred while the page has something unsaved: `@text-to-cad/ui/update`).
+ *
  * Every viewer server says who it is: `/__cad/server`'s `identityToken`, its
  * cadgen version and a digest of the page it serves. Once that answer is not the
  * one the page loaded against, the page reloads, which picks up the client that
@@ -36,14 +40,15 @@ export const AUTO_RELOAD_PHASE = Object.freeze({
 
 /**
  * @param {{phase: string, since: number}} state
- * @param {{ok: boolean, identityToken?: string}} poll
- * @param {{baseline: string, now: number, watchMs?: number, reloadingMs?: number, follow?: boolean}} context  The cadence:
- *   the default cadence (`VIEWER_WATCH_INTERVAL_MS`, `VIEWER_RELOADING_POLL_MS`); `follow`, whether a
- *   new identity is reloaded into (a dev server's) or refused (`FOREIGN`, every engine-served page's).
+ * @param {{ok: boolean, identityToken?: string, release?: string}} poll
+ * @param {{baseline: string, release?: string, now: number, watchMs?: number, reloadingMs?: number, follow?: boolean}} context
+ *   The cadence: the default cadence (`VIEWER_WATCH_INTERVAL_MS`, `VIEWER_RELOADING_POLL_MS`); `follow`,
+ *   whether a new identity is reloaded into (a dev server's) or refused (`FOREIGN`, every engine-served
+ *   page's); `release`, the release the page loaded from, another of which -- an update -- is reloaded into.
  * @returns {{phase: string, since: number, reload: boolean, delayMs: number}}
  */
 export function nextAutoReloadState(state, poll, {
-  baseline, now, watchMs = VIEWER_WATCH_INTERVAL_MS, reloadingMs = VIEWER_RELOADING_POLL_MS, follow = false
+  baseline, release = "", now, watchMs = VIEWER_WATCH_INTERVAL_MS, reloadingMs = VIEWER_RELOADING_POLL_MS, follow = false
 }) {
   const phase = state?.phase === AUTO_RELOAD_PHASE.RELOADING
     ? AUTO_RELOAD_PHASE.RELOADING
@@ -61,9 +66,11 @@ export function nextAutoReloadState(state, poll, {
 
   const answered = String(poll.identityToken || "");
   if (answered && answered !== String(baseline || "")) {
-    // A different process on the same port. A dev server's restart is followed; an engine-served
-    // page is not reloaded into a process its credential cannot authenticate: it stops asking.
-    if (!follow) {
+    // A different process on the same port. A dev server's restart is followed, and so is an update:
+    // the engine of another release that admitted this page's credential. Any other engine-served page
+    // is not reloaded into a process it cannot tell apart: it stops asking.
+    const updated = Boolean(release && poll.release && String(poll.release) !== String(release));
+    if (!follow && !updated) {
       return { phase: AUTO_RELOAD_PHASE.FOREIGN, since, reload: false, delayMs: 0 };
     }
     return { ...reloading, since, reload: true };

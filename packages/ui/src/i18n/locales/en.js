@@ -131,20 +131,12 @@ export default {
   "home.ageHours": "{n}h ago",
   "home.ageDays": "{n}d ago",
 
-  // The update button and its card.
+  // The update button: offered, updating, restarting, failed.
   "update.label": "Update",
   "update.toAria": "Update to {version}",
-  "update.available": "Update available",
-  "update.close": "Close",
-  "update.description": "A new version of text-to-cad is available. Send a message to your agent asking it to update to the latest version:",
-  "update.copy": "Copy",
-  "update.copied": "Copied",
-  "update.copyPrompt": "Copy prompt",
-  "update.sendToAgent": "Send to agent",
-  "update.manualInstallation": "Manual installation",
-  "update.sendFailed": "It could not be sent to the chat. Copy the prompt instead.",
-  "update.copiedHint": "Copied. Paste it into your agent's chat.",
-  "update.copyFailed": "It could not be copied. Select the prompt above and copy it.",
+  "update.updating": "Updating to {version}",
+  "update.restarting": "Restarting with {version}",
+  "update.failed": "The update failed: {error}",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
@@ -191,6 +183,10 @@ export default {
   "progress.snapshot.draw": "Drawing the picture",
   "progress.snapshot.write": "Writing the picture",
   "progress.inspect-measure.measure": "Measuring parts",
+  "progress.update.install": "Installing the update",
+  "progress.update.kernel": "Installing the CAD kernel",
+  "progress.update.apps": "Updating the apps",
+  "progress.update.restart": "Restarting",
 
   // Display: its tile and menu, the modes (`DisplayModeOptions.js`, by value) and the Grid switch.
   "display.label": "Display",
