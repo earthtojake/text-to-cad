@@ -46,6 +46,9 @@ export default {
   "consent.shareUsage": "원격 분석",
   "consent.shareUsageEnvironment": "원격 분석(환경에서 설정됨)",
   "consent.telemetryInfo": "text-to-cad 개선에 도움이 되는 익명 사용 데이터와 오류 보고서입니다. 프롬프트, 모델, 파일은 절대 전송되지 않습니다.",
+  "update.automatic": "자동 업데이트",
+  "update.automaticEnvironment": "자동 업데이트(환경에서 꺼짐)",
+  "update.automaticInfo": "새 text-to-cad를 자동으로 설치하고, 실행 중인 작업이 없을 때 CAD 서버를 다시 시작합니다. 끄면 업데이트 버튼이나 설치 명령으로 업데이트합니다.",
 
   "appearance.system": "시스템",
   "appearance.light": "라이트",

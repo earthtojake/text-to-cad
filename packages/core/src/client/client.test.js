@@ -321,6 +321,8 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   await client.language('zh-CN');
   await client.language(null);
   await client.version();
+  await client.automaticUpdates();
+  await client.automaticUpdates(false);
   client.reportActivity({ touched: true });
   await new Promise((resolve) => setImmediate(resolve));
   // Every change carries the header no page from another site can send; a read sends none.
@@ -336,6 +338,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/__cad/language', 'GET', null, null],
     ['/__cad/language', 'POST', '1', { locale: 'zh-CN' }], ['/__cad/language', 'POST', '1', { locale: null }],
     ['/__cad/version', 'GET', null, null],
+    ['/__cad/updates', 'GET', null, null], ['/__cad/updates', 'POST', '1', { automatic: false }],
     ['/__cad/analytics/activity', 'POST', '1', { touched: true }],
   ]);
 });

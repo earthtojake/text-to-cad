@@ -66,6 +66,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     const reply = url.startsWith('/__cad/catalog') ? catalogOf(url) : url === '/__cad/version' ? { notice }
       : url === '/__cad/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
       : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
+      : url === '/__cad/updates' ? { automatic: true, reason: 'default' }
       : url !== '/__cad/analytics' ? { ok: true }
       : init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
@@ -130,9 +131,9 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics/activity'),
       [['/__cad/analytics/activity', { controls: [{ control: 'display_xray', count: 1, seconds: 0 }] }]]);
     libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/__cad/analytics/activity'), 1);
-    // The app menu: Analytics.
+    // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Telemetry', false]]);
+      [['Telemetry', false], ['Automatic updates', true]]);
     // Nothing asks (a cad command says it once): the viewer has no notice, and the app menu's toggle
     // is the person's answer.
     assert.equal(viewer().notice, undefined);

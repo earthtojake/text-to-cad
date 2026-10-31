@@ -46,6 +46,9 @@ export default {
   "consent.shareUsage": "テレメトリ",
   "consent.shareUsageEnvironment": "テレメトリ（環境で設定済み）",
   "consent.telemetryInfo": "text-to-cad の改善に役立つ匿名の利用データとクラッシュレポートです。プロンプト、モデル、ファイルが送信されることはありません。",
+  "update.automatic": "自動アップデート",
+  "update.automaticEnvironment": "自動アップデート（環境で無効）",
+  "update.automaticInfo": "新しい text-to-cad を自動でインストールし、何も実行されていないときに CAD のサーバーを再起動します。オフにすると、アップデートボタンかインストールコマンドで更新します。",
 
   "appearance.system": "システム",
   "appearance.light": "ライト",

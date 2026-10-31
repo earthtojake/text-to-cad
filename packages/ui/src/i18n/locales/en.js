@@ -55,6 +55,9 @@ export default {
   "consent.shareUsage": "Telemetry",
   "consent.shareUsageEnvironment": "Telemetry (set by your environment)",
   "consent.telemetryInfo": "Anonymous usage data and crash reports that help improve text-to-cad. Your prompts, models and files are never sent.",
+  "update.automatic": "Automatic updates",
+  "update.automaticEnvironment": "Automatic updates (off in your environment)",
+  "update.automaticInfo": "Installs a newer text-to-cad by itself and restarts CAD’s server once nothing is running. Off, you update with the update button or the install command.",
 
   // The colour schemes (the app menu's Theme, the web home's appearance button).
   "appearance.system": "System",
