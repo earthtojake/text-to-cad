@@ -5,6 +5,7 @@ small real child. The workers' own rules through the daemon are test_pool's."""
 from __future__ import annotations
 
 import dataclasses
+import io
 import itertools
 import os
 import shutil
@@ -367,10 +368,42 @@ class ProtocolTest(unittest.TestCase):
             return started[-1]
 
         with mock.patch.object(supervised.subprocess, "Popen", side_effect=recorded), \
-                self.assertRaisesRegex(Gone, r"^the child /w/doc.xbf did not start: it never said it was ready in 0.5 s$"):
+                self.assertRaisesRegex(Gone, r"^the child /w/doc.xbf did not start: it never said it was ready in 0.5 s$") \
+                as caught:
             supervisor.lease("child", "doc", {}, label="/w/doc.xbf")
+        self.assertTrue(caught.exception.unready, "no request asks another to start")
         self.assertIsNotNone(started[0].poll(), "killed")
         self.assertEqual(supervisor.starting, set(), "its slot given back")
+
+    def test_a_standby_that_never_says_ready_is_no_standby_and_the_log_says_so_once(self) -> None:
+        service, _folder = self.silent()
+        service = dataclasses.replace(service, standby=Standby((), "adopt", ready_seconds=0.5))
+        supervisor = Supervisor(1, (service,))
+        self.addCleanup(supervisor.stop)
+        supervisor.enable_standby("child")
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as log:
+            supervisor.stand("child", {})
+            await_(lambda: supervisor.readying("child") is None, "the standby's start to be given up")
+        self.assertIsNone(supervisor.standby("child"))
+        self.assertEqual(log.getvalue(), "cad: no child standby: the child standby did not start: "
+                                         "it never said it was ready in 0.5 s\n")
+
+    def test_a_build_whose_worker_never_said_ready_is_refused_in_that_line_and_not_asked_again(self) -> None:
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        launched: list = []
+
+        def launch(service, key, label, environment, cwd, standby):
+            launched.append(label)
+            raise Gone(f"the worker for {label} did not start: it never said it was ready in 300 s", unready=True)
+
+        engine.supervisor.launch = launch
+        sent: list = []
+        engine.handle({"op": "build", "script": "/w/a.py", "env": {}}, sent.append)
+        self.assertEqual(launched, ["/w/a.py"])
+        self.assertEqual(sent, [{"failed": "the worker for /w/a.py did not start: it never said it was ready in 300 s"}])
 
     def test_with_no_ready_seconds_a_silent_child_holds_its_lease_while_it_lives(self) -> None:
         import signal

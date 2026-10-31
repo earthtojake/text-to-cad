@@ -1026,7 +1026,8 @@ class Daemon:
                     send(answer)
                     return
                 except Gone as error:
-                    if attempt == 2 or error.during:  # one that exited mid-request is not asked again
+                    # One that exited mid-request is not asked again, nor one that never said it was ready.
+                    if attempt == 2 or error.during or error.unready:
                         failed = {"failed": self._where(error, worker)}
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
@@ -1236,7 +1237,9 @@ class Daemon:
                         send(answer)
                         return
                     except Gone as error:
-                        if attempt == 2 or error.during:  # a build is never run twice
+                        # A build is never run twice, nor waited for twice on a worker that never said
+                        # it was ready: refused in that one line.
+                        if attempt == 2 or error.during or error.unready:
                             failed = {"failed": self._where(error, worker)}
                             if worker is not None:
                                 self._built(worker, failed)

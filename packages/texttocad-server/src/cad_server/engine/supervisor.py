@@ -16,9 +16,10 @@ whether it counts toward the count cap (``counted``), its rank when memory is sh
 ``watched_rank`` for a process a page watches), whether its retirements are listed in ``status``
 (``noted``: the row's name for what it served and for its answered requests), whether the
 daemon drains it before it stops (``drain``), how long its start may take before it is given up
-(``ready_seconds``: None waits as long as it lives) and whether it keeps a standby (``standby``).
-Each field is a closed vocabulary, refused at declaration otherwise. A new kind of process is a
-declaration; nothing of the daemon changes for it.
+(``ready_seconds``: None waits as long as it lives; one given up is killed, and the lease that waited
+for it fails with ``Gone.unready``, which no request asks again) and whether it keeps a standby
+(``standby``). Each field is a closed vocabulary, refused at declaration otherwise. A new kind of
+process is a declaration; nothing of the daemon changes for it.
 
 **A lease** (``lease``): the process a request runs in, one request at a time, granted first come
 first served. A request whose key has a live process of its binding takes it once it is free; one
@@ -73,9 +74,10 @@ import itertools
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -179,11 +181,12 @@ class Service:
 class Gone(Exception):
     """A process that is gone: it did not start, or it exited, or its pipe broke. ``during``: it
     exited while a request waited for its answer, which it may have half done; ``code``: its exit
-    status, where it is known."""
+    status, where it is known; ``unready``: it never said it was ready within its declared seconds, and
+    was killed (another would wait as long again: no request asks one again)."""
 
-    def __init__(self, message: str, *, during: bool = False, code: int | None = None) -> None:
+    def __init__(self, message: str, *, during: bool = False, code: int | None = None, unready: bool = False) -> None:
         super().__init__(message)
-        self.during, self.code = during, code
+        self.during, self.code, self.unready = during, code, unready
 
 
 def _home(service: Service, label: str, cwd: str | None) -> str | None:
@@ -286,7 +289,8 @@ class Process:
             ready = self.answers.get(timeout=seconds)
         except queue.Empty:
             self.kill()
-            raise Gone(f"{self._words('unstarted')}: it never said it was ready in {seconds:g} s") from None
+            raise Gone(f"{self._words('unstarted')}: it never said it was ready in {seconds:g} s",
+                       unready=True) from None
         if ready is None or "ready" not in ready:
             error = self._gone(self._words("unstarted"))
             self.stop()
@@ -766,7 +770,10 @@ class Supervisor:
         spare = None
         try:
             spare = self.launch(service, standby.label, standby.label, environment, cwd, True)
-        except Exception:  # noqa: BLE001 - no standby: the next lease starts its own process
+        except Exception as error:  # noqa: BLE001 - no standby: the next lease starts its own process
+            if isinstance(error, Gone) and error.unready:
+                # Said once, in the daemon's log: nothing else would tell why none stands by.
+                print(f"cad: no {service.name} standby: {error}", file=sys.stderr, flush=True)
             spare = None
         with self.lock:
             slot.readying = None

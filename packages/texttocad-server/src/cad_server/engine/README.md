@@ -719,7 +719,10 @@ the process runs and in which environment, what one process serves (its key: a s
 document's id), what binds a process to its caller's interpreter (`places.RESTARTS`), whether it
 counts toward the count cap, its rank when memory is shed (the standby 0, a render process 1, a
 worker 2, a watched worker 3), whether the daemon drains it before it stops, whether its retirements
-are listed in `status`, whether it keeps a standby and how long its start may take. The rules above
+are listed in `status`, whether it keeps a standby and how long its start may take: a process that
+has not said it is ready by then -- a worker in 300 s, the standby in 600, a render process in 120 --
+is killed, and the request that waited for it refused in one line saying so, never asked again (a
+standby is simply not there, and the daemon's log says why, once). The rules above
 are the supervisor's, for every service alike: a new kind of process is a declaration, and no code of
 the daemon's. A new service's large outputs go by path, a file on disk its caller reads, and its small
 answers in frames; today's children keep their bulk in frames as they always have (a drained

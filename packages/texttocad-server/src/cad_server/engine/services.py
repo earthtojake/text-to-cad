@@ -48,7 +48,11 @@ WORKER = Service(
     watched_rank=3,
     noted=("script", "builds"),
     drain=True,
-    standby=Standby(args=("--standby",), adopt="adopt", rank=0, notice=KERNEL_NOTICE, patience=KERNEL_PATIENCE),
+    ready_seconds=300.0,  # a worker says it is ready before it loads the kernel, at its first build
+    # The standby loads the kernel first: a fresh installation's first load, which the operating system
+    # looks at library by library, has been measured at 43 s.
+    standby=Standby(args=("--standby",), adopt="adopt", rank=0, notice=KERNEL_NOTICE, patience=KERNEL_PATIENCE,
+                    ready_seconds=600.0),
 )
 
 RENDER = Service(
@@ -65,6 +69,7 @@ RENDER = Service(
                 broken="the renderer for {name} is gone ({error})"),
     counted=False,
     rank=1,
+    ready_seconds=120.0,
 )
 
 SERVICES = (WORKER, RENDER)
