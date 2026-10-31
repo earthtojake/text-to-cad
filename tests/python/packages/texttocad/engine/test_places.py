@@ -3,12 +3,13 @@
 0.9 names its state folder ``texttocad`` where 0.8's was ``cadgen``: what this release keeps of the earlier
 one -- the person's settings, the installations' records less ``current``, the engines' records with the page
 token, the documents' records and Recents, setup's receipt and the install channels -- moves into its own,
-each once, and the rest stays. Every folder here is a temporary one: the platform's places are stood in
+each once, and the rest stays, with the person's telemetry no for the earlier release still installed. Every folder here is a temporary one: the platform's places are stood in
 for, never read.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -58,10 +59,27 @@ class AdoptTest(Folders):
         self.assertEqual((self.folder / "engines" / "token").read_text(encoding="utf-8"), "t" * 43)
         self.assertTrue((self.folder / "documents" / "a" / "document.json").is_file())
         self.assertTrue((self.folder / "recents" / "thumbnails" / "a.png").is_file())
-        # Moved, never copied: the locks and what was noted and not sent stay behind, alone.
+        # Moved, never copied: the locks and what was noted and not sent stay behind, and the person's no, for
+        # the earlier release still installed, which would take settings it found missing for never told.
         self.assertEqual(sorted(path.name for path in self.earlier.iterdir()),
-                         ["install.lock", "settings.lock", "telemetry-spool.jsonl"])
+                         ["install.lock", "settings.json", "settings.lock", "telemetry-spool.jsonl"])
+        self.assertEqual(json.loads((self.earlier / "settings.json").read_text(encoding="utf-8")),
+                         {"telemetry": {"choice": "off"}})
         self.assertEqual(places.adopt(self.earlier, self.folder), [], "once")
+
+    def test_only_a_no_stays_behind_and_without_the_deletion_it_owes(self) -> None:
+        for kept, behind in (({"choice": "off", "decidedAt": 2, "forget": ["id"]}, {"choice": "off", "decidedAt": 2}),
+                             ({"choice": "on", "decidedAt": 2}, None), ({"notice": 1, "notifiedAt": 1}, None)):
+            with self.subTest(kept=kept):
+                for folder in (self.earlier, self.folder):
+                    (folder / "settings.json").unlink(missing_ok=True)
+                write(self.earlier / "settings.json", json.dumps({"telemetry": kept, "language": "de"}))
+                places.adopt(self.earlier, self.folder)
+                self.assertEqual(json.loads((self.folder / "settings.json").read_text(encoding="utf-8")),
+                                 {"telemetry": kept, "language": "de"}, "the settings move whole")
+                left = self.earlier / "settings.json"
+                self.assertEqual(json.loads(left.read_text(encoding="utf-8")) if left.exists() else None,
+                                 {"telemetry": behind} if behind else None)
 
     def test_what_this_release_already_keeps_is_never_replaced(self) -> None:
         write(self.folder / "settings.json", '{"telemetry": {"notifiedAt": 1}}')

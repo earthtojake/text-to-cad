@@ -63,7 +63,8 @@ The server's key stays `cad`. The installer rewrites the Claude Desktop entry it
 | Cache | `~/.cache/cadgen` (`$XDG_CACHE_HOME`; Windows `%LOCALAPPDATA%\cadgen`) | `~/.cache/texttocad` (Windows `%LOCALAPPDATA%\texttocad`) |
 
 The installer moves into the new state folder, once, what 0.9 keeps: your settings (the
-telemetry answer, so a no stays a no, and the language), the installations' records, the
+telemetry answer, so a no stays a no -- the old folder keeps a no too, for 0.8 while it
+is still installed -- and the language), the installations' records, the
 page token (your links keep working), the documents' records and Recents, and setup's
 receipt. Recents is as it was. The cache does not move: a model in Recents opens again once
 its script runs (`cad run model.py`), and the old cache folder can be deleted, as can the old

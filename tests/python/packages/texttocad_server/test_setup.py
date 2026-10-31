@@ -687,6 +687,9 @@ class TheOlderInstallationsOwnStop(unittest.TestCase):
         (call,) = ran.call_args_list
         self.assertEqual(call.args[0], ["/env/bin/cad", "stop"])
         self.assertEqual(call.kwargs["env"][installations.NAME_ENV], "0.0.1-dev.5")
+        # It runs on the person's behalf, its words read by no one: whatever its release (0.8's cadgen
+        # among them), it counts, sends and tells nothing, so it never takes a notice nobody read for a yes.
+        self.assertEqual((call.kwargs["env"]["CADGEN_TELEMETRY"], call.kwargs["env"]["CAD_TELEMETRY"]), ("0", "0"))
         # A release knows its own name: none is passed on to it.
         with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "no\n")) as ran, \
                 mock.patch.dict(os.environ, {installations.NAME_ENV: "9.9.9-dev.1"}):

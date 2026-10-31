@@ -76,10 +76,12 @@ MARKER_SCHEMA = "cadgen env/2"
 # (the telemetry answer, so a no stays a no, and the language), the installations' records, the engines'
 # records with the page token (the page links a person keeps still open), the documents' records and
 # what the homes show of them (Recents), and setup's receipt and the install channels. Not the locks,
-# nor the telemetry an earlier release noted and did not send.
+# nor the telemetry an earlier release noted and did not send. The person's telemetry no stays in the
+# earlier folder too, for the earlier release still installed (``adopt``).
 STATE = ("texttocad", "texttocad-state")
 EARLIER_STATE = ("cadgen", "cadgen-state")
-ADOPTED = ("settings.json", INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
+SETTINGS = "settings.json"
+ADOPTED = (SETTINGS, INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
            "install-channels.json")
 CACHE, EARLIER_CACHE = "texttocad", "cadgen"
 
@@ -122,20 +124,24 @@ def adopt_earlier() -> list[str]:
 def adopt(earlier: Path, folder: Path) -> list[str]:
     """What this release keeps of the state folder ``earlier`` moved into ``folder`` (``ADOPTED``), each
     only where ``folder`` has none -- the installations' records less ``current``, an earlier release's
-    choice that is not this one's to keep. The rest stays where it was. Moved, never copied: a record
-    names one place, and a process of the earlier release still running finds no answer of the person's
-    to go on sending under (it sends nothing it was not told it may). Quiet: a move that fails leaves
-    both folders as they were, and the next registration tries again. The names moved."""
+    choice that is not this one's to keep. The rest stays where it was. Moved, never copied -- a record
+    names one place --, but for the person's telemetry no: an earlier release still installed (an app's
+    session, its own stop command) reads settings it finds missing as never told and tells its notice
+    again, which it then takes for a yes, so its folder keeps the no (``_said_no``). Quiet: a move that
+    fails leaves both folders as they were, and the next registration tries again. The names moved."""
     moved: list[str] = []
     for name in ADOPTED:
         source, destination = earlier / name, folder / name
         if not source.exists() or os.path.lexists(destination):
             continue
+        no = _said_no(source) if name == SETTINGS else None
         try:
             folder.mkdir(parents=True, exist_ok=True)
             os.rename(source, destination)
         except OSError:
             continue
+        if no is not None:
+            _leave(source, {"telemetry": no})
         moved.append(name)
     if INSTALLATIONS in moved:
         try:
@@ -143,6 +149,30 @@ def adopt(earlier: Path, folder: Path) -> list[str]:
         except OSError:
             pass
     return moved
+
+
+def _leave(path: Path, value: dict[str, Any]) -> None:
+    """``value`` written to ``path`` as JSON, whole (``atomic_replace.put``). Quiet."""
+    from cad.engine.atomic_replace import put
+
+    text = json.dumps(value, indent=2) + "\n"
+    try:
+        put(path, lambda staged: staged.write_text(text, encoding="utf-8"))
+    except OSError:
+        pass
+
+
+def _said_no(settings: Path) -> dict[str, Any] | None:
+    """The telemetry answer in the settings file ``settings`` when it is the person's no (its ``choice``
+    ``off``), without the deletion it may still owe (``forget``: the release the settings move to sends
+    that), else None."""
+    try:
+        section = json.loads(settings.read_text(encoding="utf-8")).get("telemetry")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(section, dict) or section.get("choice") != "off":
+        return None
+    return {key: value for key, value in section.items() if key != "forget"}
 
 
 def cache_dir() -> Path:

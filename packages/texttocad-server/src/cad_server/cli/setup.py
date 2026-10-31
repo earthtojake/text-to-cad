@@ -24,8 +24,8 @@ current installation's
    is not the device's engine's) that nothing uses (no app server holds it, no page watches it, no
    request is underway) is stopped by that installation's own ``stop``, found by its record -- an 0.8
    one's among the records this release moved from the earlier state folder
-   (``cad.engine.places.adopt_earlier``, before the plan). One still in use, or one no record names, is
-   left running and said, with how to stop it.
+   (``cad.engine.places.adopt_earlier``, before the plan) -- with its telemetry off (``NO_TELEMETRY``).
+   One still in use, or one no record names, is left running and said, with how to stop it.
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
@@ -210,13 +210,19 @@ def port_held(port: int) -> str | None:
     return daemon._who(port)
 
 
+# The switches that keep a process of any release from counting, sending or telling its telemetry notice
+# (0.8's ``cadgen``, then this release's): set for an earlier installation's stop, which runs on the person's
+# behalf, its words read by no one -- a notice it told there would read to it as told, so as their yes.
+NO_TELEMETRY = {"CADGEN_TELEMETRY": "0", "CAD_TELEMETRY": "0"}
+
+
 def stop_installation(record: dict[str, Any]) -> tuple[bool, str]:
     """That installation's own ``stop``, run by its console script as the ``cad`` command
-    runs it (told the version it is registered as when it cannot know it: ``installations.named``):
-    whether it stopped, and what it said."""
+    runs it (told the version it is registered as when it cannot know it: ``installations.named``),
+    with telemetry off for it (``NO_TELEMETRY``): whether it stopped, and what it said."""
     from cad_server._internal import installations
 
-    environment = dict(os.environ)
+    environment = {**os.environ, **NO_TELEMETRY}
     told = installations.named(record)
     if told:
         environment[installations.NAME_ENV] = told
