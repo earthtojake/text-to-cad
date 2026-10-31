@@ -81,7 +81,8 @@ REQUIRED=(
   "cadgen/cli/mcp.py"
   "cadgen/mcp/server.py"
   "cadgen/mcp/tunnel.py"
-  "cadgen/_runtime/mcp/index.html"
+  "cadgen/_runtime/mcp/shell.html"
+  "cadgen/_runtime/mcp/app.js"
   "cadgen/_runtime/mcp/THIRD_PARTY_LICENSES.txt"
 )
 

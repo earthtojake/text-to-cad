@@ -144,7 +144,7 @@ class StaleRuntimeEntriesArePrunedTest(unittest.TestCase):
         self.assertIsNotNone(prune, "prune_stale_runtime is gone from the runtime bundler")
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime = Path(temp_dir) / "_runtime"
-            for kept in ("viewer/index.html", "mcp/index.html"):
+            for kept in ("viewer/index.html", "mcp/shell.html"):
                 (runtime / kept).parent.mkdir(parents=True, exist_ok=True)
                 (runtime / kept).write_text("built", encoding="utf-8")
             (runtime / "browser").mkdir()

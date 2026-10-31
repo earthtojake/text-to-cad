@@ -14,7 +14,9 @@ import { thirdPartyLicenses } from '@text-to-cad/core/third-party-licenses';
 // An MCP App is one HTML resource with no asset directory behind it: the host renders it in a
 // sandboxed frame whose only other origins are data: and blob:. So everything the page needs --
 // scripts, styles, workers, images -- is inside index.html, and the build fails if anything
-// would be left outside it.
+// would be left outside it. The same app is also one module, app.js: what the engine serves the
+// shell a host keeps (`src/host/shell.ts`, built by vite.shell.config.mjs as shell.html), which
+// imports it -- its styles put in the page's head first -- and so runs the engine's release.
 
 // The shared packages start workers with `new Worker(new URL(file, import.meta.url))`. Here
 // that URL would point at the sandbox, so each one becomes Vite's inline (blob) worker. The
@@ -143,16 +145,21 @@ function inlineDocument() {
       if (!entry) throw new Error('The CAD app build has no entry chunk.');
       const bootstrap = `const SOURCES=${JSON.stringify(sources)},IMPORTS=${JSON.stringify(imports)},IDS=${JSON.stringify(ids)},ENTRY=${JSON.stringify(entry)};\n${LOADER}`;
       document = document.replace(/<script\b[^>]*\bsrc="[^"]+"[^>]*><\/script>/, () => `<script type="module">${bootstrap}</script>`);
+      const styles = [];
       for (const [name, item] of Object.entries(bundle)) {
         if (item.type === 'asset' && name.endsWith('.css')) {
+          styles.push(String(item.source));
           document = document.replace(/<link\b[^>]*\bhref="[^"]+\.css"[^>]*>/, () => `<style>${String(item.source).replace(/<\/style/gi, '<\\/style')}</style>`);
           delete bundle[name];
         }
       }
+      // The app as one module, for the shell: its styles into the shell's head, then the same loader.
+      const style = `{const s=document.createElement('style');s.textContent=${JSON.stringify(styles.join('\n'))};document.head.append(s);}`;
+      this.emitFile({ type: 'asset', fileName: 'app.js', source: `${style}\n${bootstrap}` });
       // The workers' maps, inline or not: a worker's crash never reaches the page's reporter, and the page
       // loads no map.
       for (const name of Object.keys(bundle)) if (name.endsWith('.js.map')) delete bundle[name];
-      const external = Object.keys(bundle).filter(name => name !== 'index.html');
+      const external = Object.keys(bundle).filter(name => name !== 'index.html' && name !== 'app.js');
       if (external.length) throw new Error(`Everything the CAD app loads must be inside index.html: ${external.join(', ')}`);
       html.source = document;
     } },

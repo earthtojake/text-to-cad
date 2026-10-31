@@ -4,7 +4,7 @@
   "type": "module",
   "version": "0.8.4",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.shell.config.mjs",
     "test": "node scripts/run-tests.mjs",
     "typecheck": "tsc -p tsconfig.json"
   },

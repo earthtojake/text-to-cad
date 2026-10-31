@@ -41,7 +41,7 @@ VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 # third-party notice its build wrote of the packages it inlines (THIRD_PARTY_LICENSES.txt,
 # @text-to-cad/core/third-party-licenses): shipping them in a wheel is redistribution.
 VIEWER_OUTPUTS=(index.html THIRD_PARTY_LICENSES.txt)
-MCP_OUTPUTS=(index.html THIRD_PARTY_LICENSES.txt)
+MCP_OUTPUTS=(shell.html app.js THIRD_PARTY_LICENSES.txt)
 
 MODE="write"
 CLEAN=0
@@ -185,8 +185,9 @@ build_viewer_client() {
 }
 
 # --- the CAD app an agent host renders ------------------------------------------------
-# One self-contained index.html (its vite build inlines scripts, styles, workers and
-# fonts), so the stage owes that file and the notice beside it.
+# The shell a host keeps (shell.html, small and self-contained) and the app it loads from
+# the engine (app.js, one module: its vite build inlines scripts, styles, workers and
+# fonts), so the stage owes those files and the notice beside them.
 build_mcp_app() {
   local target="$1" package_manager
   require_command node
@@ -201,13 +202,16 @@ build_mcp_app() {
       exit 1
       ;;
   esac
-  if [ ! -f "$MCP_APP_DIR/dist/index.html" ]; then
-    echo "Missing CAD app build: $MCP_APP_DIR/dist/index.html" >&2
-    exit 1
-  fi
+  for built in shell.html app.js; do
+    if [ ! -f "$MCP_APP_DIR/dist/$built" ]; then
+      echo "Missing CAD app build: $MCP_APP_DIR/dist/$built" >&2
+      exit 1
+    fi
+  done
   rm -rf "$target"
   mkdir -p "$target"
-  cp "$MCP_APP_DIR/dist/index.html" "$target/index.html"
+  cp "$MCP_APP_DIR/dist/shell.html" "$target/shell.html"
+  cp "$MCP_APP_DIR/dist/app.js" "$target/app.js"
   cp "$MCP_APP_DIR/dist/THIRD_PARTY_LICENSES.txt" "$target/THIRD_PARTY_LICENSES.txt"
 }
 
