@@ -32,6 +32,24 @@ A project built with cadgen 0.7 may need migrating: see [migrations](references/
 For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
 Use the corresponding robot-description skill for URDF, SRDF or SDF.
 
+## Image reconstruction preflight
+
+When reference images are a primary geometry source, use `$image-cad-preflight`
+before writing CAD construction code. Keep the original user request, original
+images and resulting CAD Visual Spec in this main session, then continue the
+modeling, verification and export steps below. Image-free tasks, direct
+inspection and inspiration-only images do not need preflight. If this skill was
+installed alone and preflight is unavailable, inspect the images in the main
+session and explicitly record that structured preflight was skipped.
+
+Read the completed spec before choosing the construction strategy. Check every
+P0 observation against its visual evidence, keep assumptions separate from user
+dimensions, and record any unresolved conflict. Review P0 and P1 against the final
+CAD snapshot. A spec summarizes evidence; it does not replace the original image.
+If preflight fails, report the failure and use its documented main-session
+fallback or explicitly record that it was skipped. Do not read a stale spec as
+the result of a failed run.
+
 ## Setup and paths
 
 Run cadgen through the `cadgen` command its installation writes, so this skill's commands

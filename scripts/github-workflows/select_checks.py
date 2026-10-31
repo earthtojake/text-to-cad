@@ -105,6 +105,7 @@ HEAVY_POLICY = {
 }
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
+    f"{SKILL_SUITES}/image-cad-preflight",
     f"{SKILL_SUITES}/gcode",
     f"{SKILL_SUITES}/sendcutsend",
     f"{SKILL_SUITES}/step-parts",
