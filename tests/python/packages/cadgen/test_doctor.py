@@ -286,7 +286,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("kernel   FAILED", err)
         self.assertIn(REFUSED, err, "the exception line is the evidence")
         self.assertNotIn("Smart App Control", err, "off Windows the cause is not known")
-        self.assertIn("sharing", out, "the rest of the report still prints")
+        self.assertIn("  server   ", out, "the rest of the report still prints")
 
     def test_a_refused_load_on_windows_names_smart_app_control(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
@@ -299,14 +299,17 @@ class DoctorTests(unittest.TestCase):
     def test_the_report_says_what_the_device_runs(self) -> None:
         from cadgen._internal import installations, releases, switch
 
+        from cadgen._internal import base
+
         for version in ("1.0.0", "1.1.0"):
             folder = releases.where(version)
-            (folder / "bin").mkdir(parents=True)
-            for name in ("cadgen", "python"):
-                (folder / "bin" / name).write_text("", encoding="utf-8")
+            python, command = base.interpreter(folder), releases.console(folder)  # bin/, or Windows' Scripts/
+            python.parent.mkdir(parents=True)
+            for path in (python, command):
+                path.write_text("", encoding="utf-8")
             (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
                                                   encoding="utf-8")
-            installations.register(version, (str(folder / "bin" / "cadgen"), str(folder / "bin" / "python"), str(folder)))
+            installations.register(version, (str(command), str(python), str(folder)))
         installations.point("1.1.0")
         switch._record({"from": "1.0.0", "to": "1.1.0", "ok": True, "gapMs": 640, "at": "2026-10-31T09:00:00+0000"})
         code, out, _ = _run(["--no-server"])

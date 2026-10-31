@@ -127,7 +127,16 @@ def _own() -> Installation:
     prefix = os.path.abspath(sys.prefix)
     return Installation(release=version(), name=daemon.installation(), python=platform.python_version(),
                         executable=os.path.abspath(sys.executable), prefix=prefix, root=str(package.parent),
-                        source=_source(package, prefix), arch=platform.machine(), kernel=_carries_kernel())
+                        source=_source(package, prefix), arch=_machine(), kernel=_carries_kernel())
+
+
+def _machine() -> str:
+    """The machine's architecture, as ``platform.machine()`` says it -- on Windows read where that reads
+    it, the environment the system sets, since ``platform.machine()`` may first run ``cmd /c ver``: a
+    console window, from an engine that has none."""
+    if os.name == "nt":
+        return os.environ.get("PROCESSOR_ARCHITEW6432") or os.environ.get("PROCESSOR_ARCHITECTURE") or ""
+    return platform.machine()
 
 
 def _carries_kernel() -> bool:

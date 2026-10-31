@@ -26,7 +26,7 @@ class ShellTest(unittest.TestCase):
         self.addCleanup(scratch.cleanup)
         self.page = Path(scratch.name)
         (self.page / ui.SHELL).write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
-        (self.page / ui.APP).write_text("export const app = 1;\n", encoding="utf-8")
+        (self.page / ui.APP).write_bytes(b"export const app = 1;\n")  # bytes: Windows writes no \r
         patched = mock.patch.dict(os.environ, {"CADGEN_MCP_APP_DIR": str(self.page)})
         patched.start()
         self.addCleanup(patched.stop)
@@ -43,7 +43,7 @@ class ShellTest(unittest.TestCase):
         self.assertTrue(answer["headers"]["content-type"].startswith("text/javascript"))
         self.assertEqual(base64.b64decode(answer["body"]), b"export const app = 1;\n")
         # A new build is read again; none at all is said.
-        (self.page / ui.APP).write_text("export const app = 2;\n", encoding="utf-8")
+        (self.page / ui.APP).write_bytes(b"export const app = 2;\n")
         os.utime(self.page / ui.APP, ns=(1, 1))
         self.assertEqual(ui.app_code(), b"export const app = 2;\n")
         (self.page / ui.APP).unlink()
