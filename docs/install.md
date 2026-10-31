@@ -116,7 +116,7 @@ another release. Each app takes it the way it takes a local plugin:
 | Claude Desktop (Chat tab) | CAD's server in its config, run by your own `uvx` at its full path | the update moves the server to the new release |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
 
-Nothing of it updates by itself: the folder and the copies move when you update
+The folder and the copies move with each update, yours or an automatic one
 ([Updates](#updates)). Leave the folder where it is: Claude Code and Gemini read it in
 place. `cad doctor` says where each app's plugin comes from, and writes the folder
 again if it is gone. The install command with `--uninstall` takes all of it out, the
@@ -363,13 +363,28 @@ No plugin for your agent yet?
 
 ## Updates
 
-When a newer release is out, CAD shows an update button: a blue icon first in its
-navbar and on its home, and in the corner of a CAD card that has no navbar. Click
-it, and the server installs the release, updates text-to-cad in every agent app on
-your computer as the install command does, and restarts on the new release; the
-page or the card reloads itself once the server is back. An app that shows CAD's
-replies as text gets a line with its first reply instead, naming the install
-command. Nothing updates until you ask.
+text-to-cad updates itself. Once an hour the CAD server checks whether a newer release
+is out, and when one is, it installs it in the background at once, then, once nothing
+has run for a minute (no build, picture, export or agent's request underway), updates
+text-to-cad in every agent app on your computer as the install command does and
+restarts on the new release. A CAD Viewer page or a CAD card that is open reloads
+itself into it. Should an update fail, the server stays on, or goes back to, the
+release it ran, and that release is not tried again by itself for a day; a newer one
+is tried when it comes out. With no network nothing happens, and nothing waits.
+
+To turn automatic updates off, uncheck **Automatic updates** in the menu under CAD's
+logo (in the CAD Viewer or a CAD card), or run `cad update auto off`; `cad update auto
+on` turns them back on, and `cad update auto` says whether they are on, when the server
+last checked and when it checks next. The setting is one for every app and release on
+your computer. `CAD_UPDATE_CHECK=0` in the server's environment turns the check off, and
+automatic updates with it.
+
+With automatic updates off, or until one comes, CAD shows an update button when a
+newer release is out: a blue icon first in its navbar and on its home, and in the
+corner of a CAD card that has no navbar. Click it, and the server does the same at
+once; the page or the card reloads itself once the server is back. An app that shows
+CAD's replies as text gets a line with its first reply instead, naming the install
+command.
 
 Running the install command again does the same, and so does `cad update` in a
 terminal: each installs the newest release, updates every app, moves the server to
@@ -402,7 +417,8 @@ most once an hour: one anonymous request, with no ID, path or anything about you
 never in CI and never for a copy that something else updates.
 `CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
 release says so too, with no request at all. A click on the button reads the feed
-again, for the newest release.
+again, for the newest release. With automatic updates off, the server reads the feed
+only while a CAD page or card is open.
 
 Updating from 0.8: [Migrating from 0.8 to 0.9](migrations/migrating-0.8-to-0.9.md) says
 what 0.9 renames (the `cad` command, `CAD_*`, the folders, the packages) and what the

@@ -240,7 +240,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. Nothing updates on its own.
+    and leaves everything as it was. An automatic update (on by default, `cad update auto off` to
+    leave every update to the person) waits on nothing: the server installs the release in the
+    background and switches only once it has been idle for a minute.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
     crash; a model's own process, where only the library is installed, counts nothing -- is kept
