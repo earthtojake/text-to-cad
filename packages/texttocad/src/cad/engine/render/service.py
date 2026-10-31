@@ -755,6 +755,7 @@ class Renders:
             raise RuntimeError(answer.get("failed") or "the renderer drew nothing")
         report = answer["done"]
         render.frames += 1
+        render.used = time.monotonic()  # aged by its last picture, as a document's process is
         render.rss = (report.get("process") or {}).get("rssMb")
         if report.get("retired"):
             render.retired = True
