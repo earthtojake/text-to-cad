@@ -4,43 +4,56 @@ and never stopped by a timer: it stops on ``cad stop`` (or a terminate), once it
 an update (``drain``: nothing in flight, then the switch's helper starts the next release's), when its
 door is gone and no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
 
-It holds warm workers, one per model script, run by its supervisor (``supervisor.Supervisor``, by
-the declaration ``services.WORKER``), and hands each build to its script's worker: one build at a time per worker, builds of different scripts at once, and at
-most ``CAD_ENGINE_WORKERS`` workers alive (by default, the machine's cores). A build for a
-script with a live worker waits for it while it is busy. One for a script with none starts one
-when fewer than the cap are alive; at the cap the least recently used idle worker no page
-watches is retired first (its stdin closed: it exits), and when every idle worker is watched the
-new one starts past the cap; with every worker busy, the build waits, first come first served,
-for the first to come free. Nothing is refused, and nothing is predicted: no admission.
+Every process it starts is a service it declares (``services``): a model script's warm worker (the
+documents worker among them) and a served document's render process. One supervisor runs them by
+those declarations (``supervisor.Supervisor``, ``Daemon.supervisor``), and the daemon binds its hooks
+to them by name: the drain, what a page watches, the progress that wakes pages, the cache's ``saved``.
+A request leases its service's process for itself, one request at a time per process, first come
+first served, keyed as the service declares: a worker by its script's path, a render process by its
+document's id. The services that count -- the workers -- are held to ``CAD_ENGINE_WORKERS`` processes
+alive (by default, the machine's cores): a build for a script with a live worker waits for it while
+it is busy; one for a script with none starts one when fewer than the cap are alive; at the cap the
+least recently used idle worker no page watches is retired first (its stdin closed: it exits), and
+when every idle worker is watched the new one starts past the cap; with every worker busy, the build
+waits, first come first served, for the first to come free. Nothing is refused, and nothing is
+predicted: no admission. A render process does not count.
 
-No timer retires a worker: memory alone does (``Supervisor.shed``). The workers' resident memory --
-each one's as it measured it at its start and after each build, the standby's and the render
-processes' with them -- is held to one cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``).
-Past it, or under the system's memory-pressure signal (``serve.Pressure``), idle processes are
-retired, least recently used first: the standby, then render processes, then the workers no page
-watches, and a watched one only when no other is left. A worker alone over the cap after its build
-is retired at once (``worker.retirement``). Before a worker is stopped, every document
-of it the server does not hold is taken from it (``models.Models.drain``): a document outlives its
-worker. A retired script's next build is a fresh worker's, a restart. Each such document is also
-kept in the engine's cache once it is idle, at its drain and at shutdown (``cache``), so a restart
-of the daemon opens it at once.
+No timer retires a process: memory alone does (``Supervisor.shed``). Each process's resident memory,
+as it last said it (its ``ready`` frame and each answer's ``rssMb``), is held with the others' to one
+cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``). Past it, or under the system's
+memory-pressure signal (``serve.Pressure``), idle processes are retired in the order their
+declarations rank them, least recently used first within a rank: the standby, then render processes,
+then the workers no page watches, and a watched one only when no other is left. A process that says,
+answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
+request is done. Before a worker is stopped, every document of it the server does not hold is taken
+from it (``models.Models.drain``): a document outlives its worker. A retired script's next build is a
+fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
+its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
 
-One worker stands by with the kernel loaded (``Supervisor.stand``): started with the daemon, and
-again each time a build takes it or starts a worker of its own while there is room for it. A build
-for a script with no live worker takes the standby when its environment shapes the interpreter as
-the standby's does (``RESTARTS``), and starts a fresh worker otherwise; taken, the standby is that
-script's worker from then on (``Process.adopt``), so a new script's first build pays no kernel load.
-The standby counts toward the cap, is the first retired for room or memory, and is never a
-script's worker in ``status``. ``CAD_ENGINE_STANDBY=0`` keeps none (``standby``): an operator's
-seam for CI and machines short of memory.
+The workers keep a standby with the kernel loaded (``services.WORKER``, ``Supervisor.stand``): started
+with the daemon, and again each time a build takes it or starts a worker of its own while there is
+room for it. A build for a script with no live worker takes the standby when its environment shapes
+the interpreter as the standby's does (``places.RESTARTS``), and starts a fresh worker otherwise;
+taken, the standby is that script's worker from then on (``Process.adopt``), so a new script's first
+build pays no kernel load. The standby counts toward the cap, is the first retired for room or
+memory, and is never a script's worker in ``status``. ``CAD_ENGINE_STANDBY=0`` keeps none
+(``standby``): an operator's seam for CI and machines short of memory.
+
+Every service speaks one protocol (``cad.engine.frames``). Requests are one JSON object per line on
+the process's stdin, a request's ``bytes`` exactly that many bytes after its line. The process
+answers on its original stdout in frames: a JSON object on one line and, when it says ``bytes``, that
+many bytes after it. Its first frame is ``{"ready": pid, "rssMb"}``; then, for each request, its
+``log``, ``notice`` and ``progress`` frames, which go to whoever asked, and one answer, which may
+carry ``rssMb`` and ``retire``. What it prints goes to its stderr, its log. It exits when its stdin
+closes.
 
 It also serves documents over HTTP (``serve``), holding each loaded document and its
 parts' tessellations in its memory under one budget (``serve.memory_budget``,
 ``CAD_ENGINE_MEMORY_MB``; past it, or on the system's memory-pressure signal, what is held
 is evicted: ``serve.Server.trim``), and draws them (``draw``): each served document a
-snapshot asks for gets a render process of its own (``render/service.py``), started on its
-first picture, sent each new version of it at the picture that asks for it, gone with the daemon or under the
-workers' memory cap; render processes are not workers, and do not count toward the count cap.
+snapshot asks for is drawn by a render process of its own (``renders``), started on its first
+picture, sent each new version of it at the picture that asks for it, gone with the daemon or under
+the memory cap.
 
 Its only files are the operating system's coordination, in its own folder, ``state_dir``: a lock,
 and on POSIX its door, a named pipe (``door_path``), and the pipes of the connections being opened

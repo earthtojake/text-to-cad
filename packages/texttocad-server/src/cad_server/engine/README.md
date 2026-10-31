@@ -137,8 +137,8 @@ describes the mechanism they constrain and cites them by that README's numbers -
 
 ## Architecture
 
-One server for the device -- the current installation's (**Starting and updating**) -- owns the worker
-pool, served documents and HTTP listener.
+One server for the device -- the current installation's (**Starting and updating**) -- owns its
+processes, run by one supervisor (**Services**), served documents and HTTP listener.
 `cad serve` and `cad viewer` launch or reuse that server and return its URL.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
@@ -189,11 +189,11 @@ daemon keys by it the worker that built each model document (`builders`, from wh
 asks the server's watched ids; a file the build wrote is no key there) and the live models' book
 (`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
 from).
-The worker pool alone is keyed otherwise: by the canonical path of the script a worker runs, a
+The workers alone are keyed otherwise: by the canonical path of the script a worker runs, a
 process's key, not a document's.
 
 The daemon maps each built document to its worker. HTTP watcher accounting has its
-own lock, independent of document reads and pool admission. A page watches a document (law 19)
+own lock, independent of document reads and the supervisor's leases. A page watches a document (law 19)
 while it has a version wait outstanding or completed a sync within `serve.LIVE` seconds; its heartbeats
 name the document by its id (`ids`): a file's `file_id`, a model's `model_id`, never turning
 a model into a file path. To admit a new script at the worker-count cap, the
@@ -423,8 +423,11 @@ base that cannot be made fails the request that needed it in one line
 | `snapshot.py` | `cad snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
-| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the daemon's render process per served document and per file (`service.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
-| `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script, at most one per core alive (`Pool`), connect-or-start, a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
+| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
+| `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script, at most one per core alive (`supervisor.py`), connect-or-start, a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
+| `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
+| `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
+| `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
@@ -669,14 +672,14 @@ tessellations, is under one memory budget: **Document lifetime**.)
   build that waits for its own script's busy worker takes no slot.
 - **The cap never retires a watched worker.** When every idle worker has a document a page
   watches, the new worker starts past the cap. The memory cap may still retire a watched one.
-- **A standby.** One worker stands by with the kernel loaded and no script (`Pool.stand`): started
+- **A standby.** One worker stands by with the kernel loaded and no script (`Supervisor.stand`): started
   with the daemon once the base is made (a start never makes it: **Running a model**), and again each
   time a build takes it or starts a worker of its own, while the pool has a slot for it under the cap
   and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the
   standby's does (`places.RESTARTS`), and starts a fresh worker otherwise -- after which the
   standby, of another interpreter, is replaced by one of the build's. Taken, it is that script's
-  worker (`Worker.adopt`): its key, the environment it was asked in and the folder a fresh worker
+  worker (the standby's adoption, `Process.adopt`): its key, the environment it was asked in and the folder a fresh worker
   of it would start in, its run's environment adopted as every run's is (`worker.adopt`). A build
   arriving while the standby starts, of its interpreter, waits for it rather than start another.
   It counts toward the cap, is the first retired for room at the cap or for memory, and is never a
@@ -689,7 +692,7 @@ tessellations, is under one memory budget: **Document lifetime**.)
 - **Memory retires, never a timer.** The workers' resident memory -- each one's as it measured it at
   its start and after each build, the standby's and the render processes' with it -- is held to one
   cap, `CAD_ENGINE_WORKER_RSS_MB` (default: a quarter of the machine's memory, at least 2 GiB;
-  `0` for no cap; `Pool.shed`). After each build and picture, and each `Daemon.tend` round, past
+  `0` for no cap; `Supervisor.shed`). After each build and picture, and each `Daemon.tend` round, past
   it idle processes are retired, least recently used first within each rank: the standby, render
   processes, the workers no page watches, then the watched ones, only when no other is left; a
   worker is drained first, so its documents stay held. Under the system's memory pressure (the server's
@@ -707,6 +710,35 @@ tessellations, is under one memory budget: **Document lifetime**.)
   own between two calls changes what an import of its script reads), the load made no kernel
   call and every call since took its models from their keys. Anything else loads the script
   again: another run, an edit, a body that ran.
+
+**Services.** Every process the daemon starts and supervises is a service it declares, in one place
+([services.py](services.py)), and one supervisor runs them all ([supervisor.py](supervisor.py), whose
+docstring is the mechanism): a model script's worker (the documents worker among them) and a served
+document's render process (whose pictures [renders.py](renders.py) asks for). A declaration says what
+the process runs and in which environment, what one process serves (its key: a script's path, a
+document's id), what binds a process to its caller's interpreter (`places.RESTARTS`), whether it
+counts toward the count cap, its rank when memory is shed (the standby 0, a render process 1, a
+worker 2, a watched worker 3), whether the daemon drains it before it stops, whether its retirements
+are listed in `status`, whether it keeps a standby and how long its start may take. The rules above
+are the supervisor's, for every service alike: a new kind of process is a declaration, and no code of
+the daemon's. A new service's large outputs go by path, a file on disk its caller reads, and its small
+answers in frames; today's children keep their bulk in frames as they always have (a drained
+document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
+STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
+which run with no daemon too) and the processes that outlive the engine (the telemetry sender, an
+update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's,
+count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
+machine, below; 2.3 GB parsing a 354 MB STEP).
+
+**The protocol** (`cad.engine.frames`), every service's: requests are one JSON object per line on the
+child's stdin, a request's payload that many `bytes` after its line; the child answers on a handle of
+its own -- its original stdout -- in frames, a JSON object on one line and that many `bytes` after it,
+and says what it prints on its stderr, its log. Its first frame is `{"ready": pid, "rssMb"}`; then,
+for each request, its `log`, `notice` and `progress` frames, which go to whoever asked, and one
+answer, which may say `rssMb` and `retire`. A line before a frame that is no JSON object is skipped
+(a banner). A child that answers side requests while a request runs (a worker's `where`) reads its
+stdin on a thread of its own. It exits when its stdin closes. Its memory is what it says (`rssMb`):
+a child that cannot measure itself is never retired for memory.
 
 The meshing pool starts with the first page, view or inspection, never with a build. A build
 serves its document, so the daemon's server starts with the first `python model.py`; its meshing
@@ -1025,7 +1057,7 @@ bytecode is under `pycache/`), and lists, counts and removes nothing else there 
 --prune` removes 0.7's store once nothing has written it for seven days). It is written never on the run path:
 
 - after `CACHE_IDLE_SECONDS` (10 s) with no build and no read of the document: the daemon asks the
-  worker that holds it to save it (`Worker.save`), which the worker does only when no request waits
+  worker that holds it to save it (its `save`, `Process.tell`), which the worker does only when no request waits
   for it; a build arriving during the one serialisation waits for it. Measured on juno (29
   documents, 17.2 MB cached; the assembly's 9.6 MB): its serialisation and the pipe take 80-100 ms,
   the file's write 2-6 ms, and a warm build landing 50 ms into the save took 150-170 ms against
@@ -1103,10 +1135,10 @@ says Remove, which forgets its entry alone. `cad delete` prints a line per docum
 engine, and refuses a DOC that names nothing recorded, by name and before anything is deleted
 (exit 2).
 
-**Drain.** Before the pool stops a worker -- the count cap's least recently used, replaced for
+**Drain.** Before the supervisor stops a worker -- the count cap's least recently used, replaced for
 another environment, retired for memory -- the daemon asks it
 (the `result` request with `whole`, nothing meshed) for every document of it the server
-does not hold whole at its version (`Models.drain`), out of the pool, then closes its stdin. The
+does not hold whole at its version (`Models.drain`), out of the supervisor, then closes its stdin. The
 worker serializes the document in memory (`document.to_bytes`: `TDocStd_Application.SaveAs` to a
 stream, the bytes `@xbf` writes), and the documents worker reads them in memory too
 (`document.read_bytes`: the application's stream read, overwriting into a document of its own).
@@ -1268,7 +1300,7 @@ job of kind `export` (`worker.job_progress`): `read` as it reads a file source, 
 destination. A snapshot's are three: `scene` while the document is served, meshed and its scene made,
 `draw` while the frame is drawn, `write` as the PNG is written -- said by the worker that holds a
 model's document, by the daemon as it draws a file through a render process (`Daemon.draw`,
-`render.service.Renders.draw`) and by the verb's own process for the write, or wholly in that process
+`renders.Renders.draw`) and by the verb's own process for the write, or wholly in that process
 with `daemon=False` (`render.service.draw_here_each`). A measurement's are `inspect`'s summary
 measuring a volume per part, in the process that asks (`api._summary`). `cad export`, `cad
 snapshot` and `cad inspect` draw them as `python model.py` draws a build's: the one bar, on a

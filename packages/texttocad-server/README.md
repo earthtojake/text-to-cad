@@ -15,7 +15,8 @@ The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/ca
 
 ```
 src/cad_server/
-  engine/                # the engine's server half: the daemon and its registry of documents,
+  engine/                # the engine's server half: the daemon, its supervisor and the services it
+                         #   declares (its workers, its render processes), its registry of documents,
                          #   the live models' book, the document cache, the verbs as commands
                          #   (cli), and the engine's README, the mechanisms the laws constrain
   cli/                   # the `cad` command: a module per command, each a shell over

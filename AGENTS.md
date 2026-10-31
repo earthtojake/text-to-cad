@@ -113,9 +113,10 @@ which points both at the checkout.
   3MF and DXF files written from them; the worker every build runs in; exports; the OCCT stills;
   the client every command reaches the server by), the formats and validators, and the `cadgen`
   alias. `packages/texttocad-server` ([README](packages/texttocad-server/README.md)) is the server:
-  the daemon and its registry (`cad_server/engine`), the `cad` command line (`cad_server/cli`), the
-  CAD Viewer server (`cad_server/viewer`), the CAD app's server half (`cad_server/mcp`), and the JS
-  assets they serve (`cad_server/_runtime`, built by `scripts/bundle/cadgen-runtime.sh`).
+  the daemon, the supervisor of the processes it declares and its registry (`cad_server/engine`),
+  the `cad` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
+  app's server half (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built
+  by `scripts/bundle/cadgen-runtime.sh`).
   `packages/texttocad-mcp` ([README](packages/texttocad-mcp/README.md)) is the shim, and
   `packages/aliases/` the `cadgen` and `text-to-cad` aliases. Skills consume the server as an
   installed distribution.
