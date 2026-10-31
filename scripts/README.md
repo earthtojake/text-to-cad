@@ -28,14 +28,16 @@ where those files ship, so these scripts are what produces them.
   metadata (which IS committed) rather than writing it. `--clean` removes the
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
-- `cadgen-runtime.sh` — builds the two runtime stages: `--viewer` (vite build of
-  `apps/web`) and `--mcp` (vite build of `apps/mcp`, one `index.html`), first removing any
-  entry under `_runtime` that neither stage builds, and saying so.
-  `--print-outputs` lists the directories a bundle always produces; `--check`
-  builds both and asserts each stage's `index.html` and the `THIRD_PARTY_LICENSES.txt` its
-  build writes (`@text-to-cad/core/third-party-licenses`). Called by `bundle.sh` and
-  `check-builds.sh`; pinned by `test_js_runtime_reproducibility.py`. Call it
-  directly only to debug one stage.
+- `cadgen-runtime.sh` — builds the three runtime stages: `--viewer` (vite build of
+  `apps/web`), `--mcp` (vite build of `apps/mcp`, one `index.html`) and `--plugin` (a copy of
+  the root's plugin files and of every skill file git keeps, which the server writes the plugin
+  folder from), first removing any entry under `_runtime` that no stage builds, and saying so.
+  `--print-outputs` lists the directories a bundle always produces, `--print-plugin-files` the
+  plugin's files beside `skills/`; `--check` builds them and asserts each page stage's
+  `index.html` and the `THIRD_PARTY_LICENSES.txt` its build writes
+  (`@text-to-cad/core/third-party-licenses`), and the plugin stage's every file, byte for byte.
+  Called by `bundle.sh` and `check-builds.sh`; pinned by `test_js_runtime_reproducibility.py`.
+  Call it directly only to debug one stage.
 - `lib/snapshot_runtime.sh [OUT_DIR]` — the OCCT parity bench's snapshot page,
   never part of the wheel: esbuilds `@text-to-cad/core`'s headless render entry
   with `three`/`meshoptimizer` pinned from `package-lock.json` into the ignored
@@ -139,9 +141,10 @@ where those files ship, so these scripts are what produces them.
   top-level packages alone (the aliases none, and only the library at the release as
   their requirement); that the library's and the shim's carry their Python modules, the
   library's the engine's page and environment image; that the server's carries its modules,
-  the engine's README and `_runtime/{viewer,mcp}` with each one's third-party notice, and
+  the engine's README and `_runtime/{viewer,mcp,plugin}` with each page's third-party notice, and
   nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled
-  source; and that no engine test golden ships. The only gate on package data, which fails
+  source, and its plugin the repository's own files and `skills/`, byte for byte
+  (`wheel_contents.py plugin`); and that no engine test golden ships. The only gate on package data, which fails
   quietly. `CAD_KEEP_WHEEL=1` keeps the wheels in `CAD_WHEEL_OUT_DIR`. Called by `test.yml`
   and `release-publish.yml`.
 - `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin

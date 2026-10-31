@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 import warnings
@@ -64,6 +65,39 @@ class WheelContentsTests(unittest.TestCase):
             root = Path(directory)
             with self.assertRaisesRegex(ValueError, "No bundled runtime"):
                 wheel_contents.verify_runtime(root / "absent.whl", root)
+
+    def test_the_plugin_the_server_wheel_carries_is_the_repository_s_byte_for_byte(self):
+        # The skills git keeps (tracked, or new and not ignored) and the plugin's files, nothing else.
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            files = {"LICENSE": b"licence", "skills/cad/SKILL.md": b"---\nname: cad\n---\n",
+                     "skills/cad/scripts/run.py": b"print('run')\n"}
+            for name, data in files.items():
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                (repo / name).write_bytes(data)
+            (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+            (repo / "skills/cad/__pycache__").mkdir()
+            (repo / "skills/cad/__pycache__/run.cpython-314.pyc").write_bytes(b"bytecode")
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "add", "LICENSE", ".gitignore", "skills/cad/SKILL.md"], check=True)
+            shipped = {wheel_contents.PLUGIN + name: data for name, data in files.items()}
+            cases = [
+                (shipped, None),
+                ({**shipped, wheel_contents.PLUGIN + "skills/cad/__pycache__/run.cpython-314.pyc": b"bytecode"}, "extra"),
+                ({name: data for name, data in shipped.items() if not name.endswith("run.py")}, "missing"),
+                ({**shipped, wheel_contents.PLUGIN + "skills/cad/SKILL.md": b"an older skill"}, "different bytes"),
+            ]
+            for entries, error in cases:
+                with self.subTest(error=error):
+                    wheel = Path(directory) / "test.whl"
+                    with zipfile.ZipFile(wheel, "w") as archive:
+                        for name, data in entries.items():
+                            archive.writestr(name, data)
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            wheel_contents.verify_plugin(wheel, repo, ["LICENSE"])
+                    else:
+                        self.assertEqual(wheel_contents.verify_plugin(wheel, repo, ["LICENSE"]), 3)
 
 
 if __name__ == "__main__":

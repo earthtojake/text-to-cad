@@ -94,10 +94,11 @@ models/*/unported/validation/
 packages/*/build/
 packages/aliases/*/build/
 
-# The server's packaged runtime: the CAD Viewer's built client (viewer/) and the CAD
-# app (mcp/). Both are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
-# server's wheel; neither is committed. A fresh checkout has no _runtime until the
-# bundler runs, and the server says so by name when it needs one that is absent.
+# The server's packaged runtime: the CAD Viewer's built client (viewer/), the CAD
+# app (mcp/) and the agent-app plugin, a copy of the root's manifests and skills/ (plugin/).
+# All are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the server's wheel;
+# none is committed. A fresh checkout has no _runtime until the bundler runs, and the
+# server says so by name when it needs one that is absent (a checkout's own plugin is its root).
 packages/texttocad-server/src/cad_server/_runtime/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).

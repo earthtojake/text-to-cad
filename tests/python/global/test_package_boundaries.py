@@ -6,9 +6,11 @@ direction, and core being framework-free, are scripts/test/check-dependencies.mj
 law: each Python distribution (the library, texttocad; the server, texttocad-server; the shim,
 texttocad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
-models/ and whose packages/ is never installed) each work in isolation outside
+models/ and whose packages/ is never installed; the server's wheel carries skills/ whole, and
+writes it into the plugin folder the agent apps read) each work in isolation outside
 this repo, so their markdown must not refer to anything outside the package -- a
-distribution's not even to another distribution's files, which its wheel does not carry.
+distribution's not even to another distribution's files, which its wheel does not carry, and
+a skill's links not out of its skill.
 The private apps are workspace consumers; their READMEs describe that workspace.
 The web app ships as compiled assets inside the server's wheel, not as a source mirror.
 """
@@ -155,21 +157,37 @@ class PackagedMarkdownShipsAlone(unittest.TestCase):
         )
 
 
+def _links_outside(root: Path, files) -> list[str]:
+    """Each relative Markdown link in ``files`` that leaves ``root`` or names nothing there."""
+    offenders = []
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for target in _MD_LINK.findall(text):
+            if not target or re.match(r"[a-z][a-z0-9+.-]*:", target, re.I):
+                continue  # a fragment of this page, or a URL
+            resolved = (path.parent / target).resolve()
+            if not resolved.is_relative_to(root.resolve()) or not resolved.exists():
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: {target}")
+    return offenders
+
+
 class DistributionLinksStayInside(unittest.TestCase):
     """A distribution's relative links name its own files: another distribution's are not in its wheel."""
 
     def test_every_relative_link_resolves_inside_its_distribution(self) -> None:
         offenders: list[str] = []
         for project in PROJECTS:
-            for path in _markdown_files(project):
-                text = path.read_text(encoding="utf-8", errors="replace")
-                for target in _MD_LINK.findall(text):
-                    if not target or re.match(r"[a-z][a-z0-9+.-]*:", target, re.I):
-                        continue  # a fragment of this page, or a URL
-                    resolved = (path.parent / target).resolve()
-                    if not resolved.is_relative_to(project.resolve()) or not resolved.exists():
-                        offenders.append(f"{path.relative_to(REPO_ROOT)}: {target}")
+            offenders += _links_outside(project, _markdown_files(project))
         self.assertEqual(offenders, [], "a link out of its distribution, or to a file that is not there")
+
+    def test_every_skill_link_resolves_inside_its_skill(self) -> None:
+        # The skills ship whole inside the server's wheel (cad_server/_runtime/plugin/skills, byte for byte
+        # these files: scripts/release/check-wheel-contents.sh) and each alone through the Skills CLI, so a
+        # skill's relative link names a file of its own skill, which both carry, or is a URL.
+        offenders: list[str] = []
+        for skill in sorted(path.parent for path in repo_path("skills").glob("*/SKILL.md")):
+            offenders += _links_outside(skill, _markdown_files(skill))
+        self.assertEqual(offenders, [], "a skill's link out of its skill, or to a file that is not there")
 
 
 if __name__ == "__main__":

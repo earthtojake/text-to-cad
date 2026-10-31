@@ -334,7 +334,9 @@ jobs:
             cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt \
             cad_server/_runtime/mcp/shell.html \
             cad_server/_runtime/mcp/app.js \
-            cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt; do
+            cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt \
+            cad_server/_runtime/plugin/.claude-plugin/marketplace.json \
+            cad_server/_runtime/plugin/skills/cad/SKILL.md; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2
               echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2

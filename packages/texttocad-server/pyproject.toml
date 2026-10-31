@@ -59,10 +59,12 @@ include = ["cad_server", "cad_server.*"]
 
 [tool.setuptools.package-data]
 # _runtime holds what the server serves that is not Python: the CAD Viewer's built client that
-# `cad viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage
-# (no __init__), and it is found at call time by cad_server.assets. Verified by
-# scripts/release/check-wheel-contents.sh.
-cad_server = ["py.typed", "_runtime/**/*"]
+# `cad viewer` serves, the CAD app page its MCP endpoint serves, and the agent-app plugin (its
+# manifests and the skills) it writes into the plugin folder. It is data, not a subpackage (no
+# __init__), and it is found at call time by cad_server.assets. A glob takes no dot folder, so the
+# plugin's manifest folders are named. Verified by scripts/release/check-wheel-contents.sh.
+cad_server = ["py.typed", "_runtime/**/*", "_runtime/plugin/.claude-plugin/*", "_runtime/plugin/.codex-plugin/*",
+              "_runtime/plugin/.cursor-plugin/*"]
 # The viewer server's catalog ordering is ICU root collation, read from this table at
 # runtime; it ships beside the code that reads it.
 "cad_server.viewer" = ["collation.json"]

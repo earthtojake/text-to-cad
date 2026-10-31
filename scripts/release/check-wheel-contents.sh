@@ -93,6 +93,13 @@ SERVER_REQUIRED=(
   "cad_server/_runtime/mcp/shell.html"
   "cad_server/_runtime/mcp/app.js"
   "cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt"
+  # The agent-app plugin the server writes into the plugin folder: its manifests (in folders a glob
+  # skips, being dot folders) and its skills; the plugin check below holds all of it to the repository's.
+  "cad_server/_runtime/plugin/.claude-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.claude-plugin/marketplace.json"
+  "cad_server/_runtime/plugin/.codex-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.cursor-plugin/plugin.json"
+  "cad_server/_runtime/plugin/skills/cad/SKILL.md"
 )
 SHIM_REQUIRED=(
   # The stdio transport an agent app starts: the standard library alone.
@@ -216,6 +223,10 @@ if [ "$shipped_runtime" != "$expected_runtime" ]; then
 fi
 
 "$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/texttocad-server"
+# The skills and the plugin's files ship in the server's wheel: byte for byte the repository's, at this commit.
+plugin_files=()
+while IFS= read -r plugin_file; do plugin_files+=("$plugin_file"); done < <("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-plugin-files)
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" plugin "$wheel" "$REPO_ROOT" "${plugin_files[@]}"
 echo "The five wheels carry their own packages (the aliases none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"
