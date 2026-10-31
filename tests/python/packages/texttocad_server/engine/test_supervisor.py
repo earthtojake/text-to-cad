@@ -410,14 +410,14 @@ class ProtocolTest(unittest.TestCase):
         launched: list = []
 
         def launch(service, key, label, environment, cwd, standby):
-            launched.append(label)
-            raise Gone(f"the worker for {label} did not start: it never said it was ready in 300 s", unready=True)
+            launched.append(Path(label).name)
+            raise Gone("the worker for a.py did not start: it never said it was ready in 300 s", unready=True)
 
         engine.supervisor.launch = launch
         sent: list = []
         engine.handle({"op": "build", "script": "/w/a.py", "env": {}}, sent.append)
-        self.assertEqual(launched, ["/w/a.py"])
-        self.assertEqual(sent, [{"failed": "the worker for /w/a.py did not start: it never said it was ready in 300 s"}])
+        self.assertEqual(launched, ["a.py"], "asked once")
+        self.assertEqual(sent, [{"failed": "the worker for a.py did not start: it never said it was ready in 300 s"}])
 
     def test_with_no_ready_seconds_a_silent_child_holds_its_lease_while_it_lives(self) -> None:
         import signal
