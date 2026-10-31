@@ -10,7 +10,7 @@ import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, reloadWhenClean, useUpdate, type UpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, reloadWhenClean, useAutomaticUpdates, useUpdate, type UpdateNotice } from '@text-to-cad/ui/update';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
@@ -131,7 +131,11 @@ export default function App({ client, server, tabStore, notice = null, language:
   // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
-  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
+  // Automatic updates, after Telemetry: the person's, shared with the CAD app and `cad update auto`.
+  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
+  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
+    [telemetry, automaticUpdates]);
   // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
   // in the navbar while this install is behind, from the notice read with the server's description
   // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back

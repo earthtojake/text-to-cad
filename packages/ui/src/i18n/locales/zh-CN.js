@@ -47,6 +47,9 @@ export default {
   "consent.shareUsage": "遥测",
   "consent.shareUsageEnvironment": "遥测（由你的环境设置）",
   "consent.telemetryInfo": "匿名使用数据和崩溃报告，用于改进 text-to-cad。你的提示词、模型和文件绝不会被发送。",
+  "update.automatic": "自动更新",
+  "update.automaticEnvironment": "自动更新（由你的环境关闭）",
+  "update.automaticInfo": "自动安装新版 text-to-cad，并在没有任务运行时重启 CAD 服务器。关闭后，由你通过更新按钮或安装命令更新。",
 
   "appearance.system": "跟随系统",
   "appearance.light": "浅色",

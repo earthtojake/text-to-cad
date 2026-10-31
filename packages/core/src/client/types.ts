@@ -55,6 +55,9 @@ export interface CadRecent {
 }
 /** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
 export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
+/** Whether the engine updates by itself (`cad_server/auto_updates.py`), and why: the default, the person's
+ * choice, or the environment (`CAD_UPDATE_CHECK=0`, CI), which no click changes. */
+export interface CadAutomaticUpdates { automatic: boolean; reason: 'default' | 'choice' | 'environment' }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the release offered, and this install's. */
 export interface CadUpdateNotice { latest: string; version: string }
 /** Where an update the update button started is (`cad_server/_internal/update.py`). */
@@ -212,6 +215,8 @@ export interface CadWorkspaceService {
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
   language(locale?: string | null): Promise<{ locale: string | null }>;
+  /** Whether the engine updates by itself; with `automatic`, the person's answer (the app menu's Automatic updates). */
+  automaticUpdates(automatic?: boolean): Promise<CadAutomaticUpdates>;
   /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
   version(): Promise<CadVersion>;
   /** The update button's click: the engine updates in the background, and answers as `version` does. */

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSPro
 import { ExternalLink, Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { translator, useI18n, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, useUpdate } from '@text-to-cad/ui/update';
+import { UpdateButton, useAutomaticUpdates, useUpdate } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { TooltipHint } from '@text-to-cad/ui/primitives/tooltip';
@@ -290,7 +290,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // view (`useLanguage`, the same as the browser viewer's).
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
-  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
+  // Automatic updates, after Telemetry: the person's, shared with the browser viewer and `cad update auto`.
+  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
+  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
+    [telemetry, automaticUpdates]);
   // A newer text-to-cad (`cad_server/updates.py`), from the launch's notice at once, while this install is
   // behind: the update button, an icon first among the navbar's controls (in the file handler, which
   // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from

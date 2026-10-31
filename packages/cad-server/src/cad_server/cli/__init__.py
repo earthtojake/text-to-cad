@@ -50,6 +50,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
     "update": ("cad_server.cli.update", "install the newest release and set it up in every agent app here"),
+    "update auto": ("cad_server.cli.update_auto", "show or change automatic updates: status, on, off"),
     "uninstall": ("cad_server.cli.uninstall", "take text-to-cad out of every agent app here"),
     # The folder every agent app's plugin comes from, written from the current installation.
     "plugin": ("cad_server.cli.plugin", "write the agent apps' plugin folder and print its path"),

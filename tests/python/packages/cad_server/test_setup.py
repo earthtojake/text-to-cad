@@ -462,6 +462,21 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("Gemini CLI: install the text-to-cad extension", err)
         switch.handover.assert_not_called()
 
+    def test_an_automatic_update_s_first_half_registers_and_stops_before_the_apps(self) -> None:
+        # `CAD_UPDATE_PREPARE=1` (`cad_server._internal.update.PREPARE_ENV`): the release registered and its
+        # base made while the engine works; nothing of the apps, the plugin folder or the engine changes.
+        command(self.bin, "gemini", "sys.exit(0)\n")
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}):
+            code, out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 0, err + out)
+        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], [], "no apps stage")
+        self.assertNotIn("Gemini CLI: install the text-to-cad extension\n", err)
+        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': written at the second half")
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()] \
+            if (self.bin / "calls.jsonl").exists() else []
+        self.assertNotIn(["gemini", "extensions", "link", str(plugin.folder())], calls, "no app is pointed at anything")
+        switch.handover.assert_not_called()
+
     def test_the_cad_kernel_environment_is_planned_and_made_once(self) -> None:
         from cad_server._internal import base
 

@@ -71,8 +71,10 @@ its script runs (`cad run model.py`), and the old cache folder can be deleted, a
 state folder once nothing of 0.8 runs. A `CAD_STATE_DIR` you set names a folder that moves
 nowhere.
 
-**6. Updates are by hand**: the update button in the CAD Viewer and the CAD app, `cad
-update`, or the install command again. Nothing updates on its own.
+**6. Updates come by themselves**: the CAD server installs a newer release once it is
+out and switches to it once nothing is running. `cad update auto off` (or Automatic
+updates in the menu under CAD's logo) leaves them to you: the update button in the CAD
+Viewer and the CAD app, `cad update`, or the install command again.
 
 Installing the library into a Python of your own instead of the install command: it is
 `cad` on PyPI now (`pip install 'cad[build123d]==0.9.0'`; pin it, the release you run), beside the

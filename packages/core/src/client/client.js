@@ -292,6 +292,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return locale === undefined ? request('/__cad/language', { operation: 'language' })
         : request('/__cad/language', { method: 'POST', headers: JSON_POST, body: { locale }, operation: 'language' });
     },
+    automaticUpdates(automatic) {
+      return automatic === undefined ? request('/__cad/updates', { operation: 'updates' })
+        : request('/__cad/updates', { method: 'POST', headers: JSON_POST, body: { automatic }, operation: 'updates' });
+    },
     // Whether a newer text-to-cad is out, the release the engine runs and where an update is
     // (`GET /__cad/version`); and the update button's click (`POST /__cad/update`), which answers the same.
     version() {

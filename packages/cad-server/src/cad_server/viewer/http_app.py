@@ -507,6 +507,10 @@ class CadApp:
                     response.send_json(200, language.read())
                 elif pathname == "/__cad/version":
                     response.send_json(200, self._version())
+                elif pathname == "/__cad/updates":
+                    from cad_server import auto_updates
+
+                    response.send_json(200, auto_updates.read())
                 elif pathname == "/__cad/mcp-app":
                     # The CAD app as one module, which a card's shell imports (``cad_server.assets``): the
                     # engine's release, whatever release the host kept the shell of.
@@ -562,6 +566,15 @@ class CadApp:
                         response.send_empty(413, [("connection", "close")])
                         return
                     response.send_json(200, language.change(json.loads(request.body() or b"{}")))
+                elif pathname == "/__cad/updates":
+                    # The app menu's Automatic updates: the person's setting, one for every CAD app
+                    # (``cad_server/auto_updates.py``).
+                    from cad_server import auto_updates
+
+                    if int(request.headers.get("content-length") or 0) > 4096:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    response.send_json(200, auto_updates.change(json.loads(request.body() or b"{}")))
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])

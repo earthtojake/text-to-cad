@@ -59,7 +59,9 @@ current installation's
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
 steps 2 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
-each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
+each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr. An automatic update
+runs it first with ``CAD_UPDATE_PREPARE=1`` in its environment, which stops after step 5 (the release
+registered, its base made: no app changed), and again, whole, once the engine is idle.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
@@ -98,6 +100,9 @@ ASIDE = "install-aside"
 STOP_SECONDS = 60.0
 # The server's install channel in Claude Desktop's config (``cad_server._internal.channel``).
 DESKTOP_CHANNEL = "claude-desktop"
+# An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): named here, so the
+# command's import costs nothing more.
+PREPARE_ENV = "CAD_UPDATE_PREPARE"
 
 
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
@@ -813,6 +818,10 @@ class Installer:
                 self.stage("build123d", f"cad[build123d] {self.release}")
                 kernel_failed = not self._make_kernel()
             failed = kernel_failed
+            if self.engine_update and os.environ.get(PREPARE_ENV) == "1":
+                # An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): this
+                # release registered and its base made; its apps and the switch once the engine is idle.
+                return 1 if kernel_failed else 0
             self.stage("apps")
             # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
             # written changes no app that would point at it.
