@@ -260,9 +260,10 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-An update moves the device to another release in one step, and only when the person asks: the update
-button in the CAD Viewer and the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad
-update`, or the install command run again (both `cad setup`). Each installs the release in a folder
+An update moves the device to another release in one step: the update button in the CAD Viewer and
+the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad update`, or the install
+command run again (both `cad setup`), or the engine itself, when automatic updates are on (below). Each
+installs the release in a folder
 of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
 where it holds it), makes that release's base (**Running a model**), writes the plugin folder every
 agent app is pointed at, `<state>/plugin`, from that release (`cad_server._internal.plugin`: in place,
@@ -286,6 +287,25 @@ plugin --refresh`, `switch.follow`): nothing changes when that release's setup a
 switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
 did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
 lines `update.log`.
+
+**An automatic update never interrupts.** With automatic updates on -- the person's setting, on by
+default (`cad_server.auto_updates`: the `updates` section of `settings.json`, `cad update auto`, the app
+menu's Automatic updates) -- the engine asks as it tends itself (`Daemon.tend`,
+`Update.automatic`) whether a release newer than its own is known: the feed as last read, read again
+in the background once an hour, or an agent app's newer server. One is installed at once, in the
+background -- its folder, and its own `cad setup --engine-update` with `CAD_UPDATE_PREPARE=1`, which
+registers it and makes its base and stops there, so nothing of the apps or the engine changes -- and
+the rest, its setup whole (the apps' plugins) and the switch above, waits until the engine is idle:
+nothing in flight (`Daemon.working`) and none ended (`Daemon.worked`) for a minute
+(`auto_updates.IDLE_SECONDS`), no drain, no `cad setup` holding the install lock. Until then the
+update's state stays `idle`, so no page shows it; from then it is `working` and `restarting` as a
+click's is, and every page and card follows it to the new release as they follow a click. A click
+meanwhile makes it the click's, done at once; `cad update` or the install command drains the engine,
+and the automatic update is given up. Nothing is ready to switch while a person's update runs, none
+starts within ten minutes of a failed one (`RECALL_SECONDS`), and a release whose automatic attempt
+did not hold is not tried again by itself for a day (`auto_updates.RETRY_SECONDS`, the attempt kept
+as `update-automatic.json` in the state folder); a newer one is tried at the next tend. Offline, or
+with the setting off, nothing is read and nothing happens.
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below, and `cad setup` stops
@@ -2484,7 +2504,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | Route | What it answers |
 | --- | --- |
 | `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
-| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "updates": {"automatic", "reason"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `updates` whether the engine updates by itself, `cad_server.auto_updates`), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored; `updates` put back as read changes nothing), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
