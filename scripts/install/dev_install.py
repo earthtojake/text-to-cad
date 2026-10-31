@@ -134,11 +134,12 @@ def launcher_dir() -> str:
     return os.environ.get("CADGEN_LAUNCHER_DIR") or "~/.local/bin"
 
 
-# Registers this install and writes the `cadgen` command through its own cadgen (this script cannot
-# import it), printing the record's file.
+# Registers this install, makes it the device's current installation -- the one whose engine every
+# client starts, so the apps run this checkout -- and writes the `cadgen` command, through its own
+# cadgen (this script cannot import it), printing the record's file.
 REGISTER = ("import sys\n"
             "from cadgen._internal import installations\n"
-            "(record, _, failed), (_, _, unwritten) = installations.setup(sys.argv[1])\n"
+            "(record, _, failed), (_, _, unwritten) = installations.setup(sys.argv[1], make_current=True)\n"
             "print(record)\n"
             "sys.exit('; '.join(error for error in (failed, unwritten) if error) or 0)\n")
 
@@ -300,13 +301,14 @@ def copy_page(host: str, build: bool, version: str, prune: bool = True) -> Path:
     """This install's copy of the built page. Servers still running an earlier install read their own."""
     if build:
         subprocess.run(["npm", "run", "build:mcp"], cwd=REPO_ROOT, check=True)
-    page = REPO_ROOT / "apps" / "mcp" / "dist" / "index.html"
-    if not page.is_file():
+    built = [REPO_ROOT / "apps" / "mcp" / "dist" / name for name in ("shell.html", "app.js")]
+    if not all(page.is_file() for page in built):
         raise Refused("apps/mcp is not built; run without --no-build.")
     pages = dev_root(host) / "app"
     page_dir = pages / version
     page_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(page, page_dir / "index.html")
+    for page in built:  # the shell a host keeps, and the app it loads (cadgen's mcp/ui.py)
+        shutil.copy2(page, page_dir / page.name)
     if prune:
         stale = time.time() - PAGE_COPY_DAYS * 86400
         for old in pages.iterdir():

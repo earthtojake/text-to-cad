@@ -244,10 +244,10 @@ def _engine_python(top: str, code: str, **env: str) -> subprocess.CompletedProce
 
 
 def default_engine_door(top: str) -> str | None:
-    """Where this installation's engine has its door when nothing names its folder
+    """Where the device's engine has its door when nothing names its folder
     (``daemon.default_state_dir``): the developer's own engine's place. None where it cannot be said."""
     found = _engine_python(top, "import os; from cadgen.engine import daemon; "
-                                "print(os.path.join(daemon.default_state_dir(), daemon._tag() + "
+                                "print(os.path.join(daemon.default_state_dir(), daemon.NAME + "
                                 "('.port' if os.name == 'nt' else '.door')))")
     return (found.stdout.strip() or None) if found.returncode == 0 else None
 
@@ -266,7 +266,7 @@ def engine_answers(top: str, door: str) -> bool:
 # folders of its own): the state folder (``cadgen.viewer.recents.state_dir``) and the ``cadgen``
 # command (``cadgen._internal.installations.proxy_path``), as this run's environment names them and
 # as the platform does where nothing names them; and the name this run's engines give their records
-# there (``daemon._tag``: this interpreter's environment and this checkout's engine).
+# there (``daemon.NAME``: one engine a device, so one record).
 _PERSON_PLACES = (
     "import json, os\n"
     "from cadgen._internal.installations import proxy_path\n"
@@ -276,7 +276,7 @@ _PERSON_PLACES = (
     "os.environ.pop('CADGEN_STATE_DIR', None)\n"
     "os.environ.pop('CADGEN_LAUNCHER_DIR', None)\n"
     "places.append((str(state_dir()), proxy_path()))\n"
-    "print(json.dumps({'places': places, 'engine': daemon._tag(versioned=False)}))\n"
+    "print(json.dumps({'places': places, 'engine': daemon.NAME}))\n"
 )
 
 

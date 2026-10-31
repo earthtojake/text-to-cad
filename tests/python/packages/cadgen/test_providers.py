@@ -349,8 +349,9 @@ class DetectionAndPlan(Fixture):
         commands = {step.app: [argv[1:] for argv in step.commands] for step in steps}
         self.assertEqual(commands["codex"], [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
                                              ["plugin", "add", "text-to-cad@earthtojake"]])
+        # Never --auto-update: no update arrives but the one the person asks for.
         self.assertEqual(commands["gemini"], [["extensions", "install", "https://github.com/earthtojake/text-to-cad", "--ref",
-                                               "latest", "--consent", "--auto-update"]])
+                                               "latest", "--consent"]])
         self.assertEqual(commands["grok"], [["plugin", "install", "earthtojake/text-to-cad@latest", "--trust"],
                                             ["plugin", "enable", "text-to-cad"]])
         self.assertEqual(commands["cursor"][0][:5], ["clone", "--depth", "1", "--branch", "latest"])

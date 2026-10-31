@@ -22,6 +22,8 @@ from .ui import AppPage
 from .views import ViewRegistry
 
 IDLE = 3600.0
+# The tools a CAD page calls of its own, never an agent: an update's drain does not wait for them.
+PAGE_TOOLS = frozenset({"cad_http", "cad_sync", "cad_capture_reply"})
 
 
 @dataclass
@@ -33,6 +35,7 @@ class Session:
     active: int = 0
     holder: str | None = None  # the name of the stdio server's hold it was opened under (``release``)
     released: bool = False  # that hold is gone: the session ends once nothing runs in it
+    calls: int = 0  # an agent's tool calls in flight (``Sessions.working``)
 
     def close(self):
         self.server.sidebar_views.close()
@@ -73,6 +76,12 @@ class Sessions:
         with self.lock:
             return any(s.server.operations.keeps_alive() for s in self.sessions.values())
 
+    def working(self):
+        """Whether an agent's tool call is in flight in any session, or an operation it started runs:
+        what an update's drain waits for. A page's own calls (``PAGE_TOOLS``) are not."""
+        with self.lock:
+            return any(s.calls or s.server.operations.keeps_alive() for s in self.sessions.values())
+
     def listing(self):
         with self.lock:
             self._expire()
@@ -86,6 +95,10 @@ class Sessions:
         meta = params.get('_meta') or {}
         options = meta.get('dev.texttocad/transport', {}) if isinstance(meta, dict) else {}
         options = options if isinstance(options, dict) else {}
+        # The release the peer runs: one newer than this engine's proves a release is out, and the
+        # update button shows it with no network (``cadgen.updates.see``).
+        from cadgen import updates
+        updates.see(options.get('release'))
         directory = options.get('appDir')
         page = AppPage(Path(directory)) if isinstance(directory, str) and directory else AppPage()
         app = ViewerApp(self.engine.server, host=self.engine.host, port=self.engine.server.port,
@@ -179,6 +192,10 @@ class Sessions:
                 # its stdio peer's word on a page it asked it to open (``Server.notify``).
                 session.server.notify(method, params)
                 return response.send_empty(202)
+            agent = method == 'tools/call' and params.get('name') not in PAGE_TOOLS
+            if agent:
+                with self.lock:
+                    session.calls += 1
             try:
                 meta = params.get('_meta') if isinstance(params.get('_meta'), dict) else {}
                 result = session.server.handle(method, params, RequestContext(request_id, meta))
@@ -186,6 +203,10 @@ class Sessions:
                 return self._error(response, request_id, error.code, error.message, data=error.data)
             except Exception:
                 return self._error(response, request_id, INTERNAL_ERROR, 'internal MCP request failure')
+            finally:
+                if agent:
+                    with self.lock:
+                        session.calls -= 1
             return self._result(response, request_id, result)
         finally:
             if session:

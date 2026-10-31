@@ -29,13 +29,12 @@ each of ``OBSERVERS`` is told (a mirror uploads in the background: nothing waits
 The cache folder is a second ``Folder``, written the same way; forgetting a document
 (``delete``) forgets its cache file too.
 
-Beside the documents, ``<state>/engines/token`` is the user's page token, which every
-installation's engine serves with (``Registry.token``; the first engine makes it, ``make_token``), and
-``<state>/engines/<installation>.json`` each installation's engine record (``Registry.engine``,
-``put_engine``, its own ``ENGINE_SCHEMA``): while the default port is another program's, the port
-the engine rolled to (``port``). Both are written this user's alone (0600). Links stay valid across
-restarts and upgrades because of them (``daemon.bind``); ``cadgen server --rotate-token`` replaces
-the token.
+Beside the documents, ``<state>/engines/token`` is the user's page token, which every engine
+serves with, whatever its release (``Registry.token``; the first engine makes it, ``make_token``),
+and ``<state>/engines/engine.json`` the engine's record (``Registry.engine``, ``put_engine``, its own
+``ENGINE_SCHEMA``): while the default port is another program's, the port the engine rolled to
+(``port``). Both are written this user's alone (0600). Links stay valid across restarts and updates
+because of them (``daemon.bind``); ``cadgen server --rotate-token`` replaces the token.
 
 The engine imports nothing outside itself (law 3): where the state folder is is the
 distribution's to say, through ``FACTORY`` (``cadgen._internal.engine_host``). With none, the
@@ -289,8 +288,8 @@ class Registry:
         self.state.write(TOKEN, (token + "\n").encode("ascii"), mode=0o600)
 
     def engine(self, installation: str) -> dict[str, Any]:
-        """The engine record of ``installation`` (``daemon._tag(versioned=False)``: its environment, so it
-        outlives an upgrade there): the ``port`` (int) it rolled to
+        """The engine record named ``installation`` (``daemon.NAME``: the device's one engine, so it
+        outlives an update): the ``port`` (int) it rolled to
         from a held default, where it has one; ``{}`` with none, or one this schema does not read."""
         data = self.state.read(f"{ENGINES}/{installation}.json")
         try:

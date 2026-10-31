@@ -220,7 +220,7 @@ class EventTest(unittest.TestCase):
             progress.event("render", "draw")
         with self.assertRaisesRegex(ValueError, "no stage 'body' of a snapshot"):
             progress.Progress(lambda _frame: None, kind="snapshot").stage("body")
-        self.assertEqual(progress.KINDS, ("build", "import", "export", "snapshot", "inspect-measure"))
+        self.assertEqual(progress.KINDS, ("build", "import", "export", "snapshot", "inspect-measure", "update"))
         self.assertEqual(list(progress.STAGES["snapshot"]), ["scene", "draw", "write"])
         self.assertTrue(all(words and words[0].isupper() for stages in progress.STAGES.values() for words in stages.values()))
 

@@ -90,7 +90,7 @@ class PluginTreeTests(unittest.TestCase):
                           for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json",
                                        "gemini-extension.json")
                           if path in tree}
-        gemini = {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"}
+        gemini = {"CADGEN_INSTALL_CHANNEL": "gemini-github"}
         self.assertEqual(said["latest"], {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},

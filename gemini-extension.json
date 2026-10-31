@@ -16,8 +16,7 @@
         "mcp"
       ],
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "gemini-github",
-        "CADGEN_AUTO_UPDATED": "1"
+        "CADGEN_INSTALL_CHANNEL": "gemini-github"
       }
     }
   }

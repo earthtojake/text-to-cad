@@ -8,7 +8,7 @@ Five classes, each found by what it is, never by a guess:
   of this schema carrying more than it reads (an earlier build's ``token``) is written again with
   what it reads alone, so the port it rolled to is kept.
 - **Bytecode folders of installations no longer registered**: ``<cache>/pycache/<folder>/``, each
-  an engine's (``daemon.bytecode``, named by its ``daemon._tag``), that holds no registered
+  an installation's (``daemon.bytecode``, named by its ``daemon.bytecode_tag``), that holds no registered
   installation's environment (``installations/<version>.json``'s ``prefix``, under which the
   bytecode of its libraries is filed) and is no running engine's (its lock held, or its door
   answering, in the engine folder).

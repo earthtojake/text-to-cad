@@ -897,7 +897,7 @@ class DaemonEnvironmentTest(unittest.TestCase):
                     daemon.Worker(str(cache / "model.py"), dict(given))  # in the daemon, for a run in ``given``
             return found
 
-        ours = str(cache / daemon.PYCACHE / daemon._tag())
+        ours = str(cache / daemon.PYCACHE / daemon.bytecode_tag())
         found = started({"CADGEN_CACHE_DIR": str(cache), "PYTHONDONTWRITEBYTECODE": "1"})
         for process in ("daemon", "worker"):
             self.assertEqual(found[process].get("PYTHONPYCACHEPREFIX"), ours, process)
@@ -963,38 +963,6 @@ class SweepTest(unittest.TestCase):
         done = self.cli("status")
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))
 
-    def test_a_server_of_an_older_protocol_is_still_stopped(self) -> None:
-        from unittest import mock
-
-        from cadgen.engine import client, daemon
-
-        older = daemon.PROTOCOL - 1 or 1
-        # The server a cadgen of an older protocol started: the same installation, its own door.
-        server = subprocess.Popen([sys.executable, "-c", "import sys; from cadgen.engine import daemon; "
-                                   f"daemon.PROTOCOL = {older}; sys.exit(daemon.main())"], env=self.env,
-                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.addCleanup(lambda: server.poll() is None and server.kill())
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)}), \
-                mock.patch.object(daemon, "PROTOCOL", older + 1):
-            address = daemon.address(older)
-            deadline = time.monotonic() + 60
-            while (found := client._connect(address)) is None:
-                self.assertIsNone(server.poll(), "the older server exited before it listened")
-                self.assertLess(time.monotonic(), deadline, "the older server listened")
-                time.sleep(0.05)
-            found.close()
-            self.assertIsNone(client.request({"op": "status"}, start=False), "this protocol's server is another")
-        # ``cadgen stop`` of this protocol reaches it, and says so in one line, no JSON.
-        done = self.cli("stop")
-        self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (0, f"stopped the engine server at {address}\n", ""))
-        self.assertEqual(server.wait(timeout=60), 0)
-        self.assertFalse(address.exists())
-        done = self.cli("stop")
-        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))
-        done = self.cli("stop", "--json")
-        self.assertEqual((done.returncode, json.loads(done.stdout)), (0, {"ok": True, "stopped": []}))
-
 
 class OwnFilesTest(unittest.TestCase):
     """A stopping engine removes its own files from the engine folder; a starting one removes every
@@ -1038,7 +1006,7 @@ class OwnFilesTest(unittest.TestCase):
     def test_an_engine_removes_its_files_as_it_stops_and_dead_engines_files_as_it_starts(self) -> None:
         from cadgen.engine import client, daemon
 
-        ours = daemon._tag()
+        ours = daemon.NAME
         daemon.failure_path().write_text('{"reason": "an earlier start"}', encoding="utf-8")
         dead = self.state / "aaaaaaaaaaaa.lock"
         dead.write_text("", encoding="utf-8")  # a killed engine's: nobody holds it
@@ -1074,7 +1042,7 @@ class OwnFilesTest(unittest.TestCase):
 
         old = time.time() - 600
         for name in ("aaaaaaaaaaaa.lock", "aaaaaaaaaaaa.port", "aaaaaaaaaaaa.failed", "eeeeeeeeeeee.lock",
-                     "eeeeeeeeeeee.failed", "cccccccccccc.lock", "cccccccccccc.failed", f"{daemon._tag()}.failed",
+                     "eeeeeeeeeeee.failed", "cccccccccccc.lock", "cccccccccccc.failed", f"{daemon.NAME}.failed",
                      "cadgen-open-0123456789abcdef.html", "notes.txt", "ABCDEFABCDEF.lock", "aaaaaaaaaaaa.lock.bak"):
             (self.state / name).write_text("", encoding="utf-8")
         for name in ("aaaaaaaaaaaa.failed", "cccccccccccc.failed"):
@@ -1099,7 +1067,7 @@ class OwnFilesTest(unittest.TestCase):
                           "bbbbbbbbbbbbbbbb.sock", "eeeeeeeeeeee.lock"])
         self.assertEqual(self.left(), sorted(["ABCDEFABCDEF.lock", "aaaaaaaaaaaa.lock.bak", "cadgen-open-0123456789abcdef.html",
                                               "cccccccccccc.door", "cccccccccccc.failed", "cccccccccccc.lock",
-                                              "dddddddddddd.door", "eeeeeeeeeeee.failed", f"{daemon._tag()}.failed",
+                                              "dddddddddddd.door", "eeeeeeeeeeee.failed", f"{daemon.NAME}.failed",
                                               "ffffffffffff.sock", "notes.txt"]),
                          "a live engine's files, a note its client may still read, this engine's and no engine's stay")
         self.assertEqual(daemon.sweep_dead(self.state), [], "nothing is removed twice")

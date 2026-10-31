@@ -68,7 +68,8 @@ class ExplicitRuntimeAssets(unittest.TestCase):
             for app in ("web", "mcp"):
                 (above / "apps" / app / "dist").mkdir(parents=True)
                 (above / "apps" / app / "package.json").write_text("{}", encoding="utf-8")
-                (above / "apps" / app / "dist" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+                for built in ("index.html", "shell.html"):
+                    (above / "apps" / app / "dist" / built).write_text("<!doctype html>", encoding="utf-8")
             (above / "packages" / "core").mkdir(parents=True)
             (above / "packages" / "core" / "package.json").write_text("{}", encoding="utf-8")
             installed = above / "venv" / "lib" / "python3.12" / "site-packages" / "cadgen"

@@ -6,8 +6,10 @@ It also says where the user's state folder is, which the engine's registry of do
 in (``cadgen.engine.registry.FACTORY``: the state directory, ``cadgen.viewer.recents.state_dir``),
 and the cache folder its documents' bytes are cached in (``cadgen.viewer.recents.cache_dir``).
 And it makes the environment the engine's kernel processes run in (``cadgen.engine.daemon.KERNEL``:
-the installation's base, ``cadgen._internal.base``), and tells a process that runs in a base an
-installation made which installation that is (``cadgen.engine.daemon.HOME``).
+the installation's base, ``cadgen._internal.base``), tells a process that runs in a base an
+installation made which installation that is (``cadgen.engine.daemon.HOME``), and says which
+installation's engine a client starts: the current one (``cadgen.engine.daemon.ENGINE``,
+``cadgen._internal.installations.current``).
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ def http_factory(server, host, port):
 
     app = EngineApp(server, host, session_factory=Sessions)
     server.clients_active = app.active
+    server.clients_working = app.working
     server.on_close = app.close
     server.on_hold_end = app.hold_ended
     try:
@@ -74,6 +77,19 @@ def kernel(make):
     return made(make)
 
 
+def engine():
+    """The installation whose engine a client starts (``cadgen.engine.daemon.ENGINE``): the current one
+    (``cadgen._internal.installations.current``), read now, its Python and its environment; None with
+    none current."""
+    from cadgen._internal.installations import current
+
+    try:
+        found = current()
+    except (OSError, ValueError):
+        return None
+    return None if found is None else {"python": found["python"], "prefix": found["prefix"], "version": found["version"]}
+
+
 def _attach(module):
     if module.__name__ == "cadgen.engine.client":
         module.DAEMON_MODULE = "cadgen._internal.engine_daemon"
@@ -88,6 +104,7 @@ def _attach(module):
 
         module.KERNEL = kernel
         module.HOME = home()
+        module.ENGINE = engine
 
 
 class _Loader:

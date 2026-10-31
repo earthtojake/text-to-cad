@@ -1,10 +1,17 @@
-"""The CAD app a host renders: one self-contained HTML file, addressed by its build.
+"""The CAD app a host renders: a small page, the shell, addressed by the release and its build,
+which loads the CAD app the engine serves.
 
 Every CAD surface loads this same page; what it shows comes from the launch the
-opening tool returns. The URI carries a hash of the page, so a host that caches
-resources by URI can never pair a new server with an old page. Any build's URI
-reads as the current page: a tab the host restores after an update gets the
-current app, which checks the protocol of the launch it was restored with.
+opening tool returns. The resource is the shell (``shell.html``), which greets the
+host, waits for the launch, and imports the app (``app.js``, one module of the whole
+app) from the engine (``GET /__cad/mcp-app``, ``app_code``), through the call the host
+carries back or from the engine directly: so a page a host keeps -- by its URI, or
+open across an update -- runs the engine's release, and loads the next one in place
+after an update. The URI carries the engine's release and a hash of the page,
+so a host that caches resources by URI can never pair a new server with an old
+page. Any build's URI reads as the current page: a tab the host restores after an
+update gets the current app, which checks the protocol of the launch it was
+restored with.
 
 The page must not change while the host runs. Each MCP session reports the
 URI, and a host that sees it change drops the frames showing the old one. An
@@ -16,15 +23,19 @@ from __future__ import annotations
 
 import hashlib
 import html
-import os
 import threading
 from pathlib import Path
 
-from cadgen.assets import checkout_root, runtime_build_hint, runtime_root
+from cadgen.assets import CAD_APP_MODULE as APP
+from cadgen.assets import CAD_APP_SHELL as SHELL
+from cadgen.assets import cad_app_code as app_code
+from cadgen.assets import cad_app_dir as app_dir
+from cadgen.assets import runtime_build_hint
 
 from .host import MIME  # the page's type, which a host that renders MCP Apps lists
 
 _PREFIX, _SUFFIX = "ui://cad/", "/app.html"
+__all__ = ["APP", "MIME", "RESOURCE_META", "SHELL", "AppPage", "app_code", "app_dir"]
 
 # What the page needs from its sandbox: blob workers and modules (the bundle
 # inlines its workers) and data URIs (its fonts and images). No network origin.
@@ -35,17 +46,6 @@ RESOURCE_META = {
         "permissions": {"clipboardWrite": {}},
     },
 }
-
-
-def app_dir() -> Path:
-    """Where the built page lives: ``CADGEN_MCP_APP_DIR``, a checkout's build, or the wheel's."""
-    override = str(os.environ.get("CADGEN_MCP_APP_DIR") or "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
-    root = checkout_root()
-    if root is not None and (root / "apps" / "mcp" / "dist" / "index.html").is_file():
-        return root / "apps" / "mcp" / "dist"
-    return runtime_root() / "mcp"
 
 
 def _told(data: bytes, presentation: str) -> bytes:
@@ -89,7 +89,7 @@ class AppPage:
     def _load(self) -> tuple[str, str]:
         with self._lock:
             if self._loaded is None:
-                path = (self._directory or app_dir()) / "index.html"
+                path = (self._directory or app_dir()) / SHELL
                 try:
                     data = path.read_bytes()
                 except OSError:
@@ -106,7 +106,12 @@ class AppPage:
 
     @property
     def uri(self) -> str:
-        return f"{_PREFIX}{self.build}{_SUFFIX}"
+        """``ui://cad/<release>/<build>/app.html``: the release the engine runs and a hash of the page, so a
+        host that keys what it caches by the URI (OpenAI's, by its own guidance) never pairs a page with
+        an engine of another release."""
+        from cadgen import __version__
+
+        return f"{_PREFIX}{__version__}/{self.build}{_SUFFIX}"
 
     def owns(self, uri: object) -> bool:
         return isinstance(uri, str) and uri.startswith(_PREFIX) and uri.endswith(_SUFFIX)

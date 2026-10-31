@@ -197,9 +197,9 @@ def _working_folder() -> str:
 # Routes one method reaches: the other one answers 405 naming it, never a 404 that reads as no route.
 _GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder", "/__cad/search",
                               "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
-                              "/__cad/version"})
+                              "/__cad/version", "/__cad/mcp-app"})
 _POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
-                               "/__cad/analytics/activity"})
+                               "/__cad/analytics/activity", "/__cad/update"})
 
 
 class CadApp:
@@ -260,8 +260,13 @@ class CadApp:
     # --- server info ------------------------------------------------------
 
     def server_info(self) -> dict:
+        from cadgen import __version__
+
         return {
             "app": "cad-viewer",
+            # The release this server runs: a page that sees another answer after its engine came back
+            # reloads into it (an update).
+            "release": __version__,
             # The start-time token, NOT identity_token() re-evaluated: a
             # session reports the code it was created with,
             # not the code now on disk. It is also what the browser's reload
@@ -502,6 +507,16 @@ class CadApp:
                     response.send_json(200, language.read())
                 elif pathname == "/__cad/version":
                     response.send_json(200, self._version())
+                elif pathname == "/__cad/mcp-app":
+                    # The CAD app as one module, which a card's shell imports (``cadgen.assets``): the
+                    # engine's release, whatever release the host kept the shell of.
+                    from cadgen.assets import cad_app_code
+
+                    code = cad_app_code()
+                    if code is None:
+                        response.send_json(404, {"error": "this install has no CAD app build"})
+                    else:
+                        response.send_bytes(200, code, "text/javascript; charset=utf-8")
                 elif pathname in _POST_ONLY_ROUTES:
                     response.send_bytes(405, b'{"ok":false,"error":"Method not allowed"}',
                                         "application/json", [("allow", "POST")])
@@ -554,6 +569,9 @@ class CadApp:
                     response.send_json(200, self._change_recents(json.loads(request.body())))
                 elif pathname == "/__cad/pick":
                     self._handle_pick(response)
+                elif pathname == "/__cad/update":
+                    status, body = self._update()
+                    response.send_json(status, body)
                 elif pathname == "/__cad/reveal":
                     from .reveal import reveal_path
                     if int(request.headers.get("content-length") or 0) > 8192:
@@ -740,11 +758,27 @@ class CadApp:
 
     def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from
-        the feed as last read. A feed that is due is read in the background: the page never waits."""
-        from cadgen import updates
+        the feed as last read -- a feed that is due is read in the background: the page never waits --,
+        the release this engine runs, which a page compares with its own to reload into a new one, and
+        where an update a click started is (``cadgen._internal.update``)."""
+        from cadgen import __version__, updates
+        from cadgen._internal.update import UPDATE
 
         updates.refresh()
-        return {"notice": updates.notice()}
+        return {"notice": updates.notice(), "release": __version__, "update": UPDATE.snapshot()}
+
+    def _update(self) -> tuple[int, dict]:
+        """``POST /__cad/update``: the update button's click. The update starts in the background (or the
+        one running is joined) and the request is answered at once with ``_version``'s answer, its state
+        ``working``; with no newer release, ``idle``. Only the engine's application updates: one with no
+        engine under it (a test's) answers 409."""
+        from cadgen._internal.update import UPDATE
+
+        server = getattr(self, "server", None)
+        if server is None or not callable(getattr(server, "retire", None)):
+            return 409, {"ok": False, "error": "no engine serves this page: nothing to update"}
+        UPDATE.start(server)
+        return 202, self._version()
 
     def _report_activity(self, payload: dict) -> None:
         """What the page did: a person touched it (``touched``), a Quick Edit was sent (``quickEdit``), used its

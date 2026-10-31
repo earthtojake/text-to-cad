@@ -122,17 +122,29 @@ class SkillLaunchCommand(unittest.TestCase):
                     self.assertFalse([line for line in lines if line.startswith("cadgen")], manifest)
 
     def test_the_launch_command_and_the_refusal_are_cadgens_own(self) -> None:
+        import os
+        import subprocess
         import sys
+        import tempfile
 
         sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
+        from cadgen._internal import installations
         from cadgen._internal.launch import launch_command, pinned
-        from cadgen._internal.proxy import NOT_INSTALLED
 
         self.assertEqual(launch_command("python", VERSION), LAUNCH.format(version=VERSION, tool="python"))
         self.assertEqual(pinned(VERSION), f"cadgen +{VERSION}")
-        # The line the skills tell the agent to act on is the one the command says.
-        self.assertIn(f"{VERSION} is not installed", NOT_INSTALLED.format(version=VERSION))
-        self.assertIn(LAUNCH.format(version=VERSION, tool="cadgen doctor"), NOT_INSTALLED.format(version=VERSION))
+        if os.name == "nt":
+            return  # the cmd says it with no version; the sh below is the skills' wording
+        # The line the skills tell the agent to act on is the one the command says, with none installed.
+        with tempfile.TemporaryDirectory() as scratch:
+            where = os.path.join(scratch, "bin")
+            installations.write_proxy(where, windows=False)
+            said = subprocess.run([installations.proxy_path(where, windows=False), f"+{VERSION}", "status"],
+                                  capture_output=True, text=True,
+                                  env={"PATH": os.environ.get("PATH", ""), "HOME": scratch,
+                                       "CADGEN_STATE_DIR": os.path.join(scratch, "state")}).stderr
+        self.assertIn(f"{VERSION} is not installed", said)
+        self.assertIn(LAUNCH.format(version=VERSION, tool="cadgen doctor"), said)
 
 if __name__ == "__main__":
     unittest.main()

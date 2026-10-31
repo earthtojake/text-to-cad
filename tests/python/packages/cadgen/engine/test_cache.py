@@ -135,7 +135,7 @@ class CacheTest(unittest.TestCase):
         cls.root = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-cache-")))
         cls.addClassCleanup(shutil.rmtree, cls.root, True)
         cls.shared = cls.root / "state", cls.root / "cache"
-        cls.bytecode = str(cls.shared[1] / daemon.PYCACHE / daemon._tag())  # the class engine's own
+        cls.bytecode = str(cls.shared[1] / daemon.PYCACHE / daemon.bytecode_tag())  # the class engine's own
         cls.engine_env = cls.environment(*cls.shared, cls.addClassCleanup)
 
     @classmethod

@@ -1,49 +1,64 @@
-"""``cadgen setup`` (and ``cadgen update``, the same command): text-to-cad set up, or brought up to
-date, in every agent app on this machine; and ``cadgen uninstall`` (``cadgen.cli.uninstall``, this
-module's uninstall path with a parser of its own), which takes it out again.
+"""``cadgen setup``: text-to-cad set up, or brought up to date, in every agent app on this machine,
+as this release; ``cadgen update`` (``cadgen.cli.update``) runs the newest release's; and ``cadgen
+uninstall`` (``cadgen.cli.uninstall``, this module's uninstall path with a parser of its own) takes it
+out again.
 
 The install command runs it (``cadgen.updates.INSTALL``: ``curl -fsSL https://texttocad.dev/install.sh |
 sh``; on Windows ``INSTALL_WINDOWS``, ``irm https://www.texttocad.dev/install.ps1 | iex``) after finding or
-installing uv: the newest release's cadgen, run through ``uvx``. Running it again is the update. Each
-app's plugin pins the release its CAD server runs (``cadgen==X``), so an app runs the new release from
-the session it starts after its plugin is updated. In order, each step said as it runs:
+installing uv: the newest release's cadgen, run through ``uvx``. Running it again is the update, and
+``cadgen update`` and the update button take the same steps. Each app's plugin pins the release its CAD
+server runs (``cadgen==X``), which attaches to the device's engine, the current installation's
+(``cadgen._internal.installations``), whatever release it is. In order, each step said as it runs:
 
-1. **Plan.** Under a lock in the state folder, every agent app is read
-   (``cadgen._internal.providers``), and the plan printed: per app, ``install``, ``update``,
-   ``remove duplicate`` or ``leave``, with each command it runs and each file it edits; and what
-   serves the engine's port (``CADGEN_ENGINE_PORT``, else 3245). ``--dry-run`` stops there and
-   writes nothing; otherwise the run goes on. Nothing is asked.
-2. **Engine.** An older release's engine serving that port that nothing uses (no app server holds
-   it, no page watches it, no request is underway) is stopped by that installation's own ``cadgen
-   stop``, found by its record (``cadgen._internal.installations``). One still in use, or one no
-   record names, is left running and said, with how to stop it. A newer release's engine starting
-   retires an idle older one by itself (``cadgen.engine.daemon.bind``); this frees the port now.
-3. **Apps.** Each app's own command installs or updates the plugin, which refreshes its skills and
+1. **Its release's folder.** A release from the index (or the wheel it was installed from) sets itself
+   up from ``<state>/releases/<release>`` (``cadgen._internal.releases``): run from anywhere else --
+   uvx's environment, as the install command runs it --, it makes that folder with uv, from uv's cache
+   where it holds it, and runs the same command from there. A development install or a source tree
+   sets itself up where it is.
+2. **Plan.** Under a lock in the state folder, every agent app is read (``cadgen._internal.providers``),
+   and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
+   command it runs and each file it edits; what serves the engine's port (``CADGEN_ENGINE_PORT``, else
+   3245); and the CAD kernel. ``--dry-run`` stops there and writes nothing. Nothing is asked.
+3. **An earlier cadgen's engine.** An engine of an earlier cadgen serving that port (one whose door is
+   not the device's engine's) that nothing uses (no app server holds it, no page watches it, no request
+   is underway) is stopped by that installation's own ``cadgen stop``, found by its record. One still in
+   use, or one no record names, is left running and said, with how to stop it.
+4. **The cadgen command.** This installation registered and ``~/.local/bin/cadgen`` written, as
+   ``cadgen doctor`` does it (``installations.setup``); on a device with no current installation it
+   becomes the current one.
+5. **The CAD kernel.** The environment every build and the engine's own kernel processes start from,
+   ``cadgen[kernel]`` at this release (``cadgen._internal.base``), made now when it is not, so the
+   first build after an install or an update waits on nothing: its line said while uv works, and a step
+   that fails when it cannot be made. An installation that carries the kernel itself makes none.
+6. **Apps.** Each app's own command installs or updates the plugin, which refreshes its skills and
    moves its server's pin; Claude Desktop's config gets CAD's server, this release's, written
    atomically with a ``.bak`` beside it; every second copy goes. The agents with no plugin that the
    Skills CLI knows get the skills, copied into their own skills folders by one ``npx skills add``
    (Node needed); an app with a plugin never does. A command that fails is said with its output, and
    the other apps go on; the exit status is then 1.
-4. **The cadgen command.** This installation registered and ``~/.local/bin/cadgen`` written, as
-   ``cadgen doctor`` and the CAD app's server do it (``installations.setup``).
-5. **The CAD kernel.** The environment every build and the engine's own kernel processes start
-   from, ``cadgen[kernel]`` at this release (``cadgen._internal.base``), made now when it is
-   not, so the first build after an install waits on nothing: its line said while uv works, and a
-   step that fails when it cannot be made. An installation that carries the kernel itself makes none.
-6. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take
+7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cadgen uninstall`` to take
    back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
    which release (``skills``), since that CLI keeps no versions: the next run adds them again for an
    agent that got them from another release or has lost one of them.
-7. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
+8. **The switch.** The device's engine moves to this release (``cadgen._internal.switch.handover``):
+   one running drains -- nothing in flight -- and this release's takes its place on the same port, with
+   the same token, or the release before's comes back should it fail; with none running, ``current``
+   points at this release and the next client starts its engine.
+9. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cadgen telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
    and changed nothing.
 
+``--engine-update`` is the engine's own run of it, for its update button (``cadgen._internal.update``):
+steps 2 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
+each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
+
 ``cadgen uninstall`` takes back what the receipt says was done, newest first -- with no receipt, every
 copy of text-to-cad found but a store's -- removes the ``cadgen`` command when it is cadgen's own,
-and stops this installation's engine (``cadgen stop``); with ``--purge`` it then removes the state
-and cache folders. ``--only`` limits either to some apps (and then leaves the command and the engine
-alone). Neither asks: the plan is printed and done, and ``--dry-run`` prints it alone.
+stops the engine (``cadgen stop``) and removes the release folders; with ``--purge`` it then removes
+the state and cache folders. ``--only`` limits either to some apps (and then leaves the command, the
+engine and the releases alone). Neither asks: the plan is printed and done, and ``--dry-run`` prints it
+alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cadgen``
 command that is not cadgen's, editing a config that is not plain JSON, touching a store's copy.
@@ -75,8 +90,9 @@ STOP_SECONDS = 60.0
 DESKTOP_CHANNEL = "claude-desktop"
 
 
-def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> argparse.ArgumentParser:
-    """``cadgen setup``'s parser, or with ``uninstall`` ``cadgen uninstall``'s."""
+def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
+    """``cadgen setup``'s parser, or with ``uninstall`` ``cadgen uninstall``'s, or with ``update``
+    ``cadgen update``'s (``cadgen.cli.update``): setup's options, and the switch helper's own."""
     from cadgen._internal.providers import APPS, SKILLS_AGENTS
     from cadgen.updates import INSTALL, INSTALL_WINDOWS
 
@@ -88,13 +104,23 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> argpar
                         "did (their receipt), newest first, or with no receipt every copy of text-to-cad found; the "
                         "cadgen command when it is cadgen's own; this installation's engine stopped.",
         )
+    elif update:
+        parser = argparse.ArgumentParser(
+            prog=prog,
+            allow_abbrev=False,
+            description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
+                        "as the update button does: its release folder, the CAD kernel, each app's own command, and "
+                        "the engine switched to it. With the version feed out of reach, this release's setup.",
+            epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
+        )
     else:
         parser = argparse.ArgumentParser(
             prog=prog,
             allow_abbrev=False,
-            description="Set up text-to-cad in every agent app on this machine, or bring it up to date there: each "
-                        "app's own command, Claude Desktop's config, second copies removed, an older idle engine "
-                        "stopped. Run it again to update; `cadgen uninstall` takes it out.",
+            description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
+                        "date there: its release folder, the CAD kernel, each app's own command, Claude Desktop's "
+                        "config, second copies removed, and the engine switched to this release. `cadgen update` "
+                        "runs the newest release's; `cadgen uninstall` takes it out.",
             epilog=f"The install command runs this with the newest release: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
     parser.add_argument("--dry-run", action="store_true", help="print the plan and stop: nothing is changed")
@@ -106,6 +132,14 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> argpar
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cadgen telemetry off` does")
+        if update:
+            # The switch's helper (``cadgen._internal.switch``), which the engine starts as it drains.
+            parser.add_argument("--switch", metavar="RELEASE", default=None, help=argparse.SUPPRESS)
+            parser.add_argument("--port", type=int, default=None, help=argparse.SUPPRESS)
+            parser.add_argument("--previous", default=None, help=argparse.SUPPRESS)
+        else:
+            # The engine's own run, for its update button (``cadgen._internal.update``): no switch, progress on stdout.
+            parser.add_argument("--engine-update", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true",
                         help="print the plan and what was done as JSON on stdout (progress goes to stderr)")
     return parser
@@ -130,7 +164,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
     except ValueError as error:
         parser.error(str(error))
     port, source = (named, "CADGEN_ENGINE_PORT") if named is not None else (default_port(), "default")
-    installer = Installer(args, only, port, source)
+    installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]))
     return installer.uninstall() if uninstall else installer.install()
 
 
@@ -139,7 +173,9 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 
 def engine_on(port: int) -> dict[str, Any] | None:
     """The ``status`` of the engine in this engine folder whose HTTP server is on ``port``, asked
-    read-only (``cadgen.engine.daemon._ask``, bounded), or None when no engine there serves it."""
+    read-only (``cadgen.engine.daemon._ask``, bounded), or None when no engine there serves it; with
+    ``device`` true when it is the device's engine (``cadgen.engine.daemon.NAME``'s door), false for an
+    earlier cadgen's."""
     from cadgen.engine import daemon
 
     try:
@@ -150,7 +186,7 @@ def engine_on(port: int) -> dict[str, Any] | None:
         status = daemon._ask(door, {"op": "status"})
         serving = (status or {}).get("serving")
         if isinstance(serving, dict) and serving.get("port") == port:
-            return status
+            return {**status, "device": door.stem == daemon.NAME}
     return None
 
 
@@ -187,16 +223,20 @@ def stop_installation(record: dict[str, Any]) -> tuple[bool, str]:
 class Installer:
     """One run of ``cadgen setup`` or ``cadgen uninstall``: its plan, what it did, and how it says so."""
 
-    def __init__(self, args: argparse.Namespace, only: list[str], port: int, source: str) -> None:
+    def __init__(self, args: argparse.Namespace, only: list[str], port: int, source: str,
+                 argv: list[str] | None = None) -> None:
         from cadgen import __version__
         from cadgen._internal import providers
 
         self.args, self.only, self.port, self.source = args, only, port, source
+        self.argv = list(argv or [])
         self.providers = providers
         self.machine = providers.Machine.here()
         self.release = __version__
+        # The engine's own run (``--engine-update``): progress frames on stdout, words on stderr.
+        self.engine_update = bool(getattr(args, "engine_update", False))
         # Under --json the result is the one thing on stdout: what is said goes to stderr.
-        self.out = sys.stderr if args.json else sys.stdout
+        self.out = sys.stderr if args.json or self.engine_update else sys.stdout
         self.actions: list[dict[str, Any]] = []
         self.stopped: dict[str, Any] | None = None
         # Whether Claude Code has the plugin after this run, so Cursor and Grok Build load it.
@@ -207,6 +247,58 @@ class Installer:
     def say(self, line: str = "") -> None:
         self.out.write(line + "\n")
         self.out.flush()
+
+    def stage(self, stage: str, detail: str = "") -> None:
+        """The engine's own run (``--engine-update``): the update's stage it reached, a progress frame
+        on stdout (``cadgen.engine.progress``, kind ``update``), which the engine passes to the page."""
+        if not self.engine_update:
+            return
+        from cadgen._internal.update import STAGES
+        from cadgen.engine.progress import event
+
+        frame = event("update", stage, job=self.release, detail=detail, done=STAGES.index(stage), total=len(STAGES))
+        sys.stdout.write(json.dumps({"progress": frame}) + "\n")
+        sys.stdout.flush()
+
+    # --- its release's folder -----------------------------------------------------------------
+
+    def _home(self) -> Path | None:
+        """The release folder this run sets itself up from (``releases.where``): None for an installation
+        that sets itself up where it is -- a development install or a source tree (one that names its
+        version, ``installations.NAME_ENV``, or imports cadgen from outside its environment)."""
+        from cadgen._internal import installations, releases
+
+        if os.environ.get(installations.NAME_ENV) or installations.editable() \
+                or not installations.RELEASE.fullmatch(self.release):
+            return None
+        return releases.where(self.release)
+
+    def _relocated(self) -> int | None:
+        """Step 1: run from anywhere but its release's folder, that folder made (from uv's cache where it
+        holds it) and this command run again from there, its exit status returned; None when this run is
+        already there (or sets itself up where it is)."""
+        from cadgen._internal import base, releases
+
+        home = self._home()
+        if home is None or os.path.normcase(os.path.realpath(home)) == os.path.normcase(os.path.realpath(sys.prefix)):
+            return None
+        try:
+            made = releases.make(self.release, source=base._own().source,
+                                 told=lambda line: self.say(f"release  {line}"))
+        except base.Refused as refused:
+            self.say(f"release  {refused}")
+            from cadgen.updates import command
+
+            self.say(f"Once that is fixed, run the install command again: {command()}")
+            return 1
+        run = [made["cadgen"], "setup", *self.argv]
+        self.say(f"release  cadgen {self.release} in {self.providers.shown(str(home), self.machine)}")
+        if os.name == "nt":
+            return subprocess.call(run)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(run[0], run)
+        return 1  # not reached
 
     def _plan_lines(self, title: str, apps: dict[str, Any], steps: list[Any], extra: list[dict[str, Any]]) -> None:
         """The plan, a line per step: the app, the action, what it acts on; under it each command it
@@ -321,7 +413,9 @@ class Installer:
         return next((record for record in mine if record["version"] == named), None) or (mine[0] if mine else None)
 
     def _engine(self) -> dict[str, Any]:
-        """What serves the engine's port, asked read-only, and what this run does about it."""
+        """What serves the engine's port, asked read-only, and what this run does about it: the device's
+        engine is switched to this release (``_switch``), and an earlier cadgen's that nothing uses is
+        stopped by its own ``cadgen stop``."""
         from cadgen.engine import daemon
 
         port = self.port
@@ -342,11 +436,8 @@ class Installer:
         if isinstance(prefix, str) and os.path.normcase(os.path.realpath(prefix)) == \
                 os.path.normcase(os.path.realpath(sys.prefix)):
             return {**row, "subject": f"{who}: this installation's"}
-        standing = daemon._standing(status)
-        if standing == 1:
-            return {**row, "subject": f"{who}: newer than {self.release}, left alone"}
-        if standing != -1:
-            return {**row, "subject": f"{who}: another installation's, left alone"}
+        if status.get("device"):
+            return {**row, "action": "switch", "subject": f"{who}: drains, then cadgen {self.release}'s takes its place"}
         record = self._record_of(status)
         stop = f"`cadgen +{record['version']} stop`" if record else f"`cadgen stop` run by that installation ({prefix})"
         uses = daemon._uses(status)
@@ -392,8 +483,31 @@ class Installer:
             return False
         return True
 
+    def _switch(self) -> tuple[bool, dict[str, Any] | None]:
+        """Step 8: the device's engine moved to this release (``switch.handover``), said in its lines:
+        ``(failed, what the switch did or None when there was nothing to do)``."""
+        from cadgen._internal import installations, switch
+
+        version = installations.own_version()
+        if not version:
+            return False, None
+        try:
+            done = switch.handover(version, told=lambda line: self.say(f"engine   {line}"))
+        except (OSError, ValueError, ConnectionError) as error:
+            self.say(f"engine   the switch to cadgen {version} could not run: {error}")
+            return True, None
+        if done is None:
+            return False, None
+        if done.get("ok"):
+            gap = f" ({done['gapMs']} ms without an engine)" if done.get("gapMs") is not None else ""
+            self.say(f"engine   cadgen {version} is the current installation{gap}")
+            return False, done
+        self.say(f"engine   the switch to cadgen {version} failed: {done.get('error')}"
+                 + ("; the release before runs again" if done.get("restored") else ""))
+        return True, done
+
     def _stop_older(self, engine: dict[str, Any]) -> None:
-        """An older, idle engine on the port stopped by its installation's own ``cadgen stop``."""
+        """An earlier cadgen's idle engine on the port stopped by its installation's own ``cadgen stop``."""
         ok, said = stop_installation(engine["record"])
         if ok:
             self.stopped = {"release": engine["release"], "pid": engine["pid"], "port": self.port,
@@ -521,12 +635,20 @@ class Installer:
         providers = self.providers
         where = f"engine port {self.port}" if self.port else "engine on any free port"
         title = f"text-to-cad {self.release} for this machine ({where}):"
+        if not self.args.dry_run and not self.engine_update:
+            relocated = self._relocated()
+            if relocated is not None:
+                return relocated
         if self.args.dry_run:
             apps = providers.detect(self.machine)
             steps = providers.plan(apps, release=self.release, desktop_entry=self._desktop_entry(), only=self.only,
                                    machine=self.machine, skills=(self._receipt() or {}).get("skills"))
             kernel = self._kernel()
-            extra = [self._public(self._engine()), *([kernel] if kernel else [])]
+            home = self._home()
+            release = ([{"app": "release", "label": "release", "action": "make",
+                         "subject": f"cadgen {self.release} in {providers.shown(str(home), self.machine)}, once"}]
+                       if home is not None and not os.path.isdir(home) else [])
+            extra = [*release, self._public(self._engine()), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -540,18 +662,29 @@ class Installer:
             steps = providers.plan(apps, release=self.release, desktop_entry=self._desktop_entry(), only=self.only,
                                    machine=self.machine, skills=receipt.get("skills"))
             self.fed = providers.feeds(apps, self.only or providers.APPS)
-            engine = self._engine()
+            engine = self._engine() if not self.engine_update else {"app": "engine", "label": "engine",
+                                                                     "action": "leave", "subject": "this engine's own update"}
             kernel = self._kernel()
             extra = [self._public(engine), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             work = [step for step in steps if step.changes]
             if engine["action"] == "stop":
                 self._stop_older(engine)
+            registered = self._register()
+            made = kernel is not None and kernel["action"] == "make"
+            # The kernel that cannot be made fails the run and keeps the engine where it is; an app whose
+            # command fails fails the run too, and the rest goes on: the switch among it.
+            kernel_failed = False
+            if made:
+                self.stage("kernel", f"cadgen[kernel] {self.release}")
+                kernel_failed = not self._make_kernel()
+            failed = kernel_failed
+            self.stage("apps")
             # A config's first .bak is the one an uninstall restores: a later run keeps it.
             backed_up = {action["path"] for action in receipt.get("actions") or []
                          if action.get("kind") == "edit" and action.get("ok")
                          and (action.get("created") or (action.get("backup") and Path(action["backup"]).is_file()))}
-            failed, changed = False, set()
+            changed: set[str] = set()
             aside = self._aside()
             for step in work:
                 self.say(f"{step.label}: {step.action} {step.subject}")
@@ -574,10 +707,6 @@ class Installer:
                         got[agent] = {"release": self.release, "folder": str(folder), "skills": names,
                                       "at": providers.stamp()}
                     receipt["skills"] = got
-            registered = self._register()
-            made = kernel is not None and kernel["action"] == "make"
-            if made:
-                failed = not self._make_kernel() or failed
             launcher = registered["launcher"]
             if self.actions or self.stopped or registered["record_written"] or launcher["written"]:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
@@ -587,8 +716,15 @@ class Installer:
                 if launcher["written"]:
                     receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
                 self._keep(receipt)
-            elif not made:
+            switched = None
+            if not self.engine_update and not kernel_failed:
+                switch_failed, switched = self._switch()
+                failed = failed or switch_failed
+            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or made
+                    or switched):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
+        if self.engine_update:
+            return 1 if kernel_failed else 0
         verified = self._verify()
         self._telemetry_into(verified)
         restart = self._restart(apps, changed)
@@ -631,7 +767,12 @@ class Installer:
                           "subject": f"{providers.shown(proxy, self.machine)}: not cadgen's"})
         if whole:
             extra.append({"app": "engine", "label": "engine", "action": "stop",
-                          "subject": "this installation's engine (`cadgen stop`)"})
+                          "subject": "the engine (`cadgen stop`)"})
+            from cadgen._internal import releases
+
+            if releases.listing():
+                extra.append({"app": "releases", "label": "releases", "action": "remove",
+                              "subject": providers.shown(str(releases.root()), self.machine)})
         state, cache = self._state(), Path(cache_dir())
         if self.args.purge:
             extra.append({"app": "cadgen", "label": "cadgen", "action": "remove",
@@ -668,6 +809,7 @@ class Installer:
                     self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
             if whole:
                 failed = self._stop() or failed
+                failed = self._remove_releases() or failed
             if receipt is not None:
                 if whole:
                     self._folder().remove(RECEIPT)
@@ -683,8 +825,34 @@ class Installer:
         restart = self._restart(apps, changed)
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
+    def _remove_releases(self) -> bool:
+        """The release folders removed, with their installations' records and ``current`` when it named
+        one of them: what the device runs from goes with an uninstall. True when one could not be removed
+        whole (on Windows, the folder this command runs from)."""
+        import shutil
+
+        from cadgen._internal import installations, releases
+
+        root = releases.root()
+        if not root.exists():
+            return False
+        for record in installations.records():
+            if installations._same_place(os.path.dirname(record["prefix"]), root):
+                installations.forget(record["version"])
+                if installations.current_version() == record["version"]:
+                    installations.state().remove(installations.CURRENT)
+        shutil.rmtree(root, ignore_errors=True)
+        shown = self.providers.shown(str(root), self.machine)
+        if root.exists():
+            self.say(f"releases {shown} could not be removed whole")
+            return True
+        self.say(f"releases removed {shown}")
+        self.actions.append({"app": "releases", "action": "remove", "kind": "remove", "path": str(root), "ok": True,
+                             "at": self.providers.stamp()})
+        return False
+
     def _stop(self) -> bool:
-        """``cadgen stop`` for this installation's engine, said in this run's words; True when it failed."""
+        """``cadgen stop`` for the engine, said in this run's words; True when it failed."""
         from cadgen.cli import stop
 
         with contextlib.redirect_stdout(self.out):

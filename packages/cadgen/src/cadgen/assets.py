@@ -17,14 +17,23 @@ layout that builds cadgen (``checkout_root``), never a folder found above an ins
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 __all__ = [
+    "CAD_APP_MODULE",
+    "CAD_APP_SHELL",
+    "cad_app_code",
+    "cad_app_dir",
     "checkout_root",
     "runtime_build_hint",
     "runtime_root",
     "viewer_dist_dir",
 ]
+
+# The CAD app's built page (``cadgen.mcp.ui``): the shell a host keeps as its resource, and the app,
+# one module, which the shell loads from the engine (``GET /__cad/mcp-app``).
+CAD_APP_SHELL, CAD_APP_MODULE = "shell.html", "app.js"
 
 # Data-only; deliberately no __init__.py, so this is a path lookup rather than an import.
 _RUNTIME = Path(__file__).resolve().parent / "_runtime"
@@ -107,3 +116,39 @@ def viewer_dist_dir() -> Path:
     if dev:
         return dev
     return _RUNTIME / "viewer"
+
+
+def cad_app_dir() -> Path:
+    """Where the CAD app's built page lives: ``CADGEN_MCP_APP_DIR``, a checkout's build, or the wheel's."""
+    override = str(os.environ.get("CADGEN_MCP_APP_DIR") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    root = checkout_root()
+    if root is not None and (root / "apps" / "mcp" / "dist" / CAD_APP_SHELL).is_file():
+        return root / "apps" / "mcp" / "dist"
+    return runtime_root() / "mcp"
+
+
+_code: dict[str, tuple[int, bytes]] = {}
+_code_lock = threading.Lock()
+
+
+def cad_app_code(directory: Path | None = None) -> bytes | None:
+    """The CAD app as one module (``app.js``), which the shell imports: read once per build, or None
+    where the built page's folder has none."""
+    path = (directory or cad_app_dir()) / CAD_APP_MODULE
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError:
+        return None
+    with _code_lock:
+        kept = _code.get(str(path))
+        if kept is not None and kept[0] == stamp:
+            return kept[1]
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    with _code_lock:
+        _code[str(path)] = (stamp, data)
+    return data

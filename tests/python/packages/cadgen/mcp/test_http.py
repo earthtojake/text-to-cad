@@ -40,15 +40,19 @@ class HttpSessionsTest(unittest.TestCase):
         cls.root = Path(cls.tmp.name)
         cls.page = cls.root / 'page'
         cls.page.mkdir()
-        (cls.page / 'index.html').write_text('<!doctype html><title>test app</title>', encoding='utf-8')
+        for name in ('index.html', 'shell.html'):  # the web viewer's page and the CAD app's shell
+            (cls.page / name).write_text('<!doctype html><title>test app</title>', encoding='utf-8')
         # The engine's browser records any page it is given, and opens nothing: it should be given
         # none. It exits 0, as a BROWSER that refused would have webbrowser go on to the platform's
         # own browser (macOS's osascript), which no test may reach.
         cls.opened = cls.root / 'opened.jsonl'
         cls.engine_browser = cls.browser('engine', 0)
+        # A plugin's engine that is told of releases (``cadgen.updates``), the feed never read.
         cls.env = engine_daemon.watched({**os.environ, 'CADGEN_ENGINE_DIR': str(cls.root / 'engine'),
                    'CADGEN_STATE_DIR': str(cls.root / 'state'), 'CADGEN_ENGINE_MESH': 'inline',
-                   'CADGEN_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser}, cls.addClassCleanup)
+                   'CADGEN_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser,
+                   'CADGEN_INSTALL_CHANNEL': 'claude-github', 'CADGEN_AUTO_UPDATED': '', 'CI': '',
+                   'CADGEN_UPDATE_CHECK': '0'}, cls.addClassCleanup)
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
@@ -260,6 +264,27 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(failure.exception.code, -32601)
         self.assertEqual(client.call('DELETE', '/mcp', headers=headers)[0], 200)
         self.assertEqual(post({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'}, **headers)[0], 404)
+
+    def test_the_release_an_app_s_server_runs_shows_the_update_button_when_newer_with_no_network(self):
+        # Each stdio server says its release as its session opens (``shim``'s transport meta): one newer
+        # than the engine's proves a release is out, and the button shows it, with no feed read.
+        import cadgen
+
+        client = EngineClient()
+
+        def version():
+            status, _, body = client.call('GET', '/__cad/version')
+            self.assertEqual(status, 200, body)
+            return json.loads(body)
+
+        release = cadgen.__version__
+        self.assertEqual(version()['release'], release)
+        with patch.object(cadgen, '__version__', '0.0.1'):
+            self.proxy()  # an older release's server: no release is out
+        self.assertIsNone(version()['notice'])
+        with patch.object(cadgen, '__version__', '999.0.0'):
+            self.proxy()
+        self.assertEqual(version()['notice'], {'latest': '999.0.0', 'version': release})
 
     def test_shim_opens_a_new_session_when_the_engine_session_ends(self):
         # A host initializes once: an expired session or a restarted engine must not leave the

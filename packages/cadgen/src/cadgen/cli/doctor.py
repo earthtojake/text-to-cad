@@ -1,24 +1,24 @@
 """``cadgen doctor`` — set cadgen up and report it: register the installation, write the ``cadgen``
-command, start the engine, check a skill's pin.
+command, make the CAD kernel environment, start the engine, and say what this device runs.
 
 The skills' one-time step (``uvx ... --from cadgen==<version> cadgen doctor``), and the repair
-command. It registers this installation (``<state>/installations/<version>.json``) and writes the
-proxy, ``~/.local/bin/cadgen`` (``cadgen._internal.installations``), through which the skills run
-``cadgen +<version>``, and says what it found: each written, already right, or a folder it cannot
-write (a sandbox's), the records of installations whose interpreter is gone, a file in the
+command. On a device where no installation is current it registers this one
+(``<state>/installations/<version>.json``) and makes it current (``cadgen._internal.installations``);
+on one where an installation is, it registers nothing. It writes the proxy, ``~/.local/bin/cadgen``,
+through which the skills run cadgen, and says what it found: each written, already right, or a folder
+it cannot write (a sandbox's), the records of installations whose interpreter is gone, a file in the
 proxy's place that is not cadgen's, another command shadowing it on PATH, and what cadgen left
-behind that no cadgen running now needs (``cadgen._internal.leftovers``: engine records of an
-older format, the bytecode of installations no
-longer registered, cache folders no record names), and cadgen 0.7's store and state files, with
-their size and when they were last written. ``--prune`` removes those records, the per-version
-launchers (``cadgen-<version>``, ``cadgen-python-<version>``) earlier builds published beside the
-proxy (``installations.prune_legacy``) and those leftovers, but any written in the last seven days,
-a line for each kind; ``--all-versions`` with it removes 0.7's however recently written. Nothing is
-removed without ``--prune``. Then it starts the engine
-when none runs (``cadgen.engine.client``): in a sandbox that cannot start one it says so in its usual
-line. ``--no-server`` does all of it but start the engine and make the CAD kernel environment, saying
-whether each is there: a CI job's smoke check, which must leave no engine behind. Run pointed at a skill (its directory or SKILL.md), it also says whether this is the cadgen the
-skill's docs were written against: the version its install command pins.
+behind that no cadgen running now needs (``cadgen._internal.leftovers``: engine records of an older
+format, the bytecode of installations no longer registered, cache folders no record names), and
+cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``
+removes those records, the per-version launchers (``cadgen-<version>``, ``cadgen-python-<version>``)
+earlier builds published beside the proxy (``installations.prune_legacy``) and those leftovers, but
+any written in the last seven days, a line for each kind; ``--all-versions`` with it removes 0.7's
+however recently written. Nothing is removed without ``--prune``.
+
+It says what the device runs, comparing nothing: the current installation, the release folders on
+disk (``cadgen._internal.releases``), the last update's switch, the engine running and its release,
+and each agent app's copy of the plugin and the release it pins (``cadgen._internal.providers``).
 
 It makes the CAD kernel environment, the base every build and the engine's own kernel
 processes start from (``cadgen._internal.base``: ``cadgen[kernel]`` at this release),
@@ -28,24 +28,17 @@ whether it is made. Then it proves the CAD kernel loads there. ``OCP`` is import
 interpreter of that environment (never in this one, so the report itself stays stdlib-only and
 fast to reach), and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
-says (``cadgen._internal.kernel_load_hint``). And it says where the engine's server,
-where every build runs, keeps its door, and whether it was running or was started.
+says (``cadgen._internal.kernel_load_hint``). Run by an installation that is not the current one, it
+leaves the base to the current one's ``cadgen doctor``. And it says where the engine's server, where
+every build runs, keeps its door, and whether it was running or was started -- the current
+installation's engine, whatever release this doctor is (``cadgen.engine.client``). ``--no-server``
+does all of it but start the engine and make the CAD kernel environment, saying whether each is there:
+a CI job's smoke check, which must leave no engine behind.
 
-Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
-3 = pin mismatch; 4 = the kernel is installed but cannot be loaded (the report
-says why when it can tell). A kernel environment that is not made, or cannot be
-made here (no uv, no network), is reported, not failed: a no-deps install of the
-wheel (what the release workflow smoke-tests) is still a correct install, and the
-first build makes it.
-
-A mismatch has TWO fixes and they are not interchangeable, so the report picks
-one by asking the install what KIND it is (:func:`_editable_source`). An
-ordinary install is simply not the skill's, and the skill's launch command runs
-the pinned release. An EDITABLE install records its version once, when it is
-installed, and never re-reads the project's metadata — so its code can be
-current while the version it reports is not, and running the release instead
-would swap the working tree being developed for a published one. The fix there
-is to re-install it in place, which re-records the version.
+Exit codes: 0 = done; 4 = the kernel is installed but cannot be loaded (the report says why when it
+can tell). A kernel environment that is not made, or cannot be made here (no uv, no network), is
+reported, not failed: a no-deps install of the wheel (what the release workflow smoke-tests) is
+still a correct install, and the first build makes it.
 
 stdlib-only on purpose: this must work when the heavy dependency set is broken.
 """
@@ -58,20 +51,10 @@ import sys
 from pathlib import Path
 
 
-def _resolve_skill(target: str | None) -> Path | None:
-    """The SKILL.md to check: an explicit file, a directory containing one, or the
-    working directory's — ``None`` when nothing exists to check."""
-    base = Path(target).expanduser() if target else Path.cwd()
-    if base.is_file():
-        return base
-    candidate = base / "SKILL.md"
-    return candidate if candidate.is_file() else None
-
-
 def _server(start: bool = True) -> str:
-    """The engine server this installation shares (``cadgen.engine.daemon``): where its door is,
-    and whether one is running -- started when none is and ``start``, through the client's own start,
-    which in a sandbox that cannot start one says so."""
+    """The device's engine server (``cadgen.engine.daemon``): where its door is, and whether one is
+    running, from which installation -- started when none is and ``start``, through the client's own
+    start (the current installation's), which in a sandbox that cannot start one says so."""
     try:
         from cadgen.engine import daemon as engine_daemon
         from cadgen.engine.client import request
@@ -91,11 +74,68 @@ def _server(start: bool = True) -> str:
         return f"not running ({where}); a build starts it outside a sandbox; inside one, run `cadgen server` outside first"
     from cadgen.engine.cli import workers_text
 
-    # The version the engine runs as (an engine started before engines said it, its release), so a
-    # stale one is seen; the workers as `cadgen status` counts them: the standby with them.
+    # The version the engine runs as, and its environment; the workers as `cadgen status` counts them:
+    # the standby with them.
     version = answer.get("installation") or answer.get("version")
+    prefix = answer.get("prefix")
     return (f"{'started' if started else 'running'}, pid {answer.get('pid')}"
-            + (f", cadgen {version}" if version else "") + f", {workers_text(answer)} ({where})")
+            + (f", cadgen {version}" if version else "") + (f" from {_home(prefix)}" if isinstance(prefix, str) else "")
+            + f", {workers_text(answer)} ({where})")
+
+
+def _current() -> list[str]:
+    """What the device runs, comparing nothing: the current installation, the release folders on disk
+    and the last update's switch (``cadgen._internal.switch``)."""
+    from cadgen._internal import installations, releases, switch
+
+    lines = []
+    try:
+        record = installations.current()
+        named = installations.current_version()
+        if record is not None:
+            lines.append(f"current  cadgen {record['version']} ({_home(record['prefix'])})")
+        elif named is not None:
+            lines.append(f"current  cadgen {named}, whose installation is gone: the next client makes itself current")
+        else:
+            lines.append("current  none: the first CAD session or `cadgen setup` makes one current")
+        found = releases.listing()
+        if found:
+            said = ", ".join(release["version"] + ("" if release["complete"] else " (incomplete)")
+                             + (" (current)" if release["version"] == (record or {}).get("version") else "")
+                             for release in found)
+            lines.append(f"releases {said} in {_home(str(releases.root()))}")
+        last = switch.last()
+        if last is not None:
+            how = (f"to cadgen {last.get('to')}" + (f" from {last.get('from')}" if last.get("from") else "")
+                   + (f", {last['gapMs']} ms without an engine" if last.get("gapMs") is not None else ""))
+            lines.append(f"update   {last.get('at')}: switched {how}" if last.get("ok")
+                         else f"update   {last.get('at')}: the switch {how} failed: {last.get('error')}")
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        lines.append(f"current  unknown ({type(error).__name__}: {error})")
+    return lines
+
+
+def _apps() -> list[str]:
+    """Each agent app's copy of the plugin and the release it pins, as the app says it
+    (``cadgen._internal.providers``), comparing nothing."""
+    try:
+        from cadgen._internal import providers
+
+        machine = providers.Machine.here()
+        found = providers.detect(machine)
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return [f"apps     unknown ({type(error).__name__}: {error})"]
+    lines = []
+    for name, app in found.items():
+        if not app.present:
+            continue
+        ours, stores = app.ours(), app.stores()
+        if ours is not None:
+            lines.append(f"app      {app.label}: " + (f"cadgen {ours.version or '?'}" if name == "claude-desktop"
+                                                     else ours.words(machine)))
+        elif stores:
+            lines.append(f"app      {app.label}: {stores[0].words(machine)}, which its store updates")
+    return lines
 
 
 def _command_path_hint(path: str) -> str:
@@ -133,23 +173,6 @@ def _sharing() -> str | None:
         return describe()
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return None
-
-
-def _editable_source() -> str | None:
-    """The directory this cadgen was EDITABLE-installed from, or ``None``
-    (``cadgen._internal.editable``).
-
-    ``pip install -e <dir>`` writes the project's version into the distribution's
-    metadata at install time, and the import path then points at the live
-    directory, but the recorded version is a SNAPSHOT: nothing re-reads the
-    project's metadata afterwards, so a source tree whose version has since been
-    bumped keeps reporting the version it was installed at. That is not a wrong
-    reading of the version -- it is what this interpreter really has installed --
-    and it is why the mismatch above it may need a different command.
-    """
-    from cadgen._internal.editable import editable_source
-
-    return editable_source()
 
 
 KERNEL_OK = "ok"
@@ -219,19 +242,26 @@ def _probe_kernel(python: str | None = None) -> tuple[str, str]:
 
 
 def _setup() -> list[str]:
-    """The report lines of the setup: this installation registered and the proxy written when this
-    installation may (a source tree registers only when named), the records whose interpreter is
-    gone, and why a write failed, which in a sandbox is the folder being out of reach."""
+    """The report lines of the setup: on a device with no current installation, this installation
+    registered and made current when it may (a source tree registers only when named); the proxy
+    written; the records whose interpreter is gone, and why a write failed, which in a sandbox is the
+    folder being out of reach."""
     from cadgen._internal import installations as setup
 
     lines = []
     try:
         version = setup.own_version()
-        if version:
+        current = setup.current()
+        if current is not None and not setup.mine(current):
+            registered, proxy = "current", setup.write_proxy()
+        elif version:
             registered, proxy = setup.setup(version)
         else:
             registered, proxy = None, (setup.proxy_path(), setup.proxy_status(), None)
-        if registered is None:
+        if registered == "current":
+            lines.append(f"registry cadgen {current['version']} is the current installation: this one registers "
+                         "nothing")
+        elif registered is None:
             lines.append(f"registry not registered: a source tree registers only as a version it is named "
                          f"({setup.NAME_ENV})")
         else:
@@ -376,13 +406,9 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
 def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     parser = argparse.ArgumentParser(
         prog=prog,
-        description="Set cadgen up (register it, write the cadgen command, start the engine), report it, "
-                    "and verify a skill's cadgen version pin.",
-    )
-    parser.add_argument(
-        "skill",
-        nargs="?",
-        help="A skill's SKILL.md, or a directory containing one (default: the working directory).",
+        description="Set cadgen up (register it, write the cadgen command, make the CAD kernel environment, "
+                    "start the engine) and report what this device runs: the current installation, the "
+                    "releases on disk, the engine and each agent app's plugin.",
     )
     parser.add_argument(
         "--prune",
@@ -425,9 +451,8 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
         return 0
 
     import cadgen
+    from cadgen._internal import installations
     from cadgen._internal.installations import own_version
-    from cadgen._internal.launch import launch_command
-    from cadgen.cli import read_skill_pin
 
     installed = getattr(cadgen, "__version__", "unknown")
     location = Path(cadgen.__file__).resolve().parent
@@ -437,6 +462,9 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     sys.stdout.write(f"  install  {location}\n")
     # Its record and the command the skills run it by (`cadgen._internal.installations`).
     for line in _setup():
+        sys.stdout.write(f"  {line}\n")
+    # What the device runs: the current installation, the release folders, the last switch.
+    for line in _current():
         sys.stdout.write(f"  {line}\n")
     # The engine's document cache: what it keeps, until a person deletes it.
     sys.stdout.write(f"  cache    {_cache()}\n")
@@ -448,8 +476,12 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
 
     # The CAD kernel environment, made here when it is not (but with --no-server), and its kernel loaded
     # there, before the engine starts: an engine that finds it made starts its standby there, which
-    # loads the kernel while nobody waits.
-    python, where = _kernel_environment(make=not args.no_server)
+    # loads the kernel while nobody waits. The current installation's doctor makes the current one's.
+    current = installations.current()
+    if current is not None and not installations.mine(current):
+        python, where = None, f"the current installation's (cadgen {current['version']}): its `cadgen doctor` checks it"
+    else:
+        python, where = _kernel_environment(make=not args.no_server)
     kernel_state, detail = _probe_kernel(python) if python is not None else (KERNEL_MISSING, where)
     kernel_loaded = kernel_state != KERNEL_FAILED
     status = 0 if kernel_loaded else 4
@@ -471,51 +503,10 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
     if sharing:
         # Whether CAD's apps send usage stats, as `cadgen telemetry` says it.
         sys.stdout.write(f"  sharing  {sharing}\n")
-
-    skill = _resolve_skill(args.skill)
-    if skill is None:
-        sys.stdout.write("  pin      none found (no SKILL.md to check)\n")
-        return status
-
-    pin = read_skill_pin(skill)
-    if pin is None:
-        # No pinned launch command (a development install points it at a checkout): nothing to enforce.
-        sys.stdout.write(f"  pin      unpinned in {skill}\n")
-        return status
-    if pin in (installed, own_version()):  # a development install's pin is the version it runs as
-        sys.stdout.write(f"  pin      OK — cadgen=={pin} ({skill})\n")
-        return status
-    from cadgen._internal.installations import VERSION
-
-    if not VERSION.fullmatch(pin):
-        # A SKILL.md in a downloaded project is anyone's: a "pin" that is no version (a shell
-        # command, a uv option) is said as data, never built into the command printed below.
-        sys.stderr.write(f"  pin      MISMATCH — {skill} pins no cadgen version: {ascii(pin[:64])}\n")
-        return 3
-    sys.stderr.write(
-        f"  pin      MISMATCH — {skill} pins cadgen=={pin}, "
-        f"but cadgen {own_version() or installed} is installed.\n"
-    )
-    editable = _editable_source()
-    if editable is None:
-        sys.stderr.write(
-            "This is not the installation the skill uses. Run cadgen with its launch command:\n"
-            f"  {launch_command(version=pin)} ...\n"
-        )
-    else:
-        # The install is a live source tree, so the code may already BE the
-        # pinned version: what is stale is the version this install recorded
-        # when it was made. Naming the other command here would exchange that
-        # source tree for a published release, which is not the fix.
-        sys.stderr.write(
-            f"This cadgen is an EDITABLE install of {editable}. Its version was recorded when\n"
-            "it was installed and is never re-read, so the code can be current while the\n"
-            "version it reports is not. Re-install it in place to re-record it:\n"
-            f"  uv pip install -e {editable}\n"
-            "(the skill's launch command would run the published release instead of that source\n"
-            "tree.)\n"
-        )
-    return 3
+    # Each agent app's copy of the plugin, and the release it pins.
+    for line in _apps():
+        sys.stdout.write(f"  {line}\n")
+    return status
 
 
 if __name__ == "__main__":

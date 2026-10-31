@@ -1,6 +1,7 @@
 """cadgen's version check (`cadgen/updates.py`): what each install is told about a newer text-to-cad,
-from a feed read at most once a day, said the same way wherever it shows. No test reaches the real
-feed: each one is handed in, or kept as already read today."""
+from a feed read at most once a day or an agent app's newer CAD server, said the same way wherever it
+shows, and which release an update moves to. No test reaches the real feed: each one is handed in, or
+kept as already read today."""
 
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ class UpdatesTest(unittest.TestCase):
         version = mock.patch.object(cadgen, "__version__", "0.8.1")
         version.start()
         self.addCleanup(version.stop)
+        seen = mock.patch.object(updates, "_seen", set())
+        seen.start()
+        self.addCleanup(seen.stop)
 
     def environment(self, values: dict[str, str]) -> None:
         patched = mock.patch.dict(os.environ, values)
@@ -69,19 +73,43 @@ class UpdatesTest(unittest.TestCase):
                     mock.patch("cadgen._internal.channel._source_tree", return_value=False):
                 self.assertEqual(told(), expected)
 
-    def test_the_notice_reads_the_same_everywhere_like_the_install_message(self) -> None:
+    def test_the_notice_is_the_release_and_a_text_app_s_line_names_the_install_command(self) -> None:
         self.read_today(FEED)
         found = updates.notice()
-        text = "A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)"
-        prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
-        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1", "text": text, "prompt": prompt,
-                                 "instructions": "https://github.com/earthtojake/text-to-cad#-quickstart"})
-        self.assertEqual(updates.line(found), f'{text}. Ask your agent to update to the latest version ("{prompt}"), '
-                                              'or install manually (https://github.com/earthtojake/text-to-cad#-quickstart).')
-        # The same words in the CAD Viewer a skill opens, which no plugin names a channel for.
+        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1"})
+        self.assertEqual(updates.line(found, "posix"), "text-to-cad 0.9.0 is out (this is 0.8.1); to update every agent "
+                                                       "app here, run: curl -fsSL https://texttocad.dev/install.sh | sh")
+        self.assertTrue(updates.line(found, "nt").endswith("run: irm https://www.texttocad.dev/install.ps1 | iex"))
+        # The same in the CAD Viewer a skill opens, which no plugin names a channel for.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
-            self.assertEqual(updates.notice()["prompt"], prompt)
+            self.assertEqual(updates.notice(), found)
+
+    def test_an_app_s_newer_server_shows_the_release_with_no_network(self) -> None:
+        """A shim whose release is newer than the engine's proves a release exists: the button shows,
+        with no feed read, and an update moves to it; an older or a broken one is no release."""
+        with mock.patch.object(updates, "_get", side_effect=AssertionError("the network")), \
+                mock.patch.dict(os.environ, {"CADGEN_UPDATE_CHECK": "0"}):
+            self.assertIsNone(updates.notice())
+            for said in ("0.8.0", "0.8.1", "not a release", None):
+                updates.see(said)
+            self.assertIsNone(updates.notice())
+            updates.see("0.9.2")
+            self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
+            self.assertEqual(updates.newest(), "0.9.2")
+
+    def test_an_update_reads_the_feed_now_and_moves_to_the_newest_it_knows(self) -> None:
+        self.read_today(FEED)  # read today: a click reads it again all the same
+        asked: list[str] = []
+        with mock.patch.object(updates, "_get", lambda url: asked.append(url) or {"latest": "0.9.1"}):
+            self.assertEqual(updates.newest(), "0.9.1")
+            self.assertEqual(len(asked), 1)
+            updates.see("0.10.0")
+            self.assertEqual(updates.newest(), "0.10.0")
+        with mock.patch.object(updates, "_get", return_value=None), mock.patch.object(updates, "_seen", set()):
+            self.assertEqual(updates.newest(), "0.9.1", "a feed out of reach: the feed as last read")
+        with mock.patch.object(cadgen, "__version__", "0.10.0"), mock.patch.object(updates, "_get", return_value=None):
+            self.assertIsNone(updates.newest(), "this is the newest")
 
     def test_the_feed_is_read_at_most_once_a_day_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []

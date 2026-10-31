@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import re
 import sys
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
@@ -47,10 +46,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) in the CAD kernel environment"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),
-    # text-to-cad in every agent app here, and the cadgen command with it; again to update.
-    # `uninstall` is the same module's uninstall path, with a parser of its own.
-    "setup": ("cadgen.cli.setup", "set up or update text-to-cad in every agent app here"),
-    "update": ("cadgen.cli.setup", "the same as setup: bring every agent app up to date"),
+    # text-to-cad in every agent app here, and the cadgen command with it, as this release; `update`
+    # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
+    "setup": ("cadgen.cli.setup", "set up text-to-cad in every agent app here, as this release"),
+    "update": ("cadgen.cli.update", "install the newest release and set it up in every agent app here"),
     "uninstall": ("cadgen.cli.uninstall", "take text-to-cad out of every agent app here"),
     # A page session on the installation engine; the launcher exits.
     "viewer": ("cadgen.cli.viewer", "open a viewer page on the installation engine"),
@@ -58,31 +57,6 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "telemetry": ("cadgen.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
-
-# A skill's pin is the version its SKILL.md's install command names
-# (`uvx ... --from cadgen==1.2.3 cadgen doctor`), stamped by the release with its `cadgen +1.2.3`;
-# else the version its commands run by (`cadgen +1.2.3`, a development install's
-# `cadgen +1.2.3-dev.<time>`).
-_PIN_RE = re.compile(r"--from\s+cadgen==(?P<pin>[^\s`'\"]+)")
-_RUN_PIN_RE = re.compile(r"(?<![\w.-])cadgen\s+\+(?P<pin>[0-9][0-9A-Za-z.+_-]*[0-9A-Za-z])")
-
-
-def read_skill_pin(skill_path) -> str | None:
-    """The cadgen version a SKILL.md pins, or ``None``.
-
-    ``None`` covers the non-cases uniformly: file absent or unreadable, or no install command
-    with a pin (a development install rewrites it to the checkout's interpreter). The caller
-    decides what a mismatch means (``cadgen doctor`` reports it and exits 3). String comparison
-    rather than PEP 440 on purpose: the release stamps the pin mechanically.
-    """
-    try:
-        with open(skill_path, encoding="utf-8") as handle:
-            text = handle.read()
-    except OSError:
-        return None
-    match = _PIN_RE.search(text) or _RUN_PIN_RE.search(text)
-    return match.group("pin") if match else None
-
 
 _USAGE_HEAD = "usage: cadgen <command> [args...]\n\ncommands:\n"
 _USAGE_TAIL = (

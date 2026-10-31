@@ -44,8 +44,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BASE", "Environment", "Installation", "MARKER", "Refused", "SCHEMA", "complete", "ensure", "failure",
-           "find_uv", "home", "interpreter", "kernel", "where"]
+__all__ = ["BASE", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
+           "ensure", "failure", "find_uv", "home", "interpreter", "kernel", "make", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last.
 BASE = "base"
@@ -68,6 +68,9 @@ NETWORK = re.compile(r"error sending request|network was disabled|dns error|tcp 
 # What uv says when the system refuses it a file it writes (its cache, the environment): a sandbox's.
 DENIED = re.compile(r"Operation not permitted|Permission denied|Access is denied|os error (?:1|13)\)")
 WHAT = "the CAD kernel environment"
+# A folder of wheels uv reads beside its index for every cadgen it installs (``--find-links``): a test's
+# seam, a local release a test publishes there, never a setting of a person's.
+FIND_LINKS_ENV = "CADGEN_UPDATE_FIND_LINKS"
 
 
 class Refused(Exception):
@@ -274,11 +277,38 @@ def find_uv() -> str:
                   f"package, which carries it; install cadgen again: run `{command()}`")
 
 
-def commands(uv: str, env: Path, installation: Installation) -> list[list[str]]:
-    """The uv commands that make the base: a virtual environment of the installation's own Python, then
-    its cadgen with the kernel, the files hard links to uv's cache (``LINK``)."""
-    return [[uv, "venv", "--no-project", "--python", installation.executable, str(env)],
-            [uv, "pip", "install", "--python", str(interpreter(env)), "--link-mode", LINK, *installation.requirement()]]
+@dataclass(frozen=True)
+class Recipe:
+    """What makes an environment with uv (``make``): the Python of its virtual environment, what is
+    installed in it, and the words said of it. ``release`` and ``source`` are the cadgen it installs, as
+    an installation names them (``Installation``): a release on the index (``source`` None) is asked for
+    again with its index page fetched anew when uv's cached page predates it."""
+
+    what: str  # the environment, in words: "the CAD kernel environment", "cadgen 0.9.1"
+    python: str  # the interpreter its virtual environment is made of
+    requirement: tuple[str, ...]  # what ``uv pip install`` installs
+    release: str
+    source: str | None
+    making: str  # said before uv starts
+    downloading: str  # said before uv is asked online, for what its cache did not hold
+
+
+def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
+    """The uv commands that make an environment: a virtual environment of the recipe's Python, then what
+    it installs, the files hard links to uv's cache (``LINK``), and a folder of wheels a test names read
+    beside the index (``FIND_LINKS_ENV``)."""
+    found = os.environ.get(FIND_LINKS_ENV, "").strip()
+    links = ["--find-links", found] if found else []
+    return [[uv, "venv", "--no-project", "--python", recipe.python, str(env)],
+            [uv, "pip", "install", "--python", str(interpreter(env)), "--link-mode", LINK, *links, *recipe.requirement]]
+
+
+def recipe(installation: Installation) -> Recipe:
+    """The base's recipe: ``cadgen[kernel]`` as the installation installs it, on its own Python."""
+    return Recipe(what=WHAT, python=installation.executable, requirement=tuple(installation.requirement()),
+                  release=installation.release, source=installation.source,
+                  making=f"making {WHAT}, once: cadgen[kernel] {installation.release} on Python {installation.python}",
+                  downloading="downloading the CAD kernel (about 220 MB) and what it needs, once")
 
 
 def _say(line: str) -> None:
@@ -286,59 +316,74 @@ def _say(line: str) -> None:
 
 
 def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
-    """The base at ``env`` made (``commands``): what was there removed, uv's commands run, the import path
-    its Python starts with asked of it, and the marker written last. One process makes it while another
-    waits (a lock beside it). Its marker; ``Refused`` in one line when uv cannot make it (``failure``),
-    or a file of it cannot be removed or written (``_cannot``)."""
+    """The base at ``env`` made (``make``): the import path its Python starts with asked of it, and its
+    marker, naming the installation it belongs to, written last."""
+
+    def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
+        return {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
+                "installation": dataclasses.asdict(installation), "path": _path(env), "commands": steps,
+                "seconds": round(seconds, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+
+    return make(env, recipe(installation), told, finish=finish, marker=MARKER, done=complete)
+
+
+def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
+         finish: Callable[[list[list[str]], float], dict[str, Any]], marker: str,
+         done: Callable[[Path], dict[str, Any] | None]) -> dict[str, Any]:
+    """An environment at ``env`` made with uv (``commands``): what was there removed, the virtual
+    environment made, the recipe installed -- from uv's cache first, ``--offline``, and from the network
+    only for what it does not hold, said in a line first -- and its marker (``finish``'s, written to
+    ``marker`` in it) written last, so ``done`` reads it complete. One process makes it while another
+    waits (a lock beside it), and one that finds it made meanwhile takes that one. Its marker;
+    ``Refused`` in one line when uv cannot make it (``failure``), or a file of it cannot be removed or
+    written (``_cannot``). The base (``ensure``) and a release's folder (``cadgen._internal.releases``)
+    are both made by it."""
     import contextlib
 
     from cadgen._internal.file_lock import exclusive
 
     def waiting() -> None:
-        told(f"waiting for another process that is making {WHAT}")
+        told(f"waiting for another process that is making {recipe.what}")
 
     with contextlib.ExitStack() as held:
         try:
             env.parent.mkdir(parents=True, exist_ok=True)
             held.enter_context(exclusive(env.parent / f"{env.name}.lock", waiting=waiting))
         except OSError as error:
-            raise Refused(_cannot(f"the folder {env.parent}", error)) from None
-        marker = complete(env)
-        if marker is not None:
-            return marker  # made meanwhile, by the process this one waited for
-        _remove(env)
-        steps = commands(find_uv(), env, installation)
-        told(f"making {WHAT}, once: cadgen[kernel] {installation.release} on Python {installation.python}, in {env}")
+            raise Refused(_cannot(f"the folder {env.parent}", error, recipe.what)) from None
+        found = done(env)
+        if found is not None:
+            return found  # made meanwhile, by the process this one waited for
+        _remove(env, recipe.what)
+        steps = commands(find_uv(), env, recipe)
+        told(f"{recipe.making}, in {env}")
         started = time.monotonic()
         venv, install = steps
-        done = _uv(venv, env.parent)
-        if done.returncode == 0:
-            done = _uv([*install, "--offline"], env.parent)
-            if done.returncode != 0:
+        result = _uv(venv, env.parent)
+        if result.returncode == 0:
+            result = _uv([*install, "--offline"], env.parent)
+            if result.returncode != 0:
                 # uv's cache did not hold all of it: from the network, once.
-                told("downloading the CAD kernel (about 220 MB) and what it needs, once")
-                done = _uv(install, env.parent)
-                if done.returncode != 0 and installation.source is None and _unlisted(done, installation):
-                    # uv reads an index page it cached (ten minutes, PyPI's): one from before the engine's
-                    # release was listed says there is none. Asked again, that page alone fetched anew.
+                told(recipe.downloading)
+                result = _uv(install, env.parent)
+                if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
+                    # uv reads an index page it cached (ten minutes, PyPI's): one from before the release
+                    # was listed says there is none. Asked again, that page alone fetched anew.
                     steps[1] = install = [*install, "--refresh-package", "cadgen"]
-                    done = _uv(install, env.parent)
+                    result = _uv(install, env.parent)
             step = install
         else:
             step = venv
-        if done.returncode != 0:
-            raise Refused(failure(step, done.stderr or done.stdout, installation))
-        path = _path(env)
+        if result.returncode != 0:
+            raise Refused(failure(step, result.stderr or result.stdout, recipe))
+        written = finish(steps, time.monotonic() - started)
         from cadgen._internal.atomic_replace import write_bytes_atomic
 
-        marker = {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
-                  "installation": dataclasses.asdict(installation), "path": path, "commands": steps,
-                  "seconds": round(time.monotonic() - started, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
         try:
-            write_bytes_atomic(env / MARKER, (json.dumps(marker, indent=1) + "\n").encode("utf-8"))
+            write_bytes_atomic(env / marker, (json.dumps(written, indent=1) + "\n").encode("utf-8"))
         except OSError as error:
-            raise Refused(_cannot(str(env / MARKER), error)) from None
-    return marker
+            raise Refused(_cannot(str(env / marker), error, recipe.what)) from None
+    return written
 
 
 def _path(env: Path) -> list[str]:
@@ -357,8 +402,8 @@ def _path(env: Path) -> list[str]:
     return found
 
 
-def _cannot(what: str, error: OSError) -> str:
-    """That ``what`` (a file or folder of the base) cannot be written, in one line: a denial as a
+def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
+    """That ``what`` (a file or folder of ``environment``) cannot be written, in one line: a denial as a
     sandbox's, which this once outside it, or with its permission, makes."""
     if isinstance(error, PermissionError):
         return (f"the system denies cadgen {what} ({error.strerror or error}); a sandbox that forbids it does: "
@@ -367,7 +412,7 @@ def _cannot(what: str, error: OSError) -> str:
 
 
 def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
-    """A uv command run in the bases' folder, where no project's uv settings are read."""
+    """A uv command run in the environments' folder, where no project's uv settings are read."""
     try:
         return subprocess.run(step, cwd=folder, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
@@ -375,14 +420,14 @@ def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
         raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
 
 
-def _unlisted(done: subprocess.CompletedProcess, installation: Installation) -> bool:
-    """Whether uv found no ``cadgen==<release>`` of the engine's on its index."""
+def _unlisted(done: subprocess.CompletedProcess, release: str) -> bool:
+    """Whether uv found no ``cadgen==<release>`` on its index."""
     said = " ".join((done.stderr or done.stdout or "").split())
-    return any(f"no version of {name}=={installation.release}" in said for name in ("cadgen", "cadgen[kernel]"))
+    return any(f"no version of {name}=={release}" in said for name in ("cadgen", "cadgen[kernel]"))
 
 
-def _remove(env: Path) -> None:
-    """What is at ``env`` removed, before the base is made there. On Windows a file another process reads
+def _remove(env: Path, what: str = WHAT) -> None:
+    """What is at ``env`` removed, before an environment is made there (``what``, in words). On Windows a file another process reads
     a moment (a scanner, an indexer) refuses its removal (``WinError 32``, ``5``): the removal goes on
     after a wait (``REMOVE_DELAYS``), from where it stopped."""
     for delay in (*REMOVE_DELAYS, None):
@@ -397,8 +442,8 @@ def _remove(env: Path) -> None:
         except OSError as error:
             if delay is None or getattr(error, "winerror", None) not in (5, 32):
                 if isinstance(error, PermissionError) and getattr(error, "winerror", None) is None:
-                    raise Refused(_cannot(f"{WHAT} at {env}", error)) from None
-                raise Refused(f"cannot remove {WHAT} at {env} to make it again: {error.strerror or error}") from None
+                    raise Refused(_cannot(f"{what} at {env}", error, what)) from None
+                raise Refused(f"cannot remove {what} at {env} to make it again: {error.strerror or error}") from None
             time.sleep(delay)
 
 
@@ -429,21 +474,22 @@ def _last(said: str) -> str:
     return lines[-1] if lines else "uv said nothing"
 
 
-def failure(step: list[str], said: str, installation: Installation) -> str:
-    """Why uv could not make the base, in one line of cadgen's: a file the system denies it (a sandbox's);
-    the network it needs once; a Python it cannot use; a release no index it reads has; else uv's own
-    words."""
+def failure(step: list[str], said: str, recipe: Recipe) -> str:
+    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's: a file the system
+    denies it (a sandbox's); the network it needs once; a Python it cannot use; a release no index it
+    reads has; else uv's own words."""
     explained = _explained(said)
     words = explained or _last(said)
+    what = recipe.what
     if DENIED.search(said) and not explained:
-        return (f"the system denies uv what {WHAT} needs ({_last(said)}); a sandbox that forbids it does: run this "
+        return (f"the system denies uv what {what} needs ({_last(said)}); a sandbox that forbids it does: run this "
                 "once outside it, or with its permission")
     if NETWORK.search(said):
-        return f"{WHAT} needs the network once: {_last(said)}"
+        return f"{what} needs the network once: {_last(said)}"
     if step[1] == "venv":
-        return f"uv cannot make {WHAT} on Python {installation.python}: {words}"
-    release = installation.release
-    if installation.source is None and any(f"no version of {name}=={release}" in explained
-                                           for name in ("cadgen", "cadgen[kernel]")):
-        return f"cadgen {release}, the engine's, is on no package index uv reads: {explained}"
-    return f"uv could not make {WHAT}: {words}"
+        return f"uv cannot make {what} on {recipe.python}: {words}"
+    release = recipe.release
+    if recipe.source is None and any(f"no version of {name}=={release}" in explained
+                                     for name in ("cadgen", "cadgen[kernel]")):
+        return f"cadgen {release} is on no package index uv reads: {explained}"
+    return f"uv could not make {what}: {words}"

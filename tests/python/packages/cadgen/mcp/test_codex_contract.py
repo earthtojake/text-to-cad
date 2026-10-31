@@ -2,8 +2,9 @@
 
 The server answers Codex (its client names itself ``codex-mcp-client``) with tab surfaces the agent
 opens once and then drives. ``codex_contract.json`` records that conversation -- initialize, the
-catalog, the resource, and the launches each surface returns -- with the page's build and this run's
-paths replaced by placeholders. A change to Codex's side has to change that file on purpose.
+catalog, the resource, and the launches each surface returns -- with the engine's release, the page's
+build and this run's paths replaced by placeholders. A change to Codex's side has to change that file on
+purpose.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ def converse(tmp: Path) -> dict:
     bracket.write_bytes(STL)
     page = tmp / "app"
     page.mkdir()
-    (page / "index.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
+    (page / "shell.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
     server = Server(page=AppPage(page), recents=RecentStore(tmp / "state"))
 
     def call(name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
@@ -76,7 +77,7 @@ def converse(tmp: Path) -> dict:
         if isinstance(launch, dict):  # this run's install and machine, not the contract
             launch.update({key: f"<{key}>" for key in ("version", "platform", "pick", "notice") if key in launch})
     text = json.dumps(record, indent=1, sort_keys=True).replace(str(tmp), "<tmp>")
-    return json.loads(re.sub(r"ui://cad/[0-9a-f]{16}/", "ui://cad/<build>/", text))
+    return json.loads(re.sub(r"ui://cad/[0-9A-Za-z.+_-]+/[0-9a-f]{16}/", "ui://cad/<release>/<build>/", text))
 
 
 class CodexContractTest(unittest.TestCase):

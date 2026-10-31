@@ -74,8 +74,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "server": frozenset({"port", "rotate_token"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
     # for which apps; and `uninstall`, which takes it out again.
-    "setup": frozenset({"dry_run", "only", "no_telemetry", "json"}),
-    "update": frozenset({"dry_run", "only", "no_telemetry", "json"}),
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
+    # `update` runs the newest release's `setup` with its options; the switch's helper is its own.
+    "update": frozenset({"dry_run", "only", "no_telemetry", "json", "switch", "port", "previous"}),
     "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
 }
 

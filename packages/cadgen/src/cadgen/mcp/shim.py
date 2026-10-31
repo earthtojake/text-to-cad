@@ -33,9 +33,10 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     (``CADGEN_MCP_PRESENTATION``) as a declaration, ``launcher``, the host that started this
     process (``host.launcher``), for the server to weigh (``host.presentation``), ``holder``,
     the name of this process's hold (``Holder``), whose end ends the session, ``app``, the
-    capability the session hands its views (``Proxy.app``), and ``browser``: that this process
+    capability the session hands its views (``Proxy.app``), ``browser``: that this process
     opens the browser a text host's ``cad_show`` asks for (``browser.deliver``), and whether it
-    can here."""
+    can here, and ``release``: the release this process runs, which the engine's update button
+    offers when it is newer than the engine's own (``cadgen.updates.see``)."""
     params = copy.deepcopy(params)
     offered = params.setdefault('capabilities', {})
     extensions = offered.setdefault('extensions', {})
@@ -46,20 +47,23 @@ def initialize_params(params, launcher=None, holder=None, app=None):
         extensions.pop(UI_EXTENSION, None)
         extensions.pop(TABS_EXTENSION, None)
         launcher = {'host': 'CADGEN_MCP_PRESENTATION=text', 'renders': False}
+    from cadgen import __version__
     params.setdefault('_meta', {})['dev.texttocad/transport'] = {
         'appDir': os.environ.get('CADGEN_MCP_APP_DIR', ''), 'cwd': os.getcwd(), 'launcher': launcher,
-        'browser': transport_browser(), **({'holder': holder} if holder else {}), **({'app': app} if app else {}),
+        'browser': transport_browser(), 'release': __version__,
+        **({'holder': holder} if holder else {}), **({'app': app} if app else {}),
     }
     return params
 
 
 class Holder:
     """This server's hold on the engine (``cadgen.engine.client.hold``): taken as the server starts,
-    starting the engine when none runs, and kept while the host runs, so a shell the host runs in a
-    sandbox that cannot start an engine always finds one. Once the host has quit, and this process
-    with it, the engine runs on unheld until it is stopped or a newer installation retires it. An
-    engine that goes while held (``cadgen stop``, a crash) is held again at the host's next request,
-    never at once: a stop is obeyed."""
+    starting the engine when none runs -- the current installation's, whatever release this server
+    runs -- and kept while the host runs, so a shell the host runs in a sandbox that cannot start an
+    engine always finds one. Once the host has quit, and this process with it, the engine runs on
+    unheld until it is stopped or an update replaces it. An engine that goes while held (``cadgen
+    stop``, a crash, an update's switch) is held again at the host's next request, never at once: a
+    stop is obeyed."""
 
     def __init__(self, host=lambda: None):
         self.host = host  # the host this server serves, said with the hold (``host.family``)

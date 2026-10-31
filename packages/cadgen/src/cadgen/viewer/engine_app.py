@@ -222,6 +222,15 @@ class EngineApp:
             active = self.active_requests > 0 or any(app._exports and app._exports.keeps_alive() for app in apps)
         return active or bool(self._mcp and self._mcp.active())
 
+    def working(self):
+        """What an update's drain waits for here (``serve.Server.clients_working``): an export the page
+        asked for, and an agent's MCP call or operation (``Sessions.working``). A page's own requests
+        are not: a page reconnects to the engine that follows."""
+        with self.lock:
+            apps = [self._default] if self._default else []
+            exporting = any(app._exports and app._exports.keeps_alive() for app in apps)
+        return exporting or bool(self._mcp and self._mcp.working())
+
     def close(self):
         with self.lock:
             apps = [self._default] if self._default else []

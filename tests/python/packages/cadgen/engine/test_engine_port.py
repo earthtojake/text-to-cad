@@ -1,8 +1,9 @@
-"""An installation's page links outlive its engine: one HTTP port (``--port``, else
-``CADGEN_ENGINE_PORT``, else 3245 or the port it rolled to when 3245 was another's, remembered) and
-the user's one page token, every installation's, the same at every start until ``cadgen server
---rotate-token``. A named port another process holds is refused by name; another installation's
-engine that nothing uses is retired: an older one's wherever it serves, and never a newer one's."""
+"""The device's page links outlive its engine: one HTTP port (``--port``, else ``CADGEN_ENGINE_PORT``,
+else 3245 or the port it rolled to when 3245 was another's, remembered) and the user's one page token,
+the same at every start until ``cadgen server --rotate-token``. A named port another process holds
+is refused by name; another engine on it (an earlier cadgen's, its door another name) that nothing
+uses is asked to stop, and one in use is rolled from. One engine a device: a client of another
+release attaches to the engine running, and starts the current installation's, never its own."""
 
 from __future__ import annotations
 
@@ -21,6 +22,8 @@ from unittest import mock
 from tests.python.support import engine_daemon
 
 SRC = Path(__file__).resolve().parents[5] / "packages" / "cadgen" / "src"
+# An earlier cadgen's engine's name in the engine folder (``EnginePortTest.earlier``).
+EARLIER = "0123456789ab"
 
 
 def free_port() -> int:
@@ -127,25 +130,34 @@ class EnginePortTest(unittest.TestCase):
             self.assertLess(time.monotonic(), deadline, f"only {expected} answer")
             time.sleep(0.05)
 
-    def ours(self, **extra: str) -> Path:
-        """This installation's door, running as the version ``extra`` names (``CADGEN_INSTALLATION_VERSION``)."""
+    def ours(self) -> Path:
+        """The engine's door in the test's engine folder (on Windows, its port file)."""
         from cadgen.engine import daemon
 
-        environment = {key: value for key, value in os.environ.items() if key != "CADGEN_INSTALLATION_VERSION"}
-        with mock.patch.dict(os.environ, {**environment, "CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"], **extra},
-                             clear=True):
+        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
             return daemon.address()
 
-    def other(self, **extra: str) -> tuple[str, dict, Path]:
-        """A second installation's engine on a port of this test's, its page launched: its
-        interpreter, the launch (``pid``, ``port``) and its door, stopped at the end. ``extra``: its
-        environment (``CADGEN_INSTALLATION_VERSION``, the version it runs as)."""
-        python = other_installation(self.root)
-        self.addCleanup(self.stop, python)
-        launched = self.launch(python, CADGEN_ENGINE_PORT=str(free_port()), **extra)
-        (door,) = (self.root / "engine").glob("*.port" if os.name == "nt" else "*.door")
-        self.assertNotEqual(door, self.ours(), "another installation's engine")
-        return python, launched, door
+    def earlier(self, port: int) -> tuple[Path, dict]:
+        """An earlier cadgen's engine in the test's engine folder -- its door another name, a tag of 12
+        hex digits as 0.8's engines named theirs --, serving on ``port``: its door and its status,
+        stopped at the end."""
+        from cadgen.engine import client, daemon
+
+        code = f"import sys; from cadgen.engine import daemon; daemon.NAME = {EARLIER!r}; sys.exit(daemon.main())"
+        process = subprocess.Popen([sys.executable, "-c", code], env=self.env, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(engine_daemon.reap, process)
+        door = self.root / "engine" / f"{EARLIER}.{'port' if os.name == 'nt' else 'door'}"
+        deadline = time.monotonic() + 60
+        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
+            while (connection := client._connect(door)) is None:
+                self.assertIsNone(process.poll(), "the earlier engine exited before its door answered")
+                self.assertLess(time.monotonic(), deadline, "the earlier engine's door answered")
+                time.sleep(0.05)
+            served = client._exchange(connection, {"op": "http", "port": port}, address=door)
+            self.assertEqual(served.get("url"), f"http://127.0.0.1:{port}", served)
+            self.addCleanup(lambda: daemon._ask(door, {"op": "stop"}))
+            return door, daemon._ask(door, {"op": "status"}) or {}
 
     def server(self, *args: str) -> None:
         """``cadgen server ARGS`` in the background, once its door answers."""
@@ -222,7 +234,7 @@ class EnginePortTest(unittest.TestCase):
     def remembered(self) -> int | None:
         from cadgen.engine import daemon, registry
 
-        return registry.Registry(self.root / "state").engine(daemon._tag(versioned=False)).get("port")
+        return registry.Registry(self.root / "state").engine(daemon.NAME).get("port")
 
     def test_the_default_port_is_3245_and_taken_when_free(self) -> None:
         from cadgen.engine import daemon
@@ -276,7 +288,7 @@ class EnginePortTest(unittest.TestCase):
         asked = free_port()
         done = self.cli("server", "--port", str(asked))
         self.assertEqual(done.returncode, 1, done.stderr)
-        self.assertIn("this installation's engine server is already running", done.stderr)
+        self.assertIn("the engine server is already running", done.stderr)
         self.assertFalse(listening(asked), "nothing serves the port it named")
         plain = self.cli("server")
         self.assertEqual(plain.returncode, 0, plain.stderr)
@@ -294,7 +306,7 @@ class EnginePortTest(unittest.TestCase):
         port = json.loads(done.stdout)["port"]
         self.assertTrue(default < port <= default + 64, port)
         pid = str(os.getpid()) if os.name != "nt" else r"\d+"  # the system names the holder
-        said = rf"{default} is held by (.+pid {pid}\)|another process); this installation serves on {port} and keeps it"
+        said = rf"{default} is held by (.+pid {pid}\)|another process); the engine serves on {port} and keeps it"
         self.assertRegex(done.stderr, rf"(?m)^cadgen: {said}$")
         self.assertEqual(self.record()["port"], port)
         status = self.cli("status", **extra).stdout
@@ -311,7 +323,7 @@ class EnginePortTest(unittest.TestCase):
 
         default, remembered = held_port(self), free_port()
         registry.Registry(self.root / "state").put_token("t" * 43)
-        registry.Registry(self.root / "state").put_engine(daemon._tag(versioned=False), {"port": remembered})
+        registry.Registry(self.root / "state").put_engine(daemon.NAME, {"port": remembered})
         server, where = self.bound(default)  # the default held, the remembered port free: used, nothing said
         self.assertEqual((server.port, where["source"], "notice" in where), (remembered, "rolled", False))
         self.assertEqual(server.token, "t" * 43)
@@ -320,7 +332,7 @@ class EnginePortTest(unittest.TestCase):
         self.addCleanup(held.socket.close)
         server, where = self.bound(default)
         self.assertGreater(server.port, remembered)
-        self.assertRegex(where["notice"], rf"^{remembered} is held by .+; this installation serves on {server.port} "
+        self.assertRegex(where["notice"], rf"^{remembered} is held by .+; the engine serves on {server.port} "
                                           "and keeps it$")
         self.assertEqual(self.remembered(), server.port)
         server.socket.close()
@@ -347,129 +359,61 @@ class EnginePortTest(unittest.TestCase):
         token.chmod(0o600)
         self.assertEqual(self.token(), "t" * 43, "never replaced: the links made with it still work")
 
-    def test_an_unused_engine_of_another_installation_is_retired_and_its_port_taken(self) -> None:
-        _python, theirs, _door = self.other()
-        ours = self.launch(CADGEN_ENGINE_PORT=str(theirs["port"]))
-        self.assertEqual(ours["port"], theirs["port"])
+    def test_an_unused_earlier_engine_on_the_port_is_asked_to_stop_and_its_port_taken(self) -> None:
+        port = free_port()
+        door, theirs = self.earlier(port)
+        ours = self.launch(CADGEN_ENGINE_PORT=str(port))
+        self.assertEqual(ours["port"], port)
         self.assertNotEqual(ours["pid"], theirs["pid"])
-        # One token for every installation's engine: a link outlives an upgrade.
-        self.assertEqual((ours["token"], theirs["token"]), (self.token(), self.token()))
+        # One token for every engine: a link outlives an update.
+        self.assertEqual(ours["token"], self.token())
         self.answering(self.ours())
 
-    def test_an_engine_of_another_installation_in_use_is_refused_when_named_and_else_rolled_from(self) -> None:
-        from cadgen.engine import client, previous
+    def test_an_earlier_engine_in_use_is_refused_when_named_and_else_rolled_from(self) -> None:
+        from cadgen.engine import previous
 
-        python, theirs, door = self.other()
-        held = client._connect(door)  # an app server's hold on it, as ``client.hold`` asks one
-        self.addCleanup(held.close)
-        message = {"op": "hold", "host": "codex"}  # held for Codex: the `cadgen` command in its shells runs it
-        if os.name == "nt":
-            message = {"token": door.read_text(encoding="utf-8").split()[1], **message}
-        held.writer.write((json.dumps(message) + "\n").encode())
-        held.writer.flush()
-        self.assertEqual(json.loads(held.reader.readline()), {"ok": True})
-        from cadgen.engine import daemon
-
-        status = daemon._ask(door, {"op": "status"})
-        self.assertEqual((status["holders"], status["hosts"]), (1, {"codex": 1}))
-        self.assertEqual(os.path.realpath(status["prefix"]), os.path.realpath(str(Path(python).parent.parent)))
-        done = self.started(CADGEN_ENGINE_PORT=str(theirs["port"]))
+        port = free_port()
+        door, theirs = self.earlier(port)
+        self.held(door)  # an app server's hold on it, as ``client.hold`` asks one
+        done = self.started(CADGEN_ENGINE_PORT=str(port))
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertEqual(done.stderr.strip().splitlines()[-1],
-                         f"CAD Viewer: port {theirs['port']} is held by cadgen {previous.version()}'s engine "
+                         f"CAD Viewer: port {port} is held by cadgen {previous.version()}'s engine "
                          f"(pid {theirs['pid']}), still in use by 1 app server: quit that app or run `cadgen stop` "
                          "with that version")
         self.answering(door)
-        server, where = self.bound(theirs["port"])  # its port the default: rolled from, never retired
-        self.assertGreater(server.port, theirs["port"])
-        self.assertEqual(where["notice"], f"{theirs['port']} is held by cadgen {previous.version()}'s engine (pid "
-                                          f"{theirs['pid']}); this installation serves on {server.port} and keeps it")
-        self.assertEqual(self.launch(python)["pid"], theirs["pid"], "theirs runs on")
+        server, where = self.bound(port)  # its port the default: rolled from, never asked to stop
+        self.assertGreater(server.port, port)
+        self.assertEqual(where["notice"], f"{port} is held by cadgen {previous.version()}'s engine (pid "
+                                          f"{theirs['pid']}); the engine serves on {server.port} and keeps it")
         # It serves with the token it started with: a new one is refused while it runs.
         refused = self.cli("server", "--rotate-token")
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("another installation's engine server is running", refused.stderr)
+        self.assertIn("another engine server is running", refused.stderr)
 
-    def test_a_newer_installation_retires_an_idle_older_engine_on_any_port_and_says_so_once(self) -> None:
-        _python, theirs, door = self.other(CADGEN_INSTALLATION_VERSION="0.8.0")
-        self.assertNotIn(theirs["port"], (3245,))
-        done = self.started(CADGEN_INSTALLATION_VERSION="0.9.0", CADGEN_ENGINE_PORT=str(free_port()))
-        self.assertEqual(done.returncode, 0, done.stderr)
-        said = f"retired cadgen 0.8.0's idle engine (pid {theirs['pid']}) for this newer installation"
-        self.assertEqual([line for line in done.stderr.splitlines() if "retired" in line], [f"cadgen: {said}"])
-        self.answering(self.ours(CADGEN_INSTALLATION_VERSION="0.9.0"))
-        self.assertIn(f"  {said}", self.cli("status", CADGEN_INSTALLATION_VERSION="0.9.0").stdout.splitlines())
-        again = self.started(CADGEN_INSTALLATION_VERSION="0.9.0")  # its engine reused: nothing said again
-        self.assertEqual(again.returncode, 0, again.stderr)
-        self.assertNotIn("retired", again.stderr)
+    def test_a_client_of_another_release_attaches_and_starts_the_current_installation_s_engine(self) -> None:
+        """One engine a device: a client of another installation (an app's newer plugin) attaches to the
+        engine running, whatever its release, and with none running starts the current installation's,
+        never its own."""
+        from cadgen._internal import installations
 
-    def test_an_upgrade_in_one_environment_starts_its_own_engine_and_retires_the_idle_old_one(self) -> None:
-        """A version installed again into the same environment (``pip install -U``, a dev install
-        made again): its own door, so its clients never dial the old engine still running there."""
-        old = self.ours(CADGEN_INSTALLATION_VERSION="0.8.0-dev.1")
-        new = self.ours(CADGEN_INSTALLATION_VERSION="0.8.0-dev.2")
-        self.assertNotEqual(old, new)
-        self.assertEqual(old, self.ours(CADGEN_INSTALLATION_VERSION="0.8.0-dev.1"))
-        before = self.launch(CADGEN_INSTALLATION_VERSION="0.8.0-dev.1", CADGEN_ENGINE_PORT=str(free_port()))
-        self.answering(old)
-        done = self.started(CADGEN_INSTALLATION_VERSION="0.8.0-dev.2", CADGEN_ENGINE_PORT=str(free_port()))
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotEqual(json.loads(done.stdout)["pid"], before["pid"])
-        self.assertIn(f"cadgen: retired cadgen 0.8.0-dev.1's idle engine (pid {before['pid']}) for this newer "
-                      "installation", done.stderr.splitlines())
-        self.answering(new)
-
-    def test_an_older_installation_never_retires_a_newer_engine_it_rolls_from_it(self) -> None:
-        _python, theirs, door = self.other(CADGEN_INSTALLATION_VERSION="0.9.0-dev.20261025")
-        server, where = self.bound(theirs["port"], CADGEN_INSTALLATION_VERSION="0.8.0-dev.20261024")
-        self.assertGreater(server.port, theirs["port"])
-        self.assertEqual(where["notice"], f"{theirs['port']} is held by cadgen 0.9.0-dev.20261025's engine (pid "
-                                          f"{theirs['pid']}); this installation serves on {server.port} and keeps it")
-        server.socket.close()
-        done = self.started(CADGEN_INSTALLATION_VERSION="0.8.0", CADGEN_ENGINE_PORT=str(theirs["port"]))
-        self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertEqual(done.stderr.strip().splitlines()[-1],
-                         f"CAD Viewer: port {theirs['port']} is held by cadgen 0.9.0-dev.20261025's engine (pid "
-                         f"{theirs['pid']}), a newer installation's, which this one never retires: use that version, "
-                         "or start cadgen with another CADGEN_ENGINE_PORT")
-        self.answering(door)
-
-    def test_an_older_engine_in_use_is_left_and_the_newer_rolls_from_it_with_its_notice(self) -> None:
-        _python, theirs, door = self.other(CADGEN_INSTALLATION_VERSION="0.8.0")
-        self.held(door)
-        server, where = self.bound(theirs["port"], CADGEN_INSTALLATION_VERSION="0.9.0")
-        self.assertGreater(server.port, theirs["port"])
-        self.assertEqual(where["notice"], f"{theirs['port']} is held by cadgen 0.8.0's engine (pid {theirs['pid']}); "
-                                          f"this installation serves on {server.port} and keeps it")
-        self.answering(door)
-
-    def test_installations_rank_as_packaging_orders_versions(self) -> None:
-        from cadgen.engine import daemon, previous
-
-        ordered = ["0.7.26", "0.8.0-dev.20261024", "0.8.0-dev.20261025", "0.8.0a1", "0.8.0rc1", "0.8.0",
-                   "0.8.0+local.1", "0.8.0.post1", "0.8.1-dev.1", "0.9.0", "0.10.0"]
-        self.assertEqual(sorted(reversed(ordered), key=daemon.rank), ordered)
-        self.assertEqual(daemon.rank("0.8"), daemon.rank("0.8.0"))
-        self.assertIsNone(daemon.rank("0.8.0-dev.x"))
-        try:
-            from packaging.version import Version
-        except ImportError:
-            pass
-        else:
-            self.assertEqual(sorted(reversed(ordered), key=Version), ordered)
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALLATION_VERSION": "0.9.0"}):
-            self.assertEqual(daemon._standing({"installation": "0.9.0-dev.1"}), -1, "a release above its builds")
-            self.assertEqual(daemon._standing({"installation": "0.9.0", "version": "0.9.0"}), 0)
-            self.assertEqual(daemon._standing({"installation": "1.0.0-dev.1"}), 1)
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALLATION_VERSION": "0.8.0-dev.1"}):
-            # An engine that says no installation was built before engines said it: older than any
-            # that does, though its release (0.8.0) outranks this development build.
-            self.assertEqual(daemon._standing({"version": "0.8.0"}), -1)
-            self.assertEqual(daemon._standing({"version": "9.9.9"}), -1)
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALLATION_VERSION": "mine"}):
-            # A version it cannot parse: older only when its door answers with a lower release.
-            self.assertEqual(daemon._standing({"installation": "theirs", "version": "0.0.1"}), -1)
-            self.assertIsNone(daemon._standing({"installation": "theirs", "version": previous.version()}))
+        found = installations.targets()
+        if found is None:
+            self.skipTest("this interpreter has no console script to register")
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": self.env["CADGEN_STATE_DIR"]}):
+            installations.register("1.0.0", found)
+            installations.point("1.0.0")
+        theirs = other_installation(self.root)  # another release's client, its environment its own
+        first = self.launch(CADGEN_ENGINE_PORT=str(free_port()))
+        attached = self.launch(theirs)
+        self.assertEqual(attached["pid"], first["pid"], "it attaches to the engine running")
+        self.stop()
+        started = self.launch(theirs)
+        self.assertNotEqual(started["pid"], first["pid"])
+        status = json.loads(self.cli("status", "--json", python=theirs).stdout)
+        self.assertEqual(os.path.realpath(status["prefix"]), os.path.realpath(found[2]),
+                         "it starts the current installation's engine, never its own")
+        self.answering(self.ours())
 
     def test_a_named_port_wins_and_rotate_token_replaces_the_token(self) -> None:
         named = free_port()

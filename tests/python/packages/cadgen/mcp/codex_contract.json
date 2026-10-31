@@ -173,7 +173,7 @@
   },
   "mimeType": "text/html;profile=mcp-app",
   "text": "<!doctype html><head><title>CAD</title></head>",
-  "uri": "ui://cad/<build>/app.html"
+  "uri": "ui://cad/<release>/<build>/app.html"
  },
  "resources": [
   {
@@ -198,7 +198,7 @@
    "mimeType": "text/html;profile=mcp-app",
    "name": "CAD",
    "title": "CAD",
-   "uri": "ui://cad/<build>/app.html"
+   "uri": "ui://cad/<release>/<build>/app.html"
   }
  ],
  "tools": [
@@ -214,7 +214,7 @@
      "preferredModelDisplayMode": "fullscreen"
     },
     "ui": {
-     "resourceUri": "ui://cad/<build>/app.html",
+     "resourceUri": "ui://cad/<release>/<build>/app.html",
      "visibility": [
       "app"
      ]
@@ -254,7 +254,7 @@
      ]
     },
     "ui": {
-     "resourceUri": "ui://cad/<build>/app.html",
+     "resourceUri": "ui://cad/<release>/<build>/app.html",
      "visibility": [
       "app"
      ]
@@ -306,7 +306,7 @@
      ]
     },
     "ui": {
-     "resourceUri": "ui://cad/<build>/app.html",
+     "resourceUri": "ui://cad/<release>/<build>/app.html",
      "visibility": [
       "app"
      ]
@@ -361,7 +361,7 @@
      "preferredModelDisplayMode": "fullscreen"
     },
     "ui": {
-     "resourceUri": "ui://cad/<build>/app.html"
+     "resourceUri": "ui://cad/<release>/<build>/app.html"
     }
    },
    "annotations": {

@@ -1,26 +1,33 @@
-"""The installations of cadgen this user has, and the one ``cadgen`` command that runs them.
+"""The installations of cadgen this user has, the one of them that is ``current``, and the one
+``cadgen`` command that runs it.
 
 A skill runs cadgen in the agent's shell, and that shell is often a sandbox that lets a command
 read and execute anything but write only to its working folder and the temporary folder. ``uvx``
 cannot start in one: uv writes its cache before it does anything else. The environment uv built
-starts fine there. So each installation registers itself, and one command runs whichever the
-caller names:
+starts fine there. So an installation registers itself, and one command runs the current one:
 
 - ``<state>/installations/<version>.json``, the installation's record: ``version``, the absolute
   paths of its ``python`` and its ``cadgen`` console script, its environment (``prefix``) and when
   it registered (``registered``). The state folder's ``Folder`` (``cadgen.engine.registry``) writes
   it, as it writes everything there.
+- ``<state>/installations/current``, the version of the installation that is the device's: its
+  engine is the one every client starts or attaches to (``cadgen.engine.client``), whatever its own
+  release, and the ``cadgen`` command runs it. ``cadgen setup`` (and so ``cadgen update`` and the
+  install command run again) points it at the release it sets up, through the switch
+  (``cadgen._internal.switch``); a client that finds none -- no installation before it -- points it
+  at itself once (``bootstrap``).
 - ``~/.local/bin/cadgen`` (``CADGEN_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
-  script that runs the installation registered last with ``-m cadgen._internal.proxy``, which picks
-  the installation the command names (``cadgen +0.8.0 ...``) or the one running, and runs its
-  ``cadgen`` or, for ``cadgen run``, its ``python``. Every version writes the same file
-  (``REVISION``), so the proxy is no installation's. On Windows it is ``cadgen.cmd``, the same logic.
+  script that runs the current installation's interpreter with ``-m cadgen._internal.proxy`` (with
+  no current one, the one registered last), which runs that installation's ``cadgen``. Every version
+  writes the same file (``REVISION``), so the proxy is no installation's. On Windows it is
+  ``cadgen.cmd``, the same logic.
 
-Both are written at install moments only, in two places: the CAD app's server (``cadgen mcp``) as it
-starts (:func:`startup`), which the host does outside any sandbox at the moment it installs or
-updates the plugin, and ``cadgen doctor``, the skills' one-time step, which says what it found. A
-folder either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``.
-No other command writes either. A file named ``cadgen`` there that is not the proxy (``uv tool
+The records and the proxy are written at install moments only: ``cadgen setup`` (the release it
+sets up), ``cadgen doctor``, the skills' one-time step, which says what it found, and the CAD app's
+server (``cadgen mcp``) as it starts (:func:`startup`), which the host does outside any sandbox:
+that one writes the proxy, and registers itself only where no installation is current. A folder
+either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``. No
+other command writes either. A file named ``cadgen`` there that is not the proxy (``uv tool
 install``'s link) is left alone, and said. ``cadgen doctor --prune`` removes the records whose
 interpreter is gone.
 
@@ -45,7 +52,9 @@ WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
 MARK = "cadgen proxy: "
-REVISION = 4
+REVISION = 5
+# The file that names the current installation's version, in the state folder.
+CURRENT = f"{FOLDER}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # A release's version, as a wheel reports it of itself (``cadgen.__version__``). Any other version a
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
@@ -319,16 +328,75 @@ def forget(version: str, folder=None) -> None:
     _forget_read()
 
 
+# --- current ----------------------------------------------------------------------------------
+
+
+def current_version(folder=None) -> str | None:
+    """The version ``current`` names, whether or not its installation is there, or None."""
+    data = (folder or state()).read(CURRENT)
+    named = data.decode("utf-8", "replace").strip() if data is not None else ""
+    return named if VERSION.fullmatch(named) else None
+
+
+def current(folder=None) -> dict | None:
+    """The current installation's record, while its interpreter and console script are there
+    (``alive``): the one every client's engine is (``cadgen.engine.client``). None with none current,
+    or one that is gone (its folder removed, uv's cache cleaned): a client then points ``current`` at
+    itself (``bootstrap``)."""
+    folder = folder or state()
+    version = current_version(folder)
+    if version is None:
+        return None
+    record = _parse(folder.read(_inside(version)))
+    if record is None or record["version"] != version or not alive(record):
+        return None
+    return {**record, "path": str(folder.path(_inside(version)))}
+
+
+def point(version: str, folder=None) -> None:
+    """``current`` pointed at ``version`` (registered), replaced whole: a reader sees the one before or this
+    one. The file is the version alone, no line end: ``cmd``'s ``set /p`` reads it as it is."""
+    folder = folder or state()
+    _inside(version)  # a version, or ValueError
+    folder.write(CURRENT, version.encode("utf-8"))
+
+
+def mine(record: dict | None) -> bool:
+    """Whether ``record`` names this process's own installation (its environment, as it registers it)."""
+    if record is None:
+        return False
+    found = targets()
+    return _same_place(record["prefix"], found[2] if found is not None else sys.prefix)
+
+
+def bootstrap(version: str, folder=None) -> bool:
+    """``current`` pointed at ``version`` (this installation, registered) when no live installation is
+    current: the first client on a device makes its own installation the device's, once. Whether it did."""
+    folder = folder or state()
+    if current(folder) is not None:
+        return False
+    point(version, folder)
+    return True
+
+
 # --- the proxy --------------------------------------------------------------------------------
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cadgen command: runs the installation of cadgen that `+<version>`, CADGEN_VERSION or
-# a running engine names (cadgen._internal.proxy), through the one registered last.
-# Every cadgen writes this same file as it registers (cadgen doctor, the CAD app's server).
+# The cadgen command: runs the current installation of cadgen (cadgen._internal.proxy), else
+# the one registered last. Every cadgen writes this same file (cadgen setup, cadgen doctor, the
+# CAD app's server).
 if [ -n "$CADGEN_STATE_DIR" ]; then state=$CADGEN_STATE_DIR
 elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cadgen"
 else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cadgen"
+fi
+current=$(sed -n '1p' "$state/installations/current" 2>/dev/null)
+case $current in ''|*[!0-9A-Za-z.+_-]*) current= ;; esac
+if [ -n "$current" ]; then
+  record="$state/installations/$current.json"
+  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
+  console=$(sed -n 's/^ *"cadgen": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
+  [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cadgen._internal.proxy "$@"
 fi
 for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2>/dev/null); do
   record="$state/installations/$name"
@@ -345,10 +413,23 @@ exit 1
 
 _CMD = """@echo off\r
 rem {mark}{revision}\r
-rem The cadgen command: runs the installation of cadgen that +<version>, CADGEN_VERSION or\r
-rem a running engine names (cadgen._internal.proxy), through the one registered last.\r
+rem The cadgen command: runs the current installation of cadgen (cadgen._internal.proxy), else\r
+rem the one registered last.\r
 setlocal EnableDelayedExpansion\r
 if defined CADGEN_STATE_DIR (set "state=!CADGEN_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cadgen-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cadgen-state")\r
+set "current="\r
+if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
+if defined current if exist "!state!\\installations\\!current!.json" (\r
+  set "python="\r
+  set "console="\r
+  for /f usebackq^ tokens^=4^ delims^=^\" %%p in (`findstr /c:"\\"python\\":" "!state!\\installations\\!current!.json"`) do set "python=%%p"\r
+  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cadgen\\":" "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
+  if defined python if defined console (\r
+    set "python=!python:\\\\=\\!"\r
+    set "console=!console:\\\\=\\!"\r
+    if exist "!python!" if exist "!console!" goto run\r
+  )\r
+)\r
 rem A record's python and cadgen lines are: space "KEY": "PATH", -- split at each quote, PATH is the\r
 rem fourth piece. Alive as alive() says it: its python and its console script (an uninstalled cadgen\r
 rem leaves the python), else the next record.\r
@@ -438,11 +519,17 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
     return path, status, None
 
 
-def setup(version: str) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None]]:
-    """Register this installation as ``version`` and write the proxy: each ``(path, status, error)``."""
+def setup(version: str, *, make_current: bool = False) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None]]:
+    """Register this installation as ``version`` and write the proxy: each ``(path, status, error)``.
+    With ``make_current`` (a development install), it is pointed at as ``current``; else only when no
+    live installation is (``bootstrap``)."""
     try:
         path, status = register(version)
         registered: tuple[str, str, str | None] = (path, status, None)
+        if make_current:
+            point(version)
+        else:
+            bootstrap(version)
     except (OSError, ValueError) as failure:
         try:
             where = str(state().path(_inside(version)))
@@ -453,8 +540,14 @@ def setup(version: str) -> tuple[tuple[str, str, str | None], tuple[str, str, st
 
 
 def startup() -> None:
-    """As the CAD app's server starts: register this installation and write the proxy, silently."""
+    """As the CAD app's server starts, silently: the proxy written, and where no installation is current
+    (the device's first), this one registered and made current (``bootstrap``). Where one is, this server
+    attaches to its engine (``cadgen.engine.client``) and registers nothing: an app that moved its plugin
+    to another release moves no device's engine."""
     try:
+        if current() is not None:
+            write_proxy()
+            return
         version = own_version()
         if version:
             setup(version)

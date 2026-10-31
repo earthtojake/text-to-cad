@@ -1,4 +1,4 @@
-"""Whether a newer text-to-cad is out, and what to tell the person.
+"""Whether a newer text-to-cad is out, which the update button says, and which release an update moves to.
 
 At most once a day, cadgen reads the version feed (``GET /versions``, ``cadgen/_internal/api.py``)::
 
@@ -7,33 +7,30 @@ At most once a day, cadgen reads the version feed (``GET /versions``, ``cadgen/_
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CADGEN_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
 set) or for a copy that is not told. The feed as last read is kept in the state directory
-(``versions.json``), where every process of the person's reads it.
+(``versions.json``), where every process of the person's reads it. It only says a release is out:
+nothing is fetched and nothing switches until the person asks -- the update button in the CAD Viewer
+and the CAD app (``cadgen._internal.update``), ``cadgen update``, or the install command run again.
+
+A release is also known with no network at all: an agent app whose plugin moved ahead runs the newer
+release's CAD server, which says its release as it connects (``see``), and that proves the release
+exists. The newer of the two is offered.
 
 Only a copy nothing else updates is told (``told``: ``cadgen/_internal/channel.py``): a plugin the
 person installed and updates by hand, and a process no plugin started, such as the CAD Viewer of a
 skills-only install. A plugin that something else keeps up to date -- a store, once a release
-passes its review, or the app that installed it -- says so in its startup config
+passes its review -- says so in its startup config
 (``CADGEN_AUTO_UPDATED=1``) and is never told; nor is a development install.
 
-The notice is the same wherever it shows: ``A new version v0.9.0 of text-to-cad is available
-(currently on v0.8.1)``, and a prompt for the person's agent worded like the install message,
-``Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad``: the agent takes
-the steps for its own app from there. The agent does the update; nothing here does. The CAD app's
-blue update button, first in its navbar and on its home, opens a card that sends that prompt to the
-chat where the host takes messages, and copies it elsewhere; the CAD Viewer's copies it. The card also
-links to manual installation (``INSTRUCTIONS``, the README's Quickstart), should the agent not
-manage. The button stays while the install is behind: nothing the person does with it is kept. A
-text-only app gets the same as one line (``line``) with its first ``cad_show`` result. A skill's
-``cadgen`` command says nothing: it cannot tell which plugin, if any, it came with.
-
-The install command (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's) installs or
-updates text-to-cad in every agent app on the computer (``cadgen setup``); ``cadgen setup`` names it
-when a step fails.
+The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update button, an icon and
+nothing else, while this install is behind; a click updates (``POST /__cad/update``). A text-only app
+gets one line (``line``) with its first ``cad_show`` result: the release, and the install command
+(``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's), which updates text-to-cad in
+every agent app on the computer (``cadgen setup``). A skill's ``cadgen`` command says nothing.
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
-the background (``refresh``), so no start, request or tool call waits on it -- what is told comes
-from the feed as last read. Each day's attempt is spent before it is made, so a feed that cannot be
-reached is tried once a day.
+the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
+or tool call waits on it -- what is told comes from the feed as last read. Each day's attempt is
+spent before it is made, so a feed that cannot be reached is tried once a day.
 """
 
 from __future__ import annotations
@@ -53,16 +50,17 @@ from cadgen._internal.channel import told
 
 LOG = logging.getLogger("cadgen.updates")
 
-REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
 INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
 INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
-INSTRUCTIONS = f"{REPOSITORY}#-quickstart"  # manual installation: the README's Quickstart (GitHub's anchor for "🚀 Quickstart")
 FILE = "versions.json"  # the feed as last read, in the state directory
 CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
 _RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _OFF = ("0", "off", "false", "no")
+# The releases agent apps' CAD servers said they run as they connected to this process's engine (``see``).
+_seen: set[str] = set()
+_seen_lock = threading.Lock()
 
 
 def _release(value: Any) -> tuple[int, ...] | None:
@@ -132,14 +130,15 @@ def _get(url: str) -> Any:
         return None
 
 
-def feed(*, fetch: bool = True, now: float | None = None, path: Path | None = None,
+def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, path: Path | None = None,
          get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
-    """The feed as last read, read again first (``fetch``) when that was a day ago or more."""
+    """The feed as last read, read again first (``fetch``) when that was a day ago or more -- or now,
+    ``force``: an update a person asked for."""
     path = path or _cache()
     kept = _load(path)
     known = parse_feed(kept.get("feed"))
     now = time.time() if now is None else now
-    if fetch and checking() and _due(kept, "checked", now):
+    if fetch and checking() and (force or _due(kept, "checked", now)):
         # The day's attempt is spent before it is made: a process that exits mid-request, or a feed
         # that never answers, costs one wait a day.
         _save(path, now, known)
@@ -150,6 +149,39 @@ def feed(*, fetch: bool = True, now: float | None = None, path: Path | None = No
     return known
 
 
+def see(release: Any) -> None:
+    """A release an agent app's CAD server runs, as it said when it connected: one newer than this
+    install proves a release exists, and the update button shows it, with no network."""
+    if _release(release) is not None:
+        with _seen_lock:
+            _seen.add(release)
+
+
+def _newest(candidates: list[Any], version: str) -> str | None:
+    """The newest of ``candidates`` that is newer than ``version``, or None."""
+    current = _release(version)
+    found = [(_release(value), value) for value in candidates if _release(value) is not None]
+    newer = [(parsed, value) for parsed, value in found if current is not None and parsed > current]
+    return max(newer)[1] if newer else None
+
+
+def newest(*, fetch: bool = True) -> str | None:
+    """The release an update moves to: the newest of the feed's -- read now (``fetch``, a person
+    asked) where checking is on -- and those agent apps' servers run (``see``), when it is newer than
+    this install's; else None."""
+    from cadgen import __version__
+
+    try:
+        found = feed(fetch=fetch, force=True)
+    except Exception:  # noqa: BLE001 - an update that cannot read the feed goes by what it knows
+        found = None
+    with _seen_lock:
+        candidates: list[Any] = [*_seen]
+    if found is not None and checking():
+        candidates.append(found["latest"])
+    return _newest(candidates, __version__)
+
+
 def command(system: str | None = None) -> str:
     """The install command for this computer (or for ``system``, an ``os.name``), which updates
     text-to-cad when run again (``cadgen setup``, ``cadgen.cli.setup``)."""
@@ -157,39 +189,41 @@ def command(system: str | None = None) -> str:
 
 
 def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
-    """The release to offer an install of ``version`` that is ``told`` or not, if any (see the module docstring)."""
+    """The release to offer an install of ``version`` that is ``told`` or not, if any (see the module)."""
     if found is None or not told:
         return None
-    current, latest = _release(version), _release(found["latest"])
-    if current is None or latest is None or current >= latest:
-        return None
-    return found["latest"]
+    return _newest([found["latest"]], version)
 
 
 def notice(*, path: Path | None = None) -> dict[str, str] | None:
-    """``{latest, version, text, prompt, instructions}``: what to tell the person, from the feed as
-    last read (never read here: ``refresh``), or ``None`` when there is nothing to say, or no checking."""
+    """``{latest, version}``: the newer release the update button offers, from the feed as last read
+    (never read here: ``refresh``) and the releases agent apps' servers run (``see``), or ``None`` when
+    there is none, or this copy is not told."""
     try:
-        if not checking():
+        if not told():
             return None
         from cadgen import __version__
 
-        latest = offer(feed(fetch=False, path=path), __version__, told())
+        with _seen_lock:
+            candidates: list[Any] = [*_seen]
+        if checking():
+            known = feed(fetch=False, path=path)
+            if known is not None:
+                candidates.append(known["latest"])
+        latest = _newest(candidates, __version__)
         if latest is None:
             return None
-        return {"latest": latest, "version": __version__,
-                "text": f"A new version v{latest} of text-to-cad is available (currently on v{__version__})",
-                "prompt": f"Update text-to-cad to {latest} from {REPOSITORY}", "instructions": INSTRUCTIONS}
+        return {"latest": latest, "version": __version__}
     except Exception:  # noqa: BLE001 - a notice never fails what shows it
         LOG.debug("the version check failed", exc_info=True)
         return None
 
 
-def line(found: dict[str, str]) -> str:
-    """The notice as one line of text, for an agent to pass on: the card's words, its prompt and its
-    link in place of its buttons."""
-    return (f'{found["text"]}. Ask your agent to update to the latest version ("{found["prompt"]}"), '
-            f'or install manually ({found["instructions"]}).')
+def line(found: dict[str, str], system: str | None = None) -> str:
+    """The notice as one line of text, for a text-only app's agent to pass on: the release, and the
+    install command that updates to it."""
+    return (f"text-to-cad {found['latest']} is out (this is {found['version']}); to update every agent app "
+            f"here, run: {command(system)}")
 
 
 def _quietly() -> None:
@@ -211,4 +245,3 @@ def refresh() -> threading.Thread | None:
     except Exception:  # noqa: BLE001 - a check that cannot start is tried at the next one
         LOG.debug("the version check could not start", exc_info=True)
         return None
-

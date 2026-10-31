@@ -95,7 +95,7 @@ class _Session(unittest.TestCase):
         self.loose = str(self.tmp / "elsewhere" / "loose.stl")
         page = self.tmp / "app"
         page.mkdir()
-        (page / "index.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
+        (page / "shell.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
         # What is opened in a browser, recorded and never opened: through the redirect file
         # (``browser_open``) in this test's own engine folder, on a machine with a display. A text
         # host's page is opened by the stdio peer (``call`` delivers each result as it does), the
@@ -279,18 +279,21 @@ class TabServerTest(_Session):
         # All but the page's requests (its library, settings and telemetry answer among them) and the files the agent writes read.
         self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_http", "cad_export", "cad_snapshot"])
         uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
-        self.assertRegex(uri, r"^ui://cad/[0-9a-f]{16}/app\.html$")
+        self.assertRegex(uri, r"^ui://cad/[0-9A-Za-z.+_-]+/[0-9a-f]{16}/app\.html$")
         self.assertEqual(tools["cad_open"]["_meta"]["ui"]["resourceUri"], uri)
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
     def test_the_page_reads_whether_a_newer_release_is_out_and_nothing_is_kept(self) -> None:
+        import cadgen
+
         offer_an_update(self)
         for _ in range(2):  # the update button stays while this install is behind
-            notice = self.http("GET", "/__cad/version")[1]["notice"]
-            self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad")
+            read = self.http("GET", "/__cad/version")[1]
+            self.assertEqual((read["notice"], read["release"], read["update"]["state"]),
+                             ({"latest": "99.0.0", "version": cadgen.__version__}, cadgen.__version__, "idle"))
         # A launch carries it, as the server last read it, so the button draws with the page.
-        self.assertEqual(self.launch("cad_home")["notice"], notice)
+        self.assertEqual(self.launch("cad_home")["notice"], read["notice"])
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"source": self.bracket})
@@ -1028,8 +1031,9 @@ class TextServerTest(_Session):
     def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
         offer_an_update(self)
         first = self.call("cad_show", {"source": self.bracket})["content"]
-        self.assertIn('Ask your agent to update to the latest version ("Update text-to-cad to 99.0.0 from '
-                      'https://github.com/earthtojake/text-to-cad"), or install manually', first[-1]["text"])
+        self.assertRegex(first[-1]["text"], r"^text-to-cad 99\.0\.0 is out \(this is .+\); to update every agent "
+                                            r"app here, run: (curl -fsSL https://texttocad\.dev/install\.sh \| sh|"
+                                            r"irm https://www\.texttocad\.dev/install\.ps1 \| iex)$")
         self.assertEqual(len(self.call("cad_show", {"source": self.bracket})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
@@ -1174,7 +1178,7 @@ class ToolArgumentsTest(unittest.TestCase):
         client, offered = CATALOGS[catalog]
         page = self.tmp / "app"
         page.mkdir(exist_ok=True)
-        (page / "index.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
+        (page / "shell.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
         server = Server(page=AppPage(page), recents=RecentStore(self.tmp / "state"))
         server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered,
                                                        "clientInfo": client}, None), None)

@@ -13,7 +13,8 @@ find every app, every copy of the plugin and every app's own commands the same w
 - **Codex**: the same catalog through its own ``plugin`` command; the app bundles a CLI of its own.
 - **Cursor**: a clone of the ``latest`` branch in its local plugins folder.
 - **Grok Build**: ``grok plugin``, from the repository's ``latest``.
-- **Gemini CLI**: its extension, installed from the repository at ``latest`` and auto-updated.
+- **Gemini CLI**: its extension, installed from the repository at ``latest``, never auto-updated:
+  an update is the person's (``cadgen update``, the install command, the update button).
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
 alone, copied into that agent's own skills folder by one ``npx skills add`` for all of them
@@ -1127,9 +1128,9 @@ def _plan_gemini(app: App, release: str, machine: Machine, **_: Any) -> List[Ste
                                         + ("up to date" if status == "current" else f"newer than {release}, left alone"))]
         return steps + [Step(app.id, "update", f"the {PLUGIN} extension {ours.version or '?'} -> {release}",
                              [[app.command, "extensions", "update", PLUGIN]])]
-    return steps + [Step(app.id, "install", f"the {PLUGIN} extension from {REPOSITORY_URL} at {BRANCH}, auto-updated",
-                         [[app.command, "extensions", "install", REPOSITORY_URL, "--ref", BRANCH, "--consent",
-                           "--auto-update"]])]
+    # Never auto-updated: no update arrives but the one the person asks for (``cadgen update``).
+    return steps + [Step(app.id, "install", f"the {PLUGIN} extension from {REPOSITORY_URL} at {BRANCH}",
+                         [[app.command, "extensions", "install", REPOSITORY_URL, "--ref", BRANCH, "--consent"]])]
 
 
 def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:

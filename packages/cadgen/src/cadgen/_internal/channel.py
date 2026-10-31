@@ -2,7 +2,7 @@
 
 Each plugin says both in its CAD server's startup config, as the server's environment:
 ``CADGEN_INSTALL_CHANNEL=<id>``, plus ``CADGEN_AUTO_UPDATED=1`` when something other than the person
-keeps that copy up to date (the store that reviewed it, or the app that installed it). The build
+keeps that copy up to date (the store that reviewed it). The build
 that makes the plugin writes them; nothing works them out from folders, ids or a host's
 internals. The CAD Viewer the server starts inherits them. They are environment, not flags,
 because a plugin's config pins a release of cadgen that may predate a setting: a cadgen ignores an

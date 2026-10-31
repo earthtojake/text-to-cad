@@ -34,7 +34,7 @@ SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start
 
 def _connect(address: Path | None = None) -> Connection | None:
     """A connection to the daemon at ``address`` (its door, on Windows its port file; by default
-    this protocol's), or None when none answers there. ``ConnectionError`` when the system refuses
+    the engine's), or None when none answers there. ``ConnectionError`` when the system refuses
     this process the engine's folder (a sandbox that forbids writing there)."""
     try:
         if _daemon.WINDOWS:
@@ -138,22 +138,35 @@ def environment() -> dict[str, str]:
 
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process, whose ``pid`` says whether the daemon that answers
-    is the one this process started (``_told_started``). It runs the installation's Python: this
-    process's, or, in the base the installation made (``daemon.HOME``), the installation's. The
-    engine's folder goes first on its ``PYTHONPATH`` only where that Python's environment would not
-    find it -- a source tree --, so no process the daemon starts in the base inherits it."""
+    is the one this process started (``_told_started``). It is the current installation's engine
+    (``daemon.ENGINE``, read now), started with that installation's Python whatever release this client
+    is -- a client of another release is handed nothing of its own import path --; with none current,
+    the installation's own: this process's, or, in the base the installation made (``daemon.HOME``),
+    the installation's, the engine's folder first on its ``PYTHONPATH`` only where that Python's
+    environment would not find it -- a source tree --, so no process the daemon starts in the base
+    inherits it."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
+    found = _daemon.ENGINE() if _daemon.ENGINE is not None else None
     home = _daemon.HOME
-    python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
-                            else (sys.executable, _daemon.engine_root(), sys.prefix))
-    path = env.get("PYTHONPATH", "")
-    inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
-    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
-        env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
+    if found is not None:
+        python = found["python"]
+        if not _same(found["prefix"], home["prefix"] if home else sys.prefix):
+            env.pop("PYTHONPATH", None)  # another installation's engine imports its own cadgen
+    else:
+        python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
+                                else (sys.executable, _daemon.engine_root(), sys.prefix))
+        path = env.get("PYTHONPATH", "")
+        inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
+        if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
+            env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     _daemon.bytecode(env)
     return subprocess.Popen([python, "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=_working_folder(),
                             **_daemon.detached())
+
+
+def _same(one: str, other: str) -> bool:
+    return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
 
 
 def _working_folder() -> str | None:
@@ -223,8 +236,8 @@ def _told_started(mine: list[subprocess.Popen]) -> None:
 
 
 def wait_gone(timeout: float = 60.0, endpoint: _daemon.Endpoint | None = None) -> bool:
-    """Wait until the daemon (by default this protocol's) is gone: its door no longer answers
-    and its lock, held until its workers have stopped, is free."""
+    """Wait until the daemon is gone: its door no longer answers and its lock, held until its workers
+    have stopped, is free."""
     deadline = time.monotonic() + timeout
     lock = endpoint.lock if endpoint else _daemon.lock_path()
     while time.monotonic() < deadline:
@@ -306,11 +319,11 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
 
 
 def sweep(*, stop: bool) -> dict[str, list[str]]:
-    """Every daemon of this installation, whatever protocol it speaks (``daemon.endpoints``): with
-    ``stop``, each live one stopped and waited for until gone (``stopped``, its door or port file);
-    a live one left running listed in ``running``. The door and lock files of a dead one -- nothing
-    answers there and nobody holds its lock -- are removed (``removed``). A daemon starting or
-    stopping holds its lock before it listens and until it has left, so its files are never taken."""
+    """The engine of this engine folder (``daemon.endpoints``): with ``stop``, stopped if it lives and
+    waited for until gone (``stopped``, its door or port file); a live one left running listed in
+    ``running``. The door and lock files of a dead one -- nothing answers there and nobody holds its
+    lock -- are removed (``removed``). A daemon starting or stopping holds its lock before it listens
+    and until it has left, so its files are never taken."""
     found: dict[str, list[str]] = {"stopped": [], "running": [], "removed": []}
     for endpoint in _daemon.endpoints():
         if _answering(endpoint.address):

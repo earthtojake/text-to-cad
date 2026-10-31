@@ -32,7 +32,7 @@ def stages() -> dict[str, dict[str, str]]:
 class TheVocabularyIsOneInEveryLanguage(unittest.TestCase):
     def test_every_stage_of_every_kind_has_its_key_in_every_locale_and_no_key_is_dead(self) -> None:
         vocabulary = stages()
-        self.assertEqual(list(vocabulary), ["build", "import", "export", "snapshot", "inspect-measure"])
+        self.assertEqual(list(vocabulary), ["build", "import", "export", "snapshot", "inspect-measure", "update"])
         wanted = {f"progress.{kind}.{stage}" for kind, found in vocabulary.items() for stage in found}
         locales = sorted(LOCALES.glob("*.js"))
         self.assertEqual([path.name for path in locales], ["en.js", "ja.js", "ko.js", "zh-CN.js", "zh-TW.js"])

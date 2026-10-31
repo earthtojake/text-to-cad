@@ -1,12 +1,12 @@
-"""``cadgen setup`` and ``cadgen update`` (``cadgen.cli.setup``), ``cadgen uninstall``
-(``cadgen.cli.uninstall``), and the one-line installer's scripts that run them
+"""``cadgen setup`` (``cadgen.cli.setup``), ``cadgen update`` (``cadgen.cli.update``), ``cadgen
+uninstall`` (``cadgen.cli.uninstall``), and the one-line installer's scripts that run them
 (``scripts/install/install.sh``, ``install.ps1``).
 
 The verb runs against a temporary home: its state, cache and ``cadgen`` command folders inside it,
 fake app commands on a PATH of their own, Claude Desktop's config file named by
-``CLAUDE_DESKTOP_CONFIG``. The engine is never asked: what serves the port, an older installation's
-``cadgen stop`` and this one's are stood in for, as is the telemetry choice, so nothing here
-reaches the network or the developer's own engine and settings. Every run is at a terminal that
+``CLAUDE_DESKTOP_CONFIG``. The engine is never asked: what serves the port, an earlier cadgen's
+``cadgen stop``, this one's and the switch are stood in for, as is the telemetry choice, so nothing
+here reaches the network or the developer's own engine and settings. Every run is at a terminal that
 would answer no, and asks it nothing.
 """
 
@@ -34,7 +34,7 @@ add_repo_path("packages/cadgen/src")
 import cadgen  # noqa: E402
 from cadgen import analytics  # noqa: E402
 from cadgen import cli, updates  # noqa: E402
-from cadgen._internal import installations, providers  # noqa: E402
+from cadgen._internal import installations, providers, releases, switch  # noqa: E402
 from cadgen._internal.launch import LAUNCHER  # noqa: E402
 from cadgen.cli import setup, stop, telemetry, uninstall  # noqa: E402
 
@@ -130,6 +130,7 @@ class Fixture(unittest.TestCase):
                       mock.patch.object(setup, "engine_on", side_effect=lambda port: self.serving),
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
                       mock.patch.object(setup, "stop_installation", return_value=(True, "stopped")),
+                      mock.patch.object(switch, "handover", return_value=None),
                       mock.patch.object(analytics, "notify", return_value=False),
                       mock.patch.object(telemetry, "describe", return_value="off: your choice"),
                       mock.patch.object(stop, "main", return_value=0)):
@@ -188,9 +189,9 @@ class Fixture(unittest.TestCase):
 
 
 class TheCommand(Fixture):
-    def test_setup_and_update_are_one_command_and_uninstall_a_verb_of_its_own(self) -> None:
+    def test_setup_update_and_uninstall_are_verbs_of_their_own(self) -> None:
         self.assertEqual(cli._COMMANDS["setup"][0], "cadgen.cli.setup")
-        self.assertEqual(cli._COMMANDS["update"][0], "cadgen.cli.setup")
+        self.assertEqual(cli._COMMANDS["update"][0], "cadgen.cli.update")
         self.assertEqual(cli._COMMANDS["uninstall"][0], "cadgen.cli.uninstall")
         self.assertNotIn("install", cli._COMMANDS)
         self.assertLessEqual({"setup", "update", "uninstall"}, cli._UNTOLD)
@@ -347,12 +348,70 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("port 3300 is held by node (pid 77): stop it, or set another CADGEN_ENGINE_PORT", out)
         setup.stop_installation.assert_not_called()
 
-    def test_a_newer_release_s_engine_is_left_alone(self) -> None:
-        self.serving = {"ok": True, "pid": 9, "version": "99.0.0", "installation": "99.0.0", "prefix": "/newer",
-                        "holders": 0, "watched": 0, "active": False, "busy": 0, "serving": {"port": PORT}}
+    def test_the_device_s_engine_is_switched_and_an_earlier_cadgen_s_stopped_whatever_their_versions(self) -> None:
+        """Nothing compares versions: the device's engine (its door the engine's own name) moves to this
+        release at the switch, and another cadgen's engine on the port is an earlier cadgen's to stop."""
+        idle = {"ok": True, "pid": 9, "version": "99.0.0", "installation": "99.0.0", "prefix": "/newer",
+                "holders": 0, "watched": 0, "active": False, "busy": 0, "serving": {"port": PORT}}
+        self.serving = {**idle, "device": True}
         code, out, _err = self.run_setup("--dry-run")
         self.assertEqual(code, 0, out)
-        self.assertIn(f"cadgen 99.0.0's engine (pid 9) on port {PORT}: newer than {RELEASE}, left alone", out)
+        self.assertRegex(out, rf"engine +switch +cadgen 99\.0\.0's engine \(pid 9\) on port {PORT}: drains, then "
+                              rf"cadgen {re.escape(RELEASE)}'s takes its place")
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            self.serving = {**self.older_installation("99.0.0"), "device": False}
+            code, out, _err = self.run_setup("--dry-run")
+        self.assertRegex(out, rf"engine +stop +cadgen 99\.0\.0's engine \(pid 4242\) on port {PORT}, idle: stopped by "
+                              r"its own `cadgen stop`")
+
+    def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
+        self.desktop_with({})
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": 412}
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            switch.handover.assert_called_once_with(RELEASE, told=mock.ANY)
+            self.assertIn(f"engine   cadgen {RELEASE} is the current installation (412 ms without an engine)", out)
+            self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
+                            "the apps first, then the switch")
+            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": False, "error": "no hello",
+                                            "restored": True}
+            code, out, _err = self.run_setup()
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"engine   the switch to cadgen {RELEASE} failed: no hello; the release before runs again", out)
+
+    def test_a_release_sets_itself_up_from_its_own_folder(self) -> None:
+        """Run from uvx's environment (the install command), a release makes its folder in the state
+        folder and runs the same command from there; a dry run only plans it."""
+        made = {"cadgen": str(self.root / "release-bin" / "cadgen")}
+        with mock.patch.object(installations, "editable", return_value=False), \
+                mock.patch.dict(os.environ, {installations.NAME_ENV: ""}), \
+                mock.patch.object(releases, "make", return_value=made) as make, \
+                mock.patch.object(setup.os, "execv", side_effect=SystemExit(0)) as execv, \
+                mock.patch("subprocess.call", return_value=0) as call:
+            code, out, _err = self.run_setup("--dry-run")
+            self.assertEqual(code, 0, out)
+            where = providers.shown(str(releases.where(RELEASE)), self.machine)
+            self.assertRegex(out, rf"\n  release\s+make\s+cadgen {re.escape(RELEASE)} in {re.escape(where)}, once\n")
+            make.assert_not_called()
+            code, out, _err = self.run_setup("--only", "claude")
+        self.assertEqual(code, 0, out)
+        make.assert_called_once_with(RELEASE, source=mock.ANY, told=mock.ANY)
+        run = [made["cadgen"], "setup", "--only", "claude"]
+        if os.name == "nt":
+            call.assert_called_once_with(run)
+        else:
+            execv.assert_called_once_with(made["cadgen"], run)
+
+    def test_the_engine_s_own_run_says_its_stages_on_stdout_and_switches_nothing(self) -> None:
+        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'install'] else 0)\n")
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            code, out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 0, err + out)  # an app's failure is said, and the engine still moves on
+        frames = [json.loads(line)["progress"] for line in out.splitlines()]
+        self.assertEqual([(frame["kind"], frame["stage"]) for frame in frames], [("update", "apps")])
+        self.assertIn("Gemini CLI: install the text-to-cad extension", err)
+        switch.handover.assert_not_called()
 
     def test_the_cad_kernel_environment_is_planned_and_made_once(self) -> None:
         from cadgen._internal import base
@@ -411,6 +470,18 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertFalse((self.state / setup.RECEIPT).exists())
         stop.main.assert_called_once_with([])
         self.cache.mkdir(parents=True, exist_ok=True)
+        # The release folders go with an uninstall, with their records and the current one.
+        folder = releases.where(RELEASE)
+        (folder / "bin").mkdir(parents=True)
+        for name in ("cadgen", "python"):
+            (folder / "bin" / name).write_text("", encoding="utf-8")
+        installations.register(RELEASE, (str(folder / "bin" / "cadgen"), str(folder / "bin" / "python"), str(folder)))
+        installations.point(RELEASE)
+        code, out, _err = self.run_uninstall()
+        self.assertEqual(code, 0, out)
+        self.assertFalse(releases.root().exists())
+        self.assertIn("releases removed", out)
+        self.assertEqual((installations.records(), installations.current_version()), ([], None))
         code, out, _err = self.run_uninstall("--purge")
         self.assertEqual(code, 0, out)
         self.assertFalse(self.state.exists())

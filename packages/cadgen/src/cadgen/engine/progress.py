@@ -1,8 +1,9 @@
 """Where a job is: one progress event for every job the engine runs, said by the engine alone.
 
 Nothing in a model says it: the engine reports what it runs, by name. A job is a build, an import
-(a STEP a page first opens), an export, a snapshot or a measurement (``inspect``'s summary, a
-volume per part), and every one says where it is in frames of one shape, the **progress event**::
+(a STEP a page first opens), an export, a snapshot, a measurement (``inspect``'s summary, a volume
+per part) or an update (a person's click of the update button), and every one says where it is in
+frames of one shape, the **progress event**::
 
     {"kind": "build", "stage": "body", "job": "hand.py::hand", "outputs": ["/abs/XBF/hand.xbf"],
      "detail": "middle", "done": 2, "total": null, "elapsedMs": 4120}
@@ -42,7 +43,10 @@ counted. An export says ``read`` while it reads a file source and ``write`` for 
 counted, the file's name its detail. A snapshot says ``scene`` while the document is served, meshed
 and its scene made, ``draw`` while the frame is drawn, and ``write`` as the picture is written. A
 measurement says ``measure``, counted as the engine has each part's facts: the ones it holds at
-once, the rest as the pool answers their batches (``serve.Server.measure``).
+once, the rest as the pool answers their batches (``serve.Server.measure``). An update says
+``install`` while the release's folder is made, ``kernel`` while its base is, ``apps`` while the agent
+apps' plugins are updated and ``restart`` as the engine drains for the switch, counted of the four
+(``cadgen._internal.update``); its frames are read by the page that asked, from the update's state.
 
 Whoever runs the job takes the frames (``building``): a worker sends them over its pipe and its
 daemon passes them on (``daemon``), the daemon sends a snapshot's as it draws, a server sends an
@@ -73,6 +77,8 @@ STAGES: dict[str, dict[str, str]] = {
     "export": {"read": "Reading the document", "write": "Writing files"},
     "snapshot": {"scene": "Making the scene", "draw": "Drawing the picture", "write": "Writing the picture"},
     "inspect-measure": {"measure": "Measuring parts"},
+    "update": {"install": "Installing the update", "kernel": "Installing the CAD kernel",
+               "apps": "Updating the apps", "restart": "Restarting"},
 }
 KINDS = tuple(STAGES)
 # The least time between two frames of one stage's count, in seconds; a stage's own frame is never held.
