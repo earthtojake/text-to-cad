@@ -656,6 +656,28 @@ class ThePluginCommand(Fixture):
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual([call for call in calls[count:] if call != ["codex", "--version"]], [])
 
+    def test_refresh_brings_claude_desktop_s_server_back_with_a_switch_that_went_back(self) -> None:
+        # A newer release's setup moved the folder and Claude Desktop's server to it, and its engine never
+        # started: the release left current writes the folder again, and the server goes back with it.
+        from cad_server.cli import plugin as plugin_cli
+
+        before = self.desktop_with({})
+        self.assertEqual(self.run_setup()[0], 0)
+        backup = self.desktop.with_name(self.desktop.name + ".bak")
+        self.assertEqual(backup.read_bytes(), before)
+        config = json.loads(self.desktop.read_text(encoding="utf-8"))
+        config["mcpServers"]["cad"] = self.entry("99.0.0")
+        self.desktop.write_text(json.dumps(config), encoding="utf-8")
+        manifest = plugin.folder() / plugin.MANIFEST
+        manifest.write_text(json.dumps({"name": "text-to-cad", "version": "99.0.0"}), encoding="utf-8")
+        code, _out, err = self._run(plugin_cli.main, ("--refresh",))
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"Claude Desktop: update mcpServers.cad in {providers.shown(self.desktop, self.machine)}: "
+                      f"text-to-cad 99.0.0 -> {RELEASE}", err)
+        self.assertEqual(json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"], self.entry())
+        self.assertEqual(backup.read_bytes(), before, "the first .bak, which an uninstall restores, is kept")
+        self.assertEqual(self.receipt()["actions"][-1]["app"], "claude-desktop")
+
 
 class TheOlderInstallationsOwnStop(unittest.TestCase):
     def test_it_runs_that_installation_s_console_script_told_the_version_it_cannot_know(self) -> None:

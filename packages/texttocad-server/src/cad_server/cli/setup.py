@@ -413,6 +413,14 @@ class Installer:
         text = json.dumps(receipt, ensure_ascii=False, separators=(",", ":")) + "\n"
         self._folder().write(RECEIPT, text.encode("utf-8"))
 
+    @staticmethod
+    def _backed_up(receipt: dict[str, Any]) -> set[str]:
+        """The configs an earlier run already kept the ``.bak`` of (or made): a config's first ``.bak`` is the
+        one an uninstall restores, so a later edit keeps it."""
+        return {action["path"] for action in receipt.get("actions") or []
+                if action.get("kind") == "edit" and action.get("ok")
+                and (action.get("created") or (action.get("backup") and Path(action["backup"]).is_file()))}
+
     # --- the engine ---------------------------------------------------------------------------
 
     def _record_of(self, status: dict[str, Any]) -> dict[str, Any] | None:
@@ -715,8 +723,8 @@ class Installer:
 
     def refresh(self, told: Any) -> tuple[bool, list[dict[str, Any]]]:
         """After the plugin folder was written again (``cad plugin --refresh``, which a switch runs): the
-        copies the apps keep of it brought to it (``providers.refresh_plan``), under the installer's lock,
-        the receipt kept. ``(ok, the steps run)``."""
+        copies the apps keep of it brought to it, and Claude Desktop's server moved to this release
+        (``providers.refresh_plan``), under the installer's lock, the receipt kept. ``(ok, the steps run)``."""
         from cad_server._internal.file_lock import exclusive
 
         providers = self.providers
@@ -727,10 +735,12 @@ class Installer:
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
             apps = providers.detect(self.machine, folder=self.folder)
             steps = providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
-                                           skills=receipt.get("skills"))
+                                           skills=receipt.get("skills"), desktop_entry=self._desktop_entry())
+            backed_up = self._backed_up(receipt)
             for step in steps:
                 told(f"{step.label}: {step.action} {step.subject}")
-                ok, records = providers.apply(step, self.machine, say=lambda line: told(f"  {line}"))
+                ok, records = providers.apply(step, self.machine, say=lambda line: told(f"  {line}"),
+                                              backed_up=backed_up)
                 self.actions += records
                 failed = failed or not ok
                 if ok and step.agents:
@@ -805,10 +815,7 @@ class Installer:
                 for step in [step for step in work if self._needs_folder(step)]:
                     self.say(f"{step.label}: {step.action} {step.subject}: not done, with no plugin folder")
                     work.remove(step)
-            # A config's first .bak is the one an uninstall restores: a later run keeps it.
-            backed_up = {action["path"] for action in receipt.get("actions") or []
-                         if action.get("kind") == "edit" and action.get("ok")
-                         and (action.get("created") or (action.get("backup") and Path(action["backup"]).is_file()))}
+            backed_up = self._backed_up(receipt)
             changed: set[str] = set()
             aside = self._aside()
             for step in work:

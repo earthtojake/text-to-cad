@@ -17,6 +17,8 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 - **Claude Desktop** (its chat): CAD's server alone, ``mcpServers.cad`` in its config file, run by
   ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx,
   never one uv keeps in its cache or a release folder holds (``transient``), which go from under it.
+  A switch of the engine moves it to the release it leaves current, back as much as forward
+  (``refresh_plan``).
 - **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
   its own). Codex copies a local marketplace's plugin when it is added and never again by itself, so
   every update adds it again; a running session keeps the copy it started with.
@@ -1485,19 +1487,37 @@ def plan(apps: Mapping[str, App], *, release: str, folder: Any = None, desktop_e
     return _once(steps) + _shared_note(apps, steps, machine)
 
 
+def _follow_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]]) -> List[Step]:
+    """Claude Desktop's server, ours, set to ``desktop_entry`` (``release``'s) where it differs: the release a
+    switch left current, ahead of the one in the config as much as behind it (a switch that went back)."""
+    ours = app.ours()
+    if ours is None or desktop_entry is None or app.notes or ours.entry == _wanted(ours.entry, desktop_entry):
+        return []
+    path = app.config or str(desktop_config(machine))
+    return [Step(app.id, "update", f"mcpServers.{DESKTOP_KEY} in {shown(path, machine)}: text-to-cad "
+                                   f"{ours.version or '?'} -> {release}",
+                 edit={"op": "servers", "path": path, "set": {DESKTOP_KEY: _wanted(ours.entry, desktop_entry)},
+                       "remove": []})]
+
+
 def refresh_plan(apps: Mapping[str, App], *, release: str, folder: Any, machine: Optional[Machine] = None,
-                 skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
+                 skills: Optional[Mapping[str, Any]] = None,
+                 desktop_entry: Optional[Dict[str, Any]] = None) -> List[Step]:
     """After the plugin ``folder`` was written again for ``release``: the copies apps keep of it brought to
-    it, and nothing installed anew or taken out -- Codex's (added again), Cursor's (copied again), Claude
-    Code's cached copy (``claude plugin update``) and the skills the Skills CLI copied for the agents
-    the receipt names (``skills``). Claude Code and Gemini CLI read the folder itself."""
+    it, and nothing installed anew or taken out -- Claude Code's cached copy (``claude plugin update``),
+    Claude Desktop's server (``desktop_entry``, this release's), Codex's (added again), Cursor's (copied
+    again) and the skills the Skills CLI copied for the agents the receipt names (``skills``). Claude Code
+    and Gemini CLI read the folder itself."""
     machine = _machine(machine)
     folder = Path(folder)
     steps: List[Step] = []
-    for name in ("claude", "codex", "cursor"):
+    for name in ("claude", "claude-desktop", "codex", "cursor"):
         app = apps.get(name)
         ours = app.ours() if app is not None and app.present and not app.unreadable else None
         if ours is None or app.stores():
+            continue
+        if name == "claude-desktop":
+            steps += _follow_desktop(app, release, machine, desktop_entry)
             continue
         if name != "cursor" and not _points(app.marketplaces.get(MARKETPLACE), folder):
             continue  # pointed elsewhere: `cad setup` points it here

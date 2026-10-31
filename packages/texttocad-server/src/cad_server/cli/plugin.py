@@ -6,9 +6,10 @@ installation (as the ``cad`` command runs it), or on a device with none current,
 place -- nothing is touched when it already holds this release's plugin -- and prints its path; run by
 another installation, it prints the path and says which one writes it. ``--refresh``, which the switch
 of the device's engine runs (``cad_server._internal.switch``), also brings the copies apps keep of the
-folder to it when this changed it -- an app's copy of the plugin, added or copied again, and the skills
-the Skills CLI copied for the agents without a plugin (``cad_server.cli.setup.refresh_copies``,
-``cad_server._internal.providers.refresh_plan``); an app that reads the folder in place needs nothing.
+folder to it when this changed it -- an app's copy of the plugin, added or copied again, Claude Desktop's
+server, moved to this release, and the skills the Skills CLI copied for the agents without a plugin
+(``cad_server.cli.setup.refresh_copies``, ``cad_server._internal.providers.refresh_plan``); an app that
+reads the folder in place needs nothing.
 
 Exit status: 0 done; 1 the folder could not be written; 2 bad arguments.
 """
@@ -32,7 +33,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     )
     parser.add_argument("--refresh", action="store_true",
                         help="also, when the folder changed, bring the copies apps keep of it to it (an app's "
-                             "copy of the plugin, the skills the Skills CLI copied)")
+                             "copy of the plugin, Claude Desktop's server, the skills the Skills CLI copied)")
     parser.add_argument("--json", action="store_true", help="print what was done as JSON")
     return parser
 
