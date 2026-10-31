@@ -4,7 +4,7 @@ import { english } from "../../i18n/core.js";
  *
  * A reference names one modelspace entity by its HANDLE, the id DXF gives every entity and keeps
  * across saves: `bracket.dxf#h2F` is the entity whose handle is 2F. The payload names the
- * top-level entity for everything it draws (`cadgen.drawing_payload`), so a pick of anything a
+ * top-level entity for everything it draws (`cad_server.drawing_payload`), so a pick of anything a
  * block reference draws is its INSERT, and a dimension is one reference. That is the whole
  * grammar: no faces, no edges, nothing to resolve — an agent finds `2F` in the file with any DXF
  * reader (`doc.entitydb["2F"]` in ezdxf). Quick Edit's chip reads it as a person would: its type

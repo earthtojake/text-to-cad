@@ -38,8 +38,8 @@ class DevPluginTests(unittest.TestCase):
                     if isinstance(servers, str):
                         servers = json.loads((plugin / servers).read_text(encoding="utf-8"))["mcpServers"]
                     self.assertEqual(servers, {"cad": server})
-                    self.assertEqual(server["env"], {"CADGEN_INSTALL_CHANNEL": "dev", "CADGEN_MCP_APP_DIR": "/pages/1",
-                                                     "CADGEN_INSTALLATION_VERSION": "1.2.3-dev.1"})
+                    self.assertEqual(server["env"], {"CAD_INSTALL_CHANNEL": "dev", "CAD_MCP_APP_DIR": "/pages/1",
+                                                     "CAD_INSTALLATION_VERSION": "1.2.3-dev.1"})
                     self.assertEqual(sorted(path.parent.name for path in plugin.glob("skills/*/SKILL.md")), skills)
                     self.assertFalse(list(plugin.rglob("__pycache__")))
                     for icon in (manifest.get("logo"), manifest.get("interface", {}).get("logo")):
@@ -51,7 +51,7 @@ class DevPluginTests(unittest.TestCase):
         # copied skills must run that version, or the agent's scripts would run the release's
         # installation and a daemon of their own.
         released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CADGEN_LAUNCHER_DIR": ""}):
+        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CAD_LAUNCHER_DIR": ""}):
             rewrites = dev_install.skill_rewrites(released, "1.2.3-dev.1", python="/w/.venv/bin/python")
             # Every rewrite matches text in the documents it rewrites: one that matches nothing is dead.
             documents = "".join(path.read_text(encoding="utf-8") for skill in (REPO_ROOT / "skills").glob("*/SKILL.md")
@@ -64,42 +64,50 @@ class DevPluginTests(unittest.TestCase):
                 setup = skill.parent / "references" / "setup.md"
                 text = skill.read_text(encoding="utf-8") + (setup.read_text(encoding="utf-8") if setup.is_file() else "")
                 with self.subTest(skill=skill.parent.name):
-                    self.assertNotIn("--from cadgen==", text)
+                    self.assertNotIn("--from texttocad-server==", text)
                     self.assertNotIn(f"+{released}`", text)
                     # Never the release's installer over this checkout's engine.
                     for command in dev_install.INSTALL_COMMANDS:
                         self.assertNotIn(command, text)
                     if "below means" in text:
-                        self.assertIn("`cadgen` below means `cadgen +1.2.3-dev.1`", text)
-                        self.assertIn("`python` below means `cadgen +1.2.3-dev.1 run`", text)
+                        self.assertIn("`cad` below means `cad +1.2.3-dev.1`", text)
+                        self.assertIn("`python` below means `cad +1.2.3-dev.1 run`", text)
                         self.assertIn("it says 1.2.3-dev.1 is not installed", text)
-                        self.assertIn("/w/.venv/bin/python -m cadgen.cli doctor`", text)
+                        self.assertIn("/w/.venv/bin/python -m cad_server.cli doctor`", text)
 
     def test_wheel_mode_registers_one_wheel_for_the_server_and_the_skills(self) -> None:
         import argparse
 
-        wheel = Path("/w/tmp/codex-dev/wheels/1/cadgen-1.2.3-py3-none-any.whl")
-        with tempfile.TemporaryDirectory() as scratch, mock.patch.object(dev_install, "build_wheel", return_value=wheel), \
-                mock.patch.object(dev_install, "dev_root", return_value=Path(scratch)), \
-                mock.patch.object(dev_install, "run", return_value="/state/installations/v.json\n") as run:
-            server, rewrites, page = dev_install.runtime("codex", argparse.Namespace(wheel=True, build=False), "v")
-            # Its record is kept, for --uninstall to take out.
-            self.assertEqual(json.loads((Path(scratch) / "installations.json").read_text(encoding="utf-8")),
-                             {"v": "/state/installations/v.json"})
+        with tempfile.TemporaryDirectory() as scratch:
+            # One build's three wheels, side by side: the library's, the server's and the shim's.
+            built = Path(scratch) / "wheels" / "1"
+            built.mkdir(parents=True)
+            library, wheel, shim = (built / f"{name}-1.2.3-py3-none-any.whl"
+                                    for name in ("texttocad", "texttocad_server", "texttocad_mcp"))
+            for path in (library, wheel, shim):
+                path.write_bytes(b"")
+            with mock.patch.object(dev_install, "build_wheel", return_value=wheel), \
+                    mock.patch.object(dev_install, "dev_root", return_value=Path(scratch)), \
+                    mock.patch.object(dev_install, "run", return_value="/state/installations/v.json\n") as run:
+                server, rewrites, page = dev_install.runtime("codex", argparse.Namespace(wheel=True, build=False), "v")
+                # Its record is kept, for --uninstall to take out.
+                self.assertEqual(json.loads((Path(scratch) / "installations.json").read_text(encoding="utf-8")),
+                                 {"v": "/state/installations/v.json"})
+        # The app starts the shim's wheel; the skills run the server's, with the library's beside it.
         self.assertEqual((server["args"], server["env"]),
-                         ([*dev_install.LAUNCHER[1:], str(wheel), "cadgen", "mcp"],
-                          {"CADGEN_INSTALL_CHANNEL": "dev", "CADGEN_INSTALLATION_VERSION": "v"}))
-        # The wheel's installation registers as this install's version, by its own python.
-        run.assert_called_once_with(*dev_install.LAUNCHER, str(wheel), "python", "-c", dev_install.REGISTER, "v",
-                                    capture=True)
+                         ([*dev_install.LAUNCHER[1:], str(shim), "cad-mcp"],
+                          {"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": "v"}))
+        uvx = [*dev_install.LAUNCHER[:-1], "--with", str(library), dev_install.LAUNCHER[-1], str(wheel)]
+        # The server's installation registers as this install's version, by its own python.
+        run.assert_called_once_with(*uvx, "python", "-c", dev_install.REGISTER, "v", capture=True)
         released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertTrue(rewrites[dev_install.launch("cadgen", released)].endswith(f"--from {wheel} cadgen"))
-        self.assertEqual(rewrites[f"cadgen +{released}"], "cadgen +v")
+        self.assertTrue(rewrites[dev_install.launch("cad", released)].endswith(f"--from {wheel} cad"))
+        self.assertEqual(rewrites[f"cad +{released}"], "cad +v")
         self.assertIsNone(page, "a wheel serves the page it was built with")
 
     def test_the_install_command_becomes_a_note_in_the_setup_guide_and_history_is_left(self) -> None:
         released, named = "1.2.3", "1.2.3-dev.1"
-        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CADGEN_LAUNCHER_DIR": ""}):
+        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CAD_LAUNCHER_DIR": ""}):
             root = Path(scratch) / "source"
             skill = root / "skills/fixture"
             (skill / "references").mkdir(parents=True)
@@ -107,11 +115,11 @@ class DevPluginTests(unittest.TestCase):
             (root / ".claude-plugin/plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": released}),
                                                             encoding="utf-8")
             main = ("---\nname: fixture\ndescription: fixture\n---\n"
-                    f"`cadgen` below means `cadgen +{released}`. [Setup](references/setup.md)\n")
+                    f"`cad` below means `cad +{released}`. [Setup](references/setup.md)\n")
             guide = ("```bash\n" + dev_install.INSTALL_COMMANDS[0] + "\n```\n"
                      + f"On Windows, in PowerShell: `{dev_install.INSTALL_COMMANDS[1]}`. Restart the\n"
-                     + dev_install.launch("cadgen", released) + " doctor\n"
-                     + rf"%USERPROFILE%\.local\bin\cadgen.cmd +{released}" + "\n")
+                     + dev_install.launch("cad", released) + " doctor\n"
+                     + rf"%USERPROFILE%\.local\bin\cad.cmd +{released}" + "\n")
             (skill / "SKILL.md").write_text(main, encoding="utf-8")
             (skill / "references/setup.md").write_text(guide, encoding="utf-8")
             (skill / "references/migrations.md").write_text(guide, encoding="utf-8")
@@ -122,26 +130,28 @@ class DevPluginTests(unittest.TestCase):
             note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
             self.assertIn(f"```bash\n# {note}\n```\n", copied)
             self.assertIn(f"On Windows, in PowerShell: `{note}`. Restart the\n", copied)
-            self.assertIn("/w/python -m cadgen.cli doctor", copied)
-            self.assertIn(f"cadgen.cmd +{named}", copied)
-            self.assertIn(f"`cadgen +{named}`", (plugin / "skills/fixture/SKILL.md").read_text(encoding="utf-8"))
+            self.assertIn("/w/python -m cad_server.cli doctor", copied)
+            self.assertIn(f"cad.cmd +{named}", copied)
+            self.assertIn(f"`cad +{named}`", (plugin / "skills/fixture/SKILL.md").read_text(encoding="utf-8"))
             # A migration reference may name an old release on purpose: copied as it is.
             self.assertEqual((plugin / "skills/fixture/references/migrations.md").read_text(encoding="utf-8"), guide)
 
-    def test_this_scripts_launcher_and_install_command_are_cadgens(self) -> None:
+    def test_this_scripts_launcher_and_install_command_are_the_servers(self) -> None:
         import sys
 
-        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
-        from cadgen._internal.launch import LAUNCHER
-        from cadgen.updates import INSTALL, INSTALL_WINDOWS
+        from tests.python.support.paths import add_sources
+
+        add_sources()
+        from cad_server._internal.launch import LAUNCHER
+        from cad_server.updates import INSTALL, INSTALL_WINDOWS
 
         self.assertEqual(dev_install.LAUNCHER, LAUNCHER)
         self.assertEqual(dev_install.INSTALL_COMMANDS, (INSTALL, INSTALL_WINDOWS))
 
-    def test_it_reads_the_apps_through_cadgens_providers(self) -> None:
-        # One reading of the agent apps for both installers: the development one loads cadgen's by path.
+    def test_it_reads_the_apps_through_the_servers_providers(self) -> None:
+        # One reading of the agent apps for both installers: the development one loads the server's by path.
         self.assertEqual(Path(dev_install.providers.__file__).resolve(),
-                         REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "providers.py")
+                         REPO_ROOT / "packages" / "texttocad-server" / "src" / "cad_server" / "_internal" / "providers.py")
         self.assertIs(dev_install.loose_skills, dev_install.providers.loose_skills)
         self.assertEqual(dev_install.skill_folders("codex"), dev_install.providers.skill_folders("codex"))
 

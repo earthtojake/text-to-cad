@@ -12,7 +12,7 @@ import { createTunnelClient, createTunnelFetch } from './host/tunnel';
 import './styles.css';
 
 // The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to the CAD
-// app's server for its telemetry (`cadgen/analytics.py`), each once a page and never its message.
+// app's server for its telemetry (`cad_server/analytics.py`), each once a page and never its message.
 // There is no way to the server until the host has answered (`start`): until then they wait. A frame
 // names its chunk, which the page's loader made a blob URL of and kept which is which (vite.config.mjs).
 const waiting: CadPageCrash[] = [];
@@ -37,6 +37,8 @@ const root = createRoot(element, {
   // Logged as React logs one, and counted: the page went on, with the view's "could not display".
   onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
 });
+// The shell that loaded this page takes it down to load the engine's next release in its place (an update).
+globalThis.__cadApp = { unmount: () => root.unmount() };
 
 function applyTheme(context: HostContext) {
   const dark = context.theme === 'dark';
@@ -45,12 +47,15 @@ function applyTheme(context: HostContext) {
 }
 
 async function start() {
-  const presentation = readPresentation();
-  const bridge = createBridge(window.parent);
+  // Started by the shell a host keeps (`host/shell.ts`): the host greeted and the launch read already,
+  // its bridge this page's. Else this page is the resource itself, and greets the host as a shell would.
+  const shell = globalThis.__cadShell;
+  const presentation = shell?.presentation ?? readPresentation();
+  const bridge = shell?.bridge ?? createBridge(window.parent);
   bridge.onHostContext(applyTheme);
   bridge.onHostContext(context => { hostLocale = context.locale || hostLocale; });
   // What to show comes as the result of the tool that opened this view.
-  const launched = new Promise<{ launch: Launch; result: ToolResult }>((resolve, reject) => {
+  const launched = shell ? Promise.resolve({ launch: shell.launch, result: shell.result }) : new Promise<{ launch: Launch; result: ToolResult }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(say('cad.nothingToShow'))), 30_000);
     const stop = bridge.onToolResult(result => {
       const launch = readLaunch(result);
@@ -61,7 +66,8 @@ async function start() {
     });
   });
   try {
-    await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
+    if (shell) applyTheme(bridge.hostContext);
+    else await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
     hostLocale = bridge.hostContext.locale || hostLocale;
     // The page starts on its launch alone: the launch carries what the server is (its protocol,
     // version and platform). One from another build -- a tab the host restored after an update, a

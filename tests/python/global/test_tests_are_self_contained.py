@@ -9,12 +9,12 @@ needs (a `bd.Box` is enough for every contract that is not about geometry), or
 reads a tiny fixture committed with the tests.
 
 The runner gives every test file an engine daemon of its own; a test that spawns a
-build should still set CADGEN_ENGINE_DIR itself so a direct `python -m unittest`
+build should still set CAD_ENGINE_DIR itself so a direct `python -m unittest`
 never builds on the developer's daemon (that is a convention, not something this
 guard can tell apart from a subprocess that merely runs Python). A test module that names
 an engine folder names its own state and cache folders too, or calls
 ``engine_daemon.isolate``: an engine with only its folder its own still records and caches
-its documents in the developer's (they then show in every `cadgen status`).
+its documents in the developer's (they then show in every `cad status`).
 """
 
 from __future__ import annotations
@@ -85,13 +85,13 @@ class EnginesKeepTheirDocumentsToThemselves(unittest.TestCase):
         unkept = []
         for path in sorted((TESTS / "python").rglob("test_*.py")):
             text = path.read_text(encoding="utf-8")
-            if "CADGEN_ENGINE_DIR" not in text or "engine_daemon.isolate(" in text:
+            if "CAD_ENGINE_DIR" not in text or "engine_daemon.isolate(" in text:
                 continue
-            missing = [name for name in ("CADGEN_STATE_DIR", "CADGEN_CACHE_DIR") if name not in text]
+            missing = [name for name in ("CAD_STATE_DIR", "CAD_CACHE_DIR") if name not in text]
             if missing:
                 unkept.append(f"{path.relative_to(REPO_ROOT).as_posix()}: no {' or '.join(missing)}")
         self.assertEqual(unkept, [], "a test module that starts an engine keeps its documents to itself: set "
-                                     "CADGEN_STATE_DIR and CADGEN_CACHE_DIR beside CADGEN_ENGINE_DIR, or call "
+                                     "CAD_STATE_DIR and CAD_CACHE_DIR beside CAD_ENGINE_DIR, or call "
                                      "engine_daemon.isolate(unittest.addModuleCleanup) in setUpModule")
 
 

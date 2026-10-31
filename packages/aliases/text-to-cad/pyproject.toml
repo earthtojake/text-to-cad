@@ -1,0 +1,26 @@
+# The distribution named text-to-cad, the product's own name, kept so a typed hyphen resolves: the
+# text-to-cad library, texttocad, at this very release, and nothing of its own (no module, no
+# command). Released with every release.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text-to-cad"
+version = "0.9.0"
+description = "The text-to-cad library under the product's name: installs texttocad, whose import name is cad."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+authors = [{ name = "earthtojake" }]
+dependencies = ["texttocad==0.9.0"]
+
+[project.optional-dependencies]
+# `text-to-cad[build123d]`: the library's own build123d extra.
+build123d = ["texttocad[build123d]==0.9.0"]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+
+[tool.setuptools]
+packages = []

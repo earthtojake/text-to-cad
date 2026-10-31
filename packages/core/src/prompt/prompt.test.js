@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, parsePromptReference, validatePromptReference, promptReferenceIds, resolveAttachmentPaths } from './index.js';
 
-// A STEP's ref is the engine's: its part's label, then its element's name, as `cadgen inspect` writes it.
+// A STEP's ref is the engine's: its part's label, then its element's name, as `cad inspect` writes it.
 const FACE = 'bracket/f:bracket.extrude1.3';
 const EDGE = 'bracket/e:bracket.fillet1.2';
 const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: [FACE] } };
@@ -36,7 +36,7 @@ test('a file already saved says where, as soon as it is; one that never will be 
   assert.throws(() => validatePromptContext({ ...context, parts: [...context.parts.slice(0, 2), { ...views, path: 7 }] }), /attachment path/);
 });
 test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per reference, pasted back as it was copied', () => {
-  // The canonical refs Copy Prompt writes (`cadgen.engine.refs`): an occurrence path, a quoted label, an element by number.
+  // The canonical refs Copy Prompt writes (`cad.engine.refs`): an occurrence path, a quoted label, an element by number.
   const selectors = ['kit/hand/finger.2/face 7', '"M3, M4 screw"/e:screw.body.2', 'v1.5 bracket'];
   const resource = { kind: 'workspace-file', path: '/work/XBF/kit.xbf' };
   const lines = selectors.map(selector => formatPromptReference({ resource, target: { kind: 'cad-selector', selectors: [selector] } }));

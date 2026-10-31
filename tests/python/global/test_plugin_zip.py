@@ -64,7 +64,7 @@ class PluginZipTests(unittest.TestCase):
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
             (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
-            server = {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}
+            server = {"command": "uvx", "args": ["--from", "texttocad-mcp==1.0.0", "cad-mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
 
@@ -78,9 +78,9 @@ class PluginZipTests(unittest.TestCase):
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
                 # The package names its channel, OpenAI's directory, in its server's environment, which
-                # analytics report; CADGEN_AUTO_UPDATED leaves the copy to the directory, which updates it.
+                # analytics report; CAD_AUTO_UPDATED leaves the copy to the directory, which updates it.
                 self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
-                                 {**server, "env": {"CADGEN_INSTALL_CHANNEL": "openai-directory", "CADGEN_AUTO_UPDATED": "1"}})
+                                 {**server, "env": {"CAD_INSTALL_CHANNEL": "openai-directory", "CAD_AUTO_UPDATED": "1"}})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses a subtitle over 30 characters (main's, until this check).

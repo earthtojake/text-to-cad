@@ -1,11 +1,11 @@
-"""Every `cadgen ...` command form a skill -- or the package's own markdown --
+"""Every `cad ...` command form a skill -- or the package's own markdown --
 documents has to be a real command.
 
 Skills are the product, and an agent runs what they say verbatim; the package's
 markdown (README, STORE, SNAPSHOTS) is what ships in the wheel beside them. A renamed or
 retired command leaves the docs still confidently teaching it — that is how
 `scripts/test/test-installed.sh` came to check four commands that no longer
-existed, and how `cadgen step export` would have outlived its deletion.
+existed, and how `cadgen step export` (0.7's) would have outlived its deletion.
 
 So: extract the command forms out of the skills' own fenced code blocks and put
 them through the real dispatcher's registry and the real parsers. Nothing is
@@ -24,14 +24,13 @@ import shlex
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import PROJECTS, add_sources, repo_path
 
-add_repo_path("packages/cadgen/src")
+add_sources()
 
-from cadgen import cli  # noqa: E402
+from cad_server import cli  # noqa: E402
 
 SKILLS = Path(repo_path("skills"))
-PACKAGE_DOCS = Path(repo_path("packages/cadgen"))
 
 FENCE = re.compile(r"^\s*```")
 
@@ -42,9 +41,9 @@ ELISION = "..."
 
 
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
-    """The `cadgen` argv forms inside this document's fenced code blocks.
+    """The `cad` argv forms inside this document's fenced code blocks.
 
-    Each carries whether an elision cut it short: `cadgen step snapshot ...` names
+    Each carries whether an elision cut it short: `cad snapshot ...` names
     a command but is not a complete invocation, so it is checked for existence
     and not put through the parser.
     """
@@ -63,7 +62,7 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
         if line.endswith("\\"):
             pending = line[:-1].strip()
             continue
-        if not line.startswith("cadgen "):
+        if not line.startswith("cad "):
             continue
         try:
             tokens = shlex.split(line, comments=True)
@@ -84,7 +83,7 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
 def _documented_forms() -> list[tuple[Path, list[str], bool]]:
     found: list[tuple[Path, list[str], bool]] = []
     # The package's TOP-LEVEL markdown only: that is what the wheel ships.
-    for path in (*sorted(SKILLS.rglob("*.md")), *sorted(PACKAGE_DOCS.glob("*.md"))):
+    for path in (*sorted(SKILLS.rglob("*.md")), *(path for project in PROJECTS for path in sorted(project.glob("*.md")))):
         for argv, elided in _command_forms(path.read_text(encoding="utf-8")):
             found.append((path.relative_to(SKILLS.parent), argv, elided))
     return found
@@ -127,7 +126,7 @@ class DocumentedCommands(unittest.TestCase):
             with self.subTest(source=str(source), form=" ".join(argv)):
                 self.assertIsNotNone(
                     _split_command(argv),
-                    f"{source} documents `cadgen {' '.join(argv)}`, which no command answers",
+                    f"{source} documents `cad {' '.join(argv)}`, which no command answers",
                 )
 
     def test_every_documented_form_parses(self):
@@ -143,11 +142,11 @@ class DocumentedCommands(unittest.TestCase):
                     with contextlib.redirect_stderr(errors):
                         _parse(module, rest)
                 except SystemExit:  # argparse's usage error
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {errors.getvalue().strip()}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {errors.getvalue().strip()}")
                 except argparse.ArgumentError as exc:
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {exc}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {exc}")
                 except Exception as exc:  # a hand-written parser's own error type
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {exc}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {exc}")
 
 
 class DocumentedSnapshotOutputPaths(unittest.TestCase):

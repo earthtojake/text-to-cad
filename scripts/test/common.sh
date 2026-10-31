@@ -16,14 +16,18 @@ export PYTHON_BIN
 
 # A test's engine takes any free HTTP port, never the default (3245) that the person's own engine
 # keeps: one that found it held would move off it for good. A test of the default clears this.
-export CADGEN_ENGINE_PORT=0
+export CAD_ENGINE_PORT=0
 # Nor does it keep a standby worker (``daemon.standby``): each daemon a test starts would load the
 # kernel twice over (2.4 s and 440 MB a standby) on runners short of memory. Its own tests set it on.
-export CADGEN_ENGINE_STANDBY=0
+export CAD_ENGINE_STANDBY=0
 # A test's process that dies in native code (a worker's access violation as it loads the kernel)
 # prints its Python stack before it goes: workers inherit it from the run, so the model log the
 # client prints, and so the failing test's output, says where.
 export PYTHONFAULTHANDLER=1
+
+# The three packages' source trees, the library's first: every suite runs on this checkout's own
+# packages, never on whatever the interpreter has installed (a worktree's venv may point at another).
+PACKAGE_SOURCES=(packages/texttocad/src packages/texttocad-server/src packages/texttocad-mcp/src)
 
 # The paths a run is narrowed to: test-python.sh and test-global.sh take them as arguments,
 # and only the test files at or under one of them run. Empty, the default, runs every file.
@@ -77,7 +81,7 @@ run_python_unittest() {
   # `_FailedTest.test_cli`. unittest_files.py loads each file under its full dotted
   # path relative to the repo root and names an import failure by that path + file.
   #
-  # Each test FILE runs in its own interpreter, CADGEN_TEST_JOBS at a time (default: the
+  # Each test FILE runs in its own interpreter, CAD_TEST_JOBS at a time (default: the
   # machine's cores), with an engine directory of its own: a build it asks for without naming
   # a daemon runs on one of that file's alone, stopped when the file ends, so a module that
   # starts workers or a daemon does not hold the rest of the suite.
@@ -90,7 +94,7 @@ run_python_unittest() {
 
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
     "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
-      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" ${extra[@]+"${extra[@]}"} "${test_files[@]}"
+      --jobs "${CAD_TEST_JOBS:-$(test_jobs)}" ${extra[@]+"${extra[@]}"} "${test_files[@]}"
 }
 
 is_selected_test() {

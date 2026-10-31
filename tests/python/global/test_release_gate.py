@@ -150,16 +150,40 @@ class PublishGate(unittest.TestCase):
     def test_the_wheel_s_smoke_check_starts_no_engine(self):
         # CI runs doctor on the built wheel to prove it answers; an engine it started would linger in
         # the job, so the check says whether one runs and never starts it (``doctor --no-server``).
-        doctors = [line.strip() for line in WORKFLOW.splitlines() if re.search(r"cadgen\"? doctor\b", line)]
+        doctors = [line.strip() for line in WORKFLOW.splitlines() if re.search(r"\bcad\"? doctor\b", line)]
         self.assertTrue(doctors, "the release smoke-tests doctor")
         for line in doctors:
             self.assertIn("doctor --no-server", line)
 
+    def test_the_release_builds_the_five_projects_and_installs_its_three_wheels_together(self):
+        publish = JOBS["publish"]
+        self.assertIn("for project in texttocad texttocad-server texttocad-mcp aliases/cadgen aliases/text-to-cad; do\n"
+                      "            python3 -m build --outdir dist \"packages/$project\"", publish)
+        # Exactly the five projects' wheels and sdists at the release, nothing else.
+        check = publish.split("- name: Check the distributions are the release's\n", 1)[1].split("\n      - name: ", 1)[0]
+        self.assertIn("for name in texttocad texttocad_server texttocad_mcp cadgen text_to_cad; do", check)
+        self.assertEqual({project.replace("-", "_") for project in pypi_release.PROJECTS},
+                         set(re.search(r"for name in ([\w ]+); do", check)[1].split()))
+        install = publish.split("- name: Install the built wheels and exercise them\n", 1)[1].split("\n      - name: ", 1)[0]
+        self.assertIn("dist/texttocad-*.whl", install)
+        self.assertIn("dist/texttocad_server-*.whl dist/texttocad_mcp-*.whl", install)
+        self.assertIn("scripts/test/test-installed.sh --wheels dist", install)
+        self.assertIn('"$RUNNER_TEMP/install-test/bin/cad-mcp" --help', install)
+        self.assertIn("find dist -name 'texttocad_server-*.whl'", publish)
+
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
-        # The upload, then PyPI's index -- what uv resolves a pin through -- listing it, both in the
-        # pypi job, which the branches job needs. The docs deploy and the tag follow the branches.
+        # Each project uploaded, then PyPI's index -- what uv resolves a pin through -- listing it before the
+        # next goes up: the library first, which the others pin at the release. All in the pypi job, which
+        # the branches job needs. The docs deploy and the tag follow the branches.
         pypi = JOBS["pypi"]
-        self.assertLess(pypi.index("pypa/gh-action-pypi-publish"), pypi.index("https://pypi.org/simple/cadgen/"))
+        self.assertEqual(pypi_release.PROJECTS[0], "texttocad")
+        at = 0
+        for project in pypi_release.PROJECTS:
+            with self.subTest(project=project):
+                compare = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --built', at)
+                publish = pypi.index(f"packages-dir: upload-to-pypi/{project}\n", compare)
+                at = pypi.index(f'pypi_release.py --project {project} --version "$VERSION" --wait', publish)
+        self.assertEqual(pypi.count("uses: pypa/gh-action-pypi-publish@"), len(pypi_release.PROJECTS))
         branches = condition("branches")
         self.assertTrue(evaluate(branches, {"pypi": "success"}, {"is_main": "true"}))
         self.assertFalse(evaluate(branches, {"pypi": "success"}, {"is_main": "false"}))
@@ -188,7 +212,7 @@ class PublishGate(unittest.TestCase):
         # release attaches what PyPI serves.
         self.assertNotIn("skip-existing", WORKFLOW)
         self.assertIn("scripts/release/pypi_release.py", JOBS["pypi"])
-        self.assertIn("name: cadgen-${{ needs.gate.outputs.version }}-released", JOBS["tag-release"])
+        self.assertIn("name: dist-${{ needs.gate.outputs.version }}-released", JOBS["tag-release"])
 
     def test_the_branches_get_their_copies_of_the_plugin(self):
         # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither.
@@ -269,6 +293,29 @@ class PypiRelease(unittest.TestCase):
         self.assertEqual(pypi_release.plan(built, held), (["cadgen-1.0.0.tar.gz"], ["cadgen-1.0.0-py3-none-any.whl"], []))
         held["cadgen-1.0.0-cp312-cp312-linux_x86_64.whl"] = {"sha256": "b", "url": "v"}
         self.assertEqual(pypi_release.plan(built, held)[2], ["cadgen-1.0.0-cp312-cp312-linux_x86_64.whl"])
+
+    def test_each_call_is_one_project_s_files_at_the_release(self):
+        built = ["texttocad-1.0.0-py3-none-any.whl", "texttocad-1.0.0.tar.gz", "texttocad_server-1.0.0-py3-none-any.whl",
+                 "texttocad_server-1.0.0.tar.gz", "texttocad_mcp-1.0.0.tar.gz", "text_to_cad-1.0.0.tar.gz",
+                 "cadgen-1.0.0-py3-none-any.whl", "texttocad-0.9.9.tar.gz", "texttocad-1.0.0rc1.tar.gz"]
+        self.assertEqual(pypi_release.files_of("texttocad", "1.0.0", built),
+                         ["texttocad-1.0.0-py3-none-any.whl", "texttocad-1.0.0.tar.gz"])
+        self.assertEqual(pypi_release.files_of("texttocad-server", "1.0.0", built),
+                         ["texttocad_server-1.0.0-py3-none-any.whl", "texttocad_server-1.0.0.tar.gz"])
+        self.assertEqual(pypi_release.files_of("text-to-cad", "1.0.0", built), ["text_to_cad-1.0.0.tar.gz"])
+        self.assertEqual(pypi_release.files_of("cadgen", "1.0.0", built), ["cadgen-1.0.0-py3-none-any.whl"])
+
+    def test_waiting_ends_once_the_index_lists_the_release_and_fails_when_it_never_does(self):
+        answers = iter([False, False, True])
+        with mock.patch.object(pypi_release, "listed", side_effect=lambda *_: next(answers)) as listed, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(pypi_release.wait("texttocad", "1.0.0", tries=5, pause=0), 0)
+        self.assertEqual(listed.call_count, 3)
+        with mock.patch.object(pypi_release, "listed", return_value=False) as listed, \
+                contextlib.redirect_stderr(io.StringIO()) as said:
+            self.assertEqual(pypi_release.wait("texttocad", "1.0.0", tries=3, pause=0), 1)
+        self.assertEqual(listed.call_count, 3)
+        self.assertIn("does not list texttocad 1.0.0", said.getvalue())
 
     def test_a_file_from_pypi_that_does_not_match_its_listed_sha256_is_refused(self):
         import hashlib

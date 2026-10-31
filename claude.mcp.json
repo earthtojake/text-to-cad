@@ -6,14 +6,13 @@
         "--no-config",
         "--managed-python",
         "--python",
-        "3.13",
+        "3.14",
         "--from",
-        "cadgen==0.8.4",
-        "cadgen",
-        "mcp"
+        "texttocad-mcp==0.9.0",
+        "cad-mcp"
       ],
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "claude-github"
+        "CAD_INSTALL_CHANNEL": "claude-github"
       }
     }
   }

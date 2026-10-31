@@ -8,7 +8,7 @@ has its own geometry and its own place in the assembly.
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from handlebar import MIRROR_MOUNT_RIGHT
 from lib import trim as T

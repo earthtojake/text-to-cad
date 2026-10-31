@@ -8,7 +8,7 @@ decorator, and briefly from a ``cadgen dxf build`` engine path. The re-run also
 had a Windows hazard of its own (issue #245: ``os.execv`` does not quote, so an
 interpreter path containing a space arrived as two arguments).
 
-That whole apparatus is deleted. The engine's DXF export (``cadgen.engine.export.dxf``)
+That whole apparatus is deleted. The engine's DXF export (``cad.engine.export.dxf``)
 makes DXF bytes a function of the drawing's geometry — layers sorted by name, edges
 sorted by geometric content, ezdxf's volatile provenance pinned, and its CLASSES
 registry (the actual seed-sensitive part) sorted — so the seed cannot reach the file.
@@ -31,20 +31,21 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CADGEN = REPO_ROOT / "packages/cadgen/src/cadgen"
+LIBRARY = REPO_ROOT / "packages/texttocad/src/cad"
+SERVER = REPO_ROOT / "packages/texttocad-server/src/cad_server"
 
-# Named explicitly rather than globbed: a glob over cadgen would sweep in modules
+# Named explicitly rather than globbed: a glob over the packages would sweep in modules
 # that legitimately spawn other programs. These are the places a build starts -- the
 # front door, a model script asking the daemon, the engine's commands, its client
 # starting the daemon, the daemon spawning a worker, the worker's build.
 ENTRY_POINT_SOURCES = [
-    CADGEN / "cli/__init__.py",
-    CADGEN / "engine/model.py",
-    CADGEN / "engine/cli.py",
-    CADGEN / "engine/client.py",
-    CADGEN / "engine/daemon.py",
-    CADGEN / "engine/worker.py",
-    CADGEN / "engine/build.py",
+    SERVER / "cli/__init__.py",
+    LIBRARY / "engine/model.py",
+    SERVER / "engine/cli.py",
+    LIBRARY / "engine/client.py",
+    SERVER / "engine/daemon.py",
+    LIBRARY / "engine/worker.py",
+    LIBRARY / "engine/build.py",
 ]
 
 
@@ -76,7 +77,7 @@ class NoHashSeedReExecTest(unittest.TestCase):
             [],
             offenders,
             "an entry point pins PYTHONHASHSEED again. DXF byte-determinism is "
-            "engineered in cadgen.engine.export.dxf; a seed re-exec would double "
+            "engineered in cad.engine.export.dxf; a seed re-exec would double "
             "every cold drawing build to hide an ordering bug instead of fixing it.",
         )
 

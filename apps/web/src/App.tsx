@@ -7,9 +7,10 @@ import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
 import { cadApiUrl, createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
+import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, useUpdateNotice, type UpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, reloadWhenClean, useUpdate, type UpdateNotice } from '@text-to-cad/ui/update';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
@@ -20,8 +21,6 @@ import { applyColorSchemeToDocument, resolveColorSchemeMode } from './client/ui/
 
 /** The keyboard the page is typed on — ⌘ on Apple devices, Ctrl elsewhere: the host's one platform answer. */
 const keyboardPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform) ? "darwin" : /Win/.test(navigator.platform) ? "win32" : "linux";
-// A card's link (the privacy policy, the full install instructions): a new tab, as the navbar's open.
-const openTab = (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); };
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 const subscribeToSystemDark = (onChange: () => void) => {
   const query = matchMedia(DARK_QUERY);
@@ -49,8 +48,11 @@ export default function App({ client, server, tabStore, notice = null, language:
   // Another process answering on this page's port: never loaded into the tab (a dev server's restart
   // alone is followed), and said as the engine being gone.
   const [foreign, setForeign] = useState(false);
-  useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })),
-    follow: Boolean(import.meta.env?.DEV), onForeign: () => setForeign(true) });
+  // An engine of another release that admits this page's credential is an update: reloaded into, once
+  // the page has nothing unsaved.
+  useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true,
+    identityToken: String(info.identityToken || ''), release: String(info.release || '') }), () => ({ ok: false })),
+    follow: Boolean(import.meta.env?.DEV), onForeign: () => setForeign(true), reload: () => { reloadWhenClean(() => window.location.reload()); } });
   const downloads = useMemo(() => createBrowserDownloads(), []);
   const source = useMemo(() => createCadFileSource(client), [client]);
   // What the clipboard port says to the person, in the view's language as it is when it speaks.
@@ -127,14 +129,20 @@ export default function App({ client, server, tabStore, notice = null, language:
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
   // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
-  // cadgen command says it once), and the app menu's switch changes it. The answer is the person's,
+  // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
-  // A newer text-to-cad, as the CAD app says it (`cadgen/updates.py`): the blue update button, first
-  // in the navbar and a row of its own on the home while this install is behind, from the notice read
-  // with the server's description (`main.tsx`). A page in a browser cannot reach the agent's chat, so
-  // its prompt is copied.
-  const updateNotice = useUpdateNotice(client.version, notice);
+  // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
+  // in the navbar while this install is behind, from the notice read with the server's description
+  // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back
+  // often and says nothing of its going, and reloads into the new release once it answers -- or into the
+  // release before, should the switch fail and go back, which the page reloaded there says: the tab notes
+  // that its page followed the update through the restart (`followedUpdate`).
+  const [followed] = useState(() => followedUpdate());
+  useEffect(() => { forgetFollowedUpdate(); }, []);
+  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
+  const restarting = updater.phase.phase === 'restarting';
+  useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -161,16 +169,17 @@ export default function App({ client, server, tabStore, notice = null, language:
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(engineGone, { pid: server.pid, ask: () => client.serverInfo({ fresh: true })
-    .then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
+  const askedRefused = useEngineReconnect(engineGone, { pid: server.pid, release: String(server.release || ''), fast: restarting,
+    reload: () => { reloadWhenClean(() => window.location.reload()); },
+    ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
-  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
+  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone && !restarting ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
-        card among it) is out of reach and unheard until it is back. */}
-    <div className="min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
+        card among it) is out of reach and unheard until it is back. An update's restart says nothing. */}
+    <div className="min-h-0 flex-1" inert={(engineGone && !restarting) || undefined} aria-hidden={(engineGone && !restarting) || undefined}>
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
-      update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab} /> : null}
+      update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
       colorScheme={colorScheme} language={language} />
   </div></div>;
 }

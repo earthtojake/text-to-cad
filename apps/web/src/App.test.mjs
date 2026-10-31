@@ -58,19 +58,20 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
   const guards = [];  // the header no page from another site can send, on each analytics answer
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)', prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://github.com/earthtojake/text-to-cad#-quickstart' };
+  const notice = { latest: '0.9.0', version: '0.8.1' };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
     if (url === '/__cad/analytics' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
     const reply = url.startsWith('/__cad/catalog') ? catalogOf(url) : url === '/__cad/version' ? { notice }
+      : url === '/__cad/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
       : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
       : url !== '/__cad/analytics' ? { ok: true }
       : init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
-  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted', start: '/m/launch' }; } };
+  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted', start: '/m/launch', release: '0.9.0' }; } };
   const root = createRoot(window.document.getElementById('root'));
   const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
   const viewer = () => snapshot();
@@ -91,7 +92,8 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/reveal'), [['/__cad/reveal', { path: '/m/one.step' }]]);
     assert.equal(viewer().host.links.version, '0.7.4');
     assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
-    assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
+    // An engine of another release answering is an update, which the page reloads into.
+    assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted', release: '0.9.0' });
     assert.deepEqual(serverCalls[0], { fresh: true });
 
     // The appearance is the tab's, resolved against the OS; its control is the app menu's Theme row,
@@ -131,24 +133,20 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // The app menu: Analytics.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
       [['Telemetry', false]]);
-    // Nothing asks (a cadgen command says it once): the viewer has no notice, and the app menu's toggle
+    // Nothing asks (a cad command says it once): the viewer has no notice, and the app menu's toggle
     // is the person's answer.
     assert.equal(viewer().notice, undefined);
     await act(() => viewer().appSettings[0].onCheckedChange(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false }]);
-    // A newer release is the update button, as in the CAD app: first in the navbar while this install is
-    // behind. A page in a browser cannot reach the agent's chat, so its card only copies the prompt, and
-    // nothing it does is kept: the server is only read.
+    // A newer release is the update button, as in the CAD app: an icon first in the navbar while this
+    // install is behind, drawn from the notice the page started with: nothing is read for it.
     assert.equal(viewer().update.props.notice.latest, '0.9.0');
-    assert.equal(viewer().update.props.send, undefined);
-    // Its link to manual installation opens a new tab.
-    const opened = [];
-    const openBefore = window.open;
-    window.open = (...args) => { opened.push(args); return null; };
-    viewer().update.props.onLink(notice.instructions);
-    window.open = openBefore;
-    assert.deepEqual(opened, [[notice.instructions, '_blank', 'noopener,noreferrer']]);
+    assert.equal(viewer().update.props.phase.phase, 'idle');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [], 'nothing read: the page started with the notice');
+    // A click updates: the engine is asked, and the button follows its update.
+    await act(async () => { viewer().update.props.onUpdate(); await new Promise(resolve => setTimeout(resolve, 10)); });
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/update').map(([url]) => url), ['/__cad/update']);
+    assert.equal(viewer().update.props.phase.phase, 'working');
     assert.deepEqual(guards, ['1']);
 
     // Showing another file is a navigation, by the file's id: pushed, and undone by Back.
@@ -222,7 +220,7 @@ test('a page whose engine is gone says so in its language, over the page, until 
     catalog = 'stopped';
     await act(() => client.refresh({ file: ONE }).catch(() => {}));
     assert.match(alert()?.textContent ?? '', /エンジンが動いていません。戻るとページは自動で再接続します。/);
-    assert.match(alert()?.textContent ?? '', /cadgen run <script>\.py か cadgen viewer を実行して起動してください。/);
+    assert.match(alert()?.textContent ?? '', /cad run <script>\.py か cad viewer を実行して起動してください。/);
     // The one notice: the page under it, a view's own card among it, is out of reach and unheard.
     assert.equal(window.document.querySelectorAll('[role="alert"]').length, 1);
     const under = alert()?.nextElementSibling;
@@ -231,9 +229,9 @@ test('a page whose engine is gone says so in its language, over the page, until 
     assert.equal(snapshot() !== undefined, true, 'the page stays under it');
     catalog = 'restarted';
     await act(() => client.refresh({ file: ONE }).catch(() => {}));
-    // An engine that refuses the token runs: the page's link was replaced (`cadgen server --rotate-token`).
+    // An engine that refuses the token runs: the page's link was replaced (`cad server --rotate-token`).
     assert.match(alert()?.textContent ?? '', /このページのリンクは置き換えられました。/);
-    assert.match(alert()?.textContent ?? '', /cadgen viewer を実行し、表示されたリンクを開いてください。/);
+    assert.match(alert()?.textContent ?? '', /cad viewer を実行し、表示されたリンクを開いてください。/);
     assert.doesNotMatch(alert()?.textContent ?? '', /engine token required|エンジンが動いていません/);
     catalog = 'back';
     await act(() => client.refresh({ file: ONE }));
@@ -254,10 +252,10 @@ test('the notice says the page reconnects, and how to start the engine', async (
   try {
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
-      'The engine is not running; the page reconnects when it is back.Run cadgen run <script>.py or cadgen viewer to start it.');
+      'The engine is not running; the page reconnects when it is back.Run cad run <script>.py or cad viewer to start it.');
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
-      "This page's link was replaced; the page reconnects once its new link is opened.Run cadgen viewer and open the link it prints.");
+      "This page's link was replaced; the page reconnects once its new link is opened.Run cad viewer and open the link it prints.");
   } finally {
     await act(() => root.unmount());
     dom.window.close();

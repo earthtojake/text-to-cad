@@ -17,9 +17,9 @@ URDF.
 ```
 python juno.py                                    # prints each model's id: and view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
-cadgen snapshot "$ID" juno.png --pose wave_right         # ID: the juno model's id: line
-cadgen snapshot ../juno.urdf urdf.png
-cadgen export "$ID" GLB/juno.glb                  # the seven motions as clips
+cad snapshot "$ID" juno.png --pose wave_right         # ID: the juno model's id: line
+cad snapshot ../juno.urdf urdf.png
+cad export "$ID" GLB/juno.glb                  # the seven motions as clips
 ```
 
 ## How it is built
@@ -103,6 +103,6 @@ jump's crouch to -41.1°, below the URDF's -30. The model's `ankle_pitch_*` trav
 
 ## Not ported
 
-- Per-link STEP files. `cadgen export` writes one of a link model on demand.
+- Per-link STEP files. `cad export` writes one of a link model on demand.
 - The 28 one-link scripts. Each link is a model of `juno.py` now, so no model
   calls another.

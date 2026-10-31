@@ -3,8 +3,8 @@ from bd_materials import FinishedMaterial, metals
 from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
 
 import math
 

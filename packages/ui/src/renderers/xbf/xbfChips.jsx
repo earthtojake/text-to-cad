@@ -13,7 +13,7 @@ import { useI18n } from "@text-to-cad/ui/i18n";
 // measures on the exact shape when the element is picked (`fetchXbfElementFacts`).
 //
 // Each selected thing is also a reference into the document: the engine's canonical refs
-// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cadgen inspect` and `select` read, for an .xbf,
+// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cad inspect` and `select` read, for an .xbf,
 // a STEP and a model alike: a part or subassembly by its label, or its occurrence path where the
 // label is shared (`hand/finger.2`), an element by its name, else its kind and number, under it
 // (`hand/finger.2/face 7`).

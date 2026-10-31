@@ -1,5 +1,5 @@
 /**
- * GET /v1/versions: the feed cadgen's daily version check reads (`cadgen/updates.py` in
+ * GET /v1/versions: the feed cadgen's hourly version check reads (`cadgen/updates.py` in
  * packages/cadgen):
  *
  *   {"latest": "0.9.0"}

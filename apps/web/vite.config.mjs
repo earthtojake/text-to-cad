@@ -85,7 +85,7 @@ async function startDevBackend() {
     python,
     [
       "-m",
-      "cadgen.viewer",
+      "cad_server.viewer",
       "--host",
       "127.0.0.1",
       "--api-only",

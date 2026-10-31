@@ -8,7 +8,7 @@ const SERVING = Object.freeze({ phase: "read", label: "Opening document", done: 
 
 /**
  * What the page says of a document before the engine has said anything: a STEP's is an import -- the
- * engine's reader parses it, then collects its parts (`cadgen.engine.serve`), and says so in progress
+ * engine's reader parses it, then collects its parts (`cad.engine.serve`), and says so in progress
  * events the page hears (`engineDocument`'s `onProgress`), so the page starts on the first of them, the
  * read (`kit/status/progressEvent.js`); any other document's is a read.
  */
@@ -52,7 +52,7 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  *   writing the document now; `failed`: the last build of it that failed.
  */
 /**
- * Whether a document's read failed because the engine no longer holds it (`cadgen delete` while it is
+ * Whether a document's read failed because the engine no longer holds it (`cad delete` while it is
  * open, among others): the file viewer then opens the file again, which says so in the document's
  * own words ("This model is not saved"), not as a load that failed.
  */
@@ -80,7 +80,7 @@ export function useXbfScene({ client, file }) {
     const imported = frame => { if (!held.current.scene) setState(current => ({ ...current, progress: frame })); };
     (async () => {
       if (typeof client?.engineDocument !== "function") {
-        throw new Error("This viewer cannot open a cadgen engine document: its host serves no engine.");
+        throw new Error("This viewer cannot open an engine document: its host serves no engine.");
       }
       let served = await client.engineDocument(file, { signal, onProgress: imported });
       let previous = held.current.document;

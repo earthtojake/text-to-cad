@@ -1,4 +1,4 @@
-from cadgen import model
+from cad import model
 
 import build123d as bd
 

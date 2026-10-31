@@ -19,7 +19,7 @@ pivots are passive differential joints and are not counted as actuators.
 
 from __future__ import annotations
 
-from cadgen import model
+from cad import model
 
 from dataclasses import asdict, dataclass
 from math import sqrt

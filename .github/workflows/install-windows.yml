@@ -2,8 +2,8 @@ name: Windows installer rehearsal
 
 # install.ps1 on a fresh Windows runner, the way a person runs it: Windows PowerShell 5.1, the
 # piped `irm | iex` form and the script form with options, against the wheel this tree builds.
-# uv installed by its own installer when the image has none, `cadgen setup` run with nothing
-# asked, the `cadgen` command registered, the doctor's verdict, a second run and the uninstall.
+# uv installed by its own installer when the image has none, `cad setup` run with nothing
+# asked, the `cad` command registered, the doctor's verdict, a second run and the uninstall.
 # A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
 # installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
 on:
@@ -18,12 +18,12 @@ on:
     paths:
       - .github/workflows/install-windows.yml
       - scripts/install/install.ps1
-      - packages/cadgen/src/cadgen/cli/setup.py
-      - packages/cadgen/src/cadgen/cli/uninstall.py
-      - packages/cadgen/src/cadgen/cli/doctor.py
-      - packages/cadgen/src/cadgen/_internal/providers.py
-      - packages/cadgen/src/cadgen/_internal/launch.py
-      - packages/cadgen/src/cadgen/_internal/installations.py
+      - packages/texttocad-server/src/cad_server/cli/setup.py
+      - packages/texttocad-server/src/cad_server/cli/uninstall.py
+      - packages/texttocad-server/src/cad_server/cli/doctor.py
+      - packages/texttocad-server/src/cad_server/_internal/providers.py
+      - packages/texttocad-server/src/cad_server/_internal/launch.py
+      - packages/texttocad-server/src/cad_server/_internal/installations.py
 
 permissions:
   contents: read
@@ -48,19 +48,19 @@ jobs:
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
-      - name: Build and check the wheel
+      - name: Build and check the wheels
         env:
-          CADGEN_KEEP_WHEEL: "1"
-          CADGEN_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      - name: Keep the wheel for the Windows job
+      - name: Keep the wheels for the Windows job
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-wheel
-          path: ${{ runner.temp }}/cadgen-wheel/*.whl
+          name: wheels
+          path: ${{ runner.temp }}/wheels/*.whl
           if-no-files-found: error
           retention-days: 1
 
@@ -80,17 +80,20 @@ jobs:
       - name: Take the wheel
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-wheel
+          name: wheels
           path: ${{ runner.temp }}\wheel
 
+      # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
+      # the release the server pins, which no index has before it is released.
       - name: The wheel to install from, and the release it is
         shell: pwsh
         run: |
-          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\*.whl" | Select-Object -First 1).FullName
-          if (-not $wheel) { throw "no wheel in $env:RUNNER_TEMP\wheel" }
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\texttocad_server-*.whl" | Select-Object -First 1).FullName
+          if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
           $release = (Get-Content VERSION -Raw).Trim()
-          "CADGEN_WHEEL=$wheel" >> $env:GITHUB_ENV
-          "CADGEN_RELEASE=$release" >> $env:GITHUB_ENV
+          "CAD_WHEEL=$wheel" >> $env:GITHUB_ENV
+          "UV_FIND_LINKS=$env:RUNNER_TEMP\wheel" >> $env:GITHUB_ENV
+          "CAD_RELEASE=$release" >> $env:GITHUB_ENV
           Write-Host "wheel: $wheel"
           Write-Host "release: $release"
           if (Get-Command uv -ErrorAction SilentlyContinue) {
@@ -120,23 +123,23 @@ jobs:
       # stderr line of uv's becomes a PowerShell error record.
       - name: Dry run, as a script with options (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CADGEN_WHEEL%" --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
 
       - name: The dry run's plan
         shell: pwsh
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\dry-run.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen setup exited') { throw "cadgen setup failed" }
-          if ($out -notmatch "text-to-cad $([regex]::Escape($env:CADGEN_RELEASE)) for this machine") { throw "the plan does not name the release" }
+          if ($out -match 'cad setup exited') { throw "cad setup failed" }
+          if ($out -notmatch "text-to-cad $([regex]::Escape($env:CAD_RELEASE)) for this machine") { throw "the plan does not name the release" }
           if ($out -notmatch 'Dry run: nothing was changed\.') { throw "the dry run did not end as one" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cadgen.cmd'
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
           if (Test-Path $cmd) { throw "a dry run wrote $cmd" }
 
       - name: Install, piped as the docs say (irm | iex, 5.1)
         shell: cmd
         env:
-          CADGEN_INSTALL_FROM: ${{ env.CADGEN_WHEEL }}
+          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install.txt" 2>&1
 
       - name: What the install did
@@ -144,33 +147,33 @@ jobs:
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\install.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen setup exited') { throw "cadgen setup failed" }
-          if ($out -notmatch "cadgen\s+registered $([regex]::Escape($env:CADGEN_RELEASE))") { throw "cadgen did not register" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cadgen.cmd'
-          if (-not (Test-Path $cmd)) { throw "the cadgen command was not written at $cmd" }
-          "CADGEN_CMD=$cmd" >> $env:GITHUB_ENV
+          if ($out -match 'cad setup exited') { throw "cad setup failed" }
+          if ($out -notmatch "server\s+registered $([regex]::Escape($env:CAD_RELEASE))") { throw "the server did not register" }
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
+          if (-not (Test-Path $cmd)) { throw "the cad command was not written at $cmd" }
+          "CAD_CMD=$cmd" >> $env:GITHUB_ENV
 
       - name: The registered command, the doctor and a second run
         shell: pwsh
         run: |
-          & $env:CADGEN_CMD --version
-          if ($LASTEXITCODE) { throw "cadgen --version exited $LASTEXITCODE" }
-          & $env:CADGEN_CMD doctor
-          if ($LASTEXITCODE) { throw "cadgen doctor exited $LASTEXITCODE" }
-          & $env:CADGEN_CMD setup --dry-run
-          if ($LASTEXITCODE) { throw "a second cadgen setup --dry-run exited $LASTEXITCODE" }
+          & $env:CAD_CMD --version
+          if ($LASTEXITCODE) { throw "cad --version exited $LASTEXITCODE" }
+          & $env:CAD_CMD doctor
+          if ($LASTEXITCODE) { throw "cad doctor exited $LASTEXITCODE" }
+          & $env:CAD_CMD setup --dry-run
+          if ($LASTEXITCODE) { throw "a second cad setup --dry-run exited $LASTEXITCODE" }
 
       # The uninstall as the docs give it, through the installer: never through the proxy it removes,
       # a batch file cmd is still reading.
       - name: Uninstall, through the installer (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CADGEN_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
 
       - name: What the uninstall did
         shell: pwsh
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\uninstall.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen uninstall exited') { throw "cadgen uninstall failed" }
-          if (Test-Path $env:CADGEN_CMD) { throw "the proxy is still there after the uninstall: $env:CADGEN_CMD" }
+          if ($out -match 'cad uninstall exited') { throw "cad uninstall failed" }
+          if (Test-Path $env:CAD_CMD) { throw "the proxy is still there after the uninstall: $env:CAD_CMD" }
           Write-Host "the proxy is gone"

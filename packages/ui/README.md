@@ -232,7 +232,7 @@ may rely on.
 ## CAD document updates
 
 A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
-reads what the cadgen engine serves of it through the viewer (`client.engineDocument`,
+reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/__cad/xbf`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.

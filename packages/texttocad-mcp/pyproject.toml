@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "texttocad-mcp"
+version = "0.9.0"
+description = "The stdio transport an agent app starts for text-to-cad's CAD app: MCP carried to the device's CAD server, with the standard library alone."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+authors = [{ name = "earthtojake" }]
+keywords = ["cad", "mcp", "agent-skills"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+# The standard library alone: an agent app installs this to start the CAD app, and the server it
+# reaches is installed on its own (the install command), or by this transport on a device with none.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+Repository = "https://github.com/earthtojake/text-to-cad"
+Issues = "https://github.com/earthtojake/text-to-cad/issues"
+
+[project.scripts]
+cad-mcp = "cad_mcp.shim:main"
+
+[tool.pyrefly]
+preset = "basic"
+project-includes = ["src"]
+search-path = ["src"]
+use-ignore-files = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cad_mcp", "cad_mcp.*"]

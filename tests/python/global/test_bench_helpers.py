@@ -34,7 +34,7 @@ def model(**overrides):
             "edit": {"file": "src/part.py", "from": "WIDTH = 8.0", "to": "WIDTH = 9.0"}, **overrides}
 
 
-SCRIPT = "from __future__ import annotations\nfrom cadgen import model\nWIDTH = 8.0\nDEPTH = 8.0\n\n\n@model\ndef part():\n    return WIDTH\n"
+SCRIPT = "from __future__ import annotations\nfrom cad import model\nWIDTH = 8.0\nDEPTH = 8.0\n\n\n@model\ndef part():\n    return WIDTH\n"
 
 
 def step(model_name, name, **row):
@@ -118,13 +118,13 @@ class WorkCopyTest(unittest.TestCase):
         with temporary_directory(prefix="bench-private-") as folder:
             out = Path(folder).resolve() / "batch"
             cadgen = Path(folder).resolve() / "cadgen/src"
-            keys = ("CADGEN_ENGINE_DIR", "CADGEN_STATE_DIR", "CADGEN_CACHE_DIR", "CADGEN_LAUNCHER_DIR")
+            keys = ("CAD_ENGINE_DIR", "CAD_STATE_DIR", "CAD_CACHE_DIR", "CAD_LAUNCHER_DIR")
             with patch.dict(os.environ, {**{key: "/owner/normal" for key in keys}, "PYTHONDONTWRITEBYTECODE": "1"}):
                 prepared = corpus_bench.prepare(model(pythonpath=["src"]), out, out / "doors", cadgen)
             for key in keys:
                 self.assertTrue(Path(prepared.env[key]).is_relative_to(out), key)
             self.assertEqual(len({prepared.env[key] for key in keys}), len(keys))
-            self.assertEqual(prepared.env["CADGEN_ENGINE_PORT"], "0")
+            self.assertEqual(prepared.env["CAD_ENGINE_PORT"], "0")
             self.assertEqual(prepared.env["DO_NOT_TRACK"], "1")
             self.assertNotIn("PYTHONDONTWRITEBYTECODE", prepared.env)
             self.assertTrue(Path(prepared.env["PYTHONPYCACHEPREFIX"]).is_relative_to(out))

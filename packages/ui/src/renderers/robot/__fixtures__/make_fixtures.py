@@ -5,7 +5,7 @@ The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paire
 ``swing.sdf``, ``chain.urdf``, ``linkage.urdf`` (a four-bar linkage closed through
 ``tcad:four_bar``), and two cadgen refuses: ``gone.urdf``, whose link mesh is missing, and
 ``lonely.srdf``, with no URDF beside it). This script reads each one with cadgen
-(``cadgen.robot_payload``) and writes:
+(``cad_server.robot_payload``) and writes:
 
 * ``<name>.<kind>.robot.json`` (``arm.urdf.robot.json``): the payload, with every visual's mesh
   named by the URL the browser test's server answers for it (``/meshes/<file>`` for a link mesh
@@ -15,7 +15,7 @@ The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paire
   test's server answers as a 400, as the viewer's route does.
 
 So the browser test needs no Python, and the Python suite holds these files
-current (``tests/python/packages/cadgen/test_robot_payload.py``). Regenerate after changing a
+current (``tests/python/packages/texttocad_server/test_robot_payload.py``). Regenerate after changing a
 description or the payload shape, from the repository root:
 
     .venv/bin/python packages/ui/src/renderers/robot/__fixtures__/make_fixtures.py
@@ -36,7 +36,7 @@ DESCRIPTIONS = ("arm.urdf", "arm.srdf", "swing.sdf", "chain.urdf", "linkage.urdf
 def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes]]:
     """``(payloads by name, refusals by name, primitive GLB bytes by hash)`` for the descriptions here,
     located as the browser test serves them."""
-    from cadgen.robot_payload import RobotReadError, locate_robot_payload, primitive_glb_bytes, read_robot_description
+    from cad_server.robot_payload import RobotReadError, locate_robot_payload, primitive_glb_bytes, read_robot_description
 
     payloads: dict[str, dict] = {}
     refusals: dict[str, str] = {}
@@ -70,7 +70,8 @@ def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes
 
 
 def main() -> None:
-    sys.path.insert(0, str(HERE.parents[5] / "packages" / "cadgen" / "src"))
+    for project in ("texttocad-mcp", "texttocad-server", "texttocad"):  # the library first on the path
+        sys.path.insert(0, str(HERE.parents[5] / "packages" / project / "src"))
     payloads, refusals, meshes = fixture_payloads()
     primitives = HERE / "primitives"
     shutil.rmtree(primitives, ignore_errors=True)

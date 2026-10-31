@@ -234,16 +234,14 @@ it('every view has the navbar but the file handler: the sidebar\'s home, a threa
   expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
 });
 
-it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it, the update notice under it', () => {
+it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it, the update button under it', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0', instructions: 'https://www.texttocad.dev/install' };
+  const notice = { latest: '0.9.0', version: '0.8.1' };
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', notice }} />);
   expect(viewer.props!.chrome).toBe('bare');
   expect(container.querySelector('[data-card-corner] [aria-label="Full size"]')).not.toBeNull();
-  expect(container.querySelector('[data-card-corner] [data-update-notice]')).not.toBeNull();
-  expect(screen.queryByRole('button', { name: 'Update to 0.9.0' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Update to 0.9.0' }).closest('[data-card-corner]')).not.toBeNull();
 });
 
 it("Open in browser is the navbar's last control where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {
@@ -392,7 +390,7 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const { queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
-  // cadgen's telemetry is on by default once a `cadgen` command has said so: the page never asks.
+  // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
   expect(server.asked('/__cad/analytics')).toEqual([null]);
@@ -429,46 +427,43 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));
 });
 
-it('a newer release is the navbar\'s blue update button: its card sends the prompt to the chat where the host takes messages, copies it elsewhere, the full instructions a link away; the file handler has it as a notice in its corner, closed for the view', async () => {
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
-  {
-    // The launch carries the notice as the server last read it: the button draws with the page, over the home too.
-    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
-    const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice }} />);
-    const update = await findByRole('button', { name: 'Update to 0.9.0' });
-    expect(update.closest('[data-card-corner]')).toBeNull();
-    await act(async () => update.click());
-    await findByRole('dialog', { name: 'Update available' });
-    await act(async () => getByRole('link', { name: 'Manual installation' }).click());
-    expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: notice.instructions });
-    await act(async () => getByRole('button', { name: 'Send to agent' }).click());
-    expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
-    expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
-    expect(getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
-    expect(server.asked('/__cad/version')).toEqual([]); // nothing to read, and nothing kept
-    cleanup();
-  }
-  const writeText = vi.fn(async () => {});
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-  {
-    const { bridge, server } = host({ displayMode: 'fullscreen' });
-    const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'tab', notice }} />);
-    // Looked up outside act: act holds React's updates until it returns, and the lookup waits on them.
-    const update = await findByRole('button', { name: 'Update to 0.9.0' });
-    await act(async () => update.click());
-    const copy = await findByRole('button', { name: 'Copy prompt' });
-    await act(async () => copy.click());
-    expect(writeText).toHaveBeenCalledWith(notice.prompt);
-    expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
-    cleanup();
-  }
-  // The file handler, which has no navbar: the notice at its viewport's top-right, its X closing it for the view.
-  const { bridge, server } = host({ displayMode: 'fullscreen' });
-  const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step', surface: 'file', notice }} />);
-  const card = await findByRole('region', { name: 'Update available' });
-  expect(card.closest('[data-card-corner]')).not.toBeNull();
-  expect(queryByRole('button', { name: 'Update to 0.9.0' })).toBeNull();
-  await act(async () => getByRole('button', { name: 'Close' }).click());
-  expect(queryByRole('region', { name: 'Update available' })).toBeNull();
+it('a newer release is the update button, an icon: a click updates through the engine, and once it comes back with the new release the card loads the engine\'s app in its own place', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1' };
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  // The launch carries the notice as the server last read it: the button draws with the page, over the home too.
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  let release = '0.8.1';
+  server.answers['/__cad/update'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0', progress: { stage: 'restart', done: 3, total: 4 } } });
+  server.answers['/__cad/version'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0' } });
+  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
+  const update = await findByRole('button', { name: 'Update to 0.9.0' });
+  expect(update.closest('[data-card-corner]')).toBeNull();
+  expect(update.textContent).toBe('');  // an icon, and nothing else: no card opens
+  expect(server.asked('/__cad/version')).toEqual([]);  // nothing read: the launch said it
+  await act(async () => update.click());
+  await waitFor(() => expect(server.asked('/__cad/update')).toHaveLength(1));
+  await findByRole('status', { name: 'Restarting with 0.9.0' });
+  expect(reload).not.toHaveBeenCalled();  // the engine has not come back yet
+  release = '0.9.0';  // the engine came back with the new release: the card loads its app in place
+  await waitFor(() => expect(reload).toHaveBeenCalledOnce(), { timeout: 3000 });
+  expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
+});
+
+it('a switch that fails and goes back ends the card\'s restart: the update offered again, no other app loaded', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1' };
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  let update: Record<string, unknown> = { state: 'restarting', target: '0.9.0' };
+  server.answers['/__cad/update'] = () => ({ notice, release: '0.8.1', update });
+  server.answers['/__cad/version'] = () => ({ notice, release: '0.8.1', update });
+  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
+  const button = await findByRole('button', { name: 'Update to 0.9.0' });
+  await act(async () => button.click());
+  await findByRole('status', { name: 'Restarting with 0.9.0' });
+  // The engine the failed switch started again: the card's own release, its update failed (`Update.recall`).
+  update = { state: 'failed', target: '0.9.0', error: "text-to-cad 0.9.0's engine did not start" };
+  await findByRole('button', { name: 'Update to 0.9.0' }, { timeout: 3000 });
+  expect(reload).not.toHaveBeenCalled();
 });

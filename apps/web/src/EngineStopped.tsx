@@ -4,7 +4,7 @@ import { translateIn } from '@text-to-cad/ui/i18n';
 
 /**
  * What the page says when the engine that served it is gone (`isEngineGone`): it stopped, or the one
- * answering now does not know this page's token (`refused`: its link was replaced, by `cadgen server
+ * answering now does not know this page's token (`refused`: its link was replaced, by `cad server
  * --rotate-token`). Drawn over the page, which stays as it was while the page asks for its engine
  * again and reloads when it is back (`useEngineReconnect`).
  */

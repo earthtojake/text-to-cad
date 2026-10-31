@@ -1,5 +1,5 @@
 // Robot payloads for the robot scene's tests, built by hand in the shape cadgen resolves
-// (`cadgen.robot_payload`): the articulation (the STEP format, over links), the visual list and
+// (`cad_server.robot_payload`): the articulation (the STEP format, over links), the visual list and
 // the link facts. Hand-built so a test reads every number it asserts against; what cadgen writes
 // for real descriptions is held current by the Python suite (`tests/python/.../test_robot_payload.py`)
 // and served to the browser suite from `packages/ui/src/renderers/robot/__fixtures__`.

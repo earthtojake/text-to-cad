@@ -30,10 +30,10 @@ def generated_cad_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
     return temporary_directory(prefix=prefix)
 
 
-# ERROR_SHARING_VIOLATION -- the same error cadgen's atomic rename retries
-# (``cadgen._internal.atomic_replace``), for the same reason: the handle is
+# ERROR_SHARING_VIOLATION -- the same error the library's atomic rename retries
+# (``cad._internal.atomic_replace``), for the same reason: the handle is
 # not ours. Kept as a literal here because the support package must not
-# import cadgen to clean up a directory.
+# import the library to clean up a directory.
 WINDOWS_SHARING_VIOLATION = 32
 # Widened after the 750 ms ladder lost once more on the runner (2026-09-02):
 # the scanner's hold on a just-read file can outlast a second. ~6 s total.

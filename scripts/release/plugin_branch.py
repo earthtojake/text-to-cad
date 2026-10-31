@@ -3,7 +3,7 @@
 
 Installers clone a branch and take its tree as the plugin. On `main` that tree is the
 monorepo: thousands of files, a workspace npm installs, workflows and binaries that claude.ai's
-directory holds for a reviewer -- and a cadgen pin from the merge on, before PyPI has the
+directory holds for a reviewer -- and a release's pins from the merge on, before PyPI has the
 wheel. So installers follow branches that only Publish Release writes, once the wheel is on
 PyPI: one commit per release whose tree is only the plugin -- the manifests and the icon, the
 MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a file outside
@@ -17,8 +17,8 @@ Two copies, differing in what they carry and the channel each config names:
   copies.
 
 Each MCP config names the channel its installs come from in its server's environment,
-`CADGEN_INSTALL_CHANNEL`, and `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to
-date (`COPIES`; cadgen's `_internal/channel.py`). A config the copy does not override keeps
+`CAD_INSTALL_CHANNEL`, and `CAD_AUTO_UPDATED=1` where a store keeps the copy up to
+date (`COPIES`; the server's `_internal/channel.py`). A config the copy does not override keeps
 main's: on `main` the Claude config names `claude-github`, and the Cursor one the Cursor
 Marketplace, which reads `main`.
 
@@ -58,7 +58,7 @@ STANDARD_FILES = ("plugin.json", "mcp.json")
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
-    # Each config's channel, and whether a store keeps its copies up to date (`CADGEN_AUTO_UPDATED`).
+    # Each config's channel, and whether a store keeps its copies up to date (`CAD_AUTO_UPDATED`).
     channels: dict[str, tuple[str, bool]]
 
 
@@ -130,20 +130,20 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
 
 
 def with_channel(path: str, data: bytes, channel: str, auto_updated: bool, errors: list[str]) -> bytes:
-    """An MCP config whose one `cadgen mcp` server names `channel` as its install channel, and
+    """An MCP config whose one `cad-mcp` server names `channel` as its install channel, and
     says whether something else keeps the copy up to date."""
     try:
         config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if server["args"][-2:] == ["cadgen", "mcp"]]
+        servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
     except (ValueError, KeyError, TypeError, AttributeError):
         errors.append(f"{path} is not an mcpServers config this script can read")
         return data
     if len(servers) != 1:
-        errors.append(f"{path} must start exactly one `cadgen mcp` server (found {len(servers)})")
+        errors.append(f"{path} must start exactly one `cad-mcp` server (found {len(servers)})")
         return data
-    env = {**servers[0].get("env", {}), "CADGEN_INSTALL_CHANNEL": channel}
-    env.pop("CADGEN_AUTO_UPDATED", None)
-    servers[0]["env"] = {**env, **({"CADGEN_AUTO_UPDATED": "1"} if auto_updated else {})}
+    env = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": channel}
+    env.pop("CAD_AUTO_UPDATED", None)
+    servers[0]["env"] = {**env, **({"CAD_AUTO_UPDATED": "1"} if auto_updated else {})}
     return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
 
 

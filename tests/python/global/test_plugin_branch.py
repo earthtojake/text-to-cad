@@ -21,7 +21,7 @@ branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
-SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}}})
+SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "texttocad-mcp==1.0.0", "cad-mcp"]}}})
 
 
 def git(root: Path, *args: str) -> str:
@@ -81,7 +81,7 @@ class PluginTreeTests(unittest.TestCase):
         # claude.ai's directory follows claude-plugin and updates its copies. Every other installer
         # follows latest, where the configs keep main's channels but Cursor's: main's names the
         # Cursor Marketplace, which reads main, and a Cursor install by hand clones the branch.
-        # The server's environment is the plugin's say (cadgen's _internal/channel.py).
+        # The server's environment is the plugin's say (the server's _internal/channel.py).
         said = {}
         for copy in ("latest", "directory"):
             tree, errors, _manifest = branch.build(REPO_ROOT, copy)
@@ -90,17 +90,17 @@ class PluginTreeTests(unittest.TestCase):
                           for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json",
                                        "gemini-extension.json")
                           if path in tree}
-        gemini = {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"}
+        gemini = {"CAD_INSTALL_CHANNEL": "gemini-github"}
         self.assertEqual(said["latest"], {
-            "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
-            "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
-            "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},
-            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
+            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
+            "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
+            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-github"},
+            "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
             "gemini-extension.json": gemini,
         })
         self.assertEqual(said["directory"], {
-            "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"},
-            "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},
+            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"},
+            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-github"},
             "gemini-extension.json": gemini,
         })
 

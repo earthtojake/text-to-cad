@@ -125,5 +125,5 @@ carries each old mate now (`steering` is `head_tube_axis`, `engine_swing`
 
 One motion is in the model's code: `steer`, `head_tube_axis` from -20 to 20 degrees
 over 2 s and back over 2 s, as out-and-back waypoints (a motion has no loop or
-pingpong; a player repeats it). The document keeps it as a definition; `cadgen export
+pingpong; a player repeats it). The document keeps it as a definition; `cad export
 <id> GLB/motorbike.glb` bakes it into a glTF clip named `steer`.

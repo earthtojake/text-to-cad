@@ -1,6 +1,6 @@
 export type CadJson = null | boolean | number | string | CadJson[] | { [key: string]: CadJson };
 export interface CadEntry {
-  /** The document's id (`cadgen.engine.ids`): rows join by it, so one file is one row however its path is spelled. */
+  /** The document's id (`cad.engine.ids`): rows join by it, so one file is one row however its path is spelled. */
   id?: string;
   /** The file's absolute path, `/`-separated; a document known by its id alone (a model's): its id. */
   file: string;
@@ -20,7 +20,7 @@ export interface CadEntry {
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
-  /** The folder of the most recent launch (`cadgen viewer`), which a launch's relative files are read from. */
+  /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
@@ -30,6 +30,8 @@ export interface CadServerInfo {
   home?: string;
   /** The engine process answering (`os.getpid()`): another pid after the engine was gone is a new engine, which reloads the page. */
   pid?: number;
+  /** The release the engine runs: another one answering after an update reloads the page into it. */
+  release?: string;
   [key: string]: unknown;
 }
 /** A model in the library every CAD view shares (`GET /__cad/recents`): times in seconds. */
@@ -53,8 +55,17 @@ export interface CadRecent {
 }
 /** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
 export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
-/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
-export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
+/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the release offered, and this install's. */
+export interface CadUpdateNotice { latest: string; version: string }
+/** Where an update the update button started is (`cad_server/_internal/update.py`). */
+export interface CadUpdateState {
+  state: 'idle' | 'working' | 'restarting' | 'failed';
+  target?: string | null;
+  progress?: { kind?: string; stage?: string; done?: number; total?: number | null } | null;
+  error?: string | null;
+}
+/** `GET /__cad/version`, and `POST /__cad/update`'s answer: the notice, the engine's release, the update's state. */
+export interface CadVersion { notice: CadUpdateNotice | null; release?: string; update?: CadUpdateState | null }
 export interface CadCatalog {
   entries: CadEntry[];
   /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
@@ -133,7 +144,7 @@ export interface CadEngineDocument {
  * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
- * links and joints, as written. See `packages/cadgen/src/cadgen/robot_payload.py`.
+ * links and joints, as written. See `packages/texttocad-server/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;
@@ -201,8 +212,10 @@ export interface CadWorkspaceService {
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
   language(locale?: string | null): Promise<{ locale: string | null }>;
-  /** Whether a newer text-to-cad is out: the update button's notice, or null. */
-  version(): Promise<{ notice: CadUpdateNotice | null }>;
+  /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
+  version(): Promise<CadVersion>;
+  /** The update button's click: the engine updates in the background, and answers as `version` does. */
+  startUpdate(): Promise<CadVersion>;
   /**
    * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
    * noted by the server and sent only with consent. Never fails.
@@ -210,7 +223,7 @@ export interface CadWorkspaceService {
   reportActivity(activity: CadActivity): void;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
-  /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
+  /** `GET /__cad/robot`: a robot description resolved for the page (`cad_server.robot_payload`). */
   robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   /**
    * `GET /__cad/xbf`: where the page reads a document the cadgen engine serves (an `.xbf`, a STEP),

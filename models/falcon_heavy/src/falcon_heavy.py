@@ -25,7 +25,7 @@ project's RESEARCH.md, PROVENANCE.md and DIMENSIONS.md (models/falcon_heavy).
 
 from __future__ import annotations
 
-from cadgen import model
+from cad import model
 
 import build123d as bd
 

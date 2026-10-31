@@ -14,9 +14,9 @@ export default {
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "The CAD Viewer is not answering",
   "app.engine.notRunning": "The engine is not running; the page reconnects when it is back.",
-  "app.engine.startIt": "Run cadgen run <script>.py or cadgen viewer to start it.",
+  "app.engine.startIt": "Run cad run <script>.py or cad viewer to start it.",
   "app.engine.linkReplaced": "This page's link was replaced; the page reconnects once its new link is opened.",
-  "app.engine.openNewLink": "Run cadgen viewer and open the link it prints.",
+  "app.engine.openNewLink": "Run cad viewer and open the link it prints.",
 
   // The file view: opening, and the states where it stops.
   "file.opening": "Opening…",
@@ -131,20 +131,12 @@ export default {
   "home.ageHours": "{n}h ago",
   "home.ageDays": "{n}d ago",
 
-  // The update button and its card.
+  // The update button: offered, updating, restarting, failed.
   "update.label": "Update",
   "update.toAria": "Update to {version}",
-  "update.available": "Update available",
-  "update.close": "Close",
-  "update.description": "A new version of text-to-cad is available. Send a message to your agent asking it to update to the latest version:",
-  "update.copy": "Copy",
-  "update.copied": "Copied",
-  "update.copyPrompt": "Copy prompt",
-  "update.sendToAgent": "Send to agent",
-  "update.manualInstallation": "Manual installation",
-  "update.sendFailed": "It could not be sent to the chat. Copy the prompt instead.",
-  "update.copiedHint": "Copied. Paste it into your agent's chat.",
-  "update.copyFailed": "It could not be copied. Select the prompt above and copy it.",
+  "update.updating": "Updating to {version}",
+  "update.restarting": "Restarting with {version}",
+  "update.failed": "The update failed: {error}",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
@@ -191,6 +183,10 @@ export default {
   "progress.snapshot.draw": "Drawing the picture",
   "progress.snapshot.write": "Writing the picture",
   "progress.inspect-measure.measure": "Measuring parts",
+  "progress.update.install": "Installing the update",
+  "progress.update.build123d": "Installing build123d",
+  "progress.update.apps": "Updating the apps",
+  "progress.update.restart": "Restarting",
 
   // Display: its tile and menu, the modes (`DisplayModeOptions.js`, by value) and the Grid switch.
   "display.label": "Display",
@@ -539,9 +535,9 @@ export default {
   "alert.drawingStillShown": "{message} The existing drawing remains visible.",
   "alert.captureDrawingFailed": "Couldn’t capture the drawing",
   "alert.schema.summary": "Version mismatch",
-  "alert.schema.title": "This app and cadgen disagree about drawings",
+  "alert.schema.title": "This app and the server disagree about drawings",
   "alert.schema.message": "The viewer received a drawing payload at schemaVersion {received}, but this build of the app reads version {version}.",
-  "alert.schema.recovery": "Update cadgen and the app together, then reload. They ship from one release for exactly this reason.",
+  "alert.schema.recovery": "Update the server and the app together, then reload. They ship from one release for exactly this reason.",
   "alert.srdf.summary": "URDF not found",
   "alert.srdf.title": "No URDF beside this SRDF",
   "alert.srdf.message": "An SRDF says how a robot is planned, not what it looks like, so the viewer draws the URDF it belongs to. It looked in “{folder}” for exactly one .urdf file with the same <robot name>, and found none, or more than one. {detail}",

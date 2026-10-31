@@ -5,12 +5,16 @@
 // `progress.<kind>.<stage>` (`i18n/locales`), and never reads a word of the engine's own. This is the
 // one reader of an event on the page: what it is, its key, its count.
 
+// A kind is lower-case words with hyphens between; a stage is too, but one named for a technology keeps
+// its name's digits (the update's `build123d`), as the engine's vocabulary policy allows.
 const KIND = /^[a-z][a-z-]*$/;
+const STAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const KEY = /^progress\.([^.]+)\.([^.]+)$/;
 
 /** Whether `frame` is the engine's progress event (a page's own loading frame says `phase`, never `kind`). */
 export function isProgressEvent(frame) {
   return Boolean(frame) && typeof frame === "object" && typeof frame.kind === "string" && KIND.test(frame.kind)
-    && typeof frame.stage === "string" && KIND.test(frame.stage);
+    && typeof frame.stage === "string" && STAGE.test(frame.stage);
 }
 
 /** The locale key of an event's stage: `progress.build.body`. */
@@ -19,7 +23,10 @@ export function progressKey(frame) {
 }
 
 /** Whether a status label is an event's key (`statusLabel` says it through `t`). */
-export const isProgressKey = label => /^progress\.[a-z][a-z-]*\.[a-z][a-z-]*$/.test(String(label || ""));
+export function isProgressKey(label) {
+  const key = KEY.exec(String(label || ""));
+  return Boolean(key) && KIND.test(key[1]) && STAGE.test(key[2]);
+}
 
 /**
  * An event's count, where its stage has one: `done` of `total` as "120/628" and a percentage; a stage

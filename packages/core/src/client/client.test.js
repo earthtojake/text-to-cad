@@ -252,7 +252,7 @@ test('a drawing still rendering is asked for again after the server\'s retryMs, 
 });
 
 test('an engine document is read through this server, with the client\'s fetch, once the engine holds it, its import heard meanwhile', async () => {
-  // The engine's progress event of the import (`cadgen/engine/progress.py`), handed on as it came.
+  // The engine's progress event of the import (`cad/engine/progress.py`), handed on as it came.
   const importing = { kind: 'import', stage: 'collect', job: 'a.step', outputs: [], detail: '', done: 120, total: 628, elapsedMs: 3100 };
   const replies = [{ state: 'reading', retryMs: 0 }, { state: 'reading', retryMs: 0, building: importing }, { doc: 'abc123', url: '/__cad/xbf/api/doc/abc123' }];
   const asked = [];
@@ -391,7 +391,7 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
     ? { entries: [{ id, file: id, name: 'cube', sourcePath: null }] }
     : { entries: [], missing: `no document ${id} is held`, missingState: 'unsaved' }) });
   assert.equal((await client.resolveEntry(id)).id, id);
-  held = false;  // `cadgen delete`
+  held = false;  // `cad delete`
   await client.refresh({ file: id });
   assert.equal(client.entryOf(id), null, 'its row is gone');
   const failure = await client.resolveEntry(id).catch((error) => error);

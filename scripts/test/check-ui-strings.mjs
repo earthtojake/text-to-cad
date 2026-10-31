@@ -189,7 +189,7 @@ export async function checkUiStrings(repo, { allowlist = UI_STRINGS_ALLOWLIST, r
 // What stays as written, one line each: [file, text on the line or the literal, why].
 export const UI_STRINGS_ALLOWLIST = [
   ['packages/ui/src/annotation/views.js', 'current view', "a view's name in the prompt the agent reads, not on screen"],
-  ['packages/ui/src/renderers/kit/tools/quick-edit/quickEditPrompt.js', 'Snapshot (cadgen snapshot --annotation)', "a file's label in the prompt the agent reads"],
+  ['packages/ui/src/renderers/kit/tools/quick-edit/quickEditPrompt.js', 'Snapshot (cad snapshot --annotation)', "a file's label in the prompt the agent reads"],
   ['packages/ui/src/file-viewer/navigation/NavbarLinks.jsx', 'Feedback:', "the title of the GitHub issue Feedback opens, for the project's own tracker"],
   ['packages/ui/src/export/ExportControls.tsx', 'font-normal! leading-4!', "Sonner's class names for a toast's title, no words"],
   ['packages/ui/src/renderers/kit/camera/viewportCameraKit.js', 'Jump to', "each view's English name; `viewPlaneTitle` says it on screen from its sides"],

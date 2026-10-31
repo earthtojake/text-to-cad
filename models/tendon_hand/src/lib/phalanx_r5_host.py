@@ -11,7 +11,7 @@ it, and the clipping made of it is kept.
 import io
 
 import build123d as bd
-from cadgen import memo
+from cad import memo
 
 from lib.phalanx_continuous_r5 import make_phalanx as make_continuous
 

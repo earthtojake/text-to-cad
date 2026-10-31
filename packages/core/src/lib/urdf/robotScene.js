@@ -11,7 +11,7 @@ import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSurfaceLook } from "../viewer/surfaceLook.js";
 import { shapeSourceColor } from "../viewer/surfaceMaterials.js";
 
-// A robot as a SCENE GRAPH, played from the payload cadgen resolved (`cadgen.robot_payload`):
+// A robot as a SCENE GRAPH, played from the payload cadgen resolved (`cad_server.robot_payload`):
 // the articulation (joints in rest space with affine rows over the controls, and which link
 // each joint carries) and the visual list (each mesh at its rest placement). One node per
 // joint, nested under its parent joint's, whose matrix is the joint's own motion in rest

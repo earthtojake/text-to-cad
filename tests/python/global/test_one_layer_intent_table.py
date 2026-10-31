@@ -1,9 +1,9 @@
 """Layer intent -- which DXF layers must hold closed cut contours -- is decided in one place, the
-engine's drawing checks (``cadgen.engine.export.dxf``).
+engine's drawing checks (``cad.engine.export.dxf``).
 
 There used to be a second table, in JavaScript, because the viewer parsed DXF itself; the two
 were hand-copied and nothing pinned them, so validation could accept a drawing the viewer then
-rendered as cut paths. Drawing is flattening now (``cadgen.drawing_payload``), which reads no
+rendered as cut paths. Drawing is flattening now (``cad_server.drawing_payload``), which reads no
 layer NAMES at all, so the engine's classifier is the only one -- and must stay the only one.
 """
 
@@ -29,7 +29,7 @@ class OneLayerIntentTable(unittest.TestCase):
     def test_the_engine_still_holds_the_one_table(self) -> None:
         # The guard above looks for the table by its name (the JavaScript copy's was
         # LAYER_INTENT_BY_TOKEN): a rename of the engine's would leave it looking for nothing.
-        source = (REPO_ROOT / "packages/cadgen/src/cadgen/engine/export/dxf.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "packages/texttocad/src/cad/engine/export/dxf.py").read_text(encoding="utf-8")
         self.assertIn("_INTENT_BY_TOKEN = {", source)
 
 

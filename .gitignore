@@ -90,14 +90,16 @@ models/*/unported/validation/
 .*.stp.glb/
 .*.stp.glb
 
-# `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
-packages/cadgen/build/
+# `python -m build` scratch space (scripts/release/check-wheel-contents.sh), of each Python package.
+packages/*/build/
+packages/aliases/*/build/
 
-# cadgen's packaged runtime: the CAD Viewer's built client (viewer/) and the CAD
-# app (mcp/). Both are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
-# wheel; neither is committed. A fresh checkout has no _runtime until the
-# bundler runs, and cadgen says so by name when it needs one that is absent.
-packages/cadgen/src/cadgen/_runtime/
+# The server's packaged runtime: the CAD Viewer's built client (viewer/), the CAD
+# app (mcp/) and the agent-app plugin, a copy of the root's manifests and skills/ (plugin/).
+# All are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the server's wheel;
+# none is committed. A fresh checkout has no _runtime until the bundler runs, and the
+# server says so by name when it needs one that is absent (a checkout's own plugin is its root).
+packages/texttocad-server/src/cad_server/_runtime/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).
 design/

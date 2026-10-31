@@ -1,5 +1,5 @@
 // The environment a scene's rig lights with (`sceneRig.js`), prefiltered as OCCT bakes its
-// image-based light (`cadgen/engine/render/look.py`): a surface of each roughness reflects the image
+// image-based light (`cad/engine/render/look.py`): a surface of each roughness reflects the image
 // convolved with the GGX lobe of that roughness, and a surface's diffuse term reads the irradiance's
 // nine spherical harmonics.
 //

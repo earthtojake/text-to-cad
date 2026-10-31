@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cadgen import model
+from cad import model
 from math import tau
 
 import build123d as bd

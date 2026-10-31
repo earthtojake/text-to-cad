@@ -81,7 +81,7 @@ export const COPIED_MS = 1600;
 
 /**
  * The card's Details: the whole diagnostic in a box that scrolls, with a copy icon in its
- * top-right corner, as a code block on GitHub has (the update card's prompt has one too). It
+ * top-right corner, as a code block on GitHub has. It
  * copies all of the details, however far they scroll, through the host's clipboard
  * (`ClipboardPort.writeText`); a host with no clipboard gets no icon. A copy shows a tick for a
  * moment. A copy the clipboard refuses is said under the box, where the text stays to select.

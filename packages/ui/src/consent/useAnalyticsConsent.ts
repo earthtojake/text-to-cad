@@ -5,7 +5,7 @@ import { translator } from "../i18n/core.js";
 /** What a CAD app's server says about the usage stats cadgen sends (its telemetry). */
 export interface AnalyticsConsent {
   sharing: boolean;
-  /** Why: `environment` (DO_NOT_TRACK or CADGEN_TELEMETRY decided, and no click changes it), `choice`,
+  /** Why: `environment` (DO_NOT_TRACK or CAD_TELEMETRY decided, and no click changes it), `choice`,
    * `default` (on by default: the person was told), `untold` (nothing sent yet), `unavailable`. */
   reason?: "environment" | "choice" | "default" | "untold" | "unavailable";
   /** The privacy policy. */
@@ -16,7 +16,7 @@ export interface AnalyticsConsent {
  * The app menu's Telemetry toggle, from the host's server (`consent()` reads, `consent(share)`
  * answers): read once, read again whenever the person comes back to the page (another view, the agent or
  * the CLI may have changed it meanwhile), and changed by a click. Nothing asks: cadgen's telemetry is on
- * by default once a `cadgen` command has said so. Each read and answer takes a number and only the latest
+ * by default once a `cad` command has said so. Each read and answer takes a number and only the latest
  * one's reply is kept, so a read sent just before a click (the click's own focus) can never undo it. An
  * answer that did not arrive is read back rather than shown as kept. A choice the environment made shows
  * as fixed. Its label is in `locale`, the language the host hands the view (`environment.locale`).

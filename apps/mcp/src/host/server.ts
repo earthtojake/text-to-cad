@@ -4,7 +4,7 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 
 /**
- * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`): a launch names a
+ * The launch/view protocol this page speaks with `cad-mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`. Every one of the page's calls carries its app capability (the launch's
@@ -29,7 +29,7 @@ export interface Launch {
   /** Whether a newer text-to-cad is out, as the server last read it: the update button draws with the page. */
   notice?: UpdateNotice | null;
   /**
-   * The ways to the engine that need no call, where it gives a page (`cadgen/mcp/server.py`'s
+   * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its day link
    * (`?token=`), and `engine`, that page's origin. A card whose host carries no `tools/call` links
    * the page, and first tries the engine directly with the link's token (`host/direct.ts`).

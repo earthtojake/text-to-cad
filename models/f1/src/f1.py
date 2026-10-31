@@ -37,9 +37,9 @@ GLB, exported on demand, carries those three and the two motions, `drs` and
 
 from __future__ import annotations
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
+from cad.gltf import animation
 
 import math
 
@@ -346,7 +346,7 @@ def _joints(parts):
 # rotating part fight the one thing the viewer is meant to be reading. Distances
 # are sized so parts clear each other in PROJECTION, not just in space.
 #
-# The monocoque never moves. The teardown is a GLB animation (`cadgen.gltf`), never
+# The monocoque never moves. The teardown is a GLB animation (`cad.gltf`), never
 # the mechanism's: each child, a sibling of every other in the car's tree, moves by its
 # own translation alone, so a child holding a joint for another (rear_wing,
 # suspension_front, steering_rack) drags nothing by its explode, and one hanging on a

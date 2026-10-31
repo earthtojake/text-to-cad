@@ -37,8 +37,8 @@ is a new placement of its result.
 
 from __future__ import annotations
 
-from cadgen import memo, model
-from cadgen.ap242 import configuration_sequence, mechanism_state
+from cad import memo, model
+from cad.ap242 import configuration_sequence, mechanism_state
 
 import math
 

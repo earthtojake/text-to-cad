@@ -9,7 +9,7 @@ code replays it from the worker's memory. `power_unit`, `drivetrain`,
 `suspension_rear` and `details` are stages of one child, marked in their own files.
 """
 
-from cadgen import memo
+from cad import memo
 
 from airbox import airbox
 from beam_wing import beam_wing

@@ -76,11 +76,38 @@ test('the engine the page loaded from answering again was a blip: nothing is rel
   }
 });
 
+test('while its engine restarts for an update the page asks often, and an engine of another release is reloaded into', async () => {
+  const dom = new JSDOM('<div id="root"></div>');
+  const previous = new Map(['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const queued = [];
+  const reloads = [];
+  // The same process answering with another release cannot happen, so the release alone says it: an update.
+  const answers = [null, { pid: 1, release: '0.9.1' }];
+  function Probe() {
+    useEngineReconnect(true, { pid: 1, release: '0.9.0', fast: true, ask: async () => answers.shift(), reload: () => reloads.push(1),
+      schedule: (run, delayMs) => { queued.push({ run, delayMs }); return queued.at(-1); }, cancel: () => {} });
+    return null;
+  }
+  const root = createRoot(dom.window.document.getElementById('root'));
+  try {
+    await act(() => root.render(createElement(Probe)));
+    const delays = [];
+    for (let turn = 0; turn < 2; turn += 1) await act(async () => { const timer = queued.shift(); delays.push(timer.delayMs); await timer.run(); });
+    assert.deepEqual(delays, [250, 250], 'an update\'s gap is short: asked every quarter second');
+    assert.deepEqual([reloads, queued.length], [[1], 0]);
+  } finally {
+    await act(() => root.unmount());
+    dom.window.close();
+    for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
+  }
+});
+
 test('an engine that refuses the page\'s token is told apart from none answering, and the page is never reloaded for it', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-000000000001' });
   const previous = new Map(['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  // After `cadgen server --rotate-token` the engine runs and refuses the tab's token; it is stopped
+  // After `cad server --rotate-token` the engine runs and refuses the tab's token; it is stopped
   // a moment (nothing answers), refuses it again, and then admits it: the new link was opened beside it.
   const answers = ['forbidden', 'forbidden', 'down', 'forbidden', 'back'];
   const ask = async () => {

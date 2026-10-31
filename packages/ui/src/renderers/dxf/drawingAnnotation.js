@@ -4,7 +4,7 @@
  *
  * A mark drawn over a drawing lies on the sheet: its screen points become drawing coordinates
  * (x, y, 0) under the view as it stood, on no part, so it pans and zooms with the drawing and the
- * annotation file a prompt carries is in the drawing's own coordinates — what `cadgen snapshot`
+ * annotation file a prompt carries is in the drawing's own coordinates — what `cad snapshot`
  * draws it over (`@text-to-cad/core/lib/drawing2d/marks.js`). A stroke keeps its width in screen
  * pixels, as over a model; a text mark's corners are on the sheet, so its words zoom with it.
  *

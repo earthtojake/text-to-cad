@@ -28,15 +28,15 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 SITE = Path(__file__).resolve().parent / "engine_journal"
-JOURNAL = "CADGEN_TEST_JOURNAL"
+JOURNAL = "CAD_TEST_JOURNAL"
 HELD_SECONDS = 10.0
 TIMEOUT_SECONDS = 300.0
 STACK_LINES = 30  # a thread's innermost frames: where it waits
 
 
 def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
-    """An engine, a state and a cache folder of the caller's own (``CADGEN_ENGINE_DIR``,
-    ``CADGEN_STATE_DIR``, ``CADGEN_CACHE_DIR``) in ``os.environ`` until ``cleanup`` (a module's
+    """An engine, a state and a cache folder of the caller's own (``CAD_ENGINE_DIR``,
+    ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``) in ``os.environ`` until ``cleanup`` (a module's
     ``unittest.addModuleCleanup``, a test's ``addCleanup``) stops an engine started there, puts the
     environment back and removes them: so an engine a test starts, and every environment built from
     ``os.environ`` after, runs, records and caches its documents there, never in the developer's.
@@ -47,8 +47,8 @@ def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
     folder = tempfile.mkdtemp(prefix="cadgen-test-")
     # A short folder of its own for the engine's door: a socket's path has a length limit on POSIX.
     engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
-    given = {"CADGEN_ENGINE_DIR": engine, "CADGEN_STATE_DIR": os.path.join(folder, "state"),
-             "CADGEN_CACHE_DIR": os.path.join(folder, "cache")}
+    given = {"CAD_ENGINE_DIR": engine, "CAD_STATE_DIR": os.path.join(folder, "state"),
+             "CAD_CACHE_DIR": os.path.join(folder, "cache")}
     patch = mock.patch.dict(os.environ, given)
     patch.start()
     cleanup(shutil.rmtree, folder, True)
@@ -64,14 +64,14 @@ def _stop_engine(engine: str) -> None:
         return
     from unittest import mock
 
-    from cadgen.engine import api
+    from cad.engine import api
 
-    with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine}):
+    with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": engine}):
         api.stop()
 
 
 def unwritable(folder: Path | str) -> str:
-    """A cache folder (``CADGEN_CACHE_DIR``) no one can write, under ``folder``: a file in its place,
+    """A cache folder (``CAD_CACHE_DIR``) no one can write, under ``folder``: a file in its place,
     which refuses a folder below it on every platform and to root too. The engine keeps no document
     there and does everything else as ever (an unwritable cache saves nothing): what a test names
     whose restart must find no document kept. Its path."""
@@ -178,7 +178,7 @@ def _text(data: bytes) -> str:
 
 
 def _state(env: dict[str, str]) -> Path | None:
-    folder = env.get("CADGEN_ENGINE_DIR")
+    folder = env.get("CAD_ENGINE_DIR")
     return Path(folder) if folder else None
 
 
@@ -257,7 +257,7 @@ def engine_pid(env: dict[str, str]) -> int | None:
     """The pid of the engine ``env`` names, or None when none answers."""
     from unittest import mock
 
-    from cadgen.engine.client import request
+    from cad.engine.client import request
 
     with mock.patch.dict(os.environ, env, clear=True):
         answer = request({"op": "pid"}, start=False)

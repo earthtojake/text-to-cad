@@ -9,7 +9,7 @@ import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
 Object.assign(globalThis, { React });
 afterEach(cleanup);
 
-// A payload as cadgen resolves one (`cadgen.robot_payload`): links with their facts as written and the
+// A payload as cadgen resolves one (`cad_server.robot_payload`): links with their facts as written and the
 // host path of each mesh file it could resolve, joints with `parent`/`child`, an SRDF's groups by link.
 const joint = (name: string, type: string, parent: string, child: string, extra = {}) =>
   ({ name, type, parent, child, axis: type === 'fixed' ? null : [0, 0, 1], origin: null, limit: null, mimic: null, ...extra });

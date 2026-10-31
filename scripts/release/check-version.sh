@@ -9,12 +9,14 @@ usage() {
 Usage:
   scripts/release/check-version.sh [--incremented-from REF]
 
-Checks that VERSION contains a valid canonical release version, that every
-skill's SKILL.md and setup guide (references/setup.md) name exactly that
-version: its install command (`uvx ... --from cadgen==<version> cadgen doctor`)
-and the version it runs (`cadgen +<version>`, "it says <version> is not
-installed"), and that the one-line installer's scripts fall back to it. main is
-the source branch AND what installers clone, so a stale pin ships.
+Checks that VERSION contains a valid canonical release version, that the five
+distributions (the library, the server, the shim and the two aliases) are that
+version and pin each other at it (`texttocad==<version>`), that every skill's
+SKILL.md and setup guide (references/setup.md) name exactly that version: its
+install command (`uvx ... --from texttocad-server==<version> cad doctor`) and the
+version it runs (`cad +<version>`, "it says <version> is not installed"), and
+that the one-line installer's scripts fall back to it. main is the source
+branch AND what installers clone, so a stale pin ships.
 With --incremented-from, also checks that the current version is greater than
 the version at REF (a commit, branch, or release tag -- `v0.5.0` or the bare
 `0.4.28` spelling releases before 0.5.0 used; the VERSION file at that commit
@@ -66,29 +68,44 @@ if [ -n "$BASE_REF" ]; then
   "$SCRIPT_DIR/bump-version.sh" --check-incremented-from "$BASE_REF"
 fi
 
-# Every skill's install command and `cadgen +<version>` must name THIS version. The release PR
-# stamps them (sync-version.mjs) alongside VERSION; another version means the two
-# moved separately.
+# Every skill's install command and `cad +<version>` must name THIS version, and so must the five
+# distributions' versions and their pins of the library. The release PR stamps them (sync-version.mjs)
+# alongside VERSION; another version means the two moved separately.
 stale=0
+PIN='texttocad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?==[^[:space:]`"'"'"']+'
+for project in packages/texttocad packages/texttocad-server packages/texttocad-mcp packages/aliases/cadgen \
+               packages/aliases/text-to-cad; do
+  declared="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$project/pyproject.toml")"
+  if [ "$declared" != "$version" ]; then
+    echo "$project/pyproject.toml is ${declared:-unversioned}; expected $version" >&2
+    stale=1
+  fi
+  while IFS= read -r pin; do
+    if [ "${pin##*==}" != "$version" ]; then
+      echo "$project/pyproject.toml pins $pin; expected ${pin%%==*}==$version" >&2
+      stale=1
+    fi
+  done < <(grep -oE -- "$PIN" "$project/pyproject.toml" || true)
+done
 while IFS= read -r skill; do
   while IFS= read -r pin; do
-    if [ "$pin" != "$version" ]; then
-      echo "$skill pins cadgen==$pin; expected cadgen==$version" >&2
+    if [ "${pin##*==}" != "$version" ]; then
+      echo "$skill pins $pin; expected ${pin%%==*}==$version" >&2
       stale=1
     fi
-  done < <(grep -oE -- 'cadgen==[^[:space:]`"'"'"']+' "$skill" | sed 's/.*==//')
+  done < <(grep -oE -- "$PIN" "$skill" || true)
   while IFS= read -r named; do
     if [ "$named" != "$version" ]; then
-      echo "$skill runs cadgen +$named; expected +$version" >&2
+      echo "$skill runs cad +$named; expected +$version" >&2
       stale=1
     fi
-  done < <(grep -oE -- '(cadgen(\.cmd)? \+|it says )[0-9][^[:space:]`)]*' "$skill" | sed -E 's/^(cadgen(\.cmd)? \+|it says )//')
+  done < <(grep -oE -- '(\bcad(\.cmd)? \+|it says )[0-9][^[:space:]`)]*' "$skill" | sed -E 's/^(cad(\.cmd)? \+|it says )//')
 done < <(find skills -mindepth 2 -maxdepth 3 -type f \( -name SKILL.md -o -path '*/references/setup.md' \) | sort)
 # The one-line installer falls back to the release it was published with.
 for script in scripts/install/install.sh scripts/install/install.ps1; do
-  fallback="$(sed -n -e 's/^CADGEN_VERSION="\([^"]*\)"$/\1/p' -e 's/^[[:space:]]*\$CadgenVersion = "\([^"]*\)"$/\1/p' "$script")"
+  fallback="$(sed -n -e 's/^CAD_VERSION="\([^"]*\)"$/\1/p' -e 's/^[[:space:]]*\$CadVersion = "\([^"]*\)"$/\1/p' "$script")"
   if [ "$fallback" != "$version" ]; then
-    echo "$script falls back to cadgen ${fallback:-(no stamped version)}; expected $version" >&2
+    echo "$script falls back to ${fallback:-(no stamped version)}; expected $version" >&2
     stale=1
   fi
 done
@@ -96,4 +113,4 @@ if [ "$stale" -ne 0 ]; then
   echo "Run node scripts/release/sync-version.mjs to stamp the pins from VERSION." >&2
   exit 1
 fi
-echo "Skill cadgen pins, versions and the installer's fallback match VERSION ($version)."
+echo "The five distributions, their pins, the skills' pins and versions and the installer's fallback match VERSION ($version)."

@@ -4,7 +4,7 @@ Read this file when resolving a reference, measuring a model, checking clearance
 contact, or diagnosing geometry.
 
 This is the catalogue of what exists. Write a check only when the person asks for a dimension, a
-fit or a mass, or the change is numeric and the number matters; run `cadgen inspect` only when a
+fit or a mass, or the change is numeric and the number matters; run `cad inspect` only when a
 prompt names a reference ([Pictures](../SKILL.md#pictures)).
 
 ## Contents
@@ -17,14 +17,14 @@ prompt names a reference ([Pictures](../SKILL.md#pictures)).
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
-for ones worth keeping); `cadgen inspect` answers what a ref names. A check calls the
+for ones worth keeping); `cad inspect` answers what a ref names. A check calls the
 model, so it measures the model as its code is now.
 
-A dimension the person gave is checked where the engine already holds the geometry: an
-`assert` inside the model's body, on the shape it is about to return, or `cadgen inspect`
-(`cadgen inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
+A dimension the person gave is checked where the server already holds the geometry: an
+`assert` inside the model's body, on the shape it is about to return, or `cad inspect`
+(`cad inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
 check to the model's script after its call: reading `.shape` there brings the shape into the
-script's own process and loads the CAD kernel there, about 3 s, after the engine has answered,
+script's own process and loads the CAD kernel there, about 3 s, after the server has answered,
 on every run. A check script pays the same once, so it is for a derived number the person
 asked for.
 
@@ -63,13 +63,13 @@ def find_part(tree, label):
     return matches[0]
 ```
 
-These are project helpers, not cadgen imports. `find_part` requires a unique leaf label:
+These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
 it refuses both missing and repeated labels. For repeated components, walk a known branch
 while accumulating its parents' locations, or use an occurrence path with
-`cadgen inspect` ([references](#references)).
+`cad inspect` ([references](#references)).
 
 ```python
-from cadgen import read_step
+from cad import read_step
 from kit import kit
 
 doc = kit().shape
@@ -81,11 +81,11 @@ top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
 plate = find_part(read_step("kit.step"), "plate")
 ```
 
-- Calling a model from a plain script builds it in the engine (a replay when nothing
+- Calling a model from a plain script builds it in the server (a replay when nothing
   changed) and returns its document, whose `.shape` keeps each assembly's placement.
   Walk it by labels and select within a part with build123d
   (`faces()`, `edges()`, `sort_by`, `filter_by`).
-- A ref a person gave names one element exactly: `cadgen inspect` answers it
+- A ref a person gave names one element exactly: `cad inspect` answers it
   ([below](#which-code-made-it)), and its facts (centroid, box, surface) tell which
   face of the part it is.
 - `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
@@ -94,7 +94,7 @@ plate = find_part(read_step("kit.step"), "plate")
 
 ## References
 
-A ref names a part, an assembly or one element of a document by the engine's own
+A ref names a part, an assembly or one element of a document by the server's own
 names, resolved in the document as the latest run left it:
 
 ```text
@@ -121,7 +121,7 @@ plate/face 3                            in a document of one part, its elements 
   occurrences is refused with their paths (`finger names 3 occurrences in kit.xbf:
   hand/finger.1, hand/finger.2, hand/finger.3`).
 - **An element is named by its name or its number.** Numbers are the part's own
-  face, edge and vertex numbers, the ones the viewer and `cadgen inspect` show; a
+  face, edge and vertex numbers, the ones the viewer and `cad inspect` show; a
   name survives edits that a number does not. A bare element after an owner belongs
   to that owner (`palm,f:palm.body.1`).
 - **`FILE` must be the document resolved in**: the same model's id, the same file, or
@@ -131,7 +131,7 @@ plate/face 3                            in a document of one part, its elements 
   resolves where it is; one it deleted fails, naming it; one whose making changed
   fails too, listing what its atom is named now (`plate.body.6 is now
   f:plate.body.6`), never guessing.
-- **The canonical ref**, what `cadgen inspect` answers, spells an element by its name under its part's label where that label
+- **The canonical ref**, what `cad inspect` answers, spells an element by its name under its part's label where that label
   names one occurrence, else under the occurrence's path from the root.
 
 ### Element names
@@ -155,7 +155,7 @@ starts from, and a step for each feature that made it out of another:
   `plate + boss`), and a placed part keeps its prototype's names: its label names the
   occurrence.
 - **An element read from a file** keeps the name the file gives it (a STEP or an
-  `.xbf` cadgen wrote names every face), else it is named by the read and its
+  `.xbf` text-to-cad wrote names every face), else it is named by the read and its
   number within its part: `motor = read_step(...)` in `rig` names face 12 of a
   foreign STEP `f:rig.motor.12`.
 - A long name folds to its last feature and a digest (`f:plate.relief~5d1e0c2f9a3b`):
@@ -166,18 +166,18 @@ renames nothing.
 
 ### A picked element in a model's body
 
-A ref resolves in the engine (`cadgen inspect`, the viewer), never in a model: a
+A ref resolves in the server (`cad inspect`, the viewer), never in a model: a
 body selects from the live shape it is building with build123d, by what the element
 is. To change what a person picked, read the ref's answer and either edit the code
 its `made_by` names or pick the same element in the body:
 
 ```bash
-cadgen inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
+cad inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
 ```
 
 ```python
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from plate import plate
 
@@ -191,7 +191,7 @@ def bracket():
 
 ## Which code made it
 
-`cadgen inspect DOC REF` answers what a ref names, placed where its occurrence stands:
+`cad inspect DOC REF` answers what a ref names, placed where its occurrence stands:
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's
   area, centroid, surface type, exact box, radius; an edge's length, curve type, class
@@ -201,7 +201,7 @@ def bracket():
   with the parts that have no material listed under `unweighed`.
 
 ```text
-$ cadgen inspect "$ID" "bracket/face 7"
+$ cad inspect "$ID" "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
@@ -225,12 +225,12 @@ the xbf a model declares among them -- answers none: a file names no model. A re
 several selectors answers a list; one
 that names nothing is refused (exit 2).
 
-Without a REF, `cadgen inspect DOC` prints what the document holds, one screen, then what
+Without a REF, `cad inspect DOC` prints what the document holds, one screen, then what
 it was built from. Read it for the names a ref, a pose or a snapshot takes, rather than
 guessing them:
 
 ```text
-$ cadgen inspect "$ID"
+$ cad inspect "$ID"
 hinge  fb5d7d22-372e-5e1e-a44b-a2aebf954533
 state       live, cached, built 12s ago
 parts       2 in hinge
@@ -253,7 +253,7 @@ closure
 { ...its script and function, the modules it reaches and the files it read, each by its digest... }
 ```
 
-The state is the engine's: `live` (a worker holds it), `held` (the engine holds it, no
+The state is the server's: `live` (a worker holds it), `held` (the server holds it, no
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
 closure alone. For the names alone, `--query structure` prints the same lists without the
 bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is
@@ -273,7 +273,7 @@ size = shape.bounding_box().size
 ```
 
 ```python
-from cadgen.geometry import closest_points, overlap_volume
+from cad.geometry import closest_points, overlap_volume
 
 result = closest_points(a, b)   # .distance, .point_a, .point_b
 volume = overlap_volume(solid_a, solid_b)
@@ -297,7 +297,7 @@ built: a part clear there can still pass through another in a pose
 ## Geometry diagnostics
 
 ```python
-from cadgen.geometry import is_sound, topology_errors, boundary_edges, self_intersections
+from cad.geometry import is_sound, topology_errors, boundary_edges, self_intersections
 
 ok = shape.is_valid                       # bool: BRepCheck passes (build123d)
 clean = is_sound(shape)                   # bool: the boolean kernel's argument check passes, expensive
@@ -322,10 +322,10 @@ usually a sliver a boolean left.
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cadgen inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
+`cad inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
 
 ```python
-from cadgen.geometry import mass_properties
+from cad.geometry import mass_properties
 
 properties = mass_properties([
     (aluminum_body, 2.70e-6),  # kg/mm³; use the material density for the task

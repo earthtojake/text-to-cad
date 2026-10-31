@@ -290,7 +290,7 @@ export function peekRender3Mf(url, { resources } = {}) {
 }
 
 /**
- * A robot as cadgen resolved it (`cadgen.robot_payload`, `GET /__cad/robot`): the articulation
+ * A robot as cadgen resolved it (`cad_server.robot_payload`, `GET /__cad/robot`): the articulation
  * to play and the visuals to draw. Cached for the page by file and revision, as a description
  * once was, so a warm reopen is whole on the first render; the page validates nothing of it but
  * the schema it reads.
@@ -318,7 +318,7 @@ function robotCacheKey(file, revision) {
   return `${String(file || "")}::${String(revision || "")}`;
 }
 
-/** The payload shape this build reads (`cadgen.robot_payload.ROBOT_PAYLOAD_SCHEMA_VERSION`). */
+/** The payload shape this build reads (`cad_server.robot_payload.ROBOT_PAYLOAD_SCHEMA_VERSION`). */
 export const ROBOT_PAYLOAD_SCHEMA_VERSION = 2;
 
 /** A payload from a cadgen that does not agree with this build about the shape. */

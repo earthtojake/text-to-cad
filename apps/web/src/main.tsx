@@ -33,7 +33,7 @@ if (!element) throw new Error('Missing #root mount point.');
 // again the moment it is shown (`host/cadClient.js`).
 const client = createWebCadClient();
 // The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to this
-// Viewer's server for its telemetry (`cadgen/analytics.py`), each once a page and never its message.
+// Viewer's server for its telemetry (`cad_server/analytics.py`), each once a page and never its message.
 const reportCrash = createCrashReporter(crash => client.reportActivity({ crash }));
 const onError = (event: ErrorEvent) => reportCrash(event.error);
 const onRejection = (event: PromiseRejectionEvent) => reportCrash(event.reason);

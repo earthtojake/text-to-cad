@@ -7,7 +7,7 @@ bridges; the hour recorder lives on the dial side (z < -1.5).
 """
 
 import build123d as bd
-from cadgen import memo
+from cad import memo
 
 from lib import materials
 from lib import mvt_chrono as C

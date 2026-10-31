@@ -33,7 +33,7 @@ import { prefilterEnvironment } from "./ggxEnvironment.js";
 
 // The tone curves a rig may name: the body of three's `CustomToneMapping( vec3 color )`, after
 // exposure. `clamp` is the colour times the exposure, clamped to [0, 1]: what an sRGB frame
-// buffer does to a linear sum and nothing more (OCCT's raster: `cadgen/engine/render/look.py`).
+// buffer does to a linear sum and nothing more (OCCT's raster: `cad/engine/render/look.py`).
 export const SCENE_RIG_TONE_CURVES = Object.freeze({
   clamp: "return saturate( toneMappingExposure * color );"
 });

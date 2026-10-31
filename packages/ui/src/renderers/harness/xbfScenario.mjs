@@ -7,9 +7,9 @@ import { harnessBundle } from './bundle.mjs';
 import { chromium } from 'playwright';
 
 // An engine document the harness can open: core's bracket (`lib/xbf/__fixtures__/bracket`, a
-// served document's structure and its two part buffers, as `cadgen serve` answers them: a
+// served document's structure and its two part buffers, as `cad serve` answers them: a
 // filleted plate and two instances of one peg), relayed as the viewer relays its engine
-// (`cadgen/viewer/xbf.py`): `GET /__cad/xbf?file=` answers where the page reads the document, and
+// (`cad_server/viewer/xbf.py`): `GET /__cad/xbf?file=` answers where the page reads the document, and
 // `/__cad/xbf/api/...` answers the engine's reads -- the structure, a buffer per part, the version a
 // page waits on, and the look (`look.json`) with an environment image of one texel.
 const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');

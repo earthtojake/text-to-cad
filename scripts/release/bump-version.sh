@@ -21,9 +21,10 @@ Usage:
 
 Makes this branch a release. Sets VERSION to the next major, minor or patch
 version after the one on BASE (or to X.Y.Z, which must be greater), then stamps
-the derived metadata and every cadgen pin from it (sync-version.mjs: package,
-plugin and lockfile versions, the plugin server configs, each skill's launch
-command). The pull request that carries the change releases that version when
+the derived metadata and every pin of the release's own from it (sync-version.mjs:
+package, plugin and lockfile versions, the five pyproject.toml files and their
+texttocad== pins, the plugin server configs, each skill's launch command, the
+installers' fallback). The pull request that carries the change releases that version when
 it merges: Publish Release runs on the merge.
 
 The bump is relative to BASE, not to this branch, so running it again after

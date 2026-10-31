@@ -133,8 +133,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   no ⋯, no Export and no Open in browser. What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
   the host can show the view full size, **Full size**; then, while its install is behind, the
-  update as a notice — the update card itself, Send to agent or Copy prompt, closable for the
-  view — rather than the blue button. In Preview it is gone with the rest of the column.
+  blue update button, the navbar's own: an icon, no text and no popover, which updates when
+  pressed. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,
   **Models** and **Files**, in the explorer's type (`text-xs`, a 28px list) and each as wide as its
@@ -912,7 +912,7 @@ in the prompt as JSON. Larger packets are written to system temporary storage as
 one `.snapshot.json` and named by path. Drawing, selecting and typing write nothing.
 Captured 3D views preserve projection and lens. No PNG is rendered or attached.
 To render inline JSON, the receiving agent saves it to a temporary file first,
-then draws a view with `cadgen snapshot <document> <out.png> --annotation <file>
+then draws a view with `cad snapshot <document> <out.png> --annotation <file>
 --camera authored`.
 
 
@@ -921,9 +921,9 @@ note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
 `References:` and one reference per line; then each file that travels as a file by its
-label and path — `Snapshot (cadgen snapshot --annotation):` — or the compact object under
-`Snapshot JSON (cadgen snapshot --annotation):`. An agent draws each view with
-`cadgen snapshot SRC OUT.png --annotation PACKET --camera authored`.
+label and path — `Snapshot (cad snapshot --annotation):` — or the compact object under
+`Snapshot JSON (cad snapshot --annotation):`. An agent draws each view with
+`cad snapshot SRC OUT.png --annotation PACKET --camera authored`.
 
 ## Camera, animation and Preview
 

@@ -1,6 +1,6 @@
 # @text-to-cad/core
 
-The shared JavaScript half of cadgen: everything the distribution and its
+The shared JavaScript half of text-to-cad: everything the distribution and its
 clients need to turn the meshes the engine made into pixels and motion.
 Source builds to ordinary ESM and package-owned declarations in `dist/`.
 Apps and UI consume compiled exports; the OCCT parity bench bundles the
@@ -14,14 +14,14 @@ Browser entry points never import Node-only code.
 
 **Consumers:** `@text-to-cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
 bench's bundler.
-`@text-to-cad/core/client` communicates with `cadgen.viewer` over HTTP; this
+`@text-to-cad/core/client` communicates with `cad_server.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
 ## The laws that live here
 
-- **Viewer three-input law**: a client renders from the file, what cadgen
-  resolved of it, and the bytes cadgen made — never source, never a build. A
-  document the cadgen engine serves (an `.xbf`, or a STEP, which opens as one) is
+- **Viewer three-input law**: a client renders from the file, what the server
+  resolved of it, and the bytes the engine made — never source, never a build. A
+  document the engine serves (an `.xbf`, or a STEP, which opens as one) is
   what the engine serves of it: its structure and one buffer per part
   (`lib/xbf/xbfDocument.js`), with its mechanism, its configurations and motions
   as definitions, and per occurrence what its appearance resolves to (material,
@@ -65,18 +65,18 @@ protocol relationship never imports Python or discovers an interpreter.
   saved-shape migrations. The contract and rendering mechanism:
   [docs/render-pipeline.md](docs/render-pipeline.md).
 - **Kinematics and choreography are data, independently**: the articulation
-  player (`articulation.js`) plays a robot's articulation as cadgen resolved it —
+  player (`articulation.js`) plays a robot's articulation as the server resolved it —
   controls with their limits, joints with affine rows over the controls (and, where
-  a joint follows its driver nonlinearly, a curve cadgen sampled from the
+  a joint follows its driver nonlinearly, a curve the server sampled from the
   mechanism's closed form, played by linear interpolation as a glTF sampler is),
   what a drag writes — by dot products into one motion per joint, which the robot's
   scene writes as the joint node's matrix; it mints no id, decides no default or
-  ownership, solves no mechanism, and checks nothing cadgen checked. A GLB's clips
+  ownership, solves no mechanism, and checks nothing the server checked. A GLB's clips
   are played as the file carries them (`lib/render/glbAnimationRuntime.js`, three's
   `AnimationMixer`), and an engine document's motions by `lib/xbf/xbfMotion.js`, whose
   `values(t)` is the engine's `mechanism.Timeline.values`: an evaluation is a pure function
   of t, so scrub, loop and seek are free. Neither runs model code, resolves names or checks
-  anything cadgen checked, and neither references the articulation player.
+  anything the server checked, and neither references the articulation player.
 - **One scene builder per file family, two callers**: a GLB, an STL or 3MF, a
   robot description (URDF, SRDF, SDF) and an engine document (an `.xbf`, or a STEP,
   which opens as one) are each drawn by ONE builder here
@@ -86,9 +86,9 @@ protocol relationship never imports Python or discovers an interpreter.
   for that family and the OCCT parity bench's headless page (`common/headlessScene.js`)
   both call; the look they wear is resolved in one place (`resolveSceneSurfaceLook`,
   `common/sceneSettings.js`) and a robot opens at one pose: the opening of the
-  articulation cadgen resolved for it (`cadgen.robot_payload`, played by
+  articulation the server resolved for it (`cad_server.robot_payload`, played by
   `common/articulation.js`). The
-  parity page therefore cannot draw one of them differently from the viewer (cadgen's own
+  parity page therefore cannot draw one of them differently from the viewer (the engine's own
   stills are OCCT's), and none is flattened into mesh data for a render. They are cut, exploded and measured the same
   way in both, too: Clip through `lib/viewer/sceneClip.js`, Explode through the scene's
   `setExplode` (`lib/viewer/sceneExplode.js`, a GLB's), Measure's snapping through
@@ -114,10 +114,10 @@ protocol relationship never imports Python or discovers an interpreter.
   fill; STL, unmaterialed and colour-only 3MF surfaces retain their fallback finish.
   Parts/X-ray/Flat overrides are reversible. Mechanism and supported extension scope:
   [docs/render-pipeline.md](docs/render-pipeline.md).
-- **No shipped bytes**: core neither meshes nor writes an export. cadgen's engine
+- **No shipped bytes**: core neither meshes nor writes an export. The engine
   meshes every part with OCCT in its warm worker and writes STL, 3MF and GLB itself;
   core reads those meshes and draws them. The GLBs its tests and the UI's open
-  are files cadgen wrote, and one compressed sample (`lib/render/fixtures`): no
+  are files the engine wrote, and one compressed sample (`lib/render/fixtures`): no
   JS writes a GLB.
 - **Loud failure**: unresolved refs, unknown labels, and unknown presets
   throw with the known set listed; nothing renders a plausible wrong frame.
@@ -133,7 +133,7 @@ src/
                    #   hero), renderMeshScene (the parity page's stills),
                    #   headlessRenderEntry (that page's entrypoint), headlessScene
                    #   (a GLB, mesh, robot or engine document job through its
-                   #   family builder), articulation (cadgen's articulation,
+                   #   family builder), articulation (the server's articulation,
                    #   played), sceneSettings (shared CAD/Render contract),
                    #   camera, themeSettings internals, displaySettings,
                    #   animationClock (the playback transport)
@@ -144,7 +144,7 @@ src/
                    #   the surface look, the scene contract), urdf/ (a robot
                    #   payload's meshes loaded; the robot parts and scene
                    #   builder, played by common/articulation),
-                   #   drawing2d/ (a cadgen drawing payload, a DXF's ->
+                   #   drawing2d/ (the server's drawing payload, a DXF's ->
                    #   Canvas 2D, text by fillText:
                    #   fit/pan/zoom maths, batched Path2D, screen-width strokes),
                    #   cadRefs (the ref grammars: the engine's, for an .xbf
@@ -157,10 +157,10 @@ docs/              # subsystem docs (the map below)
 ```
 
 Contract mirrors that must stay in lockstep (each has a sync test):
-`lib/cadRefs.js` ↔ `cadgen/engine/refs.py` (an engine document's refs, an `.xbf`'s and
+`lib/cadRefs.js` ↔ `cad/engine/refs.py` (an engine document's refs, an `.xbf`'s and
 a STEP's: their parse and their canonical spelling), one fixture, `lib/cadRefs.parity.json`,
 which also holds the element names (`elementNameCases`) that the engine's `ELEMENT_NAME`
-(`cadgen/engine/kernel/trace.py`) must accept (`test_naming.py`).
+(`cad/engine/kernel/trace.py`) must accept (`test_naming.py`).
 
 Where the mechanism is written:
 
@@ -221,7 +221,7 @@ cannot overwrite a newer file revision. `folder(path)` lists one folder and
 `search(path, query)` finds the CAD files under it, for the explorer.
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
-the cadgen engine, where the page reads a document the engine serves
+the engine, where the page reads a document the engine serves
 (`engineDocument`: an `.xbf`, or a STEP, read through the viewer at
 `/__cad/api/doc/<id>` with the client's own fetch). Its HTTP adapter owns the protocol; renderers
 consume domain results and resource tickets. See [workspace services and resource

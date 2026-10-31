@@ -1,5 +1,5 @@
 /**
- * A page's crash, as cadgen's telemetry takes one (`cadgen/analytics.py`: `signature`, and the server
+ * A page's crash, as cadgen's telemetry takes one (`cad_server/analytics.py`: `signature`, and the server
  * checks it again): the error's type, whether the page went on, and its innermost frames, oldest first --
  * each a script file of the page's, a function, a line and a column. Never the error's message, a value,
  * or a URL: a frame names its script by the file's own name (`fileOf`), and anything else as `<?>`.

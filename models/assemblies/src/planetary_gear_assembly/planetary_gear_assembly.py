@@ -1,7 +1,7 @@
 from __future__ import annotations
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, gear_pair, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
+from cad.gltf import animation
 from math import cos, sin, tau
 
 import build123d as bd

@@ -16,7 +16,7 @@ import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "@text-to-cad/cor
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 
 // The hero plays the planetary gear as one GLB, exported from the model's document by
-// `cadgen export` (scripts/sync-hero-glb.mjs): its parts, colours and the `meshCycle` motion,
+// `cad export` (scripts/sync-hero-glb.mjs): its parts, colours and the `meshCycle` motion,
 // which the export baked into a clip. The page reads it the way the CAD Viewer reads any GLB
 // (`buildGlbDocumentFromBuffer`) and plays the clip the way the viewer does
 // (`glbAnimationRuntime`): no gear math of the site's own.

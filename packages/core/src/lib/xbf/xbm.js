@@ -1,5 +1,5 @@
 // One part's tessellation as cadgen's engine serves it (`GET /api/doc/<id>/part/<key>`): the
-// XBM2 wire format (`cadgen/engine/mesh.py`, `Mesh.to_bytes`). It is read the way the engine
+// XBM2 wire format (`cad/engine/mesh.py`, `Mesh.to_bytes`). It is read the way the engine
 // writes it for: typed-array views over the fetched bytes, no parse and no copy. A face is a
 // range of the index buffer, an edge a range of the polyline buffer, a vertex a row of the
 // vertex table; every element is named by its ordinal, the part's `TopExp.MapShapes` ordinal,

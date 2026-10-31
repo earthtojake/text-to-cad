@@ -22,7 +22,7 @@ the as-built configuration of the document's mechanism.
 """
 
 from __future__ import annotations
-from cadgen import model
+from cad import model
 
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt

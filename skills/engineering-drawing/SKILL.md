@@ -9,7 +9,7 @@ license: MIT
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth.
 
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, places dimensions between points ON
 that geometry, finds centre marks on it, and lays the result out on an ISO
 sheet with a frame and a title block. Change the model, rerun the drawing
@@ -24,20 +24,20 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the server through the `cad` command its installation writes, so this skill's commands
+share one installation, and its server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.9.0 run`
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
+For first-time setup or an update, a missing `cad` command, a release it says is not
+installed, a server that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
 ## Workflow
 
 1. Get the part. Call the model: `enclosure()`, imported from the model's script,
-   is built by cadgen's engine (a replay when the engine already holds it), and
+   is built by text-to-cad's server (a replay when the server already holds it), and
    its `.shape` is the part. For a part with no model, read its file: `read_step` for a
    STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
    shape works. The drawing documents geometry, it does not build it.
