@@ -2338,8 +2338,9 @@ class Daemon:
         standby = ({"pid": spare.pid, "rssMb": None if spare.rss is None else round(spare.rss),
                     "seconds": round(time.time() - spare.started, 1)} if spare is not None
                    else {"pid": None, "rssMb": None, "seconds": None, "starting": True} if readying else None)
-        # What uses it, which another installation's engine asks before it retires this one (``bind``):
-        # its holds, the documents pages watch, its builds and draws, and HTTP work underway.
+        # What uses it, which `cadgen status` says (and a later cadgen's engine asks an earlier one's before
+        # it takes its port, ``bind``): its holds, the documents pages watch, its builds and draws, and HTTP
+        # work underway.
         return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
                 "up": round(time.time() - self.born, 1),
                 "workers": workers, "standby": standby, "cap": self.pool.cap, "waiting": self.pool.waiting(),

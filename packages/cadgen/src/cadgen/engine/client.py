@@ -151,7 +151,7 @@ def _start() -> subprocess.Popen:
     if found is not None:
         python = found["python"]
         if not _same(found["prefix"], home["prefix"] if home else sys.prefix):
-            env.pop("PYTHONPATH", None)  # another installation's engine imports its own cadgen
+            env.pop("PYTHONPATH", None)  # the current installation's engine imports its own cadgen
     else:
         python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
                                 else (sys.executable, _daemon.engine_root(), sys.prefix))

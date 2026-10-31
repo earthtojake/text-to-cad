@@ -10,8 +10,10 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
 
@@ -147,6 +149,54 @@ class ReleaseFoldersTest(Fixture):
             self.addCleanup(process.wait)
             self.addCleanup(process.kill)
             self.assertTrue(releases.running(folder))
+
+
+class DrainTest(unittest.TestCase):
+    """What an update's drain waits for (``Daemon.drain``, ``Daemon.working``): a build, draw or export in
+    flight and an agent's MCP tool call; never an open page, a held session, nor a page's own calls."""
+
+    def test_the_engine_stops_for_the_switch_once_its_work_in_flight_is_done(self) -> None:
+        from cadgen.engine import daemon
+
+        engine = daemon.Daemon(cap=1)
+        self.addCleanup(engine.pool.stop)
+        engine.busy, engine.holders = 1, 2  # a build in flight; two held sessions, which it does not wait for
+        closed: list[str] = []
+        engine.door = SimpleNamespace(close=lambda: closed.append("door"))
+        polled, started = threading.Event(), threading.Event()
+        asked: list[int] = []
+        working = engine.working
+
+        def counted() -> bool:
+            asked.append(1)
+            if len(asked) > 2:
+                polled.set()
+            return working()
+
+        engine.working = counted
+        engine.drain(started.set)
+        self.assertTrue(polled.wait(30))
+        self.assertEqual((closed, started.is_set(), engine.stopping.is_set()), ([], False, False),
+                         "a build in flight: the door stays open, and nothing starts")
+        sent: list[dict] = []
+        engine.handle({"op": "stop", "drain": True}, sent.append)  # a second ask joins the drain running
+        self.assertEqual(sent, [{"ok": True, "draining": True}])
+        with engine.busy_lock:
+            engine.busy = 0  # the build answered
+        self.assertTrue(engine.stopping.wait(30))
+        self.assertEqual((closed, started.is_set()), (["door"], True))
+
+    def test_an_agent_s_tool_call_holds_it_and_an_open_session_does_not(self) -> None:
+        from cadgen.mcp.http import PAGE_TOOLS, Session, Sessions
+
+        sessions = Sessions(engine=None)
+        server = SimpleNamespace(operations=SimpleNamespace(keeps_alive=lambda: False),
+                                 sidebar_views=SimpleNamespace(close=lambda: None))
+        sessions.sessions["held"] = Session(server=server, protocol="2025-11-25", client="some-host")  # type: ignore[arg-type]
+        self.assertFalse(sessions.working(), "an open session with nothing in flight")
+        sessions.sessions["held"].calls = 1  # an agent's cad_show, running
+        self.assertTrue(sessions.working())
+        self.assertEqual(PAGE_TOOLS, {"cad_http", "cad_sync", "cad_capture_reply"}, "a page's own calls are never counted")
 
 
 class Server:

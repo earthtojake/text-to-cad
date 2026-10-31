@@ -775,8 +775,8 @@ class NoTimerTest(unittest.TestCase):
 
 
 class BusyTest(unittest.TestCase):
-    """What another installation's engine asks before it retires this one (``status``): a request that
-    serves, binding the HTTP server, is in use until it is answered."""
+    """What ``status`` says is in use, and an update's drain waits for: a request that serves, binding
+    the HTTP server, is in use until it is answered."""
 
     def test_a_launch_binding_its_server_is_busy_until_it_is_answered(self) -> None:
         import threading
