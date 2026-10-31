@@ -43,11 +43,15 @@ checksum. It:
 6. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
-   one an earlier release installed from GitHub. A copy that a plugin store manages is
-   reported, never removed. The agents without a plugin get the skills alone, copied
-   from the folder through the Skills CLI ([Other Agents](#other-agents)). Claude
-   Desktop's config gets CAD's server for this release, with a `.bak` of the file kept
-   beside it.
+   one an earlier release installed from GitHub. A copy from a plugin directory
+   (claude.ai's, Codex's) is a duplicate too: running the install command asks for
+   this release, so it is removed with the app's own command and this release's
+   installed in its place. A copy the app has no command of yours to remove (one an
+   administrator manages or claude.ai syncs in Claude Code, the Cursor Marketplace's)
+   is reported and kept, and that app gets nothing beside it. The agents without a
+   plugin get the skills alone, copied from the folder through the Skills CLI
+   ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's server for this
+   release, with a `.bak` of the file kept beside it.
 7. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
    Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
    starts.
@@ -80,11 +84,12 @@ the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsur
 `goose` and so on; `cad setup --help` lists them).
 `--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
 the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
-store's, removes the `cad` command and stops the server; `--purge` with it also
-removes text-to-cad's state and cache folders. `--version <release>` installs that release
-instead of the latest; a release from before the install command has no
-`cad setup` to run. To read the script before it runs, download it first, then
-run it:
+store's, removes the `cad` command and stops the server. A plugin directory's copy that
+the install command replaced is not put back: install it from the directory again to
+get it back. `--purge` with it also removes text-to-cad's state and cache folders.
+`--version <release>` installs that release instead of the latest; a release from
+before the install command has no `cad setup` to run. To read the script before it
+runs, download it first, then run it:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh -o install.sh
@@ -108,10 +113,10 @@ another release. Each app takes it the way it takes a local plugin:
 
 | App | What it gets | After an update |
 | --- | --- | --- |
-| Claude Code | the folder added as a local catalog, `texttocad`, and its plugin installed, `text-to-cad@texttocad`; Claude Code reads the folder in place | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
-| Codex | the same catalog and plugin; Codex copies the plugin when it is added | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
+| Claude Code | the folder added as a local catalog, `texttocad`, and its plugin installed, `text-to-cad@texttocad`; Claude Code reads the folder in place. A copy from claude.ai's directory is uninstalled first (`claude plugin uninstall`); one an administrator manages, or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
+| Codex | the same catalog and plugin; Codex copies the plugin when it is added. A copy from Codex's plugin directory is removed first (`codex plugin remove`), its catalog kept | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
-| Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad` | the update copies the folder again |
+| Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy from the Cursor Marketplace is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's; without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
 | Claude Desktop (Chat tab) | CAD's server in its config, run by your own `uvx` at its full path | the update moves the server to the new release |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
@@ -221,8 +226,10 @@ In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 drives, and *Open with CAD* for model files.
 
 Codex's plugin directory lists text-to-cad too, but for now its listing trails
-the releases, so install it from the marketplace. A copy from the directory and
-one from the marketplace would load side by side: keep one.
+the releases, so install it from the marketplace. The install command replaces a
+copy from the directory with the release's; installing from the directory alone
+also works, since the plugin's server sets everything up on its first start. A copy
+from the directory and one from the marketplace would load side by side: keep one.
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
