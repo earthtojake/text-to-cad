@@ -48,14 +48,10 @@ import numpy as np
 from cadgen.engine.mesh import Mesh
 from cadgen.engine.render.context import Canvas
 from cadgen.engine.render.look import LOOK
+from cadgen.engine.render.presets import PRESETS
 from cadgen.engine.render.shapes import LINES, FaceGroup, prototype_shapes
 
 MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-PRESETS = {
-    "front": ((0, -1, 0), (0, 0, 1)), "back": ((0, 1, 0), (0, 0, 1)), "right": ((1, 0, 0), (0, 0, 1)),
-    "left": ((-1, 0, 0), (0, 0, 1)), "top": ((0, 0, 1), (0, 1, 0)), "bottom": ((0, 0, -1), (0, 1, 0)),
-    "iso": ((1, -1, 0.8), (0, 0, 1)),
-}
 # The regular modes' numbers are the look's (``look.py``), which the viewer draws by too.
 BACKGROUND = LOOK.backdrop
 EDGE = dict(LOOK.edge_colours)
@@ -218,6 +214,10 @@ class Scene:
         self.structures: list[Any] = []  # presentations made below AIS: the text quads
         self.text_quads: list[tuple[np.ndarray, str]] = []  # their world corners and colours
         self.screen_marks: list[dict[str, Any]] = []  # painted over the frame: Measure's
+        self.pmi_drawn: list[tuple[dict[str, Any], Any]] = []  # painted over the frame: the PMI's callouts
+        self.pmi_left_out: list[dict[str, Any]] = []  # the PMI not drawn, and why (pmi.left_out)
+        self.pmi_points: np.ndarray | None = None  # their labels and dimension lines, which a fitted frame takes in
+        self.pmi_bounds: tuple[Any, Any] | None = None  # the model's box at rest they were laid out by (pmi.rest_bounds)
         self.fonts: set[str] = set()  # the faces the words of the frame were set in (text.face_source)
         self.stage: list[Any] = []  # Preview's studio: its floor and the floor's shadow
         self.studio = False
@@ -438,6 +438,9 @@ class Scene:
             if len(positions):
                 m = self.placement(index)
                 chunks.append(positions.astype(float) @ m[:3, :3].T + m[:3, 3])
+        # The PMI drawn stands beside the part: a fitted frame takes in its callouts too, so none is cut off.
+        if self.pmi_points is not None:
+            chunks.append(self.pmi_points)
         return np.concatenate(chunks)
 
     def _pinned(self, camera: dict[str, Any], projection: str, focal_length: float) -> dict[str, Any]:
@@ -483,6 +486,8 @@ class Scene:
         boxes = [placed_box(self.boxes[i["prototype"]], self.placement(n))
                  for n, i in enumerate(self.structure["instances"])
                  if i["prototype"] in self.boxes and n not in self.hidden]
+        if self.pmi_points is not None:
+            boxes.append((self.pmi_points.min(0), self.pmi_points.max(0)))
         lo, hi = np.min([b[0] for b in boxes], 0), np.max([b[1] for b in boxes], 0)
         return np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
 
@@ -589,6 +594,10 @@ class Scene:
         self.structures = []
         self.text_quads = []
         self.screen_marks = []
+        self.pmi_drawn = []
+        self.pmi_left_out = []
+        self.pmi_points = None
+        self.pmi_bounds = None
         self.fonts = set()
 
     def _pixel_size(self, point: np.ndarray) -> float:
@@ -768,6 +777,31 @@ class Scene:
                               "end": [float(value) * factor for value in mark["end"]]} for mark in marks]
         if any(str(mark.get("label") or "").strip() for mark in marks):
             self.fonts.add(face(*LABEL_FACE).name)
+
+    def pmi(self, view: dict[str, Any] | None = None) -> None:
+        """The document's PMI (``structure["pmi"]``), painted over the finished frame as the viewer
+        draws it over its page (``pmi.py``): each callout the viewer draws, where its layout puts it
+        in the document at rest, at its part's first placement shown; in a part's named view
+        (``view``, ``pmi.views``'), what it shows alone, at its own placements. What is not drawn is
+        said, and why (``pmi_left_out``). Made before the camera is framed and after the hidden parts
+        are known: a fitted frame takes in each callout's label and dimension line
+        (``placed_points``), so none is cut off."""
+        from cadgen.engine.render import pmi
+        from cadgen.engine.render.text import face
+
+        self.pmi_bounds = pmi.rest_bounds(self.rest_structure, self.meshes)
+        found = pmi.constructions(self.rest_structure, self.meshes, self.pmi_bounds, self.hidden, view)
+        self.pmi_drawn = [(entry, made) for entry, made in found if made is not None]
+        self.pmi_left_out = pmi.left_out(self.rest_structure, found, self.hidden, view)
+        points = [made["label"] for _entry, made in self.pmi_drawn]
+        for _entry, made in self.pmi_drawn:
+            if made["dimension"]:
+                points += [made["dimension"]["from"], made["dimension"]["to"]]
+        self.pmi_points = np.array(points, float) if points else None
+        if self.pmi_drawn:
+            self.fonts.add(face(*pmi.TEXT).name)
+        if any(entry["kind"] == "datum" for entry, _made in self.pmi_drawn):
+            self.fonts.add(face(*pmi.LETTER).name)
 
     # --- preview ------------------------------------------------------------------------------
 
@@ -1253,13 +1287,17 @@ class Scene:
 
     def painter(self) -> Any:
         """What paints over the finished frame (sRGB bytes, in place): the text marks as three lays
-        them, then Measure's marks; None when there is nothing to paint."""
-        if not (self.text_quads or self.screen_marks):
+        them, then the PMI's callouts, then Measure's marks; None when there is nothing to paint."""
+        if not (self.text_quads or self.screen_marks or self.pmi_drawn):
             return None
 
         def paint(frame: np.ndarray) -> None:
             if self.text_quads:
                 self._relay_text(frame)
+            if self.pmi_drawn:
+                from cadgen.engine.render import pmi
+
+                pmi.paint(frame, self.pmi_drawn, self.project, pmi.Hidden(self, self.pmi_bounds))
             if self.screen_marks:
                 from cadgen.engine.render.overlay import paint_measurements
 

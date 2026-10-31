@@ -852,7 +852,7 @@ class BuildContext:
         self.stack.append(key)
         started = time.perf_counter()
         try:
-            with memo.scope(key):
+            with memo.scope(key, model=True):
                 # One coarse entry above the body's calls: not called when the bytes it is
                 # made of are what they were (``memo.body``).
                 result = memo.body(key, lambda: self.source(model), model.function)

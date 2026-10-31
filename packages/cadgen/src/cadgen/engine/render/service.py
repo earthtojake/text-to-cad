@@ -15,7 +15,10 @@ and clip (``Scene.show``), the camera (a preset, ``az:el`` or -- exactly, for ``
 one, ``frame_camera``), the grid, the annotation and the measurements painted as the page paints
 them (``Scene.painter``), and Preview's look; answered as PNG bytes and a report. A scene is let go
 of only between pictures, at once and whole (``Held.close``: its canvas closed, then collected):
-one collected while another draws took that one's environment map with it.
+one collected while another draws took that one's environment map with it. A picture drawn as a
+part's named view (``Still.view``, ``snapshot.view_of``) takes its camera's direction and up where
+its part stands, fitted as any camera object is, its section as the clip, and its PMI alone at its
+own placements.
 
 **The render process** (``python -m cadgen.engine.render.service``): the daemon starts one for a
 served document on its first snapshot (``Renders``). It talks as a worker does, frames on its
@@ -334,7 +337,8 @@ class Held:
         """``still`` (a ``snapshot.Still``) drawn: the PNG's bytes and what was drawn."""
         from cadgen.engine.mechanism import posed_structure
         from cadgen.engine.render.occt import FOCAL_LENGTH
-        from cadgen.engine.snapshot import SnapshotRefused, exploded_amount, hidden_instances, refusals
+        from cadgen.engine.snapshot import (SnapshotRefused, draws_pmi, exploded_amount, hidden_instances, refusals,
+                                            view_of)
 
         if self.structure is None:
             raise RuntimeError("the renderer holds no document")
@@ -350,7 +354,10 @@ class Held:
                 raise SnapshotRefused(f"--pose: {error}") from None
             posed = shown["kinematics"]["pose"]
         refusals(still, shown, self.path.name)
+        pmi = draws_pmi(still, self.structure, self.path.name)
         hidden = hidden_instances(shown, still.display, self.path.name)
+        # A part's named view: seen from where the picture shows its part, cut by its section.
+        viewed = view_of(still, shown, self.path.name, hidden)
         clock = time.perf_counter()
         scene, fresh = self._scene(still.preview, still.drawn)
         if fresh:
@@ -363,17 +370,26 @@ class Held:
         scene.clear_overlays(keep=self.kept.get(still.preview, ()))
         scene.grid(False)
         display = dict(still.display)
+        if viewed is not None and viewed["at"]["section"]:
+            display["clip"] = {"enabled": True, **viewed["at"]["section"]}  # its section, the Clip's settings
         if not still.preview:
             self.last = (display, still.size)
         scene.explode(exploded_amount(display))
         scene.show(display, preview=still.preview)
+        if pmi:
+            scene.pmi(viewed["view"] if viewed else None)  # before the camera: a fitted frame takes the callouts in
         timings["presentMs"] = round((time.perf_counter() - clock) * 1000)
         clock = time.perf_counter()
         lens = display.get("camera") or {}
         projection = lens.get("projection") or ("perspective" if still.preview else "orthographic")
         focal_length = float(lens.get("focalLength") or FOCAL_LENGTH)
         camera = still.camera if still.camera is not None else "iso"
-        if isinstance(camera, str):
+        if viewed is not None:
+            # Down its camera where its part stands, fitted as a camera object is.
+            frame_camera(scene, {"direction": viewed["at"]["direction"], "up": viewed["at"]["up"]}, projection,
+                         focal_length, still.padding, still.tight)
+            name = "view"
+        elif isinstance(camera, str):
             scene.frame(camera, projection, focal_length, padding=still.padding, tight=still.tight)
             name = camera
         elif still.exact:
@@ -405,6 +421,8 @@ class Held:
                       "displayMode": display.get("mode", "solid"), "preview": still.preview,
                       "parts": len(self.structure["prototypes"]), "instances": len(shown["instances"]),
                       "unmeshed": unmeshed, "pose": posed, "exploded": exploded_amount(display) or None,
+                      **({"view": viewed["view"]["name"]} if viewed else {}),
+                      **({"pmi": len(scene.pmi_drawn), "pmiLeftOut": scene.pmi_left_out} if pmi else {}),
                       "renderer": "occt", **({"font": ", ".join(sorted(scene.fonts))} if scene.fonts else {}),
                       **({"kind": self.kind, "warnings": self.warnings} if self.kind else {}), "timings": timings}
 

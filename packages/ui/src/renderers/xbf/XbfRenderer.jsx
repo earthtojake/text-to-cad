@@ -2,10 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
 import { sceneFramingBounds } from "@text-to-cad/core/lib/viewer/sceneContract.js";
 import { boundsInUnits } from "@text-to-cad/core/lib/viewer/sceneUnits.js";
+import { clipAxisPosition, normalizeStepClipSettings } from "@text-to-cad/core/lib/viewer/clipPlane.js";
 import { fetchXbfPartGroups } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
 import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
+import { interactiveCameraFrameForBounds } from "../kit/camera/viewportCameraFit.js";
 import { readFileView } from "../kit/shell/fileView.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -32,7 +35,7 @@ import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPosi
 import { MeasureIcon, SelectIcon, SelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfNodeRefs } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
-import { viewportMenuEntries } from "./xbfMenuItems.js";
+import { pmiMenuEntries, viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTopologyMenu } from "./xbfMenus.js";
 import { NO_CONNECTED_SELECTION, nextSelectionIds, selectGeometryMode, treeShape } from "./xbfSelectionFilter.js";
 import { isXbfAssemblyId, presentXbfTree, xbfAssemblyIds, xbfCoveringIds, xbfPickFrontier } from "./xbfTree.js";
@@ -41,6 +44,12 @@ import { xbfLookSubject } from "./xbfLookAt.js";
 import { readXbfView, xbfViewSignatures, xbfViewSlices } from "./xbfViewSlices.js";
 import { goneFromEngine, useXbfScene } from "./useXbfScene.js";
 import { useXbfMotion } from "./useXbfMotion.js";
+import PmiOverlay from "./pmi/PmiOverlay.jsx";
+import PmiSection from "./pmi/PmiSection.jsx";
+import { useXbfPmi } from "./pmi/useXbfPmi.jsx";
+import { usePmiViewApplied } from "./pmi/usePmiView.js";
+import { pmiCreateOptions } from "./pmi/pmiCreate.js";
+import { createHiddenTest } from "./pmi/pmiHidden.js";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@text-to-cad/ui/i18n";
 
@@ -59,7 +68,8 @@ const MENU_CONTROLS = Object.freeze({
 // same menus, the same Quick Edit chips; and, for a document with motions, the file sidebar's
 // Motion section, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
-// hand from the start, so nothing waits on topology.
+// hand from the start, so nothing waits on topology. And what only a document has: its PMI, drawn
+// on the model and read and asked for in the file sidebar's PMI section (`pmi/`).
 
 const NO_REFERENCES = Object.freeze([]);
 const EMPTY = Object.freeze([]);
@@ -68,6 +78,9 @@ const EXPLODE_OFF = Object.freeze({ exploded: { enabled: false, amount: 0 } });
 const isElementId = id => String(id).includes("/");
 // How far off z=0 a point may be, in the document's millimetres, for its DXF: the writer's own test.
 const PLANAR = 1e-6;
+// A document made from code, whose PMI changes are asked for in it: an .xbf, or a model held by its id.
+// A STEP is named by the engine's refs too (`isEngineRefFile`), but its PMI is another system's, read alone.
+const madeFromCode = path => isDocumentId(String(path || "")) || /\.xbf$/i.test(String(path || ""));
 
 /** The selection after a pick of a part or subassembly, as a STEP's: a plain pick drops the faces and edges. */
 function pickNode(current, id, multiSelect) {
@@ -155,6 +168,8 @@ function XbfSurface({ view, data }) {
   const [isolatedIds, setIsolatedIds] = useState(EMPTY);
   const [chosen, setChosen] = useState(EMPTY);
   const [hover, setHover] = useState(NO_HOVER);
+  // The PMI picked (its label, or its row), by its key: its features lit, its values read in the PMI section.
+  const [pmiPicked, setPmiPicked] = useState("");
   const selected = useMemo(() => (scene ? chosen.filter(id => (isElementId(id) ? scene.describeElement(id) : tree.nodes.has(id))) : EMPTY),
     [scene, tree, chosen]);
   const selectedNodeIds = useMemo(() => selected.filter(id => !isElementId(id)), [selected]);
@@ -171,15 +186,9 @@ function XbfSurface({ view, data }) {
   }, [shape, expandedIds, assemblyIds, tree]);
   const selectableIds = useMemo(() => (isolatedIds.length ? subtreeIds(tree, isolatedIds) : null), [tree, isolatedIds]);
 
-  // The scene follows: hidden parts, the isolation, what is lit.
+  // The scene follows: hidden parts, the isolation.
   useEffect(() => { scene?.setHiddenParts(hiddenIds); requestRender(); }, [scene, hiddenIds, requestRender]);
   useEffect(() => { scene?.setFocusedParts(leavesOf(isolatedIds)); requestRender(); }, [scene, isolatedIds, leavesOf, requestRender]);
-  useEffect(() => {
-    if (!scene) return;
-    scene.setHighlight({ hovered: hover.parts, selected: leavesOf(selectedNodeIds) });
-    scene.setElementHighlight({ hovered: hover.element, selected: selectedElementIds });
-    requestFrame();
-  }, [scene, hover, selectedNodeIds, selectedElementIds, leavesOf, requestFrame]);
 
   // ---- Position: the mechanism's pose ---------------------------------------------------------
   const kinematics = scene?.kinematics || null;
@@ -214,11 +223,13 @@ function XbfSurface({ view, data }) {
     shellRef.current?.syncSceneBounds?.();
     requestRender();
   }, [scene, poseValues, poseApplied, requestRender]);
+  // The PMI's slice of the file's view, its own hook's (below): what it restores and what it writes.
+  const pmiViewRef = useRef({ restore: () => {}, slice: null });
   // A prompt's view, as a STEP's carried its pose and what it hid: the pose Position holds off as
   // built, as `cadgen snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
   // its `--display` takes them (`hidden`, `isolated`), each node as Copy Prompt copies it and the
-  // hidden parts by the fewest nodes that name them -- so the view ink was drawn in is drawn as it was.
-  // While a motion owns the pose, the pose on screen is its frame.
+  // hidden parts by the fewest nodes that name them, and the PMI where it is off (`pmi`) -- so the
+  // view ink was drawn in is drawn as it was. While a motion owns the pose, the pose on screen is its frame.
   const positionGiven = useMemo(() => (poseApplied && kinematics && poseValues ? xbfPoseGiven(kinematics, poseValues, poseCouplings) : null),
     [poseApplied, kinematics, poseValues, poseCouplings]);
   const motionGiven = useCallback((at) => {
@@ -231,7 +242,7 @@ function XbfSurface({ view, data }) {
     const refs = ids => xbfNodeRefs({ scene, tree, resource: shellRef.current?.frame.resource, ids });
     const playing = motionRef.current?.enabled && motionRef.current.playing;
     return { jointValues: playing ? motionGiven(motionRef.current.clock.getAnimationClock()) : poseGiven,
-      hidden: refs(xbfCoveringIds(tree, hiddenIds)), isolated: refs(isolatedIds) };
+      hidden: refs(xbfCoveringIds(tree, hiddenIds)), isolated: refs(isolatedIds), pmi: !pmiViewRef.current.slice?.off };
   }, [poseGiven, motionGiven, scene, tree, hiddenIds, isolatedIds]);
 
   // ---- this document's own slices of the file's view: the tree and the pose --------------------
@@ -251,12 +262,14 @@ function XbfSurface({ view, data }) {
     if (kept.tree.hidden.length) setHiddenIds(kept.tree.hidden);
     if (kept.tree.isolated.length) setIsolatedIds(kept.tree.isolated);
     if (kept.pose && kinematics) restorePose(kept.pose);
+    if (kept.pmi) pmiViewRef.current.restore(kept.pmi);
     setViewRestored(true);
   }, [viewRestored, viewSignatures, stored, kinematics, restorePose]);
   const viewInputs = useRef(null);
   viewInputs.current = { tree: { expanded: expandedIds, hidden: hiddenIds, isolated: isolatedIds }, pose: kinematics ? pose.saved : null };
   const rendererState = useMemo(() => (viewRestored && viewSignatures
-    ? { signatures: viewSignatures, read: () => xbfViewSlices(viewInputs.current) } : null), [viewRestored, viewSignatures]);
+    ? { signatures: viewSignatures, read: () => xbfViewSlices({ ...viewInputs.current, pmi: viewSignatures.pmi ? pmiViewRef.current.slice : null }) } : null),
+  [viewRestored, viewSignatures]);
   useEffect(() => { if (viewRestored) shellRef.current?.scheduleStateSave(); },
     [viewRestored, viewSignatures, expandedIds, hiddenIds, isolatedIds, pose.saved]);
 
@@ -279,9 +292,9 @@ function XbfSurface({ view, data }) {
   // the measurements picked, then the parts, faces and edges, then the isolation -- one layer a press.
   const escapeRef = useRef(() => false);
   const escape = useMemo(() => ({
-    active: selected.length > 0 || isolatedIds.length > 0 || toolMode !== XBF_TOOL.SELECT || measure.selected.length > 0,
+    active: selected.length > 0 || isolatedIds.length > 0 || toolMode !== XBF_TOOL.SELECT || measure.selected.length > 0 || Boolean(pmiPicked),
     handle: () => escapeRef.current()
-  }), [selected.length, isolatedIds.length, toolMode, measure.selected.length]);
+  }), [selected.length, isolatedIds.length, toolMode, measure.selected.length, pmiPicked]);
   // An xbf's CAD edges are hairlines (`xbfScene.js`): while the view draws them the viewport keeps
   // its pixel ratio through a camera gesture, as a STEP's does for its edges, so a press or a
   // drag never softens and shifts the model (the edges the view draws are only known after the
@@ -298,15 +311,6 @@ function XbfSurface({ view, data }) {
     // A prompt's annotation is in the scene's coordinates: the document's millimetres.
     annotationUnits: scene?.units?.unit || "mm"
   });
-  // Export writes the document as its code built it: the displayed document and revision alone,
-  // never the selection, the pose or Preview (`docs/viewer-host.md`, Export destinations and jobs).
-  // A document the scene draws flat on z=0 at rest holds no solid, so it writes a DXF too.
-  const restBounds = scene?.restBounds;
-  const planar = Boolean(restBounds && Math.abs(restBounds.min[2]) <= PLANAR && Math.abs(restBounds.max[2]) <= PLANAR);
-  const exportView = useMemo(() => loaded.document && !host.environment.compact ? {
-    doc: loaded.document.source.doc, revision: loaded.revision, file: view.file.path, name: view.file.name, planar
-  } : null, [loaded.document, loaded.revision, host.environment.compact, view.file.path, view.file.name, planar]);
-  useExportView(exportView);
   // A measurement taken, deleted or cleared is a step of the view's one history, with the ink's.
   measure.history.current = shell.frame.history;
   shellRef.current = shell;
@@ -332,6 +336,55 @@ function XbfSurface({ view, data }) {
     position: { applied: poseApplied, reset: resetPose },
     motion: { applied: motionOwns, reset: () => motionRef.current?.onRelease() }
   });
+
+  // ---- PMI: the document's manufacturing annotations ------------------------------------------
+  // Drawn on the model as built: while Explode, a pose or a motion moves the parts, not at all; and
+  // each at the first occurrence of its part the hidden parts and the isolation leave shown. Asked
+  // for in code, so only a document made from code (an .xbf) takes changes; a STEP's are read alone.
+  const moving = explodeApplied || poseApplied || motionOwns;
+  // The model's box with its parts as built.
+  const restBounds = scene?.restBounds;
+  const isolatedParts = useMemo(() => leavesOf(isolatedIds), [leavesOf, isolatedIds]);
+  // PMI's "View from here": the viewport's camera now, and the Clip's plane where it stands (its
+  // `at` in the file's unit, else the middle of the model at rest, as the Clip cuts), none while it is off.
+  const pmiHere = useCallback(() => {
+    const clip = normalizeStepClipSettings(store.getSnapshot().display.clip);
+    const box = scene ? boundsInUnits(sceneFramingBounds(scene), scene.units) : null;
+    return { camera: shellRef.current?.frame.viewerRef.current?.getPerspective?.() || null,
+      clip: clip.enabled ? { axis: clip.axis, at: clipAxisPosition(box, clip), invert: clip.invert } : null };
+  }, [store, scene]);
+  const pmi = useXbfPmi({ scene, tree, bounds: restBounds || null, moving, editable: madeFromCode(view.file.path),
+    hiddenParts: hiddenIds, isolatedParts, selectedKey: pmiPicked, onSelect: setPmiPicked, here: pmiHere });
+  const pmiRef = useRef(pmi);
+  pmiRef.current = pmi;
+  pmiViewRef.current = { restore: pmi.restore, slice: pmi.slice };
+  useEffect(() => { if (viewRestored) shellRef.current?.scheduleStateSave(); }, [viewRestored, pmi.slice]);
+
+  // Export writes the document as its code built it: the displayed document and revision alone,
+  // never the selection, the pose or Preview (`docs/viewer-host.md`, Export destinations and jobs).
+  // A document the scene draws flat on z=0 at rest holds no solid, so it writes a DXF too. And what
+  // a STEP of it carries of its PMI, as the engine writes one: its GD&T, written and checked in the
+  // file; its notes and named views, which stay in the XBF.
+  const planar = Boolean(restBounds && Math.abs(restBounds.min[2]) <= PLANAR && Math.abs(restBounds.max[2]) <= PLANAR);
+  const pmiGdt = pmi.entries.some(entry => entry.kind !== "note");
+  const pmiNotes = pmi.entries.some(entry => entry.kind === "note");
+  const pmiViews = pmi.views.length > 0;
+  const exportView = useMemo(() => loaded.document && !host.environment.compact ? {
+    doc: loaded.document.source.doc, revision: loaded.revision, file: view.file.path, name: view.file.name, planar,
+    ...(pmiGdt || pmiNotes || pmiViews ? { pmi: { gdt: pmiGdt, kept: [...(pmiNotes ? ["notes"] : []), ...(pmiViews ? ["views"] : [])] } } : {})
+  } : null, [loaded.document, loaded.revision, host.environment.compact, view.file.path, view.file.name, planar, pmiGdt, pmiNotes, pmiViews]);
+  useExportView(exportView);
+
+  // What is lit: the parts and the faces and edges picked and under the pointer, and a PMI picked's
+  // features with them (the one under the pointer, its first).
+  const pmiLit = pmi.highlight;
+  useEffect(() => {
+    if (!scene) return;
+    scene.setHighlight({ hovered: hover.parts, selected: leavesOf(selectedNodeIds) });
+    scene.setElementHighlight({ hovered: hover.element || pmiLit.hovered,
+      selected: pmiLit.selected.length ? [...new Set([...selectedElementIds, ...pmiLit.selected])] : selectedElementIds });
+    requestFrame();
+  }, [scene, hover, selectedNodeIds, selectedElementIds, leavesOf, requestFrame, pmiLit]);
 
   // The edges the display mode draws, as the view resolved them; Preview's scene draws none.
   const edges = shell.frame.resolvedScene?.view?.edges || null;
@@ -391,6 +444,7 @@ function XbfSurface({ view, data }) {
     if (!previewing && toolMode === XBF_TOOL.MEASURE && now.drafting) { now.cancelDraft(); return true; }
     if (!previewing && toolMode !== XBF_TOOL.SELECT) { shellRef.current?.selectTool(XBF_TOOL.SELECT); return true; }
     if (now.selected.length) { now.select([]); return true; }
+    if (pmiPicked) { setPmiPicked(""); return true; }
     if (selectedRef.current.length) { setChosen(EMPTY); return true; }
     if (isolatedIds.length) { exitIsolate(); return true; }
     return false;
@@ -518,6 +572,7 @@ function XbfSurface({ view, data }) {
     const multiSelect = Boolean(modifiers?.multiSelect);
     lastPick.current = { before: selectedRef.current };
     if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) ensureSelect();
+    if (!multiSelect) setPmiPicked("");
     if (!hit) { if (!multiSelect) { setChosen(EMPTY); measureRef.current.select([]); } return; }
     if (!multiSelect) measureRef.current.select([]);
     if (hit.kind) {
@@ -633,6 +688,18 @@ function XbfSurface({ view, data }) {
   }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }])),
   [copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
     zoomToSelection, ensureSelect, usage]);
+  // A pick as PMI's New reads it: each face with its part (the structure's prototype), its canonical
+  // ref and its surface; anything else picked (a part, an edge) makes nothing.
+  const pmiFaceOf = useCallback((id) => {
+    const element = scene && isElementId(id) ? scene.describeElement(id) : null;
+    if (!element || element.kind !== "face") return { id, part: null, ref: "", surface: null };
+    return { id, part: scene.structure.instances[element.instance]?.prototype ?? null,
+      ref: tree.elementRefOf(`i${element.instance}`, "face", element.ordinal, element.name), surface: scene.elementGeometry(id)?.surface || null };
+  }, [scene, tree]);
+  // A face's PMI menu (`pmiMenuEntries`), where the document is made from code: each kind picks the
+  // faces and opens the PMI section on its form.
+  const [pmiRequest, setPmiRequest] = useState(null);
+  const addPmiOn = (faceIds, kind) => { ensureSelect(); setChosen(now => pickElements(now, faceIds, false)); setPmiRequest({ kind, key: Date.now() }); };
   const contextMenuItems = selectActive ? (press) => {
     const hit = pickAtClient(press.clientX, press.clientY);
     let menu = null;
@@ -644,7 +711,10 @@ function XbfSurface({ view, data }) {
     }
     menu ||= xbfModelMenu({ tree, assembly, expandedIds, hiddenCount: hiddenIds.length, zoomSelectionAvailable, shape,
       copyText: assembly ? "" : singleChip([tree.roots[0]?.selectionId].filter(Boolean)) });
-    return viewportMenuEntries(menu, { actions: partMenuActions, t });
+    const entries = viewportMenuEntries(menu, { actions: partMenuActions, t });
+    if (hit?.kind !== "face" || !pmiRef.current.editable) return entries;
+    const options = pmiCreateOptions({ picked: menu.referenceIds.map(pmiFaceOf), entries: pmiRef.current.entries, pending: pmiRef.current.pending, t });
+    return [...entries, ...pmiMenuEntries(options, { actions: { onAdd: option => addPmiOn(menu.referenceIds, option.kind) }, t })];
   } : null;
 
   // ---- the strip --------------------------------------------------------------------------------
@@ -689,15 +759,53 @@ function XbfSurface({ view, data }) {
     menuForNode, partMenuActions
   }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
-  const sidebar = scene && (assembly || kinematics) ? <>
+  // PMI's section: a document's that carries PMI, or one PMI is being made for (a face's "Add
+  // datum", a new one waiting in Quick Edit). A file with none has no tile for it.
+  const pmiShown = Boolean(pmi.entries.length || (pmi.editable && (pmiRequest || pmi.changes.length)));
+  const pmiPickedFaces = useMemo(() => (scene ? selected.map(pmiFaceOf) : EMPTY), [scene, selected, pmiFaceOf]);
+
+  const sidebar = scene && (assembly || kinematics || pmiShown) ? <>
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
     {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
       changed={poseApplied} onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
+    {pmiShown ? <PmiSection pmi={pmi} picked={pmiPickedFaces} selectedFeatureIds={selectedElementIds} moving={moving}
+      request={pmiRequest} onRequestDone={() => setPmiRequest(null)} /> : null}
   </> : null;
+  // Whether the model hides a point of a callout from the camera now (its leader's start, an
+  // extension line's): drawn faint. Within a thousandth of the model's size, a point is on the
+  // surface the ray meets, not behind it.
+  const hiddenTestRef = useRef(null);
+  const pmiHiddenAt = useCallback((point) => {
+    const runtime = viewportRef.current?.runtimeRef.current;
+    if (!scene || !runtime?.camera || !runtime.THREE) return false;
+    hiddenTestRef.current ??= createHiddenTest(runtime.THREE);
+    const size = restBounds ? Math.hypot(...restBounds.max.map((value, axis) => value - restBounds.min[axis])) : 0;
+    return hiddenTestRef.current({ camera: runtime.camera, pick: ray => scene.pick(ray), point, tolerance: Math.max(0.05, size * 1e-3) });
+  }, [scene, restBounds]);
+  // A PMI's label double-clicked: its feature looked at where it is drawn, as a face is.
+  const lookAtPmi = useCallback((key) => {
+    const [feature] = pmiRef.current.drawnFeatureIds(key);
+    if (feature) lookAt(feature);
+  }, [lookAt]);
+  // A part's named view picked in the PMI section: seen down its camera, its part's box framed from
+  // its direction as the viewport frames a model (`interactiveCameraFrameForBounds`), the camera
+  // handed the viewer (`setPerspective`) and its section the Clip's (`usePmiViewApplied`); its PMI
+  // alone drawn (`useXbfPmi`). The projection stays the person's (the Projection menu).
+  const fitPmiView = useCallback(({ direction, up, bounds }) => {
+    const runtime = viewportRef.current?.runtimeRef.current;
+    const rect = viewportRef.current?.hostRef.current?.getBoundingClientRect?.();
+    if (!runtime?.THREE || !runtime.camera || !runtime.controls || !bounds) return null;
+    const frame = interactiveCameraFrameForBounds(runtime.THREE, { camera: runtime.camera, controls: runtime.controls, bounds,
+      frameAspect: rect?.width && rect?.height ? rect.width / rect.height : runtime.camera.aspect, viewDirection: direction, viewUp: up });
+    return frame ? { position: frame.position.toArray(), target: frame.target.toArray(), up: frame.up.toArray(), zoom: 1,
+      orthographicHalfHeight: frame.halfHeight } : null;
+  }, []);
+  usePmiViewApplied({ applied: pmi.view, viewer: () => shellRef.current?.frame.viewerRef.current, store, fit: fitPmiView });
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
+    requests={previewing ? NO_REFERENCES : pmi.changeChips} onClearRequests={pmi.clearChanges}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
     inkTouches={inkTouches} contextMenuItems={contextMenuItems}
@@ -707,6 +815,8 @@ function XbfSurface({ view, data }) {
         <XbfMeasureOverlay viewport={viewport} scene={scene} measure={measure} picking={measuring} preview={shell.previewing}
           filter={measureFilter} source={source} fetch={engineFetch} onHoverElement={hoverElement} onDoublePick={handleMeasureDoublePick} />
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
+        {!previewing && pmi.items.length ? <PmiOverlay viewport={viewport} items={pmi.items} interactive={selectActive}
+          onSelect={key => { ensureSelect(); setPmiPicked(key); }} onHover={pmi.hover} onMove={pmi.move} onLookAt={lookAtPmi} hiddenAt={pmiHiddenAt} /> : null}
         <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
       </>;

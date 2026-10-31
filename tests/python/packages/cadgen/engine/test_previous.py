@@ -327,8 +327,10 @@ class PreviousTest(unittest.TestCase):
         self.restart()
         self.cached.write_bytes(self.cached.read_bytes().replace(writer, other_release))
         self.assertEqual(self.kit()["cache"], {"used": True, "from": "cache"})
-        # A document of the format before (the key made differently): built again, once.
-        old = other_release.replace(f"cadgen.engine {previous.FORMAT} ".encode(), b"cadgen.engine xbf/1 ")
+        # A document of the format before (the key made differently): built again, once. Its
+        # release a digit longer for each the format is shorter, so the bytes keep their length.
+        longer = len(previous.FORMAT) - len("xbf/1")
+        old = document.WRITER.format(format="xbf/1", release="9" * (len(release) + longer)).encode()
         self.assertEqual(len(old), len(other_release))
         self.restart(saved=False)
         self.cached.write_bytes(self.cached.read_bytes().replace(other_release, old))
@@ -482,7 +484,7 @@ class ClosureTest(unittest.TestCase):
         self.assertEqual(record["schema"], "cadgen.engine closure/2")
         version = (Path(__file__).resolve().parents[5] / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(record["engine"]["release"], f"cadgen {version}", "the release VERSION stamps")
-        self.assertEqual((record["engine"]["format"], len(record["engine"]["digest"])), ("xbf/9", 32))
+        self.assertEqual((record["engine"]["format"], len(record["engine"]["digest"])), ("xbf/10", 32))
         self.assertEqual(set(record["libs"]), {"build123d", "OCP", "bd_materials", "threejs_materials"})
         self.assertEqual(record["platform"], {"python": platform.python_version(), "system": platform.system(),
                                               "arch": platform.machine()}, "the Python and the machine it ran on")

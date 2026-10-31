@@ -86,7 +86,7 @@ src/
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    xbf/            an engine document (.xbf) and a STEP: model tree, Position
+    xbf/            an engine document (.xbf) and a STEP: model tree, Position, PMI (pmi/)
     robot/          URDF, SRDF and SDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
@@ -161,7 +161,9 @@ Declarations are owned here; apps need no ambient shims or aliases into this
 source tree.
 
 The viewer's drawing tools (Pencil and Shapes) are native ink projected into the model, with no drawing
-SDK and no persistent storage. Read [annotation](docs/annotation.md) before extending it.
+SDK and no persistent storage. Read [annotation](docs/annotation.md) before extending it. An engine
+document's manufacturing annotations — its dimensions, tolerances, datums and GD&T — are not ink but
+the document's own, drawn from it and asked for in its code: [PMI](docs/pmi.md).
 
 The required host contract, typed prompt bundles, delivery receipts and host
 chrome slots are documented in [viewer host](docs/viewer-host.md). Clipboard

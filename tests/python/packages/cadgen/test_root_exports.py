@@ -23,10 +23,14 @@ ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint
           "read_step", "read_xbf", "read_mesh")
 VERBS = ("export", "snapshot", "inspect")
 ROOT = (*ENGINE, *VERBS, "__version__")
-# The names that are the standards' rather than the engine's.
+# The names that are the standards' rather than the engine's: PMI's after the AP242 entities they write,
+# and those that write none (limits, the general profile and tolerance, notes, views and placements) plainly.
+PMI = ("annotate", "datum", "dimensional_size", "dimensional_location", "plus_minus_tolerance", "limits",
+       "flatness_tolerance", "position_tolerance", "surface_profile_tolerance", "general_profile", "general_tolerance",
+       "note", "view", "camera", "section", "place")
 NAMESPACES = {
     "cadgen.ap242": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
-                     "posed"),
+                     "posed", *PMI),
     "cadgen.gltf": ("animation",),
 }
 
@@ -75,9 +79,10 @@ class RootExports(unittest.TestCase):
 
         from cadgen.engine import mechanism, model
 
+        pmi = importlib.import_module("cadgen.engine.pmi")  # the engine's own module, exported by no namespace
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model,
                    "gear_pair": mechanism, "rack_and_pinion_pair": mechanism, "screw_pair": mechanism,
-                   "posed": mechanism}
+                   "posed": mechanism, **{name: pmi for name in PMI}}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
             self.assertEqual(sorted(names), sorted(module.__all__))
@@ -105,7 +110,7 @@ class RootExports(unittest.TestCase):
         # ``build`` among them: a model builds by a decorated function's call, never cadgen.build (law 12).
         for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
-                     "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "build123d"):
+                     "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "build123d", "pmi"):
             with self.subTest(name=name), self.assertRaises(AttributeError) as caught:
                 getattr(cadgen, name)
             self.assertEqual(str(caught.exception), f"module 'cadgen' has no attribute {name!r}")

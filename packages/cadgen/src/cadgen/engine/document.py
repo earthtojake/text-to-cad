@@ -32,6 +32,12 @@ An assembly whose parts carry build123d joints carries its mechanism too: links,
 pairs, the ground, the as-built configuration and the named ones, as a subtree of
 standard attributes beside the XCAF tools (``mechanism``).
 
+A part given semantic PMI (``pmi.annotate``) carries it in the GD&T tool, as XCAF's own
+datum, dimension and geometric-tolerance objects linked to its faces' sub-shape labels, its
+notes in the notes tool and its named views in the views tool (their sections in the clipping
+planes tool) (``pmi``); a document holding PMI is
+converted whole on a warm build.
+
 A model's document is kept in memory between builds (``Kept``) and a warm build patches
 it rather than converting every prototype again (``to_xcaf``): each shape label holds the
 prototype at its place in the order, and a cold conversion makes the same labels at the
@@ -100,6 +106,9 @@ class Part:
     origin: Any = None  # the result's object it was first seen as
     material: Any = None
     face_materials: dict[int, Any] = field(default_factory=dict)
+    # Its semantic PMI as the code gave it (``pmi.annotate``): annotations as plain dicts, its
+    # notes among them, and its views (``pmi._views``).
+    pmi: tuple = ()
 
 
 # The base colour of a part with a material and no colour: the exports' default grey.
@@ -141,6 +150,16 @@ class Tree:
     # whether it was handed back rather than made (``collect``'s ``harvested``).
     harvest: "Harvest | None" = None
     reused: bool = False
+    # The annotations resolved against the parts as built (``pmi.resolve``), made once; and, for a
+    # tree made of a document another system wrote, that document and each of its prototypes' part,
+    # its GD&T copied as read (``pmi.copy``).
+    pmi_resolved: list | None = None
+    pmi_source: tuple | None = None
+
+    @property
+    def pmi(self) -> list[tuple["Part", tuple]]:
+        """Each annotated part with its annotations (``pmi``), in the tree's order."""
+        return [(part, part.pmi) for part in self.parts if part.pmi]
 
 
 @dataclass(frozen=True)
@@ -281,6 +300,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         label = state.get("label") or ""
         held = _children(topods) if children and int(topods.ShapeType()) == int(TopAbs_COMPOUND) else []
         if children and len(held) == len(children):
+            pmi.refuse_assembly(obj, path)
             components = []
             parts_signature = []
             own = path.rpartition("/")[2]
@@ -324,9 +344,12 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             prototypes[signature] = found
             order.append(found)
             parts.append(found)
+        pmi.harvest(obj, found, annotated, path)
         return found, signature, color
 
-    from cadgen.engine import mechanism
+    from cadgen.engine import mechanism, pmi
+
+    annotated: dict[int, tuple] = {}
 
     wrapped = result.wrapped
     root_name = result.__dict__.get("label") or name
@@ -354,6 +377,10 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         tree.reused = True
     tree.harvest, tree.mechanism, tree.animations = found, found.mechanism, found.animations
     tree.signature = (*tree.signature, *found.signature)
+    for part, given in annotated.values():
+        part.pmi = given
+    if annotated:
+        tree.signature = (*tree.signature, pmi.signature(tree))
     return tree
 
 
@@ -362,17 +389,20 @@ def merge(tree: Tree) -> None:
     it goes, each call its own kernel construction and so its own TShape -- made one
     prototype, placed wherever either was: parts of one geometry key (``geometry_key``,
     their bytes as the document writes them), whose elements are named alike and which
-    hold the same colour, paints and materials. Parts named, coloured, painted or given
-    materials apart stay apart. Once the parts are named and keyed (``build``); the first
+    hold the same colour, paints, materials and PMI. Parts named, coloured, painted, given
+    materials or annotated apart stay apart. Once the parts are named and keyed (``build``); the first
     in the tree's order stands for the others, its name the prototype's, each placement's
     own name and colour on its component."""
+    from cadgen.engine.pmi import _text as pmi_text
+
     first: dict[tuple, Part] = {}
     replaced: dict[int, Part] = {}
     for part in tree.parts:
         names = part.names or {}
         signature = (part.key, *(tuple(names.get(kind) or ()) for kind in ("faces", "edges", "vertices")),
                      part.color, tuple(sorted(part.face_colors.items())), material_key(part.material),
-                     tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())))
+                     tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())),
+                     tuple(map(pmi_text, part.pmi or ())))
         found = first.setdefault(signature, part)
         if found is not part:
             replaced[id(part)] = found
@@ -711,6 +741,8 @@ class Kept:
         # The build closure the document holds (``Tree.closure``), and its animations' record.
         self.closure: str | None = None
         self.animations: str | None = None
+        # Whether the document holds PMI: one that does, or will, is converted whole (``_patch``).
+        self.pmi = False
 
 
 def to_xcaf(tree: Tree, kept: Kept | None = None) -> Any:
@@ -873,7 +905,7 @@ def _convert(tree: Tree, records: list[_Record], kept: Kept) -> Any:
     from OCP.UnitsMethods import UnitsMethods_LengthUnit_Millimeter
     from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
-    from cadgen.engine import mechanism
+    from cadgen.engine import mechanism, pmi
 
     doc = _new_document()
     XCAFDoc_DocumentTool.SetLengthUnit_s(doc, 1.0, UnitsMethods_LengthUnit_Millimeter)
@@ -898,6 +930,9 @@ def _convert(tree: Tree, records: list[_Record], kept: Kept) -> Any:
     kept.mechanism = converter.mechanism(tree, labels)
     if tree.mechanism is not None:
         mechanism.write(doc, tree.mechanism, lambda path: converter.occurrence(tree, labels, path))
+    places = {id(prototype): at for at, prototype in enumerate(tree.order)}
+    pmi.write(doc, tree, lambda part: labels[places[id(part)]])
+    kept.pmi = bool(tree.pmi) or tree.pmi_source is not None
     kept.doc, kept.records, kept.tables = doc, records, _tables(records)
     kept.tools = {tag for tag in _held_children(doc.Main()) if tag != mechanism.TAG}
     kept.converted, kept.patched = len(records), False
@@ -919,6 +954,10 @@ def _patch(kept: Kept, tree: Tree, records: list[_Record]) -> Any:
 
     from cadgen.engine import mechanism
 
+    if kept.pmi or tree.pmi or tree.pmi_source is not None:
+        # PMI links GD&T labels to the sub-shape labels a patch forgets and makes again: a
+        # document holding it, or about to, is converted whole.
+        return None
     tables = _tables(records)
     old = kept.records
     dirty: list[int] = []
@@ -1520,6 +1559,15 @@ class Loaded:
         animated = _animations_listed(self.animations)
         if animated:
             found["animations"] = animated
+        from cadgen.engine import pmi
+
+        records = pmi.records_of_document(self.doc, self.prototypes, self.name)
+        views = pmi.views_of_document(self.doc, self.prototypes)
+        if records or views:
+            found["pmi"] = pmi.entries(records, found)
+            found["pmi_views"] = views
+            found["pmi_coverage"] = pmi.coverage_of(found, {prototype.index: prototype.shape
+                                                            for prototype in self.prototypes})
         return found
 
 
@@ -1632,6 +1680,12 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
     animated = _animations_listed(tree.animations)
     if animated:
         found["animations"] = animated
+    if tree.pmi:
+        from cadgen.engine import pmi
+
+        found["pmi"] = pmi.entries(pmi.records_of_tree(tree, index_of), found)
+        found["pmi_views"] = pmi.views_of_tree(tree, index_of)
+        found["pmi_coverage"] = pmi.coverage_of(found, {index_of[id(part)]: part.shape for part, _given in tree.pmi})
     return found
 
 

@@ -20,15 +20,17 @@ A function worth replaying on a later build -- an assembly's part, a derivation'
 is marked ``@memo``: it writes no file, and a build whose edit does not reach it replays it
 instead of running it. A part's material is a value set on the shape: ``part.material = bd_materials.metals.aluminum()``. An assembly's mechanism is build123d's joints, placed with
 ``connect_to``, as built where the joints place the parts. The functions that say more are
-``cadgen.ap242``'s and ``cadgen.gltf``'s, defined here (``model``, ``mechanism``, ``animations``)
-and exported there: ``mechanism_state(assembly, name, **values)`` names a state of it, ``gear_pair``, ``rack_and_pinion_pair`` and ``screw_pair(assembly,
+``cadgen.ap242``'s and ``cadgen.gltf``'s, defined here (``model``, ``mechanism``, ``animations``,
+``pmi``) and exported there: ``mechanism_state(assembly, name, **values)`` names a state of it, ``gear_pair``, ``rack_and_pinion_pair`` and ``screw_pair(assembly,
 name, **joints)`` a constraint moving joints by ratio (their only way to move, its range their
 limits'), and ``configuration_sequence(assembly, name, ...)`` a sequence of states over time, which a
 GLB export bakes into a clip; ``animation(assembly, name, duration=)``
 a GLB's own choreography, never in the document, baked into the GLBs the model declares. ``read_step(path)`` and ``read_xbf(path)`` copy a file's geometry into
 the model, named, coloured and given its materials as the file has them; ``read_mesh(path)`` reads
 an STL as data -- vertices, triangles, ``bounding_box()`` -- never a shape. A build says where it
-is without a word from the model: each body it runs, by name (``progress``).
+is without a word from the model: each body it runs, by name (``progress``). ``annotate(part,
+datum(...), dimensional_size(...), ...)`` gives a part semantic PMI, written to STEP as AP242's
+entities, each function named after the one it writes (``pmi``).
 Importing this package imports no kernel: the names below load on first use. Decoration only declares: imports and definitions never build or exit the caller.
 Imported by a
 script run by its path from inside a package (``python proj/parts/model.py``), it gives the

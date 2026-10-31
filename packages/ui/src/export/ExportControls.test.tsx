@@ -22,7 +22,7 @@ if (!HTMLElement.prototype.setPointerCapture) Object.assign(HTMLElement.prototyp
 beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { toast.dismiss(); cleanup(); vi.unstubAllGlobals(); });
 const part = { doc: 'doc', revision: 'v1', file: '/part.xbf', name: 'part.xbf' };
-type Shown = typeof part & { planar?: boolean };
+type Shown = typeof part & { planar?: boolean; pmi?: { gdt: boolean; kept: ('notes' | 'views')[] } };
 function Document({ view }: { view: Shown }) { useExportView(view); return <div>Model</div>; }
 const host = { environment: { colorScheme: 'light' } } as any;
 function mount(service: any, downloads: any, { locale = 'en', phone = false, view = part as Shown, viewer = { current: null } as any } = {}) {
@@ -255,4 +255,73 @@ it('the toasts stand at the top right under the viewer\'s navbar, by its 16px gu
     toast.dismiss();
     unmount();
   }
+});
+
+it('says what a STEP carries of a document\'s PMI under the formats: its GD&T checked in the file, only the kinds it holds kept in the XBF', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const lines = () => [...menu()!.querySelectorAll('[data-export-pmi]')].map(line => line.textContent);
+  const included = 'STEP includes the built model’s PMI, checked in the exported file. Pending Quick Edit requests are not included.';
+  const cases: [Shown['pmi'], string[]][] = [
+    [undefined, []],
+    [{ gdt: true, kept: [] }, [included]],
+    [{ gdt: true, kept: ['notes', 'views'] }, [included, 'Notes and named views stay in the XBF: a STEP carries the GD&T.']],
+    [{ gdt: true, kept: ['notes'] }, [included, 'Notes stay in the XBF: a STEP carries the GD&T.']],
+    [{ gdt: false, kept: ['views'] }, ['Named views stay in the XBF: a STEP carries the GD&T.']],
+  ];
+  for (const [pmi, expected] of cases) {
+    const { service } = server();
+    const { unmount } = mount(service, { save: vi.fn() }, { view: { ...part, ...(pmi ? { pmi } : {}) } });
+    await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
+    expect(lines(), JSON.stringify(pmi)).toEqual(expected);
+    // After the formats, never one of them, and nothing is asked of the server; no PMI, no rule.
+    const items = within(menu()!).getAllByRole('menuitem');
+    expect(items.map(item => item.textContent)).toEqual(['STEP', 'STL', '3MF', 'GLB', 'XBF']);
+    for (const line of menu()!.querySelectorAll('[data-export-pmi]')) expect(items.at(-1)!.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(menu()!).queryAllByRole('separator')).toHaveLength(expected.length ? 1 : 0);
+    expect(service.epoch).not.toHaveBeenCalled();
+    unmount();
+  }
+  // A mesh file writes no STEP: no PMI to say.
+  const { service } = server();
+  mount(service, { save: vi.fn() }, { view: { ...part, file: '/scene.glb', name: 'scene.glb', pmi: { gdt: true, kept: ['notes'] } } });
+  await user.click(screen.getByRole('button', { name: 'Export', exact: true }));
+  expect(lines()).toEqual([]);
+});
+
+it('a STEP\'s PMI check is its toast once the file is handed over: all matched, then that no importer was tried', async () => {
+  const { service, jobs, finish } = server();
+  const downloads = { save: vi.fn() };
+  mount(service, downloads, { view: { ...part, pmi: { gdt: true, kept: [] } } });
+  const user = userEvent.setup({ skipHover: true });
+  await exportOnce(user);
+  await waitFor(() => expect(jobs.size).toBe(1));
+  const [id] = [...jobs.keys()];
+  jobs.set(id, { ...jobs.get(id), pmiVerification: { matched: 7, total: 7, problems: [], sha256: 'checked-bytes' } });
+  await finish(id);
+  await waitFor(() => expect(toasts().map(item => [item.dataset.type, item.querySelector('[data-title]')?.textContent]))
+    .toEqual([['success', '7/7 PMI annotations verified in STEP']]));
+  const check = toasts()[0].querySelector('[data-export-pmi-check]')!;
+  expect([...check.children].map(line => line.textContent)).toEqual([
+    'Values, units, datum order and face links match the model.',
+    'Factory importer compatibility has not been tested.']);
+  expect(downloads.save).toHaveBeenCalledTimes(1);
+  // A verified check goes on its own: no dismiss of its own.
+  expect(toasts()[0].querySelector('button[aria-label="Dismiss export status"]')).toBeNull();
+});
+
+it('a check that found problems says it is incomplete, lists them, and stays until dismissed', async () => {
+  const { service, jobs, finish } = server();
+  mount(service, { save: vi.fn() });
+  const user = userEvent.setup({ skipHover: true });
+  await exportOnce(user);
+  await waitFor(() => expect(jobs.size).toBe(1));
+  const [id] = [...jobs.keys()];
+  jobs.set(id, { ...jobs.get(id), pmiVerification: { matched: 6, total: 7, problems: ['flatness 0.05 not found'], sha256: 'x' } });
+  await finish(id);
+  await waitFor(() => expect(toasts()[0]?.querySelector('[data-export-pmi-check]')).toBeTruthy());
+  expect([toasts()[0].dataset.type, toasts()[0].querySelector('[data-title]')?.textContent]).toEqual(['warning', 'PMI verification incomplete']);
+  expect([...toasts()[0].querySelector('[data-export-pmi-check]')!.children].map(line => line.textContent)).toEqual([
+    'Review the requirements before using this file for manufacturing.',
+    'flatness 0.05 not found', 'Factory importer compatibility has not been tested.']);
+  expect(toasts()[0].querySelector('button[aria-label="Dismiss export status"]')).toBeTruthy();
 });

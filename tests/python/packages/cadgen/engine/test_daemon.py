@@ -1766,9 +1766,12 @@ if __name__ == '__main__':
         self.assertTrue((self.folder / "XBF/block.xbf").is_file())
 
 
-    def test_the_viewer_moves_before_a_derived_file_is_written(self) -> None:
+    def test_the_viewer_moves_once_every_declared_file_is_written(self) -> None:
+        """A model's declared files land together (law 17): while its STL is still being written, its
+        xbf -- the file a page serving it follows -- keeps its bytes, and the page moves once both land."""
         # An STL writer held until the test lets it go, put in place in the worker by the model's own module.
         gate = self.folder / "gate"
+        held = self.folder / "held"
         gate.touch()  # the first build writes at once
         slow = textwrap.dedent("""
             import os, time
@@ -1777,6 +1780,7 @@ if __name__ == '__main__':
             if not getattr(export, "slow", False):
                 class Slow(type(export.KINDS["stl"])):
                     def write(self, view, path):
+                        open(HELD_PATH, "w").close()
                         while not os.path.exists(GATE_PATH):
                             time.sleep(0.01)
                         super().write(view, path)
@@ -1784,8 +1788,8 @@ if __name__ == '__main__':
                 given = export.KINDS["stl"]
                 export.KINDS["stl"] = Slow(given.name, given.suffixes, given.writer, given.atomic)
                 export.slow = True
-        """).replace("GATE_PATH", repr(str(gate))) + textwrap.dedent(PAIR).replace('@xbf("XBF/pair.xbf")', '@xbf("XBF/pair.xbf")\n@stl("pair.stl")').replace(
-            "import xbf", "import stl, xbf")
+        """).replace("GATE_PATH", repr(str(gate))).replace("HELD_PATH", repr(str(held))) + textwrap.dedent(PAIR).replace(
+            '@xbf("XBF/pair.xbf")', '@xbf("XBF/pair.xbf")\n@stl("pair.stl")').replace("import xbf", "import stl, xbf")
         self.script = self.folder / "pair.py"
         self.script.write_text(slow.format(size=10), encoding="utf-8")
         self.assertEqual(self.run_script("pair.py").returncode, 0)
@@ -1795,19 +1799,27 @@ if __name__ == '__main__':
         base, query = f"{url.scheme}://{url.netloc}", parse_qs(url.query)
         ident, token = url.path.strip("/"), query["token"][0]
         before = get_json(f"{base}/api/doc/{ident}", token)
-        stl = self.folder / "pair.stl"
-        written = stl.stat().st_mtime_ns
+        stl, xbf = self.folder / "pair.stl", self.folder / "XBF/pair.xbf"
+        written = {path: path.stat().st_mtime_ns for path in (stl, xbf)}
         self.script.write_text(slow.format(size=12), encoding="utf-8")
         gate.unlink()
+        held.unlink()
         building = subprocess.Popen([sys.executable, "pair.py"], cwd=self.folder, env=self.env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(building.wait)
-        answer = get_json(f"{base}/api/doc/{ident}/version?after={before['version']}&wait=60", token)
-        self.assertNotEqual(answer["version"], before["version"])
-        self.assertEqual(stl.stat().st_mtime_ns, written, "the viewer moved before the STL was written")
+        deadline = time.monotonic() + 120
+        while not held.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(held.exists(), "the STL writer was never reached")
+        self.assertEqual({path: path.stat().st_mtime_ns for path in (stl, xbf)}, written,
+                         "a declared file landed before the others were written")
+        self.assertEqual(get_json(f"{base}/api/doc/{ident}", token)["version"], before["version"])
         gate.touch()
         self.assertEqual(building.wait(timeout=300), 0)
-        self.assertNotEqual(stl.stat().st_mtime_ns, written)
+        answer = get_json(f"{base}/api/doc/{ident}/version?after={before['version']}&wait=60", token)
+        self.assertNotEqual(answer["version"], before["version"])
+        self.assertNotEqual(stl.stat().st_mtime_ns, written[stl])
+        self.assertNotEqual(xbf.stat().st_mtime_ns, written[xbf])
 
     def test_exports_and_a_model_s_document_through_the_daemon(self) -> None:
         self.script = self.folder / "pair.py"

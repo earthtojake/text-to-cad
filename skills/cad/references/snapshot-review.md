@@ -76,6 +76,44 @@ inline or as a JSON file: `mode`, `grid`, `appearance` (`light` or `dark`), `cam
 (`{"enabled": true, "amount": 0.5}`). `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
 
+A document carrying PMI ([`annotate`](pmi.md)) has it drawn as the
+viewer shows it: each callout at its placement, its leader to the feature, a callout
+whose reference broke in red (missing, invalid) or amber (ambiguous) at the place the
+code gave it. Read those before the picture: the reference no longer names what the
+code meant. A part placed more than once has its PMI drawn at its first placement the
+picture shows. What a picture cannot draw is left out of it, so fewer callouts than the
+code wrote is not a clean picture. Each annotation left out is a warning on stderr
+(`warning: plate: the picture does not draw PMI hole-diameter (invalid): ...`), and with
+`--json`, `pmi` counts the callouts drawn and `pmiLeftOut` lists each one left out, as
+`{id, part, status, reason}` (an id is unique only on its part) -- a kind the viewer
+does not draw (in the document's words where it has them), a note (a general note,
+the general profile, a flag note naming annotations alone: listed in the viewer's
+notes, never drawn in a picture), one whose part the picture hides, or a broken one
+the code never placed. Read it with the red callouts. `pmi=off`
+(`display.pmi` false) draws the model alone; an exploded, posed or Preview picture draws
+no PMI, and asking for it there is refused.
+
+`--view NAME` draws a part's named view ([`view`](pmi.md#views)) as the viewer
+applies it: down its camera from the part's first placement the picture shows, cut by
+its section, and only the PMI it shows, at the view's own placements (`PART/NAME`
+where two parts have a view of that name). With `--json`, `view` names it; what the
+view does not show is not drawn and not left out.
+
+```bash
+cadgen snapshot "$ID" tmp/a-a.png --view A-A
+```
+
+A view has its own camera and section, so `--view` with `--camera`, or with a
+`display.clip` beside its section, is refused. So is an unknown view (the message
+lists the document's views), a view whose part the picture hides, a view of an
+exploded, posed or Preview picture (`pmi=off` draws its camera and section alone),
+a view with a section on an exploded picture, `pmi=off` or not (the section is
+placed on the parts as made, which Explode moves apart: a view of no section draws
+its camera alone there), and a view whose section its part's placement turns off
+the world's axes: a picture
+cuts only square to a world axis, never along another, so it is refused rather than
+cut wrong. In a `--job`, `--view` draws every job as the view.
+
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
 Snapshot draws technical OCCT images. Photographic Preview is available in the browser viewer.
 

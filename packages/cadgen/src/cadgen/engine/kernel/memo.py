@@ -235,6 +235,7 @@ FACE_MATERIALS = "xbf_face_materials"
 CONFIGURATIONS = "xbf_configurations"  # an assembly's mechanism states by name (``mechanism.mechanism_state``)
 COUPLINGS = "xbf_couplings"  # and its couplings by name (``mechanism.gear_pair`` and its two siblings)
 ANIMATIONS = "xbf_animations"  # and its animations by name (``animations.animation``): plain values
+PMI = "xbf_pmi"  # and a part's semantic PMI (``pmi.annotate``)
 
 
 class _Unkeyable(Exception):
@@ -1658,6 +1659,13 @@ class _Run:
         # The model whose body is running (``scope``): its calls are counted, and keyed,
         # as its own.
         self.scope: str | None = None
+        # The model whose body is running, through the @memo functions it calls (``scope``'s
+        # ``model``): what a ``pmi.annotate`` call inside either belongs to.
+        self.model: str | None = None
+        # The annotations each model's ``pmi.annotate`` calls gave, its @memo functions' among them,
+        # run or replayed (``annotated``), by the model's scope: those its document does not hold
+        # fail its build (``pmi.unattached``).
+        self.pmi: dict[str | None, list[str]] = {}
         # The logs of the model bodies running, innermost last (``body``), and the bodies
         # this run has run or replayed: each is in the trace once.
         self.bodies: list[_BodyLog] = []
@@ -1753,20 +1761,23 @@ class _Run:
 
 
 @contextlib.contextmanager
-def scope(name: str) -> Iterator[None]:
+def scope(name: str, *, model: bool = False) -> Iterator[None]:
     """Inside it, the calls of this thread's run are the model ``name``'s own: counted
     from its first, and keyed with its name. A child's body opens its own scope and the
-    parent's resumes after it, so neither shifts the other's ordinals."""
+    parent's resumes after it, so neither shifts the other's ordinals. ``model`` says
+    ``name`` is a model's, not a @memo function's: the run's ``model`` until it closes."""
     state = getattr(_LOCAL, "run", None)
     if state is None:
         yield
         return
-    previous, saved = state.scope, state.counts
+    previous, saved, owner = state.scope, state.counts, state.model
     state.scope, state.counts = name, {}
+    if model:
+        state.model = name
     try:
         yield
     finally:
-        state.scope, state.counts = previous, saved
+        state.scope, state.counts, state.model = previous, saved, owner
 
 
 @contextlib.contextmanager
@@ -1867,7 +1878,8 @@ class _BodyLog:
     order -- ``("call", entry, op, frame, inputs, results, labels, *objects, *handles,
     *results, *returned)`` for a call it hit or made (one flat tuple: a log holds tens of
     thousands, and the collector walks every container), ``("maker", entry, frame, op, *objects)`` for a maker
-    it ran, ``("body", record)`` for a body it called -- the checks its bytes are held to (a
+    it ran, ``("body", record)`` for a body it called, ``("pmi", texts)`` for a ``pmi.annotate``
+    call it made (``annotated``) -- the checks its bytes are held to (a
     callable and what it answered), the keys it interned and, apart, their ids, and whether
     it can be replayed."""
 
@@ -1903,14 +1915,16 @@ class _Body:
     log, its result as it returned it, and the last outermost run that used it; the
     TShapes of the shapes it was given (``inputs``, a ``@memo`` call's), and whether a call
     of it may be replayed (``direct``: false for a ``@memo`` function that returned no
-    geometry, whose log is kept only for the bodies that called it)."""
+    geometry, whose log is kept only for the bodies that called it); whether it is a model's
+    body, not a @memo function's (``model``: the model its annotations are given to)."""
 
-    __slots__ = ("name", "source", "log", "snapshot", "generation", "inputs", "direct", "serial", "harvest")
+    __slots__ = ("name", "source", "log", "snapshot", "generation", "inputs", "direct", "serial", "harvest",
+                 "model")
 
     def __init__(self, name: str, source: str, log: _BodyLog, snapshot: Any, generation: int,
-                 inputs: tuple = ()) -> None:
+                 inputs: tuple = (), model: bool = False) -> None:
         self.name, self.source, self.log, self.snapshot, self.generation = name, source, log, snapshot, generation
-        self.inputs, self.direct = inputs, True
+        self.inputs, self.direct, self.model = inputs, True, model
         # Which run of the body this is, process-wide: a replay keeps it, a run makes another
         # (``adopt``: what the shapes its run made past the engine are keyed by).
         self.serial = next(_SERIALS)
@@ -2020,7 +2034,7 @@ def body(name: str, source: Callable[[], str], function: Callable[[], Any], *, i
             state.records.pop(name, None)
         else:
             _BODIES[name] = state.records[name] = _Body(name, source, log, snapshot, _MARKS[-1] if _MARKS else 0,
-                                                        inputs)
+                                                        inputs, model=state.model == name)
     if state.bodies:
         parent = state.bodies[-1]
         # Its checks are the caller's too, kept or not: the caller's key says all it read.
@@ -2395,6 +2409,7 @@ def used(name: str) -> None:
         parent.checks.extend(record.log.checks)
         if record.log.reads:
             state.reads[name] = list(record.log.reads)
+        _annotated_again(record, state)
 
 
 def replayable(name: str, source: str) -> bool:
@@ -2453,7 +2468,7 @@ def _replayable(record: _Body) -> bool:
             for event in log.events:
                 if event[0] == "body":
                     pending.append(event[1])
-                elif _MEMO.get(event[1].key) is not event[1]:
+                elif event[0] != "pmi" and _MEMO.get(event[1].key) is not event[1]:
                     return False
     # A check reads a file the body read through the engine, when its stat changed: the
     # engine's own read, never one of the running body's (``_audited``).
@@ -2492,7 +2507,7 @@ def keep(name: str) -> None:
             for event in current.log.events:
                 if event[0] == "body":
                     pending.append(event[1])
-                elif _MEMO.get(event[1].key) is event[1]:
+                elif event[0] != "pmi" and _MEMO.get(event[1].key) is event[1]:
                     _MEMO.move_to_end(event[1].key)
             for key, found in zip(current.log.keys, current.log.ids):
                 _KEY_IDS[key] = found
@@ -2501,10 +2516,44 @@ def keep(name: str) -> None:
                 current.generation = generation
 
 
+def annotated(texts: list[str]) -> None:
+    """A ``pmi.annotate`` call's annotations, each as its text: the running model's (``_Run.pmi``),
+    a @memo function's it called among them, and an event of the body that made the call, so a
+    replay of that body gives them to its model as its run did (``_replay``), and a @memo call
+    whose result is handed on again gives them to the model it is handed to (``used``). Nothing
+    outside a run."""
+    state = getattr(_LOCAL, "run", None)
+    if state is None:
+        return
+    state.pmi.setdefault(state.model, []).extend(texts)
+    if state.bodies:
+        state.bodies[-1].events.append(("pmi", tuple(texts)))
+
+
+def _annotated_again(record: _Body, state: _Run) -> None:
+    """The annotations @memo body ``record``'s run, and the @memo bodies it called, gave: the
+    running model's too (``annotated``), where the body is not replayed again in this run (one done
+    already, or one whose result is handed on). A child model's are its own, given as it ran."""
+    pending = [record]
+    while pending:
+        current = pending.pop()
+        if current.model:
+            continue
+        for event in current.log.events:
+            if event[0] == "pmi":
+                state.pmi.setdefault(state.model, []).extend(event[1])
+            elif event[0] == "body":
+                pending.append(event[1])
+
+
 def _replay(record: _Body, state: _Run) -> Any:
     """The body's last run, again, without its code: each entry bound to this run as a hit
-    binds it and each feature recorded as it was; the result restored as it returned."""
+    binds it and each feature recorded as it was; the result restored as it returned. A model's
+    body replayed gives its annotations to itself, as its run did, not to the model replaying it."""
     generation = _MARKS[-1] if _MARKS else 0
+    owner = state.model
+    if record.model:
+        state.model = record.name
     for event in record.log.events:
         kind = event[0]
         if kind == "call":
@@ -2530,8 +2579,13 @@ def _replay(record: _Body, state: _Run) -> Any:
                 feature.history = entry.history
                 _copy_origins(feature, state)
             entry.refresh(None if feature is None else feature.index, state, {})
+        elif kind == "pmi":
+            state.pmi.setdefault(state.model, []).extend(event[1])
         elif event[1].name not in state.done:
             _replay(event[1], state)
+        else:
+            _annotated_again(event[1], state)
+    state.model = owner
     with _LOCK:
         for key, found in zip(record.log.keys, record.log.ids):
             _KEY_IDS[key] = found
@@ -3821,6 +3875,8 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get(CONFIGURATIONS) or {}, state),
         _normalize(state_dict.get(COUPLINGS) or {}, state),
         _normalize(state_dict.get(ANIMATIONS) or {}, state),
+        # and its PMI (``pmi.annotate``), which a hit's restored children would otherwise bring back.
+        _normalize(state_dict.get(PMI) or (), state),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
     return _intern((placed, attrs, children))

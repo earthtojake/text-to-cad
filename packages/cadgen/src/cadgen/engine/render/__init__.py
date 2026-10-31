@@ -10,8 +10,11 @@ OCCT's own; a file no document (a mesh file, a robot) from the buffers its reade
 - ``occt.py``: the scene -- the modes, the camera, clip, grid, overlays, Preview -- and the
   prototype's CLI (``python -m cadgen.engine.render.occt``); ``look.py`` the regular display modes'
   look, which ``occt.py`` draws by and ``serve.py`` serves to the viewer (``GET /api/look``);
-  ``text.py`` and ``overlay.py`` the annotation's words and Measure's marks, as the page draws them.
+  ``text.py`` and ``overlay.py`` the annotation's words and Measure's marks, as the page draws them;
+  ``presets.py`` the camera presets' one table, which ``snapshot.py`` and ``pmi.py``'s ``view`` read too.
 - ``explode.py``: the viewer's Explode, ported (held to the viewer by one golden).
+- ``pmi.py``: a document's PMI drawn as the viewer shows it, its layout ported (held to the viewer by
+  one golden).
 - ``shapes.py``: a part's buffer as triangulation-only faces and polygon edges, in one kernel read.
 - ``context.py``: the headless OpenGL context, per platform.
 - ``meshes.py``: where the prototype's CLI and the parity bench get the engine's buffers.

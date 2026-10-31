@@ -761,6 +761,7 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
     document.merge(tree)
     signature = (_signature(tree), tuple(tokens), tree.closure)
     timings["names"] = round(time.perf_counter() - clock, 4)
+    _pmi(model, tree, run, report, log)
     report["parts"] = len(tree.parts)
     report["named"] = named
     # What the tree holds at a glance, which the daemon says against the last build (``delta``).
@@ -772,6 +773,57 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
     _BUILT[model.id] = built
     _write(model, plan, tree, signature, report, log)
     timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+
+
+def _pmi(model: Any, tree: Any, run: Any, report: dict[str, Any], log: Callable[[str], None]) -> None:
+    """The tree's PMI resolved and said, the build report's ``pmi``: how many annotations, each one
+    not ok and why (kept in the document linked to nothing, refused by a STEP), and each part's
+    faces no requirement is on, its requirements that cannot both hold, and the questions its
+    requirements leave open with a standard answer each (``coverage``: the served structure's
+    ``pmi_coverage`` of each part with something to say, by its name; warned of and asked, never
+    failing the build); each logged, none dropped in silence. Annotations its body, or a @memo
+    function it called, gave a shape the result does not hold fail the build, by id
+    (``pmi.unattached``): its files would carry none of them; a body replayed gives its annotations
+    as its run did (``memo.annotated``), so a build replayed fails as the build run did. So does a
+    limits dimension whose measured size is outside its limits (``pmi.outside_limits``): a size the
+    model does not have. Of this build alone: nothing of an earlier one is read. Timed as ``pmi``."""
+    from cadgen.engine import document, pmi
+
+    clock = time.perf_counter()
+    scope = f"{model.script}::{model.name}"
+    lost = pmi.unattached(run, scope, tree) if run is not None else []
+    if lost:
+        raise pmi.PMIError(f"{model.name}: {', '.join(lost)} given to a shape that is not in the result, so no file "
+                           "would carry them: annotate the shape the model returns (an operation after annotate() "
+                           "makes another shape)")
+    if tree.pmi:
+        # Of the structure the build serves (no file's version: none is written yet), so the two agree.
+        served = document.tree_structure(tree, None)
+        outside = pmi.outside_limits(served["pmi"])
+        if outside:
+            raise pmi.PMIError(f"{model.name}: {'; '.join(outside)}")
+        report["pmi"] = {"annotations": sum(len(items) for _part, items in pmi.resolve(tree)),
+                         "problems": pmi.problems(tree)}
+        for problem in report["pmi"]["problems"]:
+            log(f"pmi {problem['part']}/{problem['id']}: {problem['status']}: {problem['problem']}")
+        names = [prototype["name"] for prototype in served["prototypes"]]
+        coverage = [{"part": names[found["part"]], "uncovered": found["uncovered"], "conflicts": found["conflicts"],
+                     "suggestions": found["suggestions"]}
+                    for found in served["pmi_coverage"]
+                    if found["uncovered"] or found["conflicts"] or found["suggestions"]]
+        if coverage:
+            report["pmi"]["coverage"] = coverage
+        for found in coverage:
+            if found["uncovered"]:
+                count = len(found["uncovered"])
+                log(f"warning: pmi: {found['part']}: {count} {'face has' if count == 1 else 'faces have'} no "
+                    f"requirement: {', '.join(found['uncovered'])}")
+            for conflict in found["conflicts"]:
+                log(f"warning: pmi: {found['part']}: {', '.join(conflict['ids'])}: {conflict['problem']}")
+            for said in found["suggestions"]:
+                # A question for the person who knows the part, its standard answer and why: never applied.
+                log(f"pmi: {found['part']}: ask: {said['question']} Suggest {said['answer']} ({said['why']})")
+        report["timings"]["pmi"] = round(time.perf_counter() - clock, 4)
 
 
 def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str, Any],
@@ -828,27 +880,44 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
     is written again from the document, and one nobody touched keeps its bytes and its time. The
     report's ``files``: each file's kind, whether it was written, the seconds and its bytes. ``log``
     hears each file written, and each one kept too when ``kept`` (a build's; a take says only what it
-    wrote, its run line the rest)."""
-    from cadgen.engine import export
+    wrote, its run line the rest). A STEP of a document with PMI is checked in the file before it
+    lands (``pmi.checked``: its ``pmiVerification``), and refused when the check finds any problem.
+    The files land together (``atomic_replace.together``, law 17): one refused or failed, none of
+    them is written and every earlier one keeps its bytes."""
+    from cadgen.engine import export, pmi
+    from cadgen.engine.atomic_replace import together
 
     timings = report.setdefault("timings", {})
     written: dict[str, Any] = {}
+    befores: dict[str, tuple | None] = {}
+    with together():
+        for target in sorted(plan, key=lambda target: target.kind != "xbf"):
+            clock = time.perf_counter()
+            befores[str(target.path)] = _stat(target.path)
+            _say("writing", target.path)
+            carried = pmi.step_entries(source().structure.get("pmi") or []) if target.kind == "step" else []
+            verified: dict[str, Any] = {}
+            fresh = None
+            if target.kind == "xbf":
+                fresh, size = save(target.path)
+            else:
+                check = (lambda staged: verified.update(pmi.checked(source(), carried, staged, log))) if carried else None
+                size = export.translate(source(), target.kind, target.path, check=check)
+            seconds = time.perf_counter() - clock
+            timings[target.kind] = round(seconds, 4)
+            written[str(target.path)] = {"kind": target.kind, "written": fresh, "seconds": round(seconds, 4),
+                                         "bytes": size}
+            if carried:
+                written[str(target.path)]["pmiVerification"] = verified
     for target in sorted(plan, key=lambda target: target.kind != "xbf"):
-        clock = time.perf_counter()
-        before = _stat(target.path)
-        _say("writing", target.path)
-        if target.kind == "xbf":
-            fresh, size = save(target.path)
-        else:
-            size = export.translate(source(), target.kind, target.path)
-            fresh = _stat(target.path) != before
-        seconds = time.perf_counter() - clock
-        timings[target.kind] = round(seconds, 4)
-        written[str(target.path)] = {"kind": target.kind, "written": fresh, "seconds": round(seconds, 4), "bytes": size}
-        if fresh or kept:
+        said = written[str(target.path)]
+        if said["written"] is None:  # landed only now: written when the file there changed
+            said["written"] = _stat(target.path) != befores[str(target.path)]
+        if said["written"] or kept:
             from cadgen.engine.cli import _bytes  # the size as every verb says one: never "0.0 MB" for a small file
 
-            log(f"{'wrote' if fresh else 'kept'} {_shown(target.path, None)} ({_bytes(size)}) in {seconds:.2f}s")
+            log(f"{'wrote' if said['written'] else 'kept'} {_shown(target.path, None)} ({_bytes(said['bytes'])}) "
+                f"in {said['seconds']:.2f}s")
     report["files"] = {str(target.path): written[str(target.path)] for target in plan}
 
 
@@ -956,7 +1025,7 @@ def _read_held(payload: bytes, name: str) -> Any:
                          xcaf=loaded.doc, world=lambda occurrence: loaded.worlds.get(occurrence),
                          local=lambda occurrence: loaded.locals.get(occurrence),
                          mechanism=loaded.mechanism, foreign=False, path=None, animations=loaded.animations,
-                         migration=loaded.migration)
+                         data=payload, migration=loaded.migration)
 
 
 def _statuses(run: Any, name: str) -> dict[str, str]:

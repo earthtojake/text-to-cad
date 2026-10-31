@@ -2,7 +2,7 @@
 
     export(source, *destinations) -> list[Written]
     snapshot(source, out, *, display=None, camera=None, grid=False, pose=None,
-             width=None, height=None, annotation=None, measurements=None) -> Drawn
+             width=None, height=None, annotation=None, measurements=None, view=None) -> Drawn
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
@@ -203,13 +203,13 @@ class Document:
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
                  pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
-                 measurements: Any = None) -> Drawn:
+                 measurements: Any = None, view: str | None = None) -> Drawn:
         """``snapshot(handle, out, ...)``: the document drawn into ``out`` (a ``.png``); every option is
         the ``snapshot`` verb's, about the picture (law 22)."""
         self._outside("snapshot")
         return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid,
                                     pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon,
-                                    annotation=annotation, measurements=measurements))
+                                    annotation=annotation, measurements=measurements, view=view))
 
 
 def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
@@ -556,14 +556,16 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
              grid: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
-             measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
+             measurements: Any = None, view: str | None = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
     file (``.glb``, ``.stl``, ``.3mf``) into ``out`` (a ``.png``) as the viewer draws it: one
     picture, a ``Drawn``. A ``Model`` is called first, as the program's own call of it builds it:
     the document drawn is the one the engine then holds, whether or not an xbf of it is on disk. ``annotation`` (the viewer's
     annotation: its file's path, its object, or the Quick Edit packet that carries it) and
     ``measurements`` are drawn over the model; ``camera="authored"`` draws it from the view the
-    annotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a
+    annotation's ink was drawn in, which the packet holds. ``view`` draws a part's named view
+    (``cadgen.ap242``'s ``view``: ``NAME``, or ``PART/NAME`` where two parts have one): its camera, its section, its
+    PMI (``snapshot.view_of``), refused with ``camera``. ``out`` a folder (a path ending in a
     separator, or one that is there) is given a name inside it, the source's stem and the time
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
     was (``snapshot.write_png``).
@@ -573,8 +575,9 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
     and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
     of its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's
-    input; a flag given overrides every job. Every request is checked before anything renders, and
-    a picture that fails writes none of the job's, leaving every output as it was.
+    input; a flag given overrides every job (``view``: every job drawn as that view, in place of its
+    camera). Every request is checked before anything renders, and a picture that fails writes none
+    of the job's, leaving every output as it was.
 
     Where each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the
     document is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as
@@ -586,7 +589,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     try:
         return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, pose=pose,
                          width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
-                         measurements=measurements, progress=frames)
+                         measurements=measurements, view=view, progress=frames)
     finally:
         if bar is not None:
             bar.close()
@@ -594,14 +597,14 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
 def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
-              measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
+              measurements: Any, view: str | None, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
             raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
         return _job(job, source, display=display, camera=camera, grid=grid, pose=pose, width=width,
                     height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
-                    measurements=measurements, progress=progress)
+                    measurements=measurements, view=view, progress=progress)
     if source is None or out is None:
         raise TypeError(f"snapshot() missing required argument: {'source' if source is None else 'out'!r}")
     from cadgen.engine import snapshot as drawing
@@ -609,12 +612,12 @@ def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, gri
     out = drawing.picture_path(out, source)
     return _snapshot(source, out, display=display, camera=camera, grid=grid, pose=pose,
                      width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
-                     measurements=measurements, progress=progress)
+                     measurements=measurements, view=view, progress=progress)
 
 
 def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
-              measurements: Any, progress: Callable[[dict], None] | None = None) -> Drawn:
+              measurements: Any, view: str | None, progress: Callable[[dict], None] | None = None) -> Drawn:
     from cadgen.engine import snapshot as drawing
     from cadgen.engine.ids import is_id
     from cadgen.engine.model import Model
@@ -622,7 +625,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
     if isinstance(source, (Model, Document)) or is_id(os.fspath(source)):
         if out.suffix.lower() != ".png":
             raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
-        drawing.options(display, camera, grid, width, height, size_profile)  # refused here, before any build
+        drawing.options(display, camera, grid, width, height, size_profile, view)  # refused here, before any build
         drawing.parse_annotation(annotation)  # refused here, before any build
         source = _called(source, daemon)
         spec = _source(source)
@@ -631,33 +634,33 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         draw = {"out": str(out), "display": display, "camera": camera, "grid": grid,
                 "pose": drawing.parse_pose(pose) if isinstance(pose, str) else pose, "width": width,
                 "height": height, "size_profile": size_profile, "annotation": annotation,
-                "measurements": drawing.parse_measurements(measurements)}
+                "measurements": drawing.parse_measurements(measurements), "view": view}
         order = {"op": "export", "source": spec, "destinations": [], "draw": draw,
                  "cwd": str(source.cwd) if isinstance(source, Document) else os.getcwd()}
         found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
-    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile)
+    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile, view)
     found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
                              annotation=drawing.parse_annotation(annotation),
                              measurements=drawing.parse_measurements(measurements), annotation_source=annotation,
-                             progress=progress)
+                             view=view, progress=progress)
     return Drawn(out, found["width"], found["height"], found)
 
 
 def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
-         measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
+         measurements: Any, view: str | None, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
     """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
     from cadgen.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
     pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, pose=pose,
                                     width=width, height=height, size_profile=size_profile, annotation=annotation,
-                                    measurements=measurements)
+                                    measurements=measurements, view=view)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
             for found in drawing.draw_pictures(pictures, daemon=daemon, progress=progress)]
 

@@ -37,16 +37,22 @@ export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-6 min-w-0 items-center
  * One settings section: a heading and its rows, a rule above it when another section precedes
  * it. A section a feature switches on and off (`enabled`, `onEnabledChange`) ends its heading in
  * that feature's checkbox, at the right, the title naming it; while it is off the section is its
- * heading alone.
+ * heading alone. One whose checkbox shows something of what the section reads, rather than
+ * switching it (`switchLabel`, the checkbox's own name and hint), keeps its rows either way.
  */
-export function FileSheetSettingsSection({ title, children, enabled, onEnabledChange, sectionId }) {
+export function FileSheetSettingsSection({ title, children, enabled, onEnabledChange, sectionId, switchLabel = "" }) {
   const titleId = useId();
   const switchable = typeof onEnabledChange === "function";
-  const open = !switchable || enabled === true;
+  const open = !switchable || enabled === true || Boolean(switchLabel);
   return <section aria-labelledby={titleId} data-settings-section={sectionId}
     className="[&+section]:mt-1 [&+section]:border-t [&+section]:pt-1 border-border">
     <h2 className="m-0">
-      {switchable ? <label className={cn(FILE_SHEET_SECTION_HEADING_CLASSES, "cursor-pointer justify-between")}>
+      {switchable && switchLabel ? <span className={cn(FILE_SHEET_SECTION_HEADING_CLASSES, "justify-between")}>
+        <span id={titleId} className="truncate">{title}</span>
+        <TooltipHint content={switchLabel}>
+          <Checkbox aria-label={switchLabel} checked={enabled === true} onCheckedChange={checked => onEnabledChange(checked === true)} />
+        </TooltipHint>
+      </span> : switchable ? <label className={cn(FILE_SHEET_SECTION_HEADING_CLASSES, "cursor-pointer justify-between")}>
         <span id={titleId} className="truncate">{title}</span>
         <Checkbox aria-labelledby={titleId} checked={open} onCheckedChange={checked => onEnabledChange(checked === true)} />
       </label> : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}

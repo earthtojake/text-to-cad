@@ -50,9 +50,11 @@ export const quickEditSelection = references => references.filter(reference => r
  *   files?: Promise<{ snapshot?: string, inline?: string }> | null,
  *   read?: (path: string) => Promise<Blob> }} quickEdit
  */
-export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "" }) {
+export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", requests = [] }) {
   const parts = [
     textPart(String(text || "").trim(), "text"),
+    // The changes the view was asked for (a renderer's `requests`), each one paragraph, after the note.
+    ...(requests.length ? [textPart(`Requested changes:\n\n${requests.join("\n\n")}`, "requests")] : []),
     ...(viewUnavailable ? [textPart(`View replay unavailable: ${viewUnavailable}`, "view-unavailable")] : []),
     referencePart({ resource: { ...resource }, target: { kind: "whole-resource" } }, "file"),
     ...quickEditSelection(references).map((reference, index) => referencePart({ ...reference, resource: { ...reference.resource } }, `reference-${index}`)),
