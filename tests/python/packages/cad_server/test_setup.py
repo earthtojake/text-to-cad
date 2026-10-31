@@ -466,6 +466,32 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("Gemini CLI: install the text-to-cad extension", err)
         switch.handover.assert_not_called()
 
+    def test_an_automatic_update_s_first_half_makes_the_kernel_and_stops_before_the_apps(self) -> None:
+        # `CAD_UPDATE_PREPARE=1` (`cad_server._internal.update.PREPARE_ENV`): the release registered and its
+        # CAD kernel environment made -- the one making no other setup does -- while the engine works;
+        # nothing of the apps, the plugin folder or the engine changes.
+        from cad_server._internal import base
+
+        command(self.bin, "gemini", "sys.exit(0)\n")
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
+                mock.patch.object(base, "ensure") as ensured:
+            code, out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 0, err + out)
+        ensured.assert_called_once()
+        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], ["build123d"],
+                         "the kernel's stage, and no apps stage")
+        self.assertNotIn("Gemini CLI: install the text-to-cad extension\n", err)
+        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': written at the second half")
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()] \
+            if (self.bin / "calls.jsonl").exists() else []
+        self.assertNotIn(["gemini", "extensions", "link", str(plugin.folder())], calls, "no app is pointed at anything")
+        switch.handover.assert_not_called()
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
+                mock.patch.object(base, "ensure", side_effect=base.Refused("uv could not reach the index")):
+            code, _out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 1, "a kernel that cannot be made keeps the engine where it is")
+        self.assertIn("build123d uv could not reach the index", err)
+
     def test_the_cad_kernel_environment_is_said_in_the_plan_and_never_made_at_setup(self) -> None:
         from cad_server._internal import base
 

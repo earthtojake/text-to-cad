@@ -63,7 +63,11 @@ current installation's
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
 steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
-each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
+each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr. An automatic update
+runs it first with ``CAD_UPDATE_PREPARE=1`` in its environment, which registers the release, makes its CAD
+kernel environment (step 5's, the one no other setup makes: left to its first need, it would be made under
+the person's first build after the engine switched by itself) and stops there, no app changed; and again,
+whole, once the engine is idle.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
@@ -112,6 +116,9 @@ STOP_SECONDS = 60.0
 ASK_SECONDS = 5.0
 # The server's install channel in Claude Desktop's config (``cad_server._internal.channel``).
 DESKTOP_CHANNEL = "claude-desktop"
+# An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): named here, so the
+# command's import costs nothing more.
+PREPARE_ENV = "CAD_UPDATE_PREPARE"
 
 
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
@@ -511,6 +518,22 @@ class Installer:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
         return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
 
+    def _prepare_kernel(self) -> bool:
+        """An automatic update's first half only (``PREPARE_ENV``): this release's CAD kernel environment
+        made now, each line uv's work says as it goes, so that the engine switching to it by itself leaves
+        no making for the person's first build. Every other run leaves it to its first need (``_kernel``).
+        Nothing to make for an installation that carries the kernel itself; False, said in its line, when
+        it cannot be made -- the update then stays where it was."""
+        from cad_server._internal import base
+
+        self.stage("build123d", f"cad[{base.EXTRA}] {self.release}")
+        try:
+            base.ensure(told=lambda line: self.say(f"build123d {line}"))
+        except (base.Refused, OSError) as refused:
+            self.say(f"build123d {refused}")
+            return False
+        return True
+
     def _switch(self) -> tuple[bool, dict[str, Any] | None]:
         """Step 8: the device's engine moved to this release (``switch.handover``), said in its lines:
         ``(failed, what the switch did or None when there was nothing to do)``."""
@@ -823,6 +846,11 @@ class Installer:
             registered = self._register()
             # An app whose command fails fails the run, and the rest goes on: the switch among it.
             failed = False
+            if self.engine_update and os.environ.get(PREPARE_ENV) == "1":
+                # An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): this release
+                # registered and its CAD kernel environment made now, so the first build after the engine
+                # switches by itself waits on nothing; its apps and the switch once the engine is idle.
+                return 0 if self._prepare_kernel() else 1
             self.stage("apps")
             # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
             # written changes no app that would point at it.
