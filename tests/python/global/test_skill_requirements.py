@@ -16,7 +16,7 @@ its own, and its docs may describe a cadgen that is not the one running.
 
 Stated as a criterion rather than a list, as before: "uses cadgen" is what the skill's docs
 TEACH (`cadgen ...`) or what its own Python imports. Skills that never touch cadgen
-(bambu-labs, dfam-check, gcode, sendcutsend, step-parts) carry no launch command, and a
+(bambu-labs, dfam-check, gcode, sendcutsend, step-diff, step-parts) carry no launch command, and a
 mention on a line that hands off to another skill (`$cad: cadgen stl build ...`) is that
 skill's command, not this one's.
 """

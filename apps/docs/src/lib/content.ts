@@ -115,6 +115,12 @@ export const skillGroups = [
       "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
   },
   {
+    name: "STEP diff",
+    path: "skills/step-diff",
+    summary:
+      "Says what changed between two STEP revisions of a part or assembly, with a picture, and opens it in 3D in Draftwright.",
+  },
+  {
     name: "DXF",
     path: "skills/dxf",
     summary:
