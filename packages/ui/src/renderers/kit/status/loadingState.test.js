@@ -63,6 +63,8 @@ test("the engine's progress event is named by its key, for every kind, counted w
   assert.equal(loadingProgress(event("snapshot", "draw", 0, null)).label, "progress.snapshot.draw");
   assert.deepEqual(loadingProgress(event("inspect-measure", "measure", 37, 256, "peg")),
     { label: "progress.inspect-measure.measure", detail: "peg", counts: "37/256", percent: 14, connectionLost: null });
+  // A stage named for a technology keeps its digits: the update's base install.
+  assert.equal(loadingProgress(event("update", "build123d", 1, 4)).label, "progress.update.build123d");
   // The page's own words win while it is finding or preparing; a frame that only looks like an event is none.
   assert.equal(loadingProgress(event("build", "body", 0, null), { finding: true }).label, "Finding file");
   assert.equal(loadingProgress({ kind: "Build Model", stage: "body" }).label, "Opening model");
