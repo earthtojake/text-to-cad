@@ -144,9 +144,11 @@ class SchedulingTest(unittest.TestCase):
         return [process.label for process in supervisor.shed()]
 
     def test_memory_is_shed_by_declared_rank_and_least_recently_used_within_one(self) -> None:
-        self.assertEqual(self.shed_in_order((WORKERS, RENDERS)), ["standby", "old-doc", "new-doc", "old.py"],
-                         "today's order: the standby, render processes, then workers no page watches")
-        swapped = (dataclasses.replace(WORKERS, rank=1), dataclasses.replace(RENDERS, rank=2))
+        from cad_server.engine.services import RENDER, WORKER
+
+        self.assertEqual(self.shed_in_order((WORKER, RENDER)), ["standby", "old-doc", "new-doc", "old.py"],
+                         "the daemon's: the standby, render processes, then workers no page watches")
+        swapped = (dataclasses.replace(WORKER, rank=1), dataclasses.replace(RENDER, rank=2))
         self.assertEqual(self.shed_in_order(swapped), ["standby", "old.py", "new.py", "old-doc"],
                          "the order is the declarations'")
 

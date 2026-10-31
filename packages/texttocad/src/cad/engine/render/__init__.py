@@ -4,8 +4,9 @@ OCCT's own; a file no document (a mesh file, a robot) from the buffers its reade
 (``formats/``), and a DXF as a drawing. ``cad snapshot`` draws every kind through it.
 
 - ``service.py``: a document held and drawn (``Held``), the daemon's render process per served
-  document and per file (``Renders``, ``python -m cad.engine.render.service``), and a document
-  drawn in this process (``draw_here``).
+  document and per file (``python -m cad.engine.render.service``, which the server's
+  ``cad_server.engine.renders`` asks for pictures), and a document drawn in this process
+  (``draw_here``).
 - ``drawing.py``: a DXF drawn as the viewer's DXF pane draws it, in ``look.py``'s 2D look.
 - ``occt.py``: the scene -- the modes, the camera, clip, grid, overlays, Preview -- and the
   prototype's CLI (``python -m cad.engine.render.occt``); ``look.py`` the regular display modes'

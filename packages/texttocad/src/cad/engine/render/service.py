@@ -17,20 +17,21 @@ them (``Scene.painter``), and Preview's look; answered as PNG bytes and a report
 of only between pictures, at once and whole (``Held.close``: its canvas closed, then collected):
 one collected while another draws took that one's environment map with it.
 
-**The render process** (``python -m cad.engine.render.service``): the daemon starts one for a
-served document on its first snapshot (``Renders``). It talks as a worker does, frames on its
-stdin and its original stdout -- a JSON line and, when it says ``bytes``, that many bytes after
-it: ``{"op": "hold", "path", "structure", "meshes": [[key, size]], "bytes"}`` (the structure, then
-the buffers of the parts it lacks) answered ``{"held": {...}}``; ``{"op": "frame", "still"}``
-answered ``{"done": report, "bytes"}`` and the PNG, ``{"refused": why}`` (a request the document
-does not offer, before anything is drawn) or ``{"failed": why}``. A picture of a version the
-process does not hold -- a model built again, a file rewritten -- sends it that version first, with
-the buffers of the parts it lacks (``_sync``): its other parts' shapes are kept. No timer stops it: it goes
-with the daemon, under the workers' memory cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``),
-which counts its memory with theirs and retires an idle one, least recently drawn first, before any
-worker (``daemon.Pool.shed``, ``Renders.retire``), and after a frame that leaves it alone over that
-cap, when it says so (``retired``) and exits; the next snapshot starts another. A render process is
-no worker: it does not count toward the workers' count cap.
+**The render process** (``python -m cad.engine.render.service``): the daemon's supervisor starts one
+for a served document on its first snapshot, a process of its ``render`` service; the daemon's side
+of it is the server's (``cad_server.engine.renders``). It talks as a worker does, frames on its
+stdin and its original stdout (``frames``) -- a JSON line and, when it says ``bytes``, that many
+bytes after it: ``{"op": "hold", "path", "structure", "meshes": [[key, size]], "bytes"}`` (the
+structure, then the buffers of the parts it lacks) answered ``{"held": {...}}``; ``{"op": "frame",
+"still"}`` answered ``{"done": report, "rssMb", "bytes"}`` and the PNG (``"retire": true`` too when
+the frame left it over its cap), ``{"refused": why}`` (a request the document does not offer, before
+anything is drawn) or ``{"failed": why}``. A picture of a version the process does not hold -- a
+model built again, a file rewritten -- sends it that version first, with the buffers of the parts it
+lacks: its other parts' shapes are kept. No timer stops it: it goes with the daemon, under the
+processes' memory cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``), which counts its memory
+with the workers' and retires an idle one, least recently drawn first, before any worker, and after
+a frame that leaves it alone over that cap, when it says so (``retired``, ``retire``) and exits; the
+next snapshot starts another. A render process is no worker: it does not count toward the count cap.
 
 **In process** (``draw_here``): ``daemon=False`` and a model drawn from its worker's memory serve
 the document from a server of this process, and draw it once.
@@ -46,13 +47,10 @@ Nothing is written: the verb writes the one PNG it is given.
 
 from __future__ import annotations
 
-import base64
 import gc
 import json
 import os
-import subprocess
 import sys
-import threading
 import time
 import traceback
 from pathlib import Path
@@ -62,7 +60,7 @@ import numpy as np
 
 from cad.engine import frames
 
-__all__ = ["Held", "Renders", "draw_here", "draw_here_each", "frame_camera", "holder", "main", "matte", "picture"]
+__all__ = ["Held", "draw_here", "draw_here_each", "foreign", "frame_camera", "holder", "main", "matte", "picture"]
 
 
 def _matrix(values: list[float]) -> np.ndarray:
@@ -559,12 +557,15 @@ def main() -> int:
                 data, report = held.draw(Still.from_json(request["still"]))
             drawn += 1
             resident, cap = resident_mb(), rss_cap_mb()
-            report["process"] = {"pid": os.getpid(), "frames": drawn, "rssMb": None if resident is None else round(resident)}
+            measured = None if resident is None else round(resident)
+            report["process"] = {"pid": os.getpid(), "frames": drawn, "rssMb": measured}
             retire = resident is not None and cap is not None and resident > cap
             if retire:
                 report["retired"] = (f"the renderer held {resident:.0f} MB after the frame, over its {cap:.0f} MB cap "
                                      "(CAD_ENGINE_WORKER_RSS_MB): the next snapshot starts a fresh one")
-            frames.write(protocol, {"id": ident, "done": report}, data)
+            # Its memory, and whether it goes, said to the daemon as every process says them.
+            frames.write(protocol, {"id": ident, "done": report, "rssMb": measured,
+                                    **({"retire": True} if retire else {})}, data)
             if retire:
                 return 0
         except (SnapshotRefused, FormatError) as error:
@@ -573,268 +574,6 @@ def main() -> int:
             frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
                               "trace": traceback.format_exc()})
     return 0
-
-
-# --- the daemon's side ---------------------------------------------------------------------------------
-
-
-class Gone(RuntimeError):
-    """A render process that exited (or never started)."""
-
-
-class Refused(ValueError):
-    """A request the document does not offer, refused by name before anything was drawn."""
-
-
-class RenderProcess:
-    """One served document's render process, from the daemon's side: started on its document's
-    first snapshot; the version it holds and the parts whose meshes it was sent."""
-
-    def __init__(self, path: Path, environment: dict[str, str]) -> None:
-        from cad.engine.places import engine_root, kernel, windowless
-
-        env = dict(environment)
-        # The engine's kernel environment's Python (the base, made first when it is not); the daemon's own
-        # environment's imports the engine the daemon runs, its folder first on the path.
-        found = kernel()
-        assert found is not None  # made, or refused
-        python = found["python"]
-        root = engine_root()
-        if found["own"] and root not in env.get("PYTHONPATH", "").split(os.pathsep):
-            env["PYTHONPATH"] = os.pathsep.join(item for item in (root, env.get("PYTHONPATH", "")) if item)
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        self.path = Path(path)
-        self.process = subprocess.Popen([python, "-P", "-m", "cad.engine.render.service"],
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
-                                        **windowless())
-        self.lock = threading.Lock()
-        self.version: str | None = None
-        self.keys: set[str] = set()
-        self.frames = 0
-        self.rss: int | None = None
-        self.retired = False
-        self.used = time.monotonic()  # when it last drew: the memory cap retires the least recently drawn first
-        self.meshed: dict[str, Any] | None = None  # the engine's account of the meshing its last version took
-        self.held: dict[str, Any] | None = None  # what it made and kept of its last version's parts
-        self.files: dict[str, Any] = {}  # a file no document: every file its reader read, stamped
-        self.said: list[str] = []  # its last lines on stderr, for a failure's report
-        threading.Thread(target=self._stderr, daemon=True).start()
-        ready = frames.read(self.process.stdout)
-        if ready is None or "ready" not in ready[0]:
-            raise Gone(f"the renderer for {self.path.name} did not start: {self._last()}")
-        self.pid = ready[0]["ready"]
-
-    def _stderr(self) -> None:
-        assert self.process.stderr is not None
-        try:
-            for line in iter(self.process.stderr.readline, b""):
-                self.said = [*self.said[-40:], line.decode("utf-8", "replace").rstrip()]
-        except (OSError, ValueError):  # closed by ``stop``
-            pass
-
-    def _last(self) -> str:
-        return " | ".join(line for line in self.said[-5:] if line) or "no word from it"
-
-    def alive(self) -> bool:
-        return self.process.poll() is None and not self.retired
-
-    def busy(self) -> bool:
-        """Whether it is drawing or being sent a version now: never retired then."""
-        return self.lock.locked()
-
-    def ask(self, request: dict[str, Any], payload: bytes = b"") -> tuple[dict[str, Any], bytes]:
-        """One request and its answer (call with ``lock`` held)."""
-        try:
-            frames.write(self.process.stdin, request, payload)
-            found = frames.read(self.process.stdout)
-        except (OSError, ValueError, EOFError) as error:
-            raise Gone(f"the renderer for {self.path.name} is gone ({error}): {self._last()}") from None
-        if found is None:
-            code = self.process.wait()
-            raise Gone(f"the renderer for {self.path.name} exited ({code}): {self._last()}")
-        return found
-
-    def stop(self) -> None:
-        try:
-            if self.process.stdin is not None:
-                self.process.stdin.close()
-            self.process.wait(timeout=5)
-        except Exception:  # noqa: BLE001
-            self.process.kill()
-            self.process.wait()
-        for stream in (self.process.stdout, self.process.stderr):
-            try:
-                if stream is not None:
-                    stream.close()
-            except OSError:
-                pass
-
-
-class Renders:
-    """The daemon's render processes: one per served document, by its id on the server."""
-
-    def __init__(self, server: Any, environment: Callable[[], dict[str, str]] = lambda: dict(os.environ)) -> None:
-        self.server = server
-        self.environment = environment
-        self.processes: dict[str, RenderProcess] = {}
-        self.lock = threading.Lock()
-
-    def _process(self, ident: str, path: Path) -> RenderProcess:
-        with self.lock:
-            found = self.processes.get(ident)
-            if found is not None and found.alive():
-                return found
-            if found is not None:
-                found.stop()
-            found = self.processes[ident] = RenderProcess(path, self.environment())
-            return found
-
-    def _sync(self, render: RenderProcess, doc: Any) -> dict[str, int]:
-        """The process holds the served version: every part meshed (the daemon's pool, for any
-        part its cache lacks), and the buffers of the parts the process lacks sent with the
-        structure. Call with the process's lock held."""
-        timings: dict[str, int] = {}
-        if render.version == doc.version:
-            return timings
-        clock = time.perf_counter()
-        meshed = self.server.mesh_all(doc, None)
-        structure = self.server.structure(doc)
-        timings["meshMs"] = round((time.perf_counter() - clock) * 1000)
-        clock = time.perf_counter()
-        lacking = sorted({p["key"] for p in structure["prototypes"]} - render.keys)
-        buffers = []
-        for key in lacking:
-            data = self.server.cache.get(key)
-            if data is None:  # dropped from the cache since: meshed again from the document's shape
-                data = self.server._submit(key, self.server.shape_of(doc, key), None).result()[0]
-            buffers.append(data)
-        answer, _payload = render.ask({"op": "hold", "path": str(doc.path), "structure": structure,
-                                       "meshes": [[key, len(data)] for key, data in zip(lacking, buffers)]},
-                                      b"".join(buffers))
-        if "held" not in answer:
-            raise RuntimeError(answer.get("failed") or "the renderer would not hold the document")
-        render.version, render.keys, render.held = doc.version, {p["key"] for p in structure["prototypes"]}, answer["held"]
-        timings["holdMs"] = round((time.perf_counter() - clock) * 1000)
-        render.meshed = {key: meshed.get(key) for key in ("parts", "meshed", "seconds", "triangles", "mode")}
-        return timings
-
-    def _file(self, path: Path, still: dict[str, Any], progress: Any = None) -> tuple[bytes, dict[str, Any]]:
-        """A picture of a file no document (``foreign``): its render process, which reads it with
-        its reader, opened again whenever a file it read has changed, asked for a frame. ``progress``
-        as ``draw`` takes it."""
-        from cad.engine.formats import stale
-
-        timings: dict[str, int] = {}
-        if progress is not None:
-            progress.stage("scene", detail=path.name)
-        for attempt in (1, 2):
-            render = self._process(f"file:{path}", path)
-            try:
-                with render.lock:
-                    if render.version is None or stale(render.files):
-                        clock = time.perf_counter()
-                        answer, _payload = render.ask({"op": "open", "path": str(path)})
-                        if "refused" in answer:
-                            raise Refused(answer["refused"])
-                        if "opened" not in answer:
-                            raise RuntimeError(answer.get("failed") or f"the renderer could not read {path.name}")
-                        opened = answer["opened"]
-                        render.version, render.files, render.held = "opened", opened["files"], opened
-                        timings.update(openMs=round((time.perf_counter() - clock) * 1000), readMs=opened["readMs"])
-                    if progress is not None:
-                        progress.stage("draw")
-                    answer, data = render.ask({"op": "frame", "still": still})
-            except Gone:
-                if attempt == 2:
-                    raise
-                continue
-            break
-        if "refused" in answer:
-            raise Refused(answer["refused"])
-        if "done" not in answer:
-            raise RuntimeError(answer.get("failed") or "the renderer drew nothing")
-        report = answer["done"]
-        render.frames += 1
-        render.used = time.monotonic()  # aged by its last picture, as a document's process is
-        render.rss = (report.get("process") or {}).get("rssMb")
-        if report.get("retired"):
-            render.retired = True
-        report["timings"] = {**timings, **report.get("timings", {})}
-        return data, report
-
-    def draw(self, path: Path, still: dict[str, Any], progress: Any = None) -> tuple[bytes, dict[str, Any]]:
-        """A picture of the served document at ``path``: its render process started, or patched
-        to the version served, and asked for a frame. Raises ``Refused`` by name. A file no
-        document is read and drawn by a render process of its own (``_file``). ``progress``, a
-        ``progress.Progress`` of kind ``snapshot``, is told the stages as they begin: ``scene`` while
-        the document is served, meshed and held by its process, ``draw`` while the frame is drawn."""
-        if foreign(Path(path)):
-            return self._file(Path(path).resolve(), still, progress)
-        started = time.perf_counter()
-        if progress is not None:
-            progress.stage("scene", detail=Path(path).name)
-        ident = self.server.add(Path(path))
-        doc = self.server.document(ident)
-        timings = {"serveMs": round((time.perf_counter() - started) * 1000)}
-        for attempt in (1, 2):
-            render = self._process(ident, doc.path)
-            try:
-                with render.lock:
-                    timings.update(self._sync(render, doc))
-                    if progress is not None:
-                        progress.stage("draw")
-                    answer, data = render.ask({"op": "frame", "still": still})
-            except Gone:
-                if attempt == 2:
-                    raise
-                continue
-            break
-        if "refused" in answer:
-            raise Refused(answer["refused"])
-        if "done" not in answer:
-            raise RuntimeError(answer.get("failed") or "the renderer drew nothing")
-        report = answer["done"]
-        render.frames += 1
-        render.used = time.monotonic()
-        render.rss = (report.get("process") or {}).get("rssMb")
-        if report.get("retired"):
-            render.retired = True
-        report["timings"] = {**timings, **report.get("timings", {})}
-        report["mesh"] = render.meshed
-        return data, report
-
-    def status(self) -> list[dict[str, Any]]:
-        """The render processes alive now, a row each: one that exited, or retired itself after a
-        frame, is no row, though its document's next picture has yet to start another."""
-        return [{"document": str(render.path), "pid": render.pid, "version": render.version, "held": render.held,
-                 "frames": render.frames, "rssMb": render.rss, "alive": True, "busy": render.lock.locked()}
-                for render in list(self.processes.values()) if render.alive()]
-
-    def processes_now(self) -> list[RenderProcess]:
-        """The render processes alive now, whose memory the workers' cap counts (``daemon.Pool.shed``):
-        read without the lock, which is held while a process starts."""
-        return [render for render in list(self.processes.values()) if render.alive()]
-
-    def retire(self, render: RenderProcess) -> None:
-        """One render process stopped for memory (``daemon.Pool.shed``), unless it is drawing: the next
-        snapshot of its document starts another."""
-        with self.lock:
-            ident = next((ident for ident, found in self.processes.items() if found is render), None)
-            if ident is None or render.busy():
-                return
-            del self.processes[ident]
-        render.stop()
-
-    def stop(self) -> None:
-        with self.lock:
-            for render in self.processes.values():
-                render.stop()
-            self.processes.clear()
-
-
-def answer_png(data: bytes) -> str:
-    """A picture as the daemon's answer carries it on its JSON line."""
-    return base64.b64encode(data).decode("ascii")
 
 
 if __name__ == "__main__":

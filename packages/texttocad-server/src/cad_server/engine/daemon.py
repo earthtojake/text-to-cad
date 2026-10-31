@@ -654,7 +654,7 @@ class Daemon:
         # Per model document a build made (its ``model_id``), the worker that built it last: the one
         # that holds its provenance (``provenance``). A file the build wrote is no key: it names no model.
         self.builders: dict[str, Process] = {}
-        self.renders = None  # the served documents' render processes (``render.service.Renders``)
+        self.renders = None  # the served documents' pictures, by their render processes (``renders.Renders``)
         self.serving = threading.Lock()
         from cad_server.engine.models import Models
 
@@ -1312,7 +1312,7 @@ class Daemon:
         document is served, meshed and held by its render process, ``draw`` while the frame is drawn),
         as a build's frames go to its caller."""
         from cad.engine.progress import Progress
-        from cad.engine.render.service import Refused, Renders, answer_png
+        from cad_server.engine.renders import Refused, Renders, answer_png
 
         with self.busy_lock:
             self.busy += 1
@@ -1322,7 +1322,7 @@ class Daemon:
             server = self.serve(request)
             with self.serving:
                 if self.renders is None:
-                    self.renders = self.supervisor.renders = Renders(server)
+                    self.renders = Renders(server, self.supervisor)
             try:
                 data, report = self.renders.draw(Path(request["path"]), request["still"], said)
             except Refused as error:
@@ -1337,7 +1337,6 @@ class Daemon:
             with self.busy_lock:
                 self.busy -= 1
             self.touch()
-            self.supervisor.shed()  # its render process measured again: the processes' memory to its cap
 
     def status(self) -> dict[str, Any]:
         """The daemon, its workers (each its script, its builds, its memory after its last build
@@ -1456,9 +1455,7 @@ class Daemon:
     def shutdown(self) -> None:
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
-        self.supervisor.stop()
-        if self.renders is not None:
-            self.renders.stop()
+        self.supervisor.stop()  # its workers, the standby and the render processes
         if self.server is not None:
             self.server.stop()
 

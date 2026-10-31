@@ -17,9 +17,8 @@ from unittest import mock
 
 from cad.engine import client, places, reader
 from cad_server.engine import daemon  # noqa: F401 - the kernel environment as the daemon names it (places.KERNEL)
-from cad_server.engine.services import WORKER
+from cad_server.engine.services import RENDER, WORKER
 from cad_server.engine.supervisor import Process
-from cad.engine.render import service
 
 # Windows' values: ``subprocess`` names them on Windows alone.
 NO_WINDOW, NEW_GROUP, DETACHED_PROCESS = 0x08000000, 0x00000200, 0x00000008
@@ -55,7 +54,8 @@ class WindowsConsoleTest(unittest.TestCase):
         script = str(folder / "model.py")
         for name, start in (("worker", lambda: Process.start(WORKER, script, script, dict(os.environ))),
                             ("reader", lambda: reader.Reader()._start()),
-                            ("render process", lambda: service.RenderProcess(folder / "part.xbf", dict(os.environ)))):
+                            ("render process", lambda: Process.start(RENDER, "part", str(folder / "part.xbf"),
+                                                                     dict(os.environ)))):
             with self.subTest(process=name):
                 self.assertEqual(self.popen(start)["creationflags"], NO_WINDOW)
                 self.assertNotIn("creationflags", self.popen(start, "posix"))  # POSIX takes no creation flags

@@ -684,61 +684,6 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.scene.caps, [], "nor in Wireframe, which draws no faces")
 
 
-class RenderStatusTest(unittest.TestCase):
-    def test_a_render_process_that_is_gone_is_no_row_of_the_status(self) -> None:
-        from types import SimpleNamespace
-
-        from cad.engine.render.service import Renders
-
-        def process(name: str, alive: bool) -> SimpleNamespace:
-            return SimpleNamespace(path=Path(name), pid=1, version="v", held={}, frames=1, rss=10,
-                                   alive=lambda: alive, lock=threading.Lock())
-
-        renders = Renders(server=None)
-        renders.processes = {"live": process("live.xbf", True), "gone": process("gone.xbf", False)}
-        self.assertEqual([row["document"] for row in renders.status()], ["live.xbf"],
-                         "exited or retired, it waits for no picture to leave the status")
-
-
-class RenderProcessTest(unittest.TestCase):
-    """The render process, as the daemon talks to it: a version held, frames answered with PNG
-    bytes, and gone after a frame that leaves it over its memory cap."""
-
-    def setUp(self) -> None:
-        gl()
-        self.folder = Path(tempfile.mkdtemp(prefix="engine-render-process-")).resolve()
-        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.document = build(self.folder, BENCH, "bench")
-        self.structure, self.buffers = served(self.document)
-
-    def start(self, cap: str):
-        from cad.engine.render.service import RenderProcess
-
-        process = RenderProcess(self.document, {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_WORKER_RSS_MB": cap})
-        self.addCleanup(process.stop)
-        keys = sorted(self.buffers)
-        answer, _ = process.ask({"op": "hold", "path": str(self.document), "structure": self.structure,
-                                 "meshes": [[key, len(self.buffers[key])] for key in keys]},
-                                b"".join(self.buffers[key] for key in keys))
-        self.assertEqual(answer["held"]["made"], shapes(self.structure))
-        return process
-
-    def test_frames_are_answered_warm_and_a_process_over_its_cap_retires(self) -> None:
-        process = self.start("0")
-        still = Still({"mode": "solid"}, size=SIZE).as_json()
-        first, data = process.ask({"op": "frame", "still": still})
-        drawn(data, SIZE)
-        second, _ = process.ask({"op": "frame", "still": still})
-        self.assertEqual((first["done"]["process"]["frames"], second["done"]["process"]["frames"]), (1, 2))
-        self.assertNotIn("sceneMs", second["done"]["timings"], "the second picture is drawn on the first's scene")
-        refused, _ = process.ask({"op": "frame", "still": {**still, "pose": "shut"}})
-        self.assertIn("no mechanism state 'shut'", refused["refused"])
-        capped = self.start("1")
-        answer, _ = capped.ask({"op": "frame", "still": still})
-        self.assertIn("CAD_ENGINE_WORKER_RSS_MB", answer["done"]["retired"])
-        self.assertEqual(capped.process.wait(timeout=30), 0, "gone once it has answered")
-
-
 PAIR = """
 import build123d as bd
 from cad.engine import xbf

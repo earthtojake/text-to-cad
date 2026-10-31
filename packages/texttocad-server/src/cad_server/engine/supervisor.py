@@ -555,13 +555,6 @@ class Supervisor:
         self.retired: collections.deque = collections.deque(maxlen=RETIRED_KEPT)
         self.standbys = {name: _Standing() for name, service in self.services.items() if service.standby is not None}
         self.stopped = False
-        # TEMPORARY, until the render processes are a service of their own: the daemon's
-        # (``render.service.Renders``), their memory counted with the processes' and shed at rank 1.
-        self.renders: Any = None
-
-    def _drawing(self) -> list[Any]:
-        """The render processes alive now (``renders``): asked before the lock is taken (TEMPORARY)."""
-        return self.renders.processes_now() if self.renders is not None else []
 
     def _launch(self, service: Service, key: str, label: str, environment: dict[str, str], cwd: str | None,
                 standby: bool) -> Process:
@@ -753,13 +746,13 @@ class Supervisor:
         if slot is None or not slot.enabled or self.pressed():
             return
         declared = self.services[service]
-        cap, drawing = self.memory(), self._drawing()
+        cap = self.memory()
         with self.lock:
             if self.stopped or slot.ready is not None or slot.readying is not None:
                 return
             if declared.counted and self._occupied() >= self.cap:
                 return
-            if cap is not None and self._resident(drawing) + (slot.size or 0.0) > cap:
+            if cap is not None and self._resident() + (slot.size or 0.0) > cap:
                 return
             slot.readying = dict(environment)
         threading.Thread(target=self._stood, args=(declared, slot, dict(environment), os.getcwd()),
@@ -796,16 +789,15 @@ class Supervisor:
 
     # --- memory ------------------------------------------------------------------------------
 
-    def _resident(self, drawing: list[Any]) -> float:
+    def _resident(self) -> float:
         """The resident memory of every process, in MiB, as each last said it (call with the lock
-        held): the live ones', the ready standbys' and the render processes' (``drawing``)."""
+        held): the live ones' and the ready standbys'."""
         standing = [slot.ready for slot in self.standbys.values() if slot.ready is not None]
-        return float(sum(process.rss or 0 for process in [*self.table.values(), *standing, *drawing]))
+        return float(sum(process.rss or 0 for process in [*self.table.values(), *standing]))
 
     def resident(self) -> float:
-        drawing = self._drawing()
         with self.lock:
-            return self._resident(drawing)
+            return self._resident()
 
     def _rank(self, process: Any) -> int:
         """Its order when memory is shed and at the count cap: its service's rank, or its watched rank
@@ -821,15 +813,14 @@ class Supervisor:
         once -- standbys and idle processes are retired, in the order their declarations rank them,
         least recently used first within a rank. A busy process is never retired, nor one that never
         said its memory (but a standby). Each is drained first when its service drains. The retired."""
-        cap, renders, drawing = self.memory(), self.renders, self._drawing()
+        cap = self.memory()
         with self.lock:
             standing = {id(slot.ready): (slot, slot.ready) for slot in self.standbys.values() if slot.ready is not None}
             if self.stopped or (cap is None and not (pressure and standing)):
                 return []
-            total = self._resident(drawing)
+            total = self._resident()
             target = None if cap is None else cap * (PRESSURE_SHARE if pressure else 1.0)
             candidates = [(process.service.standby.rank, process.used, process) for _slot, process in standing.values()]
-            candidates += [(1, render.used, render) for render in drawing if not render.busy()]  # TEMPORARY
             candidates += [(self._rank(process), process.used, process) for process in self.table.values()
                            if not process.leased]
             chosen: list[Any] = []
@@ -841,8 +832,6 @@ class Supervisor:
                     continue  # unmeasured: retiring it frees nothing the rule can count
                 total -= held.rss or 0.0
                 chosen.append(held)
-                if held in drawing:
-                    continue  # a render process: the daemon's ``Renders`` lets it go (TEMPORARY)
                 if standby:
                     standing[id(held)][0].ready = None
                 else:
@@ -851,10 +840,7 @@ class Supervisor:
             if chosen:
                 self._grant()
         for held in chosen:
-            if held in drawing:
-                renders.retire(held)
-            else:
-                self._retire(held, drain=id(held) not in standing)
+            self._retire(held, drain=id(held) not in standing)
         return chosen
 
     # --- the grant ---------------------------------------------------------------------------
