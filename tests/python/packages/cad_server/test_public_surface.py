@@ -68,6 +68,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
     # `update` runs the newest release's `setup` with its options; the switch's helper is its own.
     "update": frozenset({"dry_run", "only", "no_telemetry", "json", "switch", "port", "previous"}),
+    # Automatic updates, the person's setting: status, on or off (a verb of its own, as `update`'s options
+    # are what every release hands its newer one).
+    "update auto": frozenset({"action"}),
     "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
     # The plugin folder written from the current installation, and the apps' copies of it with --refresh.
     "plugin": frozenset({"refresh", "json"}),
