@@ -57,7 +57,7 @@ class WindowsConsoleTest(unittest.TestCase):
             with self.subTest(process=name):
                 self.assertEqual(self.popen(start)["creationflags"], NO_WINDOW)
                 self.assertNotIn("creationflags", self.popen(start, "posix"))  # POSIX takes no creation flags
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(folder)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(folder)}):
             started = self.popen(client._start)
             self.assertEqual(started["creationflags"], NO_WINDOW | NEW_GROUP)
             self.assertFalse(started["creationflags"] & DETACHED_PROCESS, "no console at all gives each child a window")

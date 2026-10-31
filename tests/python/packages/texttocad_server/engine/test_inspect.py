@@ -1,4 +1,4 @@
-"""``cadgen inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection
@@ -25,7 +25,7 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 HINGE = """
 import pathlib
 import build123d as bd
-from cadgen import model
+from cad import model
 from bd_materials import metals
 from cad.ap242 import configuration_sequence, mechanism_state
 
@@ -60,10 +60,10 @@ class SummaryTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, engine, True)
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
-                                          "CADGEN_STATE_DIR": str(self.folder / "state"),
-                                          "CADGEN_CACHE_DIR": str(self.folder / "cache"),
-                                          "CADGEN_ENGINE_MESH": "inline"}, self.addCleanup)
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
+                                          "CAD_STATE_DIR": str(self.folder / "state"),
+                                          "CAD_CACHE_DIR": str(self.folder / "cache"),
+                                          "CAD_ENGINE_MESH": "inline"}, self.addCleanup)
         self.addCleanup(self.run_, "-m", "cad_server.engine", "stop")
 
     def run_(self, *args: str):

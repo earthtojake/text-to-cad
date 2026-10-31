@@ -288,7 +288,7 @@ class MotionReadsTest(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        for name in ("CADGEN_ENGINE_BODIES", "CADGEN_ENGINE_MEMO"):
+        for name in ("CAD_ENGINE_BODIES", "CAD_ENGINE_MEMO"):
             os.environ.pop(name, None)
         for name, text in (("moves.py", MOVES), ("hinge.py", HINGE)):
             (self.folder / name).write_text(textwrap.dedent(text), encoding="utf-8")
@@ -351,7 +351,7 @@ def unused():
 
 KEPT = """
 import build123d as bd
-from cadgen import glb, xbf
+from cad import glb, xbf
 from cad.ap242 import configuration_sequence
 from cad.gltf import animation
 import moves
@@ -400,7 +400,7 @@ class HarvestKeptTest(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        for name in ("CADGEN_ENGINE_BODIES", "CADGEN_ENGINE_MEMO"):
+        for name in ("CAD_ENGINE_BODIES", "CAD_ENGINE_MEMO"):
             os.environ.pop(name, None)
 
     def write(self, *, amplitude: int = 20, unused: int = 0, height: int = 10, cap: str = "cap",

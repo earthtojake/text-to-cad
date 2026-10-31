@@ -5,7 +5,7 @@ here by CALLING them (occurrence order = the original's explode order). The
 museum section is one flag, `lib/spec.py:SECTIONED`, read by every system: the
 cutaway is the model's own geometry. The engine is one model, `w16`, holding
 the `crank` motion and the `explode` and `running_reveal` GLB animations below; its GLB,
-whose clips they are, is exported on demand (`cadgen export <id> GLB/w16.glb`, the id its
+whose clips they are, is exported on demand (`cad export <id> GLB/w16.glb`, the id its
 run prints).
     block          block + main caps + shells
     crank          crankshaft, damper, flywheel

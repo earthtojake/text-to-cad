@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 # The server's command, and the shim's.
-COMMAND=cadgen
+COMMAND=cad
 SHIM_COMMAND=cad-mcp
 USAGE="Usage: scripts/test/test-installed.sh [--wheels DIR]"
 
@@ -72,7 +72,7 @@ DIST="$WORK/dist"
 mkdir -p "$EMPTY" "$DIST"
 # The builds below run on the engine's daemon, as every build does: this run's own, in a private
 # folder, stopped on the way out.
-export CADGEN_ENGINE_DIR="$WORK/engine" CADGEN_CACHE_DIR="$WORK/no-0.7-store"
+export CAD_ENGINE_DIR="$WORK/engine" CAD_CACHE_DIR="$WORK/no-0.7-store"
 cleanup() {
   # The installed server stops the daemon its builds started.
   if [ -x "$VENV/bin/python" ]; then
@@ -83,10 +83,10 @@ cleanup() {
 }
 trap cleanup EXIT
 # What the CAD app remembers (its library, release checks) stays in the throwaway directory too.
-export CADGEN_STATE_DIR="$WORK/state"
+export CAD_STATE_DIR="$WORK/state"
 # And the command the installation writes for the skills: never this machine's ~/.local/bin.
-export CADGEN_LAUNCHER_DIR="$WORK/bin"
-unset CADGEN_INSTALLATION_VERSION CADGEN_VERSION
+export CAD_LAUNCHER_DIR="$WORK/bin"
+unset CAD_INSTALLATION_VERSION CAD_VERSION
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
@@ -246,9 +246,9 @@ PY
 
 step "Starting the CAD app registered the server and wrote the $COMMAND command the skills run"
 VERSION_INSTALLED="$("$VENV/bin/python" -c 'import cad_server; print(cad_server.__version__)')"
-RECORD="$CADGEN_STATE_DIR/installations/$VERSION_INSTALLED.json"
-PROXY="$CADGEN_LAUNCHER_DIR/$COMMAND"
-[ -f "$RECORD" ] || fail "no record of $VERSION_INSTALLED in $CADGEN_STATE_DIR/installations"
+RECORD="$CAD_STATE_DIR/installations/$VERSION_INSTALLED.json"
+PROXY="$CAD_LAUNCHER_DIR/$COMMAND"
+[ -f "$RECORD" ] || fail "no record of $VERSION_INSTALLED in $CAD_STATE_DIR/installations"
 # Compared resolved: the temporary folder's path may be spelled through a symlink (/var, /private/var).
 "$VENV/bin/python" - "$RECORD" "$VENV" <<'PY' || exit 1
 import json, os, sys
@@ -262,7 +262,7 @@ same "$("$PROXY" "+$VERSION_INSTALLED" run -c 'import sys; print(sys.prefix)')" 
   || fail "$COMMAND +$VERSION_INSTALLED run does not run the installation's python"
 # The first installation on this machine is its current one, and the command runs it whatever release a
 # skill names: nothing on the machine compares versions.
-[ "$(cat "$CADGEN_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
+[ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
   || fail "$VERSION_INSTALLED is not the current installation"
 same "$("$PROXY" +0.0.1 run -c 'import sys; print(sys.prefix)')" "$VENV" \
   || fail "$COMMAND +0.0.1 run does not run the current installation"

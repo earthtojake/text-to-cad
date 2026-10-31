@@ -1,6 +1,6 @@
 """The agent apps text-to-cad installs into, read and changed the way each one keeps its plugins.
 
-``cadgen setup`` (``cad_server.cli.setup``) asks this module what is on the machine and what to do
+``cad setup`` (``cad_server.cli.setup``) asks this module what is on the machine and what to do
 about it, and a checkout's development installer loads this same file by its path: both installers
 find every app, every copy of the plugin and every app's own commands the same way. Six apps:
 
@@ -14,7 +14,7 @@ find every app, every copy of the plugin and every app's own commands the same w
 - **Cursor**: a clone of the ``latest`` branch in its local plugins folder.
 - **Grok Build**: ``grok plugin``, from the repository's ``latest``.
 - **Gemini CLI**: its extension, installed from the repository at ``latest``, never auto-updated:
-  an update is the person's (``cadgen update``, the install command, the update button).
+  an update is the person's (``cad update``, the install command, the update button).
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
 alone, copied into that agent's own skills folder by one ``npx skills add`` for all of them
@@ -465,23 +465,33 @@ def _toml(path: Path) -> Tuple[Optional[dict], Optional[str]]:
         return None, f"cannot be read ({type(error).__name__})"
 
 
+# What a server entry of text-to-cad's names: the requirement uvx runs it from -- this release's transport
+# (``texttocad-mcp==X``), or an earlier release's server (``cadgen==X``) --, the command it runs (``cad-mcp``,
+# an earlier release's ``cadgen``), or the module a checkout's Python runs (``python -m cad_mcp``; an earlier
+# one's ``cad_server.cli`` or ``cadgen.cli``, with ``mcp``).
+PINS = ("texttocad-mcp==", "texttocad-server==", "cadgen==")
+ENTRY_WORDS = ("cad-mcp", "cadgen", "cad_mcp", "cad_server.cli", "cadgen.cli")
+
+
 def runs_cadgen(entry: Any) -> bool:
-    """Whether a server entry runs cadgen: its command is cadgen's, or its arguments name it."""
+    """Whether a server entry is text-to-cad's: its command is its transport's or an earlier release's
+    server's, or its arguments name one (``PINS``, ``ENTRY_WORDS``)."""
     if not isinstance(entry, dict):
         return False
     command = entry.get("command")
     arguments = entry.get("args") if isinstance(entry.get("args"), list) else []
-    if isinstance(command, str) and "cadgen" in os.path.basename(command):
+    if isinstance(command, str) and ("cadgen" in os.path.basename(command)
+                                     or os.path.basename(command).lower().removesuffix(".exe") == "cad-mcp"):
         return True
-    return any(isinstance(word, str) and (word.startswith("cadgen==") or word in ("cadgen", "cad_server.cli"))
-               for word in arguments)
+    return any(isinstance(word, str) and (word.startswith(PINS) or word in ENTRY_WORDS) for word in arguments)
 
 
 def server_pin(entry: Any) -> Optional[str]:
-    """The cadgen release a server entry runs (``cadgen==X`` in its arguments), or ``None``."""
+    """The release a server entry runs (``texttocad-mcp==X``, or an earlier release's ``cadgen==X``, in its
+    arguments), or ``None``."""
     for word in (entry or {}).get("args") or []:
-        if isinstance(word, str) and word.startswith("cadgen=="):
-            return word[len("cadgen=="):]
+        if isinstance(word, str) and word.startswith(PINS):
+            return word.partition("==")[2]
     return None
 
 
@@ -670,7 +680,7 @@ def _loose(app: App, machine: Machine) -> None:
 
 
 def _servers(app: App, entries: Any, path: Path, ours: Optional[str] = None) -> None:
-    """The entries of a ``mcpServers`` table that run cadgen: hand-made copies of CAD's server."""
+    """The entries of a ``mcpServers`` table that run text-to-cad: hand-made copies of CAD's server."""
     for key, entry in (entries.items() if isinstance(entries, dict) else ()):
         if runs_cadgen(entry):
             app.copies.append(Copy(app.id, "server", str(key), version=server_pin(entry), path=str(path),
@@ -1128,14 +1138,14 @@ def _plan_gemini(app: App, release: str, machine: Machine, **_: Any) -> List[Ste
                                         + ("up to date" if status == "current" else f"newer than {release}, left alone"))]
         return steps + [Step(app.id, "update", f"the {PLUGIN} extension {ours.version or '?'} -> {release}",
                              [[app.command, "extensions", "update", PLUGIN]])]
-    # Never auto-updated: no update arrives but the one the person asks for (``cadgen update``).
+    # Never auto-updated: no update arrives but the one the person asks for (``cad update``).
     return steps + [Step(app.id, "install", f"the {PLUGIN} extension from {REPOSITORY_URL} at {BRANCH}",
                          [[app.command, "extensions", "install", REPOSITORY_URL, "--ref", BRANCH, "--consent"]])]
 
 
 def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:
     """``desktop_entry`` as it replaces ``entry``: the environment someone added to the entry kept
-    (a ``CADGEN_ENGINE_PORT``, say), the release's own variables over it."""
+    (a ``CAD_ENGINE_PORT``, say), the release's own variables over it."""
     kept = entry.get("env") if isinstance(entry, dict) and isinstance(entry.get("env"), dict) else {}
     return {**desktop_entry, "env": {**kept, **(desktop_entry.get("env") or {})}}
 
@@ -1143,9 +1153,10 @@ def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:
 def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]] = None,
                   **_: Any) -> List[Step]:
     """Claude Desktop's config: ``mcpServers.cad`` set to ``desktop_entry``, this release's server,
-    where it has none or one that runs an older release (its pin, ``cadgen==X``, is what uvx runs)
-    or differs otherwise (its uvx); one that pins a newer release is left alone. Every other entry
-    that runs cadgen is taken out, in the same write of the file (one ``.bak``)."""
+    where it has none or one that runs an older release (its pin, ``texttocad-mcp==X`` or an earlier
+    release's ``cadgen==X``, is what uvx runs) or differs otherwise (its uvx); one that pins a newer release
+    is left alone. Every other entry that runs text-to-cad is taken out, in the same write of the file (one
+    ``.bak``)."""
     path = app.config or str(desktop_config(machine))
     others = [copy for copy in app.copies if not copy.ours]
     remove = [copy.name for copy in others]
@@ -1156,13 +1167,13 @@ def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optio
     elif desktop_entry is None:
         steps.append(_leave(app, "no uvx found to run CAD's server with: install uv, then run this again"))
     elif ours is None:
-        change = Step(app.id, "install", f"{where}: cadgen {release}")
+        change = Step(app.id, "install", f"{where}: text-to-cad {release}")
     elif ours.entry == _wanted(ours.entry, desktop_entry):
-        steps.append(_leave(app, f"{where}: cadgen {release}, up to date"))
+        steps.append(_leave(app, f"{where}: text-to-cad {release}, up to date"))
     elif is_release(ours.version) and version_key(ours.version) > version_key(release):
-        steps.append(_leave(app, f"{where}: cadgen {ours.version}, newer than {release}, left alone"))
+        steps.append(_leave(app, f"{where}: text-to-cad {ours.version}, newer than {release}, left alone"))
     else:
-        change = Step(app.id, "update", f"{where}: cadgen {ours.version or '?'} -> {release}")
+        change = Step(app.id, "update", f"{where}: text-to-cad {ours.version or '?'} -> {release}")
     if change is not None:
         entry = _wanted(ours.entry, desktop_entry) if ours is not None else desktop_entry
         change.edit = {"op": "servers", "path": path, "set": {DESKTOP_KEY: entry}, "remove": remove}
@@ -1222,12 +1233,12 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str],
         recorded = had.get("skills") if isinstance(had.get("skills"), list) else list(SKILLS)
         missing = [name for name in recorded if folder / name not in have]
         if before == release and not missing:
-            steps.append(Step(agent, "leave", f"the skills in {where}, from cadgen {release}: up to date"))
+            steps.append(Step(agent, "leave", f"the skills in {where}, from text-to-cad {release}: up to date"))
         elif not npx:
             steps.append(Step(agent, "leave", NEED_NODE))
         elif had or have:
             why = (f"{', '.join(missing[:3])}{f' +{len(missing) - 3}' if len(missing) > 3 else ''} missing"
-                   if before == release else f"from cadgen {before or '?'} -> {release}")
+                   if before == release else f"from text-to-cad {before or '?'} -> {release}")
             due.append(Step(agent, "update", f"the skills in {where}" + (": " if before == release else ", ") + why))
             steps.append(due[-1])
         else:

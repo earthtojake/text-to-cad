@@ -1,6 +1,6 @@
-"""The ``cadgen`` console script -- a subcommand dispatcher over the distribution's CLIs.
+"""The ``cad`` console script -- a subcommand dispatcher over the distribution's CLIs.
 
-Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the friendly
+Every subcommand is also reachable as ``python -m cad_server.cli.<module>``; this is the friendly
 front door, not a second implementation. A subcommand's parser lives in its own module and
 owns its arguments, so the console and module entry points cannot drift. The engine's verbs
 (``export``, ``snapshot``, ``serve``, ``inspect``, ``status``, ``stop``, ``delete``, ``server``) are
@@ -8,7 +8,7 @@ owns its arguments, so the console and module entry points cannot drift. The eng
 the verb function's signature (``cad_server._internal.cli_from_function``).
 
 **Dispatch is lazy on purpose.** Importing a CAD subcommand pulls in OCP/build123d, which
-costs seconds and needs the heavy dependency set installed. ``cadgen --help`` and an
+costs seconds and needs the heavy dependency set installed. ``cad --help`` and an
 unknown command must not pay for that, so the registry stores dotted module names as
 strings and imports exactly the one being run. Do not hoist these to module-level imports
 when adding commands.
@@ -22,12 +22,12 @@ import sys
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
-# ``cadgen --help`` stays a single readable column.
+# ``cad --help`` stays a single readable column.
 #
 # Two-word names are intentional where a noun has several verbs. Dispatch joins
 # argv[0:2] before argv[0], so the two-word form wins where it exists.
 #
-# A model script builds by running it (``cadgen run <model>.py``: the CAD kernel environment's
+# A model script builds by running it (``cad run <model>.py``: the CAD kernel environment's
 # ``python <model>.py``): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # The engine (cad.engine): documents exported, drawn and served, its server.
@@ -45,22 +45,21 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "srdf validate": ("cad_server.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment"),
-    "doctor": ("cad_server.cli.doctor", "install: register, write the cadgen command, start the engine"),
-    # text-to-cad in every agent app here, and the cadgen command with it, as this release; `update`
+    "doctor": ("cad_server.cli.doctor", "install: register, write the cad command, start the engine"),
+    # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
     "update": ("cad_server.cli.update", "install the newest release and set it up in every agent app here"),
     "uninstall": ("cad_server.cli.uninstall", "take text-to-cad out of every agent app here"),
-    # A page session on the installation engine; the launcher exits.
+    # A page session on the installation engine; the launcher exits. (CAD inside an agent host's panels is
+    # the shim's own command, ``cad-mcp``: the host starts that stdio peer per session.)
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the installation engine"),
-    # CAD inside an agent host's panels. The host starts a stateless stdio peer per session.
-    "mcp": ("cad_server.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
 
-_USAGE_HEAD = "usage: cadgen <command> [args...]\n\ncommands:\n"
+_USAGE_HEAD = "usage: cad <command> [args...]\n\ncommands:\n"
 _USAGE_TAIL = (
-    "\nRun 'cadgen <command> --help' for a command's own options.\n"
+    "\nRun 'cad <command> --help' for a command's own options.\n"
     "Each command is also available as 'python -m <module>'.\n"
 )
 
@@ -81,9 +80,9 @@ def _format_verbs(noun: str) -> list[str]:
 
 def _format_usage(noun: str) -> str:
     return (
-        f"usage: cadgen {noun} <verb> [args...]\n\n{noun} commands:\n"
+        f"usage: cad {noun} <verb> [args...]\n\n{noun} commands:\n"
         + _command_lines(_format_verbs(noun))
-        + f"\nRun 'cadgen {noun} <verb> --help' for a command's own options.\n"
+        + f"\nRun 'cad {noun} <verb> --help' for a command's own options.\n"
     )
 
 
@@ -134,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _output_closed() -> int:
-    """Whatever read this command's output closed it (``cadgen ... | head``): stop quietly, as a CLI does
+    """Whatever read this command's output closed it (``cad ... | head``): stop quietly, as a CLI does
     on SIGPIPE -- no traceback, no crash report (``cad_server.analytics.stdout_closed``), nothing more written. Both
     streams go to the null device first: Python flushes them again as it exits, and would print that
     flush's own BrokenPipeError."""
@@ -167,7 +166,7 @@ def _main(argv: list[str] | None) -> int:
         from cad_server import __version__
         from cad_server._internal.installations import own_version
 
-        sys.stdout.write(f"cadgen {own_version() or __version__}\n")
+        sys.stdout.write(f"cad {own_version() or __version__}\n")
         return 0
 
     # Longest match first, so `urdf validate` is dispatched as one command.
@@ -185,11 +184,15 @@ def _main(argv: list[str] | None) -> int:
                 sys.stdout.write(_format_usage(noun))
                 return 0
             problem = f"unknown {noun} command {rest[0]!r}" if rest else f"{noun} needs a verb"
-            sys.stderr.write(f"cadgen: {problem}\n\n" + _format_usage(noun))
+            sys.stderr.write(f"cad: {problem}\n\n" + _format_usage(noun))
             return 2
-        sys.stderr.write(f"cadgen: unknown command {noun!r}\n\n" + _usage())
+        sys.stderr.write(f"cad: unknown command {noun!r}\n\n" + _usage())
         return 2
 
+    # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
+    # this release keeps of its state folder moves into its own first, before the notice below writes there.
+    if command in _REGISTERS:
+        _adopt()
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
     # with, so the CAD app and the CAD Viewer say it (`cad_server/updates.py`). What a command does say,
     # once and before its work, is what those two send by default (`cad_server/analytics.py`).
@@ -209,7 +212,7 @@ def _main(argv: list[str] | None) -> int:
 
 
 def _report(error: Exception) -> None:
-    """A command that failed past its own reporting -- a crash of cadgen's -- kept for telemetry
+    """A command that failed past its own reporting -- a crash of the server's -- kept for telemetry
     (``cad_server.analytics.report``); the traceback is the person's, as ever."""
     try:
         from cad_server.analytics import report
@@ -218,10 +221,25 @@ def _report(error: Exception) -> None:
     report(error, "command", handled=False)
 
 
-# Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
-# reads; the engine's server, writing nowhere; `telemetry` and `setup` (`update`), which say it their own
-# way; `uninstall`; and `run`, which is only the python it runs, as the `cadgen` command's `run` is.
-_UNTOLD = frozenset({"mcp", "server", "telemetry", "setup", "update", "uninstall", "run"})
+# Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry` and
+# `setup` (`update`), which say it their own way; `uninstall`; and `run`, which is only the python it runs,
+# as the `cad` command's `run` is.
+_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run"})
+
+
+# The told commands that register this installation (``cad_server._internal.installations.setup``).
+_REGISTERS = frozenset({"doctor"})
+
+
+def _adopt() -> None:
+    """What this release keeps of an earlier release's state folder, moved into its own
+    (``cad.engine.places.adopt_earlier``): never in a command's way."""
+    try:
+        from cad.engine.places import adopt_earlier
+
+        adopt_earlier()
+    except Exception:  # noqa: BLE001 - registration tries again, and says what it could not write
+        return
 
 
 def _tell() -> None:
@@ -246,11 +264,11 @@ def _run_module(command: str, module_name: str, rest: list[str]) -> int:
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so
-    # `cadgen urdf validate --help` says "cadgen urdf validate".
+    # `cad urdf validate --help` says "cad urdf validate".
     # Not every command takes a name for its parser, hence the signature check rather
     # than a blanket keyword.
     import inspect  # only the dispatcher needs it; `--help` does not.
 
     if "prog" in inspect.signature(module.main).parameters:
-        return int(module.main(rest, prog=f"cadgen {command}") or 0)
+        return int(module.main(rest, prog=f"cad {command}") or 0)
     return int(module.main(rest) or 0)

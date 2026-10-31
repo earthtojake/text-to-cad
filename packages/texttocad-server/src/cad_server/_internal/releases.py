@@ -6,7 +6,7 @@ Viewer's server, the MCP shim, without the kernel (its ``kernel`` extra goes in 
 as the base is (``base.make``): its files hard links into uv's cache, asked of the cache first
 (``--offline``) and of the network only for what it does not hold, its marker
 (``cadgen-release.json``) written last, a lock beside it. An update makes the folder of the release
-it moves to (``make``), that release then sets itself up from there (``cadgen setup``, which
+it moves to (``make``), that release then sets itself up from there (``cad setup``, which
 registers it, ``cad_server._internal.installations``), and the switch points ``current`` at it
 (``cad_server._internal.switch``).
 
@@ -61,7 +61,7 @@ def where(version: str) -> Path:
 
 def console(env: Path) -> Path:
     """The ``cadgen`` command of the environment at ``env``."""
-    return env / ("Scripts/cadgen.exe" if os.name == "nt" else "bin/cadgen")
+    return env / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad")
 
 
 def complete(env: Path) -> dict[str, Any] | None:
@@ -91,9 +91,9 @@ def recipe(version: str, python: str, source: str | None) -> base.Recipe:
         else:
             requirement = (*((f"{base.LIBRARY} @ {library}",) if library and not os.path.isdir(library) else ()),
                            f"{base.SERVER} @ {source}")
-    return base.Recipe(what=f"cadgen {version}", python=python, requirement=requirement, release=version,
-                       source=source, making=f"installing cadgen {version} on Python {platform.python_version()}",
-                       downloading=f"downloading cadgen {version}")
+    return base.Recipe(what=f"text-to-cad {version}", python=python, requirement=requirement, release=version,
+                       source=source, making=f"installing text-to-cad {version} on Python {platform.python_version()}",
+                       downloading=f"downloading text-to-cad {version}")
 
 
 def make(version: str, *, python: str | None = None, source: str | None = None,

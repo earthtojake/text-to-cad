@@ -25,7 +25,7 @@ class BrowserOpenTest(unittest.TestCase):
         self.engine = Path(tempfile.mkdtemp(prefix='eng-')).resolve()
         os.chmod(self.engine, 0o700)
         self.addCleanup(shutil.rmtree, self.engine, True)
-        for patch in (mock.patch.dict(os.environ, {'CADGEN_ENGINE_DIR': str(self.engine)}),
+        for patch in (mock.patch.dict(os.environ, {'CAD_ENGINE_DIR': str(self.engine)}),
                       mock.patch.object(browser_open, 'display_refusal', return_value=None)):  # CI has no display
             patch.start()
             self.addCleanup(patch.stop)

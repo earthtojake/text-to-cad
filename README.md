@@ -56,7 +56,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It installs uv if it is missing, then sets up text-to-cad in every agent app on
 your computer with each app's own commands (the plugin, which brings the skills
 and CAD's MCP server, or for an agent without a plugin the skills alone),
-registers the `cadgen` command, and moves CAD's engine to the new release. Run
+registers the `cad` command, and moves CAD's engine to the new release. Run
 it again to update everything, or click CAD's update button when it shows one; it
 lists the apps to restart.
 
@@ -90,7 +90,7 @@ robot description files, simulation, and local review.
 text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
-  A bug report with the model script and the output of `cadgen doctor` is the
+  A bug report with the model script and the output of `cad doctor` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
   security problem is reported privately, as [SECURITY.md](SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).

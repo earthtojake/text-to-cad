@@ -26,7 +26,7 @@ build too, from the last build that named the document -- so a page asking about
 element never waits on a build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
-(``CADGEN_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
+(``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
 all its workers to together: ``daemon.Pool.shed``) is retired: its reports say so (``retired``),
 and the daemon, once it has taken the worker's documents from it (``models.Models.drain``),
 closes its stdin. The daemon starts a fresh one for the next build, a restart: a model whose
@@ -173,9 +173,9 @@ def _physical_mb() -> float | None:
 def rss_cap_mb() -> float | None:
     """The resident memory the daemon's workers, its standby and its render processes may hold
     together (``daemon.Pool.shed``), and so one of them alone after a build or a frame:
-    ``CADGEN_ENGINE_WORKER_RSS_MB`` (``0`` for no cap), else a quarter of the machine's memory, at
+    ``CAD_ENGINE_WORKER_RSS_MB`` (``0`` for no cap), else a quarter of the machine's memory, at
     least 2 GiB. None: no cap."""
-    given = os.environ.get("CADGEN_ENGINE_WORKER_RSS_MB", "").strip()
+    given = os.environ.get("CAD_ENGINE_WORKER_RSS_MB", "").strip()
     if given:
         try:
             value = float(given)
@@ -197,7 +197,7 @@ def retirement(reports: list[dict[str, Any]], resident: float | None = None) -> 
         return False
     for report in reports:
         report["retired"] = (f"the worker held {resident:.0f} MB after the build, over its {cap:.0f} MB cap "
-                             "(CADGEN_ENGINE_WORKER_RSS_MB): the next build starts a fresh one")
+                             "(CAD_ENGINE_WORKER_RSS_MB): the next build starts a fresh one")
     return True
 
 
@@ -254,7 +254,7 @@ def kept() -> dict[str, str]:
     set for itself."""
     from cad.engine.places import BYTECODE, RESTARTS
 
-    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CADGEN_ENGINE_WORKER") if name in os.environ}
+    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER") if name in os.environ}
 
 
 def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
@@ -477,7 +477,7 @@ def refusal(error: BaseException) -> dict[str, str]:
     return {"kind": f"{kind.__module__}:{kind.__qualname__}"}
 
 def main() -> int:
-    os.environ["CADGEN_ENGINE_WORKER"] = "1"
+    os.environ["CAD_ENGINE_WORKER"] = "1"
     protocol = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)  # the model's prints go where the daemon reads logs from
     sys.stdout = sys.stderr

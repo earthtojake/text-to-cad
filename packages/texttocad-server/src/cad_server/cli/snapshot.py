@@ -1,4 +1,4 @@
-"""``cadgen snapshot SRC OUT.png``: a document, a mesh file, a robot or a drawing drawn by OCCT
+"""``cad snapshot SRC OUT.png``: a document, a mesh file, a robot or a drawing drawn by OCCT
 as the CAD Viewer draws it (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen snapshot"
+DEFAULT_PROG = "cad snapshot"
 ENGINE_VERB = "snapshot"
 
 

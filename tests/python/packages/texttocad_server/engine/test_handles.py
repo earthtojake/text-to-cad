@@ -33,7 +33,7 @@ from cad_server.engine.registry import Registry  # noqa: E402
 
 PARTS = """
 import build123d as bd
-from cadgen import model, xbf
+from cad import model, xbf
 
 
 @model
@@ -74,7 +74,7 @@ EIGHT = """
 import pathlib
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 RUNS = pathlib.Path(__file__).with_name("runs.txt")
 
@@ -112,7 +112,7 @@ HANDED = """
 import json
 
 import build123d as bd
-from cadgen import model
+from cad import model
 from cad.gltf import animation
 
 lid = bd.Box(10, 10, 2)
@@ -128,7 +128,7 @@ print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle
 
 HINGE = """
 import build123d as bd
-from cadgen import model
+from cad import model
 from cad.ap242 import mechanism_state, posed
 
 
@@ -181,7 +181,7 @@ import json
 import pathlib
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 def tree(node, path=()):
@@ -244,9 +244,9 @@ class HandleTest(unittest.TestCase):
         cls.state, cls.cache = cls.folder / "state", cls.folder / "cache"
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.engine),
-                                         "CADGEN_STATE_DIR": str(cls.state), "CADGEN_CACHE_DIR": str(cls.cache),
-                                         "CADGEN_ENGINE_MESH": "inline"},
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.engine),
+                                         "CAD_STATE_DIR": str(cls.state), "CAD_CACHE_DIR": str(cls.cache),
+                                         "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(cls.cli, "stop")
 
@@ -269,7 +269,7 @@ class HandleTest(unittest.TestCase):
     def ask(self, message: dict) -> dict:
         from cad.engine.client import request
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             return request(message, start=False) or {}
 
     def test_a_call_returns_a_handle_whose_shape_loads_on_first_access_and_a_child_s_composes(self) -> None:
@@ -331,7 +331,7 @@ class HandleTest(unittest.TestCase):
         self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
                       "its words, from its program")
         # From a REPL: the working folder is its scope.
-        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cadgen import model\n"
+        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
                                "h = model(bd.Box(2, 2, 2), name='scratch')\nprint('RESULT ' + json.dumps(h.id))\n")
         self.assertEqual(repl, derived_id(project, "scratch"))
         # Exported by its id, as any document the engine holds; after a restart, from the cache.
@@ -387,7 +387,7 @@ class HandleTest(unittest.TestCase):
             import json
 
             import build123d as bd
-            from cadgen import model
+            from cad import model
 
             from dims import WIDTH
 
@@ -426,7 +426,7 @@ UNREACHED = """
 import sys
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 @model
@@ -447,7 +447,7 @@ if __name__ == "__main__":
 
 class UnreachedEngineTest(unittest.TestCase):
     def test_a_model_call_no_engine_serves_ends_in_one_line_on_stderr(self) -> None:
-        """``python model.py`` and ``cadgen run model.py`` in a sandboxed shell with no engine: the
+        """``python model.py`` and ``cad run model.py`` in a sandboxed shell with no engine: the
         client's line on stderr, as a ``cadgen`` verb says it, status 1, no traceback; a program
         that catches the error hears nothing."""
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="unreached-")))
@@ -458,12 +458,12 @@ class UnreachedEngineTest(unittest.TestCase):
         from cad.engine.client import SANDBOXES
         from cad.engine.client import SANDBOXED
 
-        env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
-               "CADGEN_STATE_DIR": str(folder / "state"), "CADGEN_CACHE_DIR": str(folder / "cache"),
+        env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
+               "CAD_STATE_DIR": str(folder / "state"), "CAD_CACHE_DIR": str(folder / "cache"),
                **dict(SANDBOXES)}
         for command in ([sys.executable, "peg.py"], [sys.executable, "-m", "cad_server.cli", "run", "peg.py"]):
             done = engine_daemon.run(command, cwd=folder, env=env)
-            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cadgen: {SANDBOXED}\n"), command)
+            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {SANDBOXED}\n"), command)
         caught = engine_daemon.run([sys.executable, "peg.py", "catch"], cwd=folder, env=env)
         self.assertEqual((caught.returncode, caught.stdout, caught.stderr), (0, "caught\n", ""))
         self.assertEqual(sorted(path.name for path in engine.iterdir()), [], "no engine started")

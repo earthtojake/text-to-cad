@@ -110,8 +110,8 @@ class BodiesCase(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        os.environ.pop("CADGEN_ENGINE_BODIES", None)
-        os.environ.pop("CADGEN_ENGINE_MEMO", None)
+        os.environ.pop("CAD_ENGINE_BODIES", None)
+        os.environ.pop("CAD_ENGINE_MEMO", None)
         self.folder = Path(tempfile.mkdtemp(prefix="engine-bodies-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.write("shared.py", SHARED.format(width=10))
@@ -209,7 +209,7 @@ class OrdinalTest(BodiesCase):
         replayed = self.build()["memo"]
         memo.clear()
         self.write("root.py", ROOT.format(hole=1.0))
-        os.environ["CADGEN_ENGINE_BODIES"] = "0"
+        os.environ["CAD_ENGINE_BODIES"] = "0"
         self.build()
         self.write("root.py", ROOT.format(hole=1.5))
         ran = self.build()["memo"]

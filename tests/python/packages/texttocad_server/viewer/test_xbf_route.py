@@ -69,9 +69,9 @@ class XbfRouteTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.base = Path(os.path.realpath(tempfile.mkdtemp(prefix="viewer-xbf-")))
         cls.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        cls.saved = {name: os.environ.get(name) for name in ("CADGEN_ENGINE_DIR", "CADGEN_ENGINE_MESH")}
+        cls.saved = {name: os.environ.get(name) for name in ("CAD_ENGINE_DIR", "CAD_ENGINE_MESH")}
         # The daemon this test starts is its own: its own socket folder, one part meshed at a time.
-        os.environ.update({"CADGEN_ENGINE_DIR": str(cls.state), "CADGEN_ENGINE_MESH": "inline"})
+        os.environ.update({"CAD_ENGINE_DIR": str(cls.state), "CAD_ENGINE_MESH": "inline"})
         (cls.base / "models.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
         env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
         # Built as a script runs: through this test's own engine daemon.
@@ -293,7 +293,7 @@ finally:
         (self.base / "part.stl").write_text("solid t\nendsolid t\n", encoding="utf-8")
         (self.base / "garbage.step").write_text("not a step file\n", encoding="utf-8")
         for target, words in (("/__cad/xbf", "needs ?file="),
-                              (f"/__cad/xbf?file={quote(str(self.base / 'part.stl'), safe='')}", "not a document the cadgen engine reads"),
+                              (f"/__cad/xbf?file={quote(str(self.base / 'part.stl'), safe='')}", "not a document the engine reads"),
                               (f"/__cad/xbf?file={quote(str(self.base / 'gone.xbf'), safe='')}", "no document")):
             with self.subTest(target=target):
                 status, body = self.get(target)

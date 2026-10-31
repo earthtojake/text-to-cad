@@ -1,4 +1,4 @@
-"""The ``cadgen`` console-script dispatcher.
+"""The ``cad`` console-script dispatcher.
 
 The behaviour worth pinning is not the argument parsing — each subcommand owns that — but
 the dispatch contract: every registered command resolves to a real ``main(argv)``, and
@@ -25,14 +25,14 @@ class Registry(unittest.TestCase):
                 module = importlib.import_module(module_name)
                 self.assertTrue(
                     callable(getattr(module, "main", None)),
-                    f"{module_name} must expose a callable main() for 'cadgen {name}'",
+                    f"{module_name} must expose a callable main() for 'cad {name}'",
                 )
                 self.assertTrue(help_text.strip(), f"{name} needs help text")
 
     def test_the_viewer_verbs_are_registered_and_lazy(self):
         # The CAD Viewer's backend is cad_server.viewer, reached through the front
         # door as a launcher for the shared engine. Registered by dotted module
-        # name like everything else, so `cadgen --help` imports none of it.
+        # name like everything else, so `cad --help` imports none of it.
         for name in ("viewer",):
             self.assertIn(name, cli._COMMANDS)
             module_name, _ = cli._COMMANDS[name]
@@ -49,7 +49,7 @@ class Dispatch(unittest.TestCase):
     def test_no_args_prints_usage_and_succeeds(self):
         code, out, _ = self._run([])
         self.assertEqual(code, 0)
-        self.assertIn("usage: cadgen", out)
+        self.assertIn("usage: cad", out)
         self.assertIn("snapshot", out)
 
     def test_help_flags_print_usage(self):
@@ -57,7 +57,7 @@ class Dispatch(unittest.TestCase):
             with self.subTest(flag=flag):
                 code, out, _ = self._run([flag])
                 self.assertEqual(code, 0)
-                self.assertIn("usage: cadgen", out)
+                self.assertIn("usage: cad", out)
 
     def test_version_flag_reports_the_distribution_version(self):
         from cad_server import __version__
@@ -70,7 +70,7 @@ class Dispatch(unittest.TestCase):
                 mock.patch.object(installations, "editable", return_value=False):
             code, out, _ = self._run(["--version"])
         self.assertEqual(code, 0)
-        self.assertEqual(out.strip(), f"cadgen {__version__}")
+        self.assertEqual(out.strip(), f"cad {__version__}")
 
     def test_version_flag_names_a_development_installation_by_its_own_version(self):
         # Two installations are told apart: a dev install says its stamped name, as doctor's header does.
@@ -80,19 +80,34 @@ class Dispatch(unittest.TestCase):
 
         with mock.patch.dict("os.environ", {installations.NAME_ENV: "0.8.0-dev.20261025032350"}):
             code, out, _ = self._run(["--version"])
-        self.assertEqual((code, out.strip()), (0, "cadgen 0.8.0-dev.20261025032350"))
+        self.assertEqual((code, out.strip()), (0, "cad 0.8.0-dev.20261025032350"))
+
+    def test_doctor_adopts_the_earlier_state_folder_before_its_notice_writes_this_one(self):
+        # `doctor` registers, as `setup` does (which says no notice); any other command adopts nothing.
+        from unittest import mock
+
+        from cad.engine import places
+
+        for argv, expected in ((["doctor", "--help"], ["adopt", "tell"]), (["status", "--help"], ["tell"])):
+            with self.subTest(argv=argv):
+                calls = []
+                with mock.patch.object(places, "adopt_earlier", side_effect=lambda: calls.append("adopt") or []), \
+                        mock.patch.object(cli, "_tell", side_effect=lambda: calls.append("tell")), \
+                        self.assertRaises(SystemExit):
+                    self._run(argv)
+                self.assertEqual(calls, expected)
 
     def test_status_names_the_engine_s_installation(self):
         from cad_server.engine.cli import status_text
 
         text = status_text({"pid": 7, "up": 5, "workers": [], "installation": "0.8.0-dev.20261025032350"})
-        self.assertTrue(text.startswith("engine server 7 (cadgen 0.8.0-dev.20261025032350), up "), text)
+        self.assertTrue(text.startswith("engine server 7 (text-to-cad 0.8.0-dev.20261025032350), up "), text)
 
     def test_unknown_command_exits_two_and_names_it_on_stderr(self):
         code, _, err = self._run(["nope"])
         self.assertEqual(code, 2)
         self.assertIn("nope", err)
-        self.assertIn("usage: cadgen", err)
+        self.assertIn("usage: cad", err)
 
     def test_subcommand_argv_is_forwarded_untouched(self):
         """The dispatcher must not consume or reorder a subcommand's own flags."""

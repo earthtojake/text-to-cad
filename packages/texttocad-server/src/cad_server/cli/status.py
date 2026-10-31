@@ -1,4 +1,4 @@
-"""``cadgen status``: the engine server's workers, what each builds, and what it serves
+"""``cad status``: the engine server's workers, what each builds, and what it serves
 (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen status"
+DEFAULT_PROG = "cad status"
 ENGINE_VERB = "status"
 
 

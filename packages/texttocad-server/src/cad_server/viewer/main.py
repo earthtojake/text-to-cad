@@ -13,7 +13,7 @@ import webbrowser
 
 from cad_server import assets
 
-DEFAULT_PROG = 'cadgen viewer'
+DEFAULT_PROG = 'cad viewer'
 
 
 def resolve_dist_dir(explicit: str) -> str:
@@ -49,15 +49,15 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
-            print('CAD Viewer client is not built; build apps/web or install the cadgen wheel', file=sys.stderr)
+            print('CAD Viewer client is not built; build apps/web or install the texttocad-server wheel', file=sys.stderr)
             return 1
     try:
         answer = request({'op': 'viewer', **options})
         if not answer or 'failed' in answer:
             raise ValueError((answer or {}).get('failed', 'engine did not answer'))
         # The meshing pool starts with the first page, not with the engine (every build starts
-        # that): started now, it warms while the browser opens. CADGEN_VIEWER_WARM=0 skips it.
-        if os.environ.get('CADGEN_VIEWER_WARM', '').strip() != '0':
+        # that): started now, it warms while the browser opens. CAD_VIEWER_WARM=0 skips it.
+        if os.environ.get('CAD_VIEWER_WARM', '').strip() != '0':
             request({'op': 'warm'})
     except (OSError, ValueError) as error:
         print(f'CAD Viewer: {error}', file=sys.stderr)

@@ -77,7 +77,7 @@ export function writeXbfPosition(values, control, next) {
 }
 
 /**
- * A pose as `cadgen snapshot --pose` takes it (`{"<joint or coupling>": value}`): each pair a person
+ * A pose as `cad snapshot --pose` takes it (`{"<joint or coupling>": value}`): each pair a person
  * can set, its value (a number, or a pair's several values), and each coupling's value, which moves
  * its joints. A prompt's view carries it as its `jointValues`, so the view the ink was drawn in is
  * posed again as it was.

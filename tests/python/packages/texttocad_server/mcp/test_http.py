@@ -49,11 +49,11 @@ class HttpSessionsTest(unittest.TestCase):
         cls.opened = cls.root / 'opened.jsonl'
         cls.engine_browser = cls.browser('engine', 0)
         # A plugin's engine that is told of releases (``cad_server.updates``), the feed never read.
-        cls.env = engine_daemon.watched({**os.environ, 'CADGEN_ENGINE_DIR': str(cls.root / 'engine'),
-                   'CADGEN_STATE_DIR': str(cls.root / 'state'), 'CADGEN_ENGINE_MESH': 'inline',
-                   'CADGEN_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser,
-                   'CADGEN_INSTALL_CHANNEL': 'claude-github', 'CADGEN_AUTO_UPDATED': '', 'CI': '',
-                   'CADGEN_UPDATE_CHECK': '0'}, cls.addClassCleanup)
+        cls.env = engine_daemon.watched({**os.environ, 'CAD_ENGINE_DIR': str(cls.root / 'engine'),
+                   'CAD_STATE_DIR': str(cls.root / 'state'), 'CAD_ENGINE_MESH': 'inline',
+                   'CAD_VIEWER_DIST': str(cls.page), 'BROWSER': cls.engine_browser,
+                   'CAD_INSTALL_CHANNEL': 'claude-github', 'CAD_AUTO_UPDATED': '', 'CI': '',
+                   'CAD_UPDATE_CHECK': '0'}, cls.addClassCleanup)
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
@@ -219,7 +219,7 @@ class HttpSessionsTest(unittest.TestCase):
         folder = (self.root / 'tool-models').resolve()
         folder.mkdir()
         script = folder / 'http_part.py'
-        script.write_text('from build123d import Box\nfrom cadgen import model\n\n\n@model\n'
+        script.write_text('from build123d import Box\nfrom cad import model\n\n\n@model\n'
                           'def http_part():\n    return Box(2, 3, 4)\n', encoding='utf-8')
         from cad.engine.api import build_script
         built = build_script(script, ['http_part'])
@@ -321,8 +321,8 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
 
     def test_stdio_shim_serves_resource_and_exits_without_stopping_engine(self):
-        process = subprocess.Popen([sys.executable, '-m', 'cad_server.cli', 'mcp'],
-                    env={**self.env, 'CADGEN_MCP_APP_DIR': str(self.page)},
+        process = subprocess.Popen([sys.executable, '-m', 'cad_mcp'],
+                    env={**self.env, 'CAD_MCP_APP_DIR': str(self.page)},
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         def close():
             if process.poll() is None:
@@ -364,7 +364,7 @@ class HttpSessionsTest(unittest.TestCase):
             else ((signal.SIGTERM, 1),)
         for ending, code in endings:
             before = len(mcp())
-            process = subprocess.Popen([sys.executable, '-m', 'cad_server.cli', 'mcp'], env=self.env, stdin=subprocess.PIPE,
+            process = subprocess.Popen([sys.executable, '-m', 'cad_mcp'], env=self.env, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
             self.addCleanup(lambda process=process: process.poll() is None and process.kill())
             process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': INIT}) + '\n')
@@ -392,7 +392,7 @@ class HttpSessionsTest(unittest.TestCase):
         # What the environment loads at its start (a checkout's .pth binds the lazy kernel) is not the shim's.
         code = ("import sys; before = set(sys.modules); from cad_mcp.shim import Proxy; "
                 "assert not {name for name in set(sys.modules) - before "
-                "if name.partition('.')[0] in ('cadgen', 'OCP', 'build123d')}")
+                "if name.partition('.')[0] in ('cad', 'cadgen', 'cad_server', 'OCP', 'build123d')}")
         done = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=20)
         self.assertEqual(done.returncode, 0, done.stderr)
 

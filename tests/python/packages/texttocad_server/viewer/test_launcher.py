@@ -27,8 +27,8 @@ class LauncherTest(unittest.TestCase):
         (self.dist / 'index.html').write_text('<html>viewer</html>', encoding='utf-8')
         (self.dist / 'assets').mkdir()
         (self.dist / 'assets' / 'app.js').write_text('export {}', encoding='utf-8')
-        self.env = engine_daemon.watched({**os.environ, 'CADGEN_ENGINE_DIR': str(self.root / 'engine'),
-                   'CADGEN_STATE_DIR': str(self.root / 'state'), 'CADGEN_ENGINE_MESH': 'inline'}, self.addCleanup)
+        self.env = engine_daemon.watched({**os.environ, 'CAD_ENGINE_DIR': str(self.root / 'engine'),
+                   'CAD_STATE_DIR': str(self.root / 'state'), 'CAD_ENGINE_MESH': 'inline'}, self.addCleanup)
         self.addCleanup(self.stop_engine)
 
     def stop_engine(self):

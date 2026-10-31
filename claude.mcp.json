@@ -8,12 +8,11 @@
         "--python",
         "3.14",
         "--from",
-        "cadgen==0.8.4",
-        "cadgen",
-        "mcp"
+        "texttocad-mcp==0.8.4",
+        "cad-mcp"
       ],
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "claude-github"
+        "CAD_INSTALL_CHANNEL": "claude-github"
       }
     }
   }

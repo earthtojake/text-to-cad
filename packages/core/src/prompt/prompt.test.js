@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, parsePromptReference, validatePromptReference, promptReferenceIds, resolveAttachmentPaths } from './index.js';
 
-// A STEP's ref is the engine's: its part's label, then its element's name, as `cadgen inspect` writes it.
+// A STEP's ref is the engine's: its part's label, then its element's name, as `cad inspect` writes it.
 const FACE = 'bracket/f:bracket.extrude1.3';
 const EDGE = 'bracket/e:bracket.fillet1.2';
 const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: [FACE] } };

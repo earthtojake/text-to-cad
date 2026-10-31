@@ -4,7 +4,7 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 
 /**
- * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`): a launch names a
+ * The launch/view protocol this page speaks with `cad-mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`. Every one of the page's calls carries its app capability (the launch's

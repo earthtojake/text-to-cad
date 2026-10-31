@@ -88,7 +88,7 @@ class FoldersTest(unittest.TestCase):
         document.write_bytes(b"x")
         (home / ".git/objects").mkdir(parents=True)
         (home / ".git/objects/x.step").write_bytes(b"x")
-        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(home / ".cache/cadgen")}):
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(home / ".cache/cadgen")}):
             names = lambda path: [entry["name"] for entry in list_folder(str(path))["entries"]]
             self.assertEqual(names(home), [".cache"])
             self.assertEqual(names(home / ".cache"), ["cadgen"])

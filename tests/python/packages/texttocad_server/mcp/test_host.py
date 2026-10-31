@@ -34,7 +34,7 @@ class LauncherTest(unittest.TestCase):
     def test_each_host_is_named_by_its_program_and_subcommand_past_what_launched_the_server(self) -> None:
         for chain, named, renders in (
                 (CODEX_EXEC, "codex exec", False),
-                ([["/bin/sh", "-c", "uvx cadgen mcp"], UVX, *CODEX_EXEC], "codex exec", False),
+                ([["/bin/sh", "-c", "uvx cad-mcp"], UVX, *CODEX_EXEC], "codex exec", False),
                 ([CODEX_EXEC[1]], "codex exec", False),  # an npm install's node script, where it runs codex itself
                 (CODEX_TUI, "codex", False),
                 ([[NPM_CODEX, "--model", "gpt-6-astra", "make a cube"]], "codex", False),  # a prompt is not a subcommand

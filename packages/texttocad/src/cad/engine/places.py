@@ -46,7 +46,7 @@ NAME = "engine"
 # The version an installation that cannot know its own name runs as (a development install's
 # ``<version>-dev.<time>``, set by its launcher and the ``cadgen`` command): the name its records
 # and its engine's ``status`` give it (``installation``).
-INSTALLATION_ENV = "CADGEN_INSTALLATION_VERSION"
+INSTALLATION_ENV = "CAD_INSTALLATION_VERSION"
 # What a worker's environment must share with a request's for the request to use it: what shapes
 # the import system of the interpreter it started (the interpreter itself is the engine's kernel
 # environment's, ``kernel``). A run adopts the rest of its caller's environment (``worker.adopt``), so a
@@ -69,57 +69,112 @@ MARKER_SCHEMA = "cadgen env/2"
 
 # --- the user's folders ----------------------------------------------------------------------------
 
+# The state folder's name in the platform's place for it (on Windows, beside the cache folder, its own
+# suffix), and the earlier releases' (named for cadgen, the library's earlier name). What this release
+# keeps of an earlier state folder (``ADOPTED``) it moves into its own (``adopt``): the person's settings
+# (the telemetry answer, so a no stays a no, and the language), the installations' records, the engines'
+# records with the page token (the page links a person keeps still open), the documents' records and
+# what the homes show of them (Recents), and setup's receipt and the install channels. Not the locks,
+# nor the telemetry an earlier release noted and did not send.
+STATE = ("texttocad", "texttocad-state")
+EARLIER_STATE = ("cadgen", "cadgen-state")
+ADOPTED = ("settings.json", INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
+           "install-channels.json")
+CACHE = "texttocad"
+
+
+def _platform_state(names: tuple[str, str]) -> Path:
+    posix, windows = names
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / posix
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / windows
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / posix
+
 
 def state_dir() -> Path:
-    """Where this user's CAD state lives (``CADGEN_STATE_DIR`` overrides it)."""
-    override = os.environ.get("CADGEN_STATE_DIR")
+    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``texttocad`` in the platform's
+    place for state (on Windows ``texttocad-state`` in the local application data)."""
+    override = os.environ.get("CAD_STATE_DIR")
     if override:
         return Path(override)
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "cadgen"
-    if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "cadgen-state"
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "cadgen"
+    return _platform_state(STATE)
+
+
+def adopt_earlier() -> list[str]:
+    """What this release keeps of an earlier release's state folder moved into its own (``adopt``), where no
+    state folder is named (``CAD_STATE_DIR``): what an installation's registration
+    (``cad_server._internal.installations``), ``cad setup`` and ``cad doctor`` do before they write there.
+    Each thing moves once: once this release's folder has it, the earlier one's stays. The names moved."""
+    if os.environ.get("CAD_STATE_DIR"):
+        return []
+    return adopt(_platform_state(EARLIER_STATE), _platform_state(STATE))
+
+
+def adopt(earlier: Path, folder: Path) -> list[str]:
+    """What this release keeps of the state folder ``earlier`` moved into ``folder`` (``ADOPTED``), each
+    only where ``folder`` has none -- the installations' records less ``current``, an earlier release's
+    choice that is not this one's to keep. The rest stays where it was. Moved, never copied: a record
+    names one place, and a process of the earlier release still running finds no answer of the person's
+    to go on sending under (it sends nothing it was not told it may). Quiet: a move that fails leaves
+    both folders as they were, and the next registration tries again. The names moved."""
+    moved: list[str] = []
+    for name in ADOPTED:
+        source, destination = earlier / name, folder / name
+        if not source.exists() or os.path.lexists(destination):
+            continue
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            os.rename(source, destination)
+        except OSError:
+            continue
+        moved.append(name)
+    if INSTALLATIONS in moved:
+        try:
+            (folder / CURRENT).unlink()
+        except OSError:
+            pass
+    return moved
 
 
 def cache_dir() -> Path:
     """Where the engine caches documents' bytes (``documents/<id>/document.xbf``): the platform's
     cache location, which the system and the person treat as disposable -- wiping it loses no
-    state, the records stay in ``state_dir``. ``CADGEN_CACHE_DIR`` when set (a relative one made
+    state, the records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made
     absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
-    ``$XDG_CACHE_HOME/cadgen`` on POSIX or ``%LOCALAPPDATA%\\cadgen`` on Windows when set, else
-    ``~/.cache/cadgen``: the folder cadgen 0.7 kept its store in, by the same rule."""
-    override = os.environ.get("CADGEN_CACHE_DIR", "").strip()
+    ``$XDG_CACHE_HOME/texttocad`` on POSIX or ``%LOCALAPPDATA%\\texttocad`` on Windows when set, else
+    ``~/.cache/texttocad``. An earlier release's cache (named for cadgen) is not read: it is a cache."""
+    override = os.environ.get("CAD_CACHE_DIR", "").strip()
     if override:
         root = Path(override).expanduser()
         if not root.is_absolute():
             root = (Path.cwd() / root).resolve()
-            os.environ["CADGEN_CACHE_DIR"] = str(root)
+            os.environ["CAD_CACHE_DIR"] = str(root)
         return root
     if os.name == "nt":
         local = os.environ.get("LOCALAPPDATA", "").strip()
         if local:
-            return Path(local) / "cadgen"
+            return Path(local) / CACHE
     else:
         xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
         if xdg:
-            return Path(xdg) / "cadgen"
-    return Path.home() / ".cache" / "cadgen"
+            return Path(xdg) / CACHE
+    return Path.home() / ".cache" / CACHE
 
 
 # --- the engine folder -----------------------------------------------------------------------------
 
 
 def engine_dir() -> Path:
-    """Where the engine's door and lock live: ``CADGEN_ENGINE_DIR``, else ``default_engine_dir``.
+    """Where the engine's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir``.
     Resolved once, here, for the client and the server alike (``os.path.realpath``): a ``..``, a
     symlink or a trailing slash in either spelling names the same door, lock and port file."""
-    override = os.environ.get("CADGEN_ENGINE_DIR")
+    override = os.environ.get("CAD_ENGINE_DIR")
     return Path(os.path.realpath(override if override else default_engine_dir()))
 
 
 def default_engine_dir() -> str:
-    """The engine's folder when ``CADGEN_ENGINE_DIR`` names none, in a place no other user can make
+    """The engine's folder when ``CAD_ENGINE_DIR`` names none, in a place no other user can make
     it first: ``$XDG_RUNTIME_DIR/cadgen-engine`` (Linux's per-session folder), else
     ``cadgen-engine`` in the user's temporary folder when it is this user's alone: on macOS the one
     the system names (``_darwin_temp``, ``/var/folders/...``), which a sandbox that sets its own
@@ -179,10 +234,10 @@ def folder_refusal(folder: Path) -> str | None:
         return f"the engine's folder {folder} is not a folder"
     if found.st_uid != os.getuid():
         return (f"the engine's folder {folder} belongs to another user (uid {found.st_uid}): "
-                "set CADGEN_ENGINE_DIR to a folder of your own")
+                "set CAD_ENGINE_DIR to a folder of your own")
     if found.st_mode & 0o022:
         return (f"the engine's folder {folder} can be written by others (mode {stat.S_IMODE(found.st_mode):o}): "
-                "run chmod go-w on it, or set CADGEN_ENGINE_DIR to a folder of your own")
+                "run chmod go-w on it, or set CAD_ENGINE_DIR to a folder of your own")
     return None
 
 
@@ -288,7 +343,7 @@ def home(prefix: str | None = None) -> dict[str, Any] | None:
 
 # The installation this process belongs to when it runs in the base that installation made (``home``):
 # ``{"executable", "prefix", "root", ...}``; None in the installation's own environment. A process there --
-# a model's script ``cadgen run`` runs, its worker -- goes by its installation's name (``registered``) and,
+# a model's script ``cad run`` runs, its worker -- goes by its installation's name (``registered``) and,
 # with no current installation (``engine``), starts the engine with its installation's Python
 # (``client._start``).
 HOME: dict[str, Any] | None = home()
@@ -353,7 +408,7 @@ def _home_prefix() -> str:
 
 def installation() -> str:
     """The version this installation runs as -- the one name its client, its daemon and its workers
-    all go by (``status``, its bytecode): ``CADGEN_INSTALLATION_VERSION`` when it names one (the
+    all go by (``status``, its bytecode): ``CAD_INSTALLATION_VERSION`` when it names one (the
     ``cadgen`` command sets it for a development install, which reports its release's version), else
     the version this environment is registered as (``registered``: a dev environment's
     ``python model.py`` run directly), else the release declared beside this code
@@ -497,4 +552,4 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     except Exception as error:  # noqa: BLE001 - the server's refusal, carried in one line
         from cad.engine.serve import KernelProcessesUnavailable
 
-        raise KernelProcessesUnavailable(f"cadgen has no CAD kernel environment: {error}") from error
+        raise KernelProcessesUnavailable(f"the server has no CAD kernel environment: {error}") from error

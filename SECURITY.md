@@ -10,7 +10,7 @@ Everything below runs as you, with your files.
 viewing and exporting. Its clients reach it through its door, a named pipe
 with a pair of pipes per connection, that only you can open (on Windows, a
 loopback port and a token in a file only you can read). The door lives in the
-engine's folder (`CADGEN_ENGINE_DIR`, by default
+engine's folder (`CAD_ENGINE_DIR`, by default
 `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
 the system's per-user one, else `$TMPDIR`),
 else `/tmp/cadgen-<uid>`). The client and the daemon refuse a folder that
@@ -22,21 +22,21 @@ engine), so the boundary is your user account, not the sandbox.
 **The CAD Viewer and the MCP endpoint.** The engine serves the CAD Viewer and
 the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless you name
 another; when another program holds it, the next free port, which your
-installation keeps and names in `cadgen status`). Every route needs one of three
+installation keeps and names in `cad status`). Every route needs one of three
 credentials, all made from one token:
 
 - **The token** is yours, not one engine's: made once, kept in a file only you
   can read in your state folder (`engines/token`), and served by every
   installation's engine at every start until you rotate it. No URL carries it,
-  and only `cadgen viewer --api-only --json` prints it, for the development
+  and only `cad viewer --api-only --json` prints it, for the development
   client's proxy. Your own clients read it through the engine's door and send
   it as a Bearer header.
 - **A link** is what every URL cadgen prints or opens carries (`cad_show`'s,
-  `cadgen viewer`'s, a build's `view:` line, the page it opens in your
+  `cad viewer`'s, a build's `view:` line, the page it opens in your
   browser): `?token=` with an expiry and the token's signature of it. It works
   for 24 hours. After that it opens the viewer only in a browser that holds a
   session; anywhere else its page says it has expired and to run
-  `cadgen viewer` for a new one.
+  `cad viewer` for a new one.
 - **The session cookie** is what a browser is given for a link: HttpOnly,
   SameSite=Strict, one name for every port of this host, holding the token's
   signature of its own expiry, never the token. It lasts 30 days from its last
@@ -44,8 +44,8 @@ credentials, all made from one token:
 
 An engine checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
-an upgrade. `cadgen server --rotate-token`, with every engine stopped
-(`cadgen stop`, with each version that runs one), replaces the token, and with
+an upgrade. `cad server --rotate-token`, with every engine stopped
+(`cad stop`, with each version that runs one), replaces the token, and with
 it every link and every session made before. Behind the credentials:
 
 - A Host check refuses DNS rebinding.
@@ -80,7 +80,7 @@ The page answers only messages from its host's window.
 written by someone else is untrusted input. The engine reads it in separate
 processes and bounds its work: assembly, node and block expansion, archive
 unpacking, and buffer reads. It fetches nothing a file names over the network.
-`cadgen sdf validate` runs `gz sdf --check` on a document that names a remote
+`cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 
 **The install command.** `curl -fsSL https://texttocad.dev/install.sh | sh` (on

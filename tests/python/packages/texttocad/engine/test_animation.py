@@ -7,7 +7,7 @@ its STEP keys the bake's own.
 
 The two GLBs the core suite plays and validates (``packages/core/src/lib/render/fixtures``:
 ``animation.glb``, ``motion.glb``) are this module's ``CHANNELS`` and ``MOTION`` baked; a test
-holds them to what the baker writes now. ``CADGEN_WRITE_FIXTURES=1`` writes them afresh."""
+holds them to what the baker writes now. ``CAD_WRITE_FIXTURES=1`` writes them afresh."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ FIXTURES = REPO_ROOT / "packages/core/src/lib/render/fixtures"
 CHANNELS = '''
 import math
 import build123d as bd
-from cadgen import glb, xbf
+from cad import glb, xbf
 from cad.ap242 import mechanism_state
 from cad.gltf import animation
 
@@ -78,7 +78,7 @@ def channels():
 # The same box with a motion alone: an AP242 configuration sequence, which every GLB of it carries.
 MOTION = '''
 import build123d as bd
-from cadgen import glb, xbf
+from cad import glb, xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
@@ -103,7 +103,7 @@ def motion_box():
 # explode, a stagger and a hide. What the GLB's keys are held to (``export/keys.py``).
 FIDELITY = '''
 import build123d as bd
-from cadgen import glb, xbf
+from cad import glb, xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 from cad.gltf import animation
 
@@ -385,7 +385,7 @@ class GlbTest(_Folder):
 
         source = """
             import build123d as bd
-            from cadgen import glb, xbf
+            from cad import glb, xbf
             from cad.gltf import animation
 
 
@@ -483,7 +483,7 @@ class GlbTest(_Folder):
         point at one sampler, written once, and each still plays its part's motion."""
         self.build("""
             import build123d as bd
-            from cadgen import glb
+            from cad import glb
             from cad.gltf import animation
 
 
@@ -604,7 +604,7 @@ class GlbTest(_Folder):
         self.assertEqual(sorted(document.Loaded(self.folder / "XBF/motion.xbf").animations), ["drop"])
         self.build(f"""
             import build123d as bd
-            from cadgen import glb, read_xbf
+            from cad import glb, read_xbf
             from cad.gltf import animation
 
 
@@ -631,7 +631,7 @@ class FixturesTest(_Folder):
             with self.subTest(fixture=fixture):
                 self.build(source, name, stem=name)
                 made = self.folder / glb
-                if os.environ.get("CADGEN_WRITE_FIXTURES") == "1":
+                if os.environ.get("CAD_WRITE_FIXTURES") == "1":
                     shutil.copyfile(made, FIXTURES / fixture)
                 ours, read_ours = _glb(made)
                 theirs, read_theirs = _glb(FIXTURES / fixture)

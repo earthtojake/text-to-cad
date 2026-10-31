@@ -25,7 +25,7 @@ from cad_server.engine.registry import Folder, Registry
 from tests.python.support import engine_daemon
 
 SCRIPT = '''import build123d as bd
-from cadgen import model
+from cad import model
 @model{options}
 def part():
     return bd.Box(2, 3, 4)
@@ -64,7 +64,7 @@ class ClaimTest(Fixture):
         with self.assertRaises(ValueError) as refused:
             claimed(self.registry, {"script": str(two), "name": "first", "line": 4}, "arm")
         self.assertIn(f"claimed by {one}:5 and {two}:4", str(refused.exception))
-        self.assertIn("or once one.py no longer declares it, run `cadgen run one.py`", str(refused.exception))
+        self.assertIn("or once one.py no longer declares it, run `cad run one.py`", str(refused.exception))
         claimed(self.registry, {"script": str(self.folder / "other" / "two.py"), "name": "first", "line": 4},
                 "arm")  # another folder is another namespace
         self.assertEqual(released(self.registry, two, ["arm"]), [], "only its own script gives a name up")
@@ -221,11 +221,11 @@ class ReattachmentDaemonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, True)
         engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
         self.addCleanup(shutil.rmtree, engine, True)
-        self.env = {**os.environ, "CADGEN_ENGINE_DIR": engine, "CADGEN_STATE_DIR": str(self.folder / "state"),
-                    "CADGEN_CACHE_DIR": str(self.folder / "cache"), "CADGEN_LAUNCHER_DIR": str(self.folder / "bin"),
-                    "CADGEN_ENGINE_PORT": "0", "CADGEN_ENGINE_STANDBY": "0", "DO_NOT_TRACK": "1"}
+        self.env = {**os.environ, "CAD_ENGINE_DIR": engine, "CAD_STATE_DIR": str(self.folder / "state"),
+                    "CAD_CACHE_DIR": str(self.folder / "cache"), "CAD_LAUNCHER_DIR": str(self.folder / "bin"),
+                    "CAD_ENGINE_PORT": "0", "CAD_ENGINE_STANDBY": "0", "DO_NOT_TRACK": "1"}
         self.addCleanup(self.stop)
-        self.registry = Registry(self.env["CADGEN_STATE_DIR"], self.env["CADGEN_CACHE_DIR"])
+        self.registry = Registry(self.env["CAD_STATE_DIR"], self.env["CAD_CACHE_DIR"])
 
     def stop(self):
         engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=self.env)

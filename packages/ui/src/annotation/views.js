@@ -3,7 +3,7 @@
  * `display.mode` and `display.grid`, `display.clip` and `display.exploded`, `display.hidden` and
  * `display.isolated`, `kinematics` or `jointValues`, `animation`, `selection.hide` and
  * `selection.focus`, and the picture's `width` and `height`), so the prompt's views file is a job
- * `cadgen snapshot --annotation PACKET --camera authored` draws as it was.
+ * `cad snapshot --annotation PACKET --camera authored` draws as it was.
  *
  * @typedef {{
  *   camera: { position: number[], target: number[], up: number[], orthographicHalfHeight: number },
@@ -27,7 +27,7 @@ const filled = value => Boolean(value) && typeof value === "object" && Object.ke
  * parts or hides them — Clip when it is on, the one motion on screen (Explode, the pose, or a
  * routine's kept frame: `{clip, time}`), the parts hidden and isolated. A renderer whose parts are
  * named by refs (an engine document's: as Copy Prompt copies them) gives them as `hidden` and
- * `isolated`, which the view's display says as `cadgen snapshot --display` takes them; one whose
+ * `isolated`, which the view's display says as `cad snapshot --display` takes them; one whose
  * parts are not gives `hide` and `focus`, its `selection`.
  *
  * @param {{ camera: PromptView["camera"], display?: PromptView["display"], width: number, height: number } | null} viewport

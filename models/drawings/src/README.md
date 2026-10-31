@@ -22,7 +22,7 @@ Build from this folder, any one, then write every DXF (`../DXF/`, gitignored):
 python gasket_plate.py
 python cabinet_panel_drawing.py
 python exports.py
-cadgen snapshot ../DXF/cabinet_panel_drawing.dxf cabinet.png
+cad snapshot ../DXF/cabinet_panel_drawing.dxf cabinet.png
 ```
 
 Each bend fixture is there for a case:

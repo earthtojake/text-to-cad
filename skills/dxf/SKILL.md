@@ -12,13 +12,13 @@ repository link is only for provenance and release review.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
+Run the server through the `cad` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+- `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.8.4 run`
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
+For first-time setup or an update, a missing `cad` command, a release it says is not
 installed, an engine that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
@@ -36,20 +36,20 @@ that returns planar geometry.
 **A drawing is a model.** It builds as any `$cad` model does: `python <name>.py`
 rebuilds it in the engine, prints its document's `id:` and page, and writes nothing.
 The DXF is exported from that document, by build123d's own exporter, once the drawing
-checks pass: `cadgen export <id> drawing.dxf`. A drawing that calls a part model
+checks pass: `cad export <id> drawing.dxf`. A drawing that calls a part model
 (`bracket()` in its body) builds that part in the same run. The CAD Viewer and
-`cadgen snapshot` read the `.dxf` itself, so the file you hand a cutting service,
+`cad snapshot` read the `.dxf` itself, so the file you hand a cutting service,
 the file the viewer draws and the file a snapshot renders are one and the same.
 
 ## The contract
 
 **A drawing is a `@model` function that takes no parameters and returns build123d 2D
-geometry on z=0: a sketch, a face, wires or edges. `cadgen export` writes the DXF.**
+geometry on z=0: a sketch, a face, wires or edges. `cad export` writes the DXF.**
 You never construct a document, name an entity, or write a file from the model.
 
 ```python
 import build123d as bd
-from cadgen import model
+from cad import model
 
 HOLE_D = 4.5
 
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
 ```bash
 python src/gasket.py                       # prints id: and view:
-cadgen export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
+cad export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
 ```
 
 - **One shape** is one layer, `CUT`. That is the whole contract for most drawings.
@@ -101,7 +101,7 @@ cadgen export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
   # src/exports.py
   from pathlib import Path
 
-  from cadgen import export
+  from cad import export
 
   from gasket import gasket
 
@@ -126,7 +126,7 @@ Copy the full template for the applicable workflow from
    part in the same run and returns its geometry.
 
    ```python
-   from cadgen import flatten, model
+   from cad import flatten, model
 
    from bracket import bracket        # the model: importing builds nothing
 
@@ -146,14 +146,14 @@ Copy the full template for the applicable workflow from
    part's body does not reach (a comment, another model) re-runs nothing.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
-   read it with `read_step`, or convert it once (`cadgen export vendor_panel.step
+   read it with `read_step`, or convert it once (`cad export vendor_panel.step
    vendor_panel.xbf`) and read the xbf with `read_xbf`, which is faster. Like every
    file a run reads, it is an input: replacing the vendor file re-runs the drawing.
 
    ```python
    from pathlib import Path
 
-   from cadgen import flatten, model, read_step
+   from cad import flatten, model, read_step
 
    HERE = Path(__file__).resolve().parent
 
@@ -217,15 +217,15 @@ Use these defaults unless the user specifies otherwise:
 
 ```bash
 python path/to/drawing.py                                   # builds every model its __main__ calls
-cadgen export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
-cadgen snapshot path/to/drawing.dxf review.png              # draws it
-cadgen snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
+cad export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
+cad snapshot path/to/drawing.dxf review.png              # draws it
+cad snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
 ```
 
 **Running the script is the only way to build a drawing, and exporting it the only
 way to write its DXF.** `python <drawing>.py` takes no options and writes nothing; it
 prints each model's report (`built src/gasket.py::gasket cold in 2.29s: ...`), its
-`id:` and its page, and exits 1 when a body raises. `cadgen export` exits 2 when the
+`id:` and its page, and exits 1 when a body raises. `cad export` exits 2 when the
 export refuses the drawing (3D, off the plane, a failed drawing check), naming which.
 An imported `.dxf` needs nothing at all: hand it straight to a snapshot or the viewer.
 
@@ -233,7 +233,7 @@ Paths on the command line, and those `export` takes from Python, resolve from th
 working directory; anchor them on `__file__` in an `exports.py`. Keep a drawing
 script in the same directory as the geometry it derives from, named `<name>.py`.
 
-`cadgen snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole,
+`cad snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole,
 from above, fitted with a margin, in the pens the file declares (an entity with no
 pen of its own takes the paper's ink), on light paper or, with
 `--display '{"appearance": "dark"}'`, dark. `--size-profile`, `--width` and
@@ -251,8 +251,8 @@ are in drawing coordinates, on the sheet. Draw what the person saw, each window 
 their ink and dimensions on it, before editing:
 
 ```bash
-cadgen snapshot --job tmp/panel.snapshot.json                     # every view, into the paths its jobs name
-cadgen snapshot panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
+cad snapshot --job tmp/panel.snapshot.json                     # every view, into the paths its jobs name
+cad snapshot panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
 ```
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
@@ -268,7 +268,7 @@ checks; review geometry visually (see [Show the model](#show-the-model)).
 
 ```bash
 python path/to/source.py
-cadgen export "$ID" path/to/drawing.dxf
+cad export "$ID" path/to/drawing.dxf
 ```
 
 5. Validate the exported DXF deterministically, then hand off and report.
@@ -278,7 +278,7 @@ cadgen export "$ID" path/to/drawing.dxf
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cadgen snapshot`.
+own work; review with `cad snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.
@@ -294,7 +294,7 @@ own work; review with `cadgen snapshot`.
   run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cadgen viewer --json FILE [FILE ...]
+  cad viewer --json FILE [FILE ...]
   ```
 
   The command ensures this installation's engine, registers each file and prints

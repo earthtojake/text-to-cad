@@ -15,7 +15,7 @@ responses but not others. The header set on the wire is part of the contract:
   Their absence is what makes the same-origin policy block cross-origin reads
   and what makes the POST preflight fail. Do not add them.
 
-A response can be given a GET's ``Range`` (``byte_range``; ``cadgen mcp``'s
+A response can be given a GET's ``Range`` (``byte_range``; ``cad-mcp``'s
 tunnel gives it one, to carry a long body in parts). Every writer of a 200
 answers ``bytes=<first>-<last>`` inside the body with ``206``, that part,
 ``content-range: bytes <first>-<last>/<length>`` and an ``etag`` naming the

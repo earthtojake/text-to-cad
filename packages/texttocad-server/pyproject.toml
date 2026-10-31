@@ -43,7 +43,7 @@ Repository = "https://github.com/earthtojake/text-to-cad"
 Issues = "https://github.com/earthtojake/text-to-cad/issues"
 
 [project.scripts]
-cadgen = "cad_server.cli:main"
+cad = "cad_server.cli:main"
 
 [tool.pyrefly]
 preset = "basic"
@@ -59,7 +59,7 @@ include = ["cad_server", "cad_server.*"]
 
 [tool.setuptools.package-data]
 # _runtime holds what the server serves that is not Python: the CAD Viewer's built client that
-# `cadgen viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage
+# `cad viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage
 # (no __init__), and it is found at call time by cad_server.assets. Verified by
 # scripts/release/check-wheel-contents.sh.
 cad_server = ["py.typed", "_runtime/**/*"]

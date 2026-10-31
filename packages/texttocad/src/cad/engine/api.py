@@ -441,7 +441,7 @@ def _source(source: Any) -> dict[str, Any]:
     path = Path(text).resolve()
     if path.suffix.lower() not in SOURCES + MESHES:
         # A script is the commonest such source: its run makes the document, and prints its id.
-        run = (f"; run `cadgen run {text}` first, then export its document by id"
+        run = (f"; run `cad run {text}` first, then export its document by id"
                if path.suffix.lower() == ".py" else "")
         raise ExportRefused(f"{path.name} is no document: an export reads an .xbf, a .step, a mesh "
                             f"({', '.join(MESHES)}) or a document id{run}")
@@ -462,7 +462,7 @@ def export(source: Any, *destinations: Any,
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
     carries every configuration sequence the document defines, as a clip. A call the program's own
-    code makes (``python exports.py``) says each file, as ``cadgen export`` does. Where the export is
+    code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
     terminal and nowhere when it is not, ``False`` nowhere, a callable each frame."""
@@ -568,7 +568,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
     was (``snapshot.write_png``).
 
-    ``job`` in place of ``out`` is every picture a job names (``cadgen snapshot --job``), a list of
+    ``job`` in place of ``out`` is every picture a job names (``cad snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
     object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
     and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
@@ -705,7 +705,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cadgen inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -827,9 +827,9 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if not path.is_file():
         raise ValueError(f"no document {named}")
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
-        said = (f"`cadgen inspect {path.name}` alone tells its nodes, meshes and animations, and "
-                f"`cadgen viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
-                f"inspect reads nothing more of it: `cadgen viewer {path.name}` shows it, and the document it was "
+        said = (f"`cad inspect {path.name}` alone tells its nodes, meshes and animations, and "
+                f"`cad viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
+                f"inspect reads nothing more of it: `cad viewer {path.name}` shows it, and the document it was "
                 "exported from, inspected, tells the rest")
         raise ValueError(f"{path.name} is a mesh: it has no B-rep for a ref to name and no build closure (only an "
                          f".xbf carries one); {said}")
@@ -878,7 +878,7 @@ def _no_closure(path: Path) -> str:
     """Why a STEP holds no build closure: the format carries none (an xbf does, law 1), whoever wrote
     it -- cadgen's own export among them -- and what to inspect instead."""
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file (cadgen inspect {path.name} REF)")
+            f"document by its id for its closure, or name a ref in the file (cad inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -906,7 +906,7 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cadgen inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad inspect DOC``): its name and id; its
     state -- a model's (``live``, ``held``, ...: ``ModelDocuments.state``), where the engine holds
     it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the

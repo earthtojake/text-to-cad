@@ -1,8 +1,8 @@
 """The public ``sdf`` namespace: the verbs that operate on SDFormat documents.
 
 No decorator, for the reason :mod:`cad.urdf` gives: a world or model
-description is authored, not generated. ``cadgen sdf validate`` is a generated
-MIRROR of :func:`validate`; ``cadgen snapshot`` draws one
+description is authored, not generated. ``cad sdf validate`` is a generated
+MIRROR of :func:`validate`; ``cad snapshot`` draws one
 (``cad.engine.snapshot``).
 """
 

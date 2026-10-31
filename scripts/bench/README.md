@@ -63,7 +63,7 @@ The batch never stops another batch's engine or clears its cache. Steps are:
 - `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
   (`POST /api/doc/<id>/mesh`), mesh again after dropping those meshes on the now-warm
   pool, then read the page's structure. No file is substituted for the model document;
-- `snapshot-first`, `snapshot`: draw that document id twice with `cadgen snapshot --json`.
+- `snapshot-first`, `snapshot`: draw that document id twice with `cad snapshot --json`.
 
 The small measurement driver runs the target with Python's `runpy` and records reports
 returned by `api.build_script` when the script's explicit model calls reach it. It
@@ -91,8 +91,8 @@ PYTHONPATH=packages/texttocad/src .venv/bin/python scripts/bench/occt_parity.py 
 display modes. Each `--doc NAME=PATH` (an `.xbf`, built first) is drawn in Solid,
 Shaded, Parts, X-ray, Hidden line and Wireframe at iso and front (`--modes`,
 `--cameras`, `--size`) twice, both from the engine daemon's meshes
-(`CADGEN_ENGINE_DIR` picks the daemon): by OCCT, whose look is the reference
-(`cad/engine/render/look.py`) and which `cadgen snapshot` draws with; and by the
+(`CAD_ENGINE_DIR` picks the daemon): by OCCT, whose look is the reference
+(`cad/engine/render/look.py`) and which `cad snapshot` draws with; and by the
 viewer's own scene code, `@text-to-cad/core`'s headless renderer, which the bench
 builds at the start of each run (`scripts/bundle/lib/snapshot_runtime.sh`, into the
 ignored `tmp/bench/snapshot-page`; the wheel does not carry it), then loads in a

@@ -29,7 +29,7 @@ class SdfSourceTests(unittest.TestCase):
         return sdf_path
 
     def _parse(self, path: Path) -> SdfSource:
-        """The file at ``path`` parsed as ``cadgen sdf validate`` parses it."""
+        """The file at ``path`` parsed as ``cad sdf validate`` parses it."""
         return parse_sdf_xml(path.read_text(encoding="utf-8"), source_path=path, base_dir=path.parent)
 
     def test_accepts_minimal_model(self) -> None:

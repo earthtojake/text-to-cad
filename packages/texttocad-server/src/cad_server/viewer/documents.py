@@ -28,7 +28,7 @@ def engine_document_path(file_ref):
         return file_ref
     path = absolute_path(file_ref)
     if os.path.splitext(path)[1].lower() not in ENGINE_DOCUMENTS:
-        raise ValueError(f"{node_basename(path)} is not a document the cadgen engine reads (.xbf, .step, .stp)")
+        raise ValueError(f"{node_basename(path)} is not a document the engine reads (.xbf, .step, .stp)")
     if not os.path.isfile(path):
         raise ValueError(f"no document {path}")
     return path

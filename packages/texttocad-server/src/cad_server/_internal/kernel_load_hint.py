@@ -12,7 +12,7 @@ Nothing in that message says who refused the load, and the only record is
 Event ID 3077 in the CodeIntegrity operational log. An agent that sees the
 ImportError reinstalls, retries and gives up; a user who does find the event
 still has to learn that Smart App Control has no per-app exception. So the
-CLI failure reporter and ``cadgen doctor`` say all of that in the place the
+CLI failure reporter and ``cad doctor`` say all of that in the place the
 failure is read.
 
 ``kernel_load_hint`` is deliberately narrow: a Windows ``ImportError`` whose
@@ -67,7 +67,7 @@ def kernel_load_hint(
     a refused kernel load on Windows.
 
     ``failure`` is the exception a command caught, or the last line of a
-    subprocess's stderr (``cadgen doctor`` probes the kernel in a fresh
+    subprocess's stderr (``cad doctor`` probes the kernel in a fresh
     interpreter, so it only has the text). ``platform`` defaults to the running
     one; tests pass ``"win32"`` from any host.
     """

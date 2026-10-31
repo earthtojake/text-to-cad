@@ -22,9 +22,9 @@ It is a short script, served by texttocad.dev and attached to each
 checksum. It:
 
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
-2. Runs `cadgen setup` from the latest release, pinned, through uvx; for this
+2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen setup`.
+   `uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in cadgen's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -33,16 +33,16 @@ checksum. It:
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
 5. Stops the engine of a cadgen from before 0.9 on CAD's port (3245, or
-   `CADGEN_ENGINE_PORT`) when nothing is using it, through that installation's own
-   `cadgen stop`. One still in use (an app session open on it, a page watching it, a
+   `CAD_ENGINE_PORT`) when nothing is using it, through that installation's own
+   `cad stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
 6. Installs or updates text-to-cad in each app with the app's own commands, the
    ones below, and removes duplicate copies. A copy that a plugin store manages is
    reported, never removed. The agents without a plugin get the skills alone, through
    the Skills CLI ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's
    server for this release, with a `.bak` of the file kept beside it.
-7. Registers the release and writes the `cadgen` command (`~/.local/bin/cadgen`; on
-   Windows `%USERPROFILE%\.local\bin\cadgen.cmd`), as the CAD server does when it
+7. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
+   Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
    starts.
 8. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
    build123d and what they need, about 220 MB the first time) on the same Python,
@@ -70,13 +70,13 @@ curl -fsSL https://texttocad.dev/install.sh | sh -s -- --uninstall          # un
 
 `--only` takes `claude`, `claude-desktop`, `codex`, `cursor`, `grok` and `gemini`, and
 the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsurf`,
-`goose` and so on; `cadgen setup --help` lists them).
-`--uninstall` runs `cadgen uninstall` in place of `cadgen setup`: it takes back what
+`goose` and so on; `cad setup --help` lists them).
+`--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
 the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
-store's, removes the `cadgen` command and stops the engine; `--purge` with it also
+store's, removes the `cad` command and stops the engine; `--purge` with it also
 removes cadgen's state and cache folders. `--version <release>` installs that release
 instead of the latest; a release from before the install command has no
-`cadgen setup` to run. To read the script before it runs, download it first, then
+`cad setup` to run. To read the script before it runs, download it first, then
 run it:
 
 ```bash
@@ -99,7 +99,7 @@ with the same options.
    connection.
 
 The plugin for your agent app brings the skills and CAD's viewer, a local server
-(`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
+(`cad-mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
 The runtime supports Python 3.14+; the launch commands use uv-managed Python 3.14.
@@ -160,8 +160,8 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cadgen==0.8.4", "cadgen", "mcp"],
-      "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "texttocad-mcp==0.8.4", "cad-mcp"],
+      "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
 }
@@ -334,7 +334,7 @@ page or the card reloads itself once the engine is back. An app that shows CAD's
 replies as text gets a line with its first reply instead, naming the install
 command. Nothing updates until you ask.
 
-Running the install command again does the same, and so does `cadgen update` in a
+Running the install command again does the same, and so does `cad update` in a
 terminal: each installs the newest release, updates every app, moves the engine to
 it and lists the apps to restart. To update one app by hand, run the update
 commands under its heading, then restart it.
@@ -344,7 +344,7 @@ app's plugin names: an app whose plugin is behind or ahead uses that engine all 
 same. An app runs its updated plugin from the session it starts after the update.
 Each release is kept in a folder of its own in cadgen's state folder
 (`releases/<release>`): the one before the current stays, to go back to should the
-new one not start, and older ones go at the next update. `cadgen doctor` says
+new one not start, and older ones go at the next update. `cad doctor` says
 which releases are there, which one is current, the release the engine runs, and
 each app's plugin's.
 
@@ -356,7 +356,7 @@ engine to it.
 To find out a release is out, cadgen fetches `api.texttocad.dev/v1/versions` at
 most once a day: one anonymous request, with no ID, path or anything about you,
 never in CI and never for a copy that something else updates.
-`CADGEN_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
+`CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
 release says so too, with no request at all. A click on the button reads the feed
 again, for the newest release.
 
@@ -371,7 +371,7 @@ step, and an agent with the CAD skill can follow it.
 ## What a model runs in
 
 The release the install command runs, and each app's CAD server, is cadgen's core:
-the engine, the `cadgen` command, the CAD Viewer's server and CAD's MCP server,
+the engine, the `cad` command, the CAD Viewer's server and CAD's MCP server,
 without the CAD kernel. A model runs where the kernel is: in one environment cadgen
 makes with uv in its cache folder and keeps, the release with its kernel
 (`cadgen[kernel]`) on the engine's Python, 3.14. Every model runs there, and so do
@@ -392,7 +392,7 @@ native module. Windows 11's Smart App Control blocks unsigned native code, so
 on a machine where it is on (the default on a fresh install) every `cadgen`
 command and `import build123d` fails with
 `ImportError: DLL load failed while importing OCP`, and Event Viewer records
-the refusal as Event ID 3077 under CodeIntegrity › Operational. `cadgen doctor`
+the refusal as Event ID 3077 under CodeIntegrity › Operational. `cad doctor`
 names this when it sees it.
 
 Smart App Control has no per-app exception. Either turn it off (Settings ›

@@ -1,6 +1,6 @@
 """The public ``srdf`` namespace: the verbs that operate on MoveIt2 SRDFs.
 
-No decorator, for the reason :mod:`cad.urdf` gives. ``cadgen srdf validate``
+No decorator, for the reason :mod:`cad.urdf` gives. ``cad srdf validate``
 is a generated MIRROR of :func:`validate`.
 
 An SRDF is only meaningful against its URDF, and that context is resolved rather

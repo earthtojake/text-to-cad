@@ -4,7 +4,7 @@ and the files they declare.
 The root exports exactly the engine's surface -- ``model``, the decorators (``xbf``, ``step``,
 ``glb``, ``stl``, ``threemf``, ``dxf``), ``memo``, face painting (``paint``), the readers (``read_step``, ``read_xbf``, ``read_mesh``) -- its operations on
 documents as functions (``export``, ``snapshot``, ``inspect``) and ``__version__``; process
-control (``cadgen serve``, ``status``, ``stop``, ``server``) is the ``cadgen`` command's alone. Two
+control (``cad serve``, ``status``, ``stop``, ``server``) is the ``cadgen`` command's alone. Two
 namespaces hold the standards' names: ``cad.ap242`` the mechanism's (``mechanism_state``,
 ``configuration_sequence``, ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``, ``posed``) and
 ``cad.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cadgen``
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING as _TYPE_CHECKING
 
 # Before anything imports build123d, which every cadgen entry point eventually does:
 # build123d parses EVERY font in the system font folders at import time, with no
-# per-file guard, so one malformed file aborts the import and every cadgen command
+# per-file guard, so one malformed file aborts the import and every cad command
 # with it (issue #322, upstream in build123d's register_folder), as does a font with
 # no family name, whose empty name OCCT refuses (#636). This hides the fonts build123d
 # cannot register from that one listing.
@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING as _TYPE_CHECKING
 # warm workers and `python -m cadgen.X` children all reach cadgen by different routes, and a
 # fix that covered only one of them would leave the builds it spawns still broken.
 #
-# Cost where nothing is wrong: one str.endswith per glob call. CADGEN_FONT_GUARD=0
+# Cost where nothing is wrong: one str.endswith per glob call. CAD_FONT_GUARD=0
 # opts out.
 from cad._internal.font_scan import install_font_guard as _install_font_guard
 from cad._internal.lazy_kernel import install as _install_lazy_kernel

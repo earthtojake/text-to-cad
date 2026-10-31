@@ -2,7 +2,7 @@
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
-The built client ships inside the same wheel. `cadgen viewer [FILE ...]` opens the
+The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
 engine's one page and exits. The page addresses every document by path, `/<uuid>`: a
 model's id, or a file's id once a launcher (or the page itself) registers it, derived from
 the file's canonical path. `/` is the home: the library alone, the documents opened or built
@@ -94,33 +94,33 @@ to the page (dev refuses a `VIEWER_` variable named like a token), and the dev s
 no CORS headers, so no other origin reads what its token-bearing proxy answers. Build shared packages first; Vite needs no web
 production build.
 
-Prod is `cadgen viewer`, run from anywhere. It serves the client bundled by
+Prod is `cad viewer`, run from anywhere. It serves the client bundled by
 `scripts/bundle/bundle.sh` or installed in the wheel. To explicitly select this
 checkout's web build, start from the repository root:
 
 ```bash
 npm run build:web
-export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
-cadgen viewer --host 127.0.0.1 --json [FILE ...]
+export CAD_VIEWER_DIST="$PWD/apps/web/dist"
+cad viewer --host 127.0.0.1 --json [FILE ...]
 ```
 
 The launcher ensures this installation's engine and its one page, registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
 record without opening a browser; `--no-open` prints only the URL. There is no
-foreground viewer server and no `--detach` or `viewer stop`. `cadgen stop` stops
+foreground viewer server and no `--detach` or `viewer stop`. `cad stop` stops
 the installation's engine and all its clients; never stop an engine you did not start.
 
-`cadgen serve DOC` also starts or reuses this engine, prints the document URL and
+`cad serve DOC` also starts or reuses this engine, prints the document URL and
 exits. It has no `--foreground` or standalone server mode.
 
 The engine binds loopback on 3245, or, when another program holds it, the next free
-port, which the installation keeps (`cadgen status` says which and why). `--port N`
+port, which the installation keeps (`cad status` says which and why). `--port N`
 pins its HTTP port and `--host ADDRESS` pins its bind address. If the running engine has a different
 port or address, the launch fails with that conflict; it never replaces a server
 or starts a second engine. A taken port that `--port` names fails, naming its holder. There are no page sessions: every launch
 reuses the one page, and its folder replaces the last launch's as the one its relative files are read from.
-`--dist DIR` (or `CADGEN_VIEWER_DIST`) selects a built client.
+`--dist DIR` (or `CAD_VIEWER_DIST`) selects a built client.
 
 The JSON record includes `url`, `apiUrl`, `token`, `port`, `pid`, `start` (the folder the home
 shows), `documents` (`{id, file, url}` for each FILE) and `action` (`started` or `reused`,
@@ -135,15 +135,15 @@ off loopback exposes these same authenticated routes; anyone with a link or the 
 local-file access. Keep the URL private. Vite remains on its own strict port, 5173.
 A refused page load is answered 403 with a static page of a few lines, no script and no asset: a
 link past its day says it has expired, any other (no link, a session 30 days unused, or a link or
-cookie from before `cadgen server --rotate-token`) that the page needs its link, and both say to
-run `cadgen viewer` and open the link it prints. A
+cookie from before `cad server --rotate-token`) that the page needs its link, and both say to
+run `cad viewer` and open the link it prints. A
 loaded page whose engine stops under it says the engine is not running, in the person's
 language, over the page until a read answers again. One whose engine runs and refuses its token
-(after `cadgen server --rotate-token`) says instead that its link was replaced, and to run `cadgen
+(after `cad server --rotate-token`) says instead that its link was replaced, and to run `cadgen
 viewer` and open the link it prints; it keeps asking, never reloads for the refusal, and heals
 once that link, opened beside it, has left the new cookie.
 
-A page closing never stops the engine, and no timer does: it runs until `cadgen stop`, or
+A page closing never stops the engine, and no timer does: it runs until `cad stop`, or
 until a newer installation's engine retires it while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
@@ -164,7 +164,7 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 - **Warm work survives navigation.** The app retains one client across navigation, so the
   caches keyed to its resources stay valid across file switches. The cadgen engine holds
   every document it served and each part's mesh under one memory budget (a quarter of the
-  machine's memory by default, `CADGEN_ENGINE_MEMORY_MB`), and the last STEP reads by their
+  machine's memory by default, `CAD_ENGINE_MEMORY_MB`), and the last STEP reads by their
   bytes: within it, reopening a document reads and meshes nothing again; past it the least
   recently used leave memory first and are read again when asked.
   Inactive WebGL scenes are released, and a file's view (its camera, Display
@@ -392,7 +392,7 @@ the update button at the right while a newer text-to-cad is out. The home is a s
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
-again, `cadgen run <the program that built it>` -- and Go home, titled for the state the engine
+again, `cad run <the program that built it>` -- and Go home, titled for the state the engine
 names: "This model is not saved" (`unsaved`) or "This model’s script is gone" (`detached`); a file
 that is not there shows "File does not exist".
 
@@ -418,7 +418,7 @@ user's state directory, shared with the CAD app.
 
 ### Usage stats (telemetry)
 
-cadgen's usage stats (`cad_server/analytics.py`) are on by default once a `cadgen` command has said
+cadgen's usage stats (`cad_server/analytics.py`) are on by default once a `cad` command has said
 so, once, in its output; nothing in the Viewer asks. **Telemetry** in the app menu turns
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),

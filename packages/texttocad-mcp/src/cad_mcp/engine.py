@@ -52,12 +52,12 @@ INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
 # Switches that govern only the process they are set in: the server serves every later client, so it
 # goes by the person's saved choice, never by the switch of whichever client happened to start it.
-PER_PROCESS = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
+PER_PROCESS = ("DO_NOT_TRACK", "CAD_TELEMETRY")
 # The sandboxes known to refuse the loopback port the server's HTTP listener needs, each by a variable and
 # the value it sets in the shells it runs: Codex's Seatbelt, in its default workspace-write mode.
 SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             "(the CAD plugin's server starts the engine) or run `cadgen server` outside the sandbox")
+             "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
 # How long a reader waits on a port file Windows refuses while it is renamed into place: the writer's ladder.
 RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 
@@ -66,25 +66,25 @@ RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 
 
 def state_dir() -> Path:
-    """Where this user's CAD state lives (``CADGEN_STATE_DIR`` overrides it)."""
-    override = os.environ.get("CADGEN_STATE_DIR")
+    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it)."""
+    override = os.environ.get("CAD_STATE_DIR")
     if override:
         return Path(override)
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "cadgen"
+        return Path.home() / "Library" / "Application Support" / "texttocad"
     if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "cadgen-state"
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "cadgen"
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "texttocad-state"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "texttocad"
 
 
 def engine_dir() -> Path:
-    """Where the server's door and lock live: ``CADGEN_ENGINE_DIR``, else ``default_engine_dir``."""
-    override = os.environ.get("CADGEN_ENGINE_DIR")
+    """Where the server's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir``."""
+    override = os.environ.get("CAD_ENGINE_DIR")
     return Path(os.path.realpath(override if override else default_engine_dir()))
 
 
 def default_engine_dir() -> str:
-    """The engine folder when ``CADGEN_ENGINE_DIR`` names none: ``$XDG_RUNTIME_DIR/cadgen-engine``, else
+    """The engine folder when ``CAD_ENGINE_DIR`` names none: ``$XDG_RUNTIME_DIR/cadgen-engine``, else
     ``cadgen-engine`` in the user's own temporary folder (on macOS the one the system names, whatever
     ``TMPDIR`` a sandbox sets), else ``/tmp/cadgen-<uid>``; on Windows ``cadgen-engine`` in the temporary
     folder."""
@@ -130,10 +130,10 @@ def folder_refusal(folder: Path) -> str | None:
         return f"the engine's folder {folder} is not a folder"
     if found.st_uid != os.getuid():
         return (f"the engine's folder {folder} belongs to another user (uid {found.st_uid}): "
-                "set CADGEN_ENGINE_DIR to a folder of your own")
+                "set CAD_ENGINE_DIR to a folder of your own")
     if found.st_mode & 0o022:
         return (f"the engine's folder {folder} can be written by others (mode {stat.S_IMODE(found.st_mode):o}): "
-                "run chmod go-w on it, or set CADGEN_ENGINE_DIR to a folder of your own")
+                "run chmod go-w on it, or set CAD_ENGINE_DIR to a folder of your own")
     return None
 
 
@@ -374,7 +374,7 @@ def _port_text(path: Path) -> str:
 
 
 def _denied(cause: str) -> ConnectionError:
-    return ConnectionError(f"the system denies cadgen's local engine ({cause}); a sandbox that forbids "
+    return ConnectionError(f"the system denies text-to-cad's local engine ({cause}); a sandbox that forbids "
                            "it does: run this command outside it, or with the sandbox's permission")
 
 

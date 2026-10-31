@@ -5,7 +5,7 @@ engine does, case for case.
 the refs it copies and the ones pasted back to it) and a second speller of canonical refs (what Copy
 Prompt writes). The ``refCases`` and ``spellingCases`` of its ``cadRefs.parity.json`` are asserted
 there against those, and here against ``refs.parse`` and ``refs.resolve_structure`` -- the
-resolution ``cadgen inspect`` runs on the structure it serves -- so the two cannot drift.
+resolution ``cad inspect`` runs on the structure it serves -- so the two cannot drift.
 """
 
 from __future__ import annotations

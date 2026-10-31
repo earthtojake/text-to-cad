@@ -149,8 +149,8 @@ class MemoCase(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        os.environ.pop("CADGEN_ENGINE_BODIES", None)
-        os.environ.pop("CADGEN_ENGINE_MEMO", None)
+        os.environ.pop("CAD_ENGINE_BODIES", None)
+        os.environ.pop("CAD_ENGINE_MEMO", None)
         self.folder = Path(tempfile.mkdtemp(prefix="engine-memo-marker-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.write("shared.py", SHARED.format(width=10))
@@ -436,7 +436,7 @@ class MemoNamesTest(MemoCase):
         self.assertEqual(self.measured(plain), replayed)
 
     def measured(self, names: dict) -> list:
-        """What `cadgen inspect` measures of each named face of stage two, by its ref."""
+        """What `cad inspect` measures of each named face of stage two, by its ref."""
         from cad.engine import api
 
         xbf = self.folder / "XBF" / "staged.xbf"

@@ -10,7 +10,7 @@ set -euo pipefail
 #            and the shim's (92% of the time)
 #   viewer   the CAD Viewer backend alone (tests/python/packages/texttocad_server/viewer)
 #   skills   every skill's suite
-#   all      cadgen + skills (the default)
+#   all      cad + skills (the default)
 #
 # --print-weights prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file on
 # stdout: the first thing to read when a run is slow.

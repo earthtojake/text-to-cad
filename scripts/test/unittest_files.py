@@ -18,10 +18,10 @@ which `-m unittest` would run silently.
 when a run is slow.
 
 Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
-directory of its own (``CADGEN_ENGINE_DIR``): a build it asks for without naming one runs on
+directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
 an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
-running there is stopped once it ends (``stop_engine``). Its ``CADGEN_CACHE_DIR``,
-``CADGEN_STATE_DIR`` and ``CADGEN_LAUNCHER_DIR`` are folders of its own that do not exist yet, so
+running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
+``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own that do not exist yet, so
 nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
 installations or their ``cadgen`` command; a record that this run's cadgen writes in the
 developer's own state folder anyway, or that command written, fails the run, named with the test
@@ -55,7 +55,7 @@ import unittest
 # hang runs out the CI job's timeout and says nothing about where it is.
 FILE_HANG_SECONDS = 15 * 60
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
-# timer, so one a killed run leaves behind runs until it is stopped (``cadgen stop`` with its
+# timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
 
 # Stopping a file's daemon waits for its workers to exit.
@@ -237,7 +237,7 @@ def stop_engine(top: str, engine_dir: str) -> None:
         return
     if not any(name.endswith((".door", ".port")) for name in names):
         return
-    env = {**os.environ, "CADGEN_ENGINE_DIR": engine_dir, "PYTHONPATH": _source_path(top)}
+    env = {**os.environ, "CAD_ENGINE_DIR": engine_dir, "PYTHONPATH": _source_path(top)}
     stopped = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import api; api.stop()"],
                              env=env, capture_output=True, text=True, timeout=ENGINE_STOP_SECONDS)
     if stopped.returncode:
@@ -246,7 +246,7 @@ def stop_engine(top: str, engine_dir: str) -> None:
 
 def _engine_python(top: str, code: str, **env: str) -> subprocess.CompletedProcess:
     """``code`` run against this checkout's packages, the environment as this run's but ``env``."""
-    given = {key: value for key, value in os.environ.items() if key != "CADGEN_ENGINE_DIR"}
+    given = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_DIR"}
     given["PYTHONPATH"] = _source_path(top)
     return subprocess.run([sys.executable, "-P", "-c", code], env={**given, **env}, capture_output=True, text=True,
                           timeout=ENGINE_STOP_SECONDS)
@@ -267,7 +267,7 @@ def engine_answers(top: str, door: str) -> bool:
         return False
     found = _engine_python(top, "from cad.engine.client import request; "
                                 "print('yes' if request({'op': 'pid'}, start=False) else 'no')",
-                           CADGEN_ENGINE_DIR=os.path.dirname(door))
+                           CAD_ENGINE_DIR=os.path.dirname(door))
     return found.stdout.strip() == "yes"
 
 
@@ -282,8 +282,8 @@ _PERSON_PLACES = (
     "from cad.engine import places as engine\n"
     "from cad_server.viewer.recents import state_dir\n"
     "places = [(str(state_dir()), proxy_path())]\n"
-    "os.environ.pop('CADGEN_STATE_DIR', None)\n"
-    "os.environ.pop('CADGEN_LAUNCHER_DIR', None)\n"
+    "os.environ.pop('CAD_STATE_DIR', None)\n"
+    "os.environ.pop('CAD_LAUNCHER_DIR', None)\n"
     "places.append((str(state_dir()), proxy_path()))\n"
     "print(json.dumps({'places': places, 'engine': engine.NAME}))\n"
 )
@@ -337,7 +337,7 @@ def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
     try:
         return _run_file(path, top, verbose, env, started, places)
     finally:
-        stop_engine(top, env["CADGEN_ENGINE_DIR"])
+        stop_engine(top, env["CAD_ENGINE_DIR"])
 
 
 def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: float,
@@ -410,10 +410,10 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 # A state folder and a command folder of its own too: the engine's registry of
                 # documents (and Recents), the installations and the ``cadgen`` command are the
                 # developer's, never a test's.
-                env = {**os.environ, **shared, "CADGEN_ENGINE_DIR": os.path.join(engines, f"e{index}"),
-                       "CADGEN_STATE_DIR": os.path.join(engines, f"s{index}"),
-                       "CADGEN_CACHE_DIR": os.path.join(engines, f"c{index}"),
-                       "CADGEN_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                env = {**os.environ, **shared, "CAD_ENGINE_DIR": os.path.join(engines, f"e{index}"),
+                       "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
+                       "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
+                       "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
                 futures.append(pool.submit(run_one, path, env))
             for future in concurrent.futures.as_completed(futures):
                 path, code, output, seconds = future.result()
@@ -421,7 +421,7 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 if door is not None and not developers and engine_answers(top, door):
                     beside = ", ".join(sorted(running)) or "none"
                     leaked.append(f"{door}, after {path} (running beside it: {beside})")
-                    _engine_python(top, "from cad.engine import api; api.stop()", CADGEN_ENGINE_DIR=os.path.dirname(door))
+                    _engine_python(top, "from cad.engine import api; api.stop()", CAD_ENGINE_DIR=os.path.dirname(door))
                 for where, test in _OUTSIDE.findall(output):
                     seen_in.setdefault(where, []).append(f"{test} ({path})")
                 output = _OUTSIDE.sub("", output)

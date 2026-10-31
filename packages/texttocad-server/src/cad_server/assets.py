@@ -1,7 +1,7 @@
 """Where cadgen's non-Python runtime assets live.
 
 cadgen serves JavaScript it does not write in Python: the CAD Viewer's built client
-(``cadgen viewer`` serves it) and the CAD app page (``cadgen mcp`` serves it). They ship
+(``cad viewer`` serves it) and the CAD app page (``cad-mcp`` serves it). They ship
 inside the distribution under ``cad_server/_runtime``, and can be pointed elsewhere for
 development. Nothing cadgen runs needs Node.
 
@@ -51,14 +51,14 @@ def runtime_build_hint(path: Path | str, *, overridable: bool = True) -> str:
     """
     if _in_source_checkout():
         return (
-            "cadgen is running from a source checkout, where the packaged runtime is BUILT "
+            "The server is running from a source checkout, where the packaged runtime is BUILT "
             "and never committed: run scripts/bundle/bundle.sh to produce it. "
             f"Expected it at {path}."
         )
     return (
-        f"This cadgen installation is incomplete: {path} should ship inside the "
-        "distribution. Reinstall cadgen"
-        + (", or point the matching CADGEN_*_DIR environment variable at a directory "
+        f"This installation of the server is incomplete: {path} should ship inside the "
+        "distribution. Reinstall text-to-cad"
+        + (", or point the matching CAD_*_DIR environment variable at a directory "
            "that holds it." if overridable else ".")
     )
 
@@ -106,10 +106,10 @@ def _dev_viewer_dist_dir() -> Path | None:
 def viewer_dist_dir() -> Path:
     """Directory holding the CAD Viewer's built client (``index.html`` and its assets).
 
-    ``CADGEN_VIEWER_DIST`` names it directly (``cadgen viewer --dist`` is its CLI twin).
+    ``CAD_VIEWER_DIST`` names it directly (``cad viewer --dist`` is its CLI twin).
     Otherwise a checkout's built ``apps/web/dist`` wins over the packaged copy.
     """
-    override = _env_dir("CADGEN_VIEWER_DIST")
+    override = _env_dir("CAD_VIEWER_DIST")
     if override:
         return override
     dev = _dev_viewer_dist_dir()
@@ -119,8 +119,8 @@ def viewer_dist_dir() -> Path:
 
 
 def cad_app_dir() -> Path:
-    """Where the CAD app's built page lives: ``CADGEN_MCP_APP_DIR``, a checkout's build, or the wheel's."""
-    override = str(os.environ.get("CADGEN_MCP_APP_DIR") or "").strip()
+    """Where the CAD app's built page lives: ``CAD_MCP_APP_DIR``, a checkout's build, or the wheel's."""
+    override = str(os.environ.get("CAD_MCP_APP_DIR") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
     root = checkout_root()

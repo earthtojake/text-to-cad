@@ -32,9 +32,9 @@ class Fixture(unittest.TestCase):
         self.root = Path(scratch.name).resolve()
         engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
         self.addCleanup(lambda: __import__("shutil").rmtree(engine, True))
-        patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.root / "state"),
-                                               "CADGEN_CACHE_DIR": str(self.root / "cache"),
-                                               "CADGEN_ENGINE_DIR": engine})
+        patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.root / "state"),
+                                               "CAD_CACHE_DIR": str(self.root / "cache"),
+                                               "CAD_ENGINE_DIR": engine})
         patched.start()
         self.addCleanup(patched.stop)
 
@@ -58,7 +58,7 @@ class SwitchTest(Fixture):
 
         def started(version: str, port, told) -> tuple[bool, str]:
             tried.append(version)
-            return (True, "") if version in works else (False, f"cadgen {version}'s engine did not start")
+            return (True, "") if version in works else (False, f"text-to-cad {version}'s engine did not start")
 
         return tried, mock.patch.object(switch, "_started", side_effect=started)
 
@@ -88,7 +88,7 @@ class SwitchTest(Fixture):
             done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
         self.assertFalse(done["ok"])
         self.assertTrue(done["restored"])
-        self.assertEqual(done["error"], "cadgen 1.2.0's engine did not start")
+        self.assertEqual(done["error"], "text-to-cad 1.2.0's engine did not start")
         self.assertEqual((tried, installations.current_version()), (["1.2.0", "1.1.0"], "1.1.0"))
         asked.assert_any_call({"op": "stop"}, start=False)  # whatever of the new release answered, stopped first
         self.assertEqual(len(releases.listing()), 2, "nothing is removed when the switch fails")
@@ -212,12 +212,12 @@ class Server:
 
 class UpdateJobTest(Fixture):
     def setup_script(self, *lines: str, code: int = 0, said: str = "") -> str:
-        """A release's ``cadgen setup --engine-update``: ``lines`` on stdout, ``said`` on stderr, ``code``."""
+        """A release's ``cad setup --engine-update``: ``lines`` on stdout, ``said`` on stderr, ``code``."""
         script = self.root / ("setup.py")
         script.write_text("import sys\n" + "".join(f"print({line!r}, flush=True)\n" for line in lines)
                           + (f"print({said!r}, file=sys.stderr)\n" if said else "") + f"sys.exit({code})\n", encoding="utf-8")
         if os.name == "nt":
-            command = self.root / "cadgen.cmd"
+            command = self.root / "cad.cmd"
             command.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
         else:
             command = self.root / "cadgen"
@@ -269,7 +269,7 @@ class UpdateJobTest(Fixture):
         self.assertEqual((state["state"], state["error"]),
                          ("failed", "the CAD kernel environment needs the network once: dns error"))
         self.assertEqual(server.retired, [], "the engine stays as it was")
-        refused = releases.base.Refused("cadgen 1.2.0 needs the network once: dns error")
+        refused = releases.base.Refused("text-to-cad 1.2.0 needs the network once: dns error")
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(releases, "make", side_effect=refused):
             job.start(server)
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))

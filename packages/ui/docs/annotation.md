@@ -151,7 +151,7 @@ Copy Prompt, Queue or Send is pressed (`host.promptFiles`). The snapshot packet
 includes shared annotation and measurements: up to 1 KiB of compact UTF-8 JSON
 travels inline, and larger packets are saved to a temporary `.snapshot.json`.
 No images are rendered at handoff. Save inline JSON to a file, then
-`cadgen snapshot <document> <out.png> --annotation <file> --camera authored` draws the
+`cad snapshot <document> <out.png> --annotation <file> --camera authored` draws the
 view the ink was drawn in over the model, or over an edit of it.
 The Annotation chip does not copy references or save individual files.
 Queue and Send clear the annotation with the note; Copy Prompt keeps it.

@@ -201,7 +201,7 @@ class BuildTest(EngineCase):
         # Its key unchanged, its file is taken and the body is not run at all (``previous``).
         self.assertEqual(self.build("frame")["frame"]["cache"], {"used": True, "from": "memory"})
         # Run, with retention off: made afresh around the same parts, and nothing rewritten.
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_BODIES": "0"}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_BODIES": "0"}):
             self.build("frame")
             frame = self.build("frame")["frame"]
         self.assertGreater(frame["memo"]["uncached"], 0)

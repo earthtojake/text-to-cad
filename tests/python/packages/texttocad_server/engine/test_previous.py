@@ -357,7 +357,7 @@ class PreviousTest(unittest.TestCase):
         self.assertEqual(self.xbf.read_bytes(), first)
 
     def export(self, name: str) -> bytes:
-        """The kit's STEP as ``cadgen export`` writes it, in a process of its own, through an engine
+        """The kit's STEP as ``cad export`` writes it, in a process of its own, through an engine
         of the test's own -- its folders, no port of its own choosing -- stopped once the test ends:
         never the developer's engine, state or cache, however the file is run."""
         import subprocess
@@ -366,9 +366,9 @@ class PreviousTest(unittest.TestCase):
         if not hasattr(self, "engine_env"):
             engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
             self.addCleanup(shutil.rmtree, engine, True)
-            self.engine_env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine), "CADGEN_STATE_DIR": str(engine / "state"),
-                               "CADGEN_CACHE_DIR": str(engine / "cache"), "CADGEN_ENGINE_PORT": "0",
-                               "CADGEN_ENGINE_STANDBY": "0"}
+            self.engine_env = {**os.environ, "CAD_ENGINE_DIR": str(engine), "CAD_STATE_DIR": str(engine / "state"),
+                               "CAD_CACHE_DIR": str(engine / "cache"), "CAD_ENGINE_PORT": "0",
+                               "CAD_ENGINE_STANDBY": "0"}
             self.addCleanup(subprocess.run, [sys.executable, "-m", "cad_server.engine", "stop"], env=self.engine_env,
                             capture_output=True)
         out = self.folder / name

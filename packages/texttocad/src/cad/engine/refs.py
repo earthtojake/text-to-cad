@@ -1,6 +1,6 @@
 """References to geometry: one grammar that names a part, an assembly or one element of a
 document by the names the engine gives them, resolved against a document's structure
-(``resolve_structure``, what ``cadgen inspect`` and the viewer read).
+(``resolve_structure``, what ``cad inspect`` and the viewer read).
 
 A ref is resolved by name in the document as it is now -- the latest build -- never in the one
 it was copied from, and nothing of an earlier build is kept: an element a later build moved or
@@ -560,7 +560,7 @@ def check_file(file: str | None, document: Path | None) -> None:
         raise RefError(f"the ref names {file}, not {os.path.basename(str(document))}")
 
 
-# --- a served document's structure (``cadgen inspect``) ----------------------------------------
+# --- a served document's structure (``cad inspect``) ----------------------------------------
 
 
 def resolve_structure(structure: dict[str, Any], ref: str, document: Path | None = None) -> list[Hit]:

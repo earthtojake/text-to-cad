@@ -1,5 +1,5 @@
 """The person's settings: one file, ``settings.json``, in the state directory beside the model
-library, so both CAD apps (``cadgen mcp`` and ``cadgen viewer``) and every version of cadgen read
+library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every version of cadgen read
 the same answers -- nothing an install or an update replaces holds them. Deleting the state
 directory forgets them.
 

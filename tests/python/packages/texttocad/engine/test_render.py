@@ -17,7 +17,7 @@ and drivers apart, a line a pixel over still matches). Where a platform's OpenGL
 the row has a golden of that platform's own (`render_golden/<platform>/<row>.png`), held to the same
 bound; a row missed in CI prints the picture it drew (`GOLDEN <platform>/<row>`, base64), that
 platform's golden once a person has looked at it. A deliberate change to the look makes them
-again: `CADGEN_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/texttocad/engine/test_render.py`.
+again: `CAD_RENDER_GOLDENS=write scripts/test/test-python.sh tests/python/packages/texttocad/engine/test_render.py`.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 GOLDEN = Path(__file__).resolve().parent / "render_golden"
-WRITE = os.environ.get("CADGEN_RENDER_GOLDENS") == "write"
+WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 SIZE = (320, 240)
 PLATFORM = context.platform()  # a row a platform draws apart has a golden of its own there
 
@@ -698,7 +698,7 @@ class RenderProcessTest(unittest.TestCase):
     def start(self, cap: str):
         from cad.engine.render.service import RenderProcess
 
-        process = RenderProcess(self.document, {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_WORKER_RSS_MB": cap})
+        process = RenderProcess(self.document, {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_WORKER_RSS_MB": cap})
         self.addCleanup(process.stop)
         keys = sorted(self.buffers)
         answer, _ = process.ask({"op": "hold", "path": str(self.document), "structure": self.structure,
@@ -719,7 +719,7 @@ class RenderProcessTest(unittest.TestCase):
         self.assertIn("no mechanism state 'shut'", refused["refused"])
         capped = self.start("1")
         answer, _ = capped.ask({"op": "frame", "still": still})
-        self.assertIn("CADGEN_ENGINE_WORKER_RSS_MB", answer["done"]["retired"])
+        self.assertIn("CAD_ENGINE_WORKER_RSS_MB", answer["done"]["retired"])
         self.assertEqual(capped.process.wait(timeout=30), 0, "gone once it has answered")
 
 
@@ -744,7 +744,7 @@ if __name__ == "__main__":
 
 
 class DaemonRenderTest(unittest.TestCase):
-    """`cadgen snapshot` drawn by OCCT through the daemon: a render process per served
+    """`cad snapshot` drawn by OCCT through the daemon: a render process per served
     document, warm from its second picture, sent its file's new version by the next picture with
     only the parts it lacks, gone with the daemon; and in this process with ``daemon=False`` from Python. Nothing is written but
     the pictures, and the daemon's door, lock and clients' pipes."""
@@ -753,8 +753,8 @@ class DaemonRenderTest(unittest.TestCase):
         gl()
         self.folder = Path(tempfile.mkdtemp(prefix="engine-render-daemon-")).resolve()
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        self.env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.state),
-                    "CADGEN_ENGINE_MESH": "inline"}
+        self.env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
+                    "CAD_ENGINE_MESH": "inline"}
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
         self.addCleanup(self.cli, "stop")

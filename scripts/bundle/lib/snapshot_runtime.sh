@@ -11,7 +11,7 @@
 # uses, so its picture is the viewport's.
 #
 # The esbuild toolchain and the pinned three/meshoptimizer are npm-installed once into
-# tmp/cadgen-snapshot-build (CADGEN_SNAPSHOT_BUILD_DEPS_DIR names another).
+# tmp/cadgen-snapshot-build (CAD_SNAPSHOT_BUILD_DEPS_DIR names another).
 
 SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 
@@ -164,7 +164,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   set -euo pipefail
   BUNDLE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
   out_dir="${1:-$BUNDLE_REPO_ROOT/tmp/bench/snapshot-page}"
-  deps_dir="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$BUNDLE_REPO_ROOT/tmp/cadgen-snapshot-build}"
+  deps_dir="${CAD_SNAPSHOT_BUILD_DEPS_DIR:-$BUNDLE_REPO_ROOT/tmp/cadgen-snapshot-build}"
   npm --prefix "$BUNDLE_REPO_ROOT" run build -w @text-to-cad/core >/dev/null
   ensure_snapshot_runtime_deps "$deps_dir"
   build_snapshot_runtime "$out_dir" "$deps_dir"

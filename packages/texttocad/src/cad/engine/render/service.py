@@ -26,7 +26,7 @@ answered ``{"done": report, "bytes"}`` and the PNG, ``{"refused": why}`` (a requ
 does not offer, before anything is drawn) or ``{"failed": why}``. A picture of a version the
 process does not hold -- a model built again, a file rewritten -- sends it that version first, with
 the buffers of the parts it lacks (``_sync``): its other parts' shapes are kept. No timer stops it: it goes
-with the daemon, under the workers' memory cap (``CADGEN_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``),
+with the daemon, under the workers' memory cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``),
 which counts its memory with theirs and retires an idle one, least recently drawn first, before any
 worker (``daemon.Pool.shed``, ``Renders.retire``), and after a frame that leaves it alone over that
 cap, when it says so (``retired``) and exits; the next snapshot starts another. A render process is
@@ -590,7 +590,7 @@ def main() -> int:
             retire = resident is not None and cap is not None and resident > cap
             if retire:
                 report["retired"] = (f"the renderer held {resident:.0f} MB after the frame, over its {cap:.0f} MB cap "
-                                     "(CADGEN_ENGINE_WORKER_RSS_MB): the next snapshot starts a fresh one")
+                                     "(CAD_ENGINE_WORKER_RSS_MB): the next snapshot starts a fresh one")
             _write(protocol, {"id": ident, "done": report}, data)
             if retire:
                 return 0

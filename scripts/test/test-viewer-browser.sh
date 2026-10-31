@@ -55,11 +55,11 @@ fi
 log="$(mktemp)"
 viewer_pidfile="$project/viewer.pid"
 # The model library every Viewer writes: the test's own, never the user's.
-export CADGEN_STATE_DIR="$project/state"
+export CAD_STATE_DIR="$project/state"
 # The engine that builds the fixtures and serves the STEP and .xbf ones to the page: this
 # test's own daemon, one part meshed at a time, stopped on the way out.
-export CADGEN_ENGINE_DIR="$project/engine" CADGEN_ENGINE_MESH=inline CADGEN_CACHE_DIR="$project/no-0.7-store"
-export CADGEN_VIEWER_DIST="$RUNTIME"
+export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
+export CAD_VIEWER_DIST="$RUNTIME"
 cleanup() {
   "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
   rm -rf "$project" "$log"

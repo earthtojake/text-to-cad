@@ -12,7 +12,7 @@ A model is a parameterless function returning a build123d shape::
 An explicit ``arm()`` call builds it, and the child models its body calls, in a warm worker whose
 kernel memo makes an edit cost what it changed; the document is written to
 ``XBF/arm.xbf`` beside the script, and the derived files it declares after it, each a
-translation of that document (``cadgen export``). ``cadgen serve XBF/arm.xbf``
+translation of that document (``cad export``). ``cad serve XBF/arm.xbf``
 shows it. Nothing but those files is written: every cache lives in a process's memory.
 The verbs as functions are ``cad.engine.api`` (``cadgen.export``, ``cadgen.snapshot``, ...).
 

@@ -15,7 +15,7 @@ from cad.engine import said
 
 SCRIPT = """
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 @model

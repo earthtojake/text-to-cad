@@ -1,4 +1,4 @@
-"""``cadgen serve DOC``: a document served over HTTP by the engine daemon, its page's URL
+"""``cad serve DOC``: a document served over HTTP by the engine daemon, its page's URL
 printed (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen serve"
+DEFAULT_PROG = "cad serve"
 ENGINE_VERB = "serve"
 
 

@@ -1,4 +1,4 @@
-"""cadgen's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cadgen`` command has
+"""text-to-cad's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cad`` command has
 said so, never after a no -- and that they carry counts, times and metadata -- how many people, how often,
 on how many files -- and nothing else. The build daemon's counts are ``test_daemon_telemetry.py``'s."""
 
@@ -32,8 +32,8 @@ from cad_server.viewer.recents import RecentStore
 
 # Where the notice is said, and the default holds: an install a plugin made (a checkout is a development install,
 # never told and sending nothing by default), outside CI. Every test runs there unless it says otherwise.
-TOLD = {"CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""}
-QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", NOTICE_ENV: "", **TOLD}
+TOLD = {"CAD_INSTALL_CHANNEL": "claude-github", "CI": ""}
+QUIET = {"DO_NOT_TRACK": "", "CAD_TELEMETRY": "", NOTICE_ENV: "", **TOLD}
 
 
 class _Tmp(unittest.TestCase):
@@ -61,7 +61,7 @@ class _Tmp(unittest.TestCase):
     def serve(self, channel: str, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
         # The channel the plugin's startup command named, as the server hands it on (`cad_server/_internal/channel.py`).
-        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
             recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
         server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
@@ -112,7 +112,7 @@ class ConsentTest(_Tmp):
     def test_ci_and_a_development_install_send_nothing_by_default_even_where_the_person_was_told(self) -> None:
         self.assertTrue(notify(io.StringIO(), path=self.path))  # told, by a plugin's command
         self.assertEqual(status(path=self.path)["reason"], "default")
-        for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev")):
+        for name, value in (("CI", "true"), ("CAD_INSTALL_CHANNEL", "dev")):
             with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
                 self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
                 choose(True, by="cli", path=self.path)  # a yes holds anywhere
@@ -149,7 +149,7 @@ class ConsentTest(_Tmp):
             choose(False, by="app", path=self.path, forget=lambda id: True)
         with mock.patch("cad_server.analytics.DISCLOSURE", 3):
             self.assertEqual(status(path=self.path)["reason"], "choice")
-        for name, value in (("DO_NOT_TRACK", "1"), ("CADGEN_TELEMETRY", "off")):
+        for name, value in (("DO_NOT_TRACK", "1"), ("CAD_TELEMETRY", "off")):
             with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
                 self.assertEqual(status(path=self.path)["reason"], "environment")
                 self.assertFalse(status(path=self.path)["sharing"])
@@ -159,7 +159,7 @@ class NoMeansNoTest(_Tmp):
     """A no is kept, and nothing undoes it."""
 
     def test_a_no_survives_restarts_updates_and_a_larger_disclosure(self) -> None:
-        choose(False, by="app", path=self.path)  # the menu's toggle, `cadgen telemetry off`, or the agent
+        choose(False, by="app", path=self.path)  # the menu's toggle, `cad telemetry off`, or the agent
         no = {"sharing": False, "reason": "choice", "id": None}
         self.assertEqual(status(path=self.path), no)  # a restart: read from the state directory again
         with mock.patch("cad_server.analytics.SCHEMA", 2):  # an update that changes what a batch looks like
@@ -256,7 +256,7 @@ class OneAnswerTest(_Tmp):
         self.assertFalse(status(path=self.path)["sharing"])
 
     def test_the_environment_turns_it_on_too(self) -> None:
-        with mock.patch.dict("os.environ", {"CADGEN_TELEMETRY": "1"}):
+        with mock.patch.dict("os.environ", {"CAD_TELEMETRY": "1"}):
             found = status(path=self.path)
         self.assertEqual((found["sharing"], found["reason"]), (True, "environment"))
         self.assertTrue(found["id"])
@@ -595,7 +595,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(self.consent(server), {"sharing": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.call(server, "cad_view")  # noted before anyone was told
-        self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cadgen` command
+        self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cad` command
         # The running CAD app sends from the notice on, with no restart -- and never what it noted before.
         self.assertEqual(self.consent(server), {"sharing": True, "reason": "default", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
@@ -688,7 +688,7 @@ class SenderTest(_Tmp):
         viewer, app = sent
         self.assertEqual([viewer["process"], app["process"]], ["viewer", "app"])
         # The viewer's batches are the browser page's usage: their client is the viewer itself, of this version, shown
-        # in a browser -- as `cadgen viewer` said of itself before the engine served its page, and as PostHog tells
+        # in a browser -- as `cad viewer` said of itself before the engine served its page, and as PostHog tells
         # the viewer's use from the apps' by client. The CAD app's names the agent app a session's initialize does
         # (``Server``), none before.
         self.assertEqual((viewer["client"], viewer["presentation"]),
@@ -696,14 +696,14 @@ class SenderTest(_Tmp):
         self.assertEqual([key for key in ("client", "presentation") if key in app], [])
 
     def test_a_batch_names_the_version_its_installation_runs_as(self) -> None:
-        # A development install's own `<version>-dev.<time>` (what the `cadgen` command tells it, and its engine is
+        # A development install's own `<version>-dev.<time>` (what the `cad` command tells it, and its engine is
         # named by): a send forced from one is told apart from the release's, which names its own.
         from cad_server import __version__
 
         choose(True, by="cli", path=self.path)
         for named, version in (("0.8.0-dev.20261026120000", "0.8.0-dev.20261026120000"), ("", __version__)):
             sent: list[dict] = []
-            with self.subTest(named=named), mock.patch.dict("os.environ", {"CADGEN_INSTALLATION_VERSION": named}):
+            with self.subTest(named=named), mock.patch.dict("os.environ", {"CAD_INSTALLATION_VERSION": named}):
                 recorder = Recorder(path=self.path, send=sent.append)
                 recorder.called("cad_show", True)
                 recorder.flush()
@@ -810,7 +810,7 @@ class InstallChannelTest(_Tmp):
 
     def started(self, process: str, channel: str = "") -> tuple[Recorder, list[dict]]:
         sent: list[dict] = []
-        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
             recorder = Recorder(process=process, path=self.path, send=lambda payload: sent.append(payload) or True)
         return recorder, sent
 
@@ -820,7 +820,7 @@ class InstallChannelTest(_Tmp):
         return sent[-1]["channel"]
 
     def server_starts(self, channel: str) -> str | None:
-        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
             return install_channel.remember(path=self.record)
 
     def test_every_process_of_the_installation_reports_the_channel_its_plugins_server_wrote_down(self) -> None:
@@ -871,7 +871,7 @@ class InstallChannelTest(_Tmp):
         # A development install's own server writes `dev` down for its installation, so its engine, which takes no
         # channel from whoever started it, still sends nothing by default.
         self.path.write_text(json.dumps({"telemetry": {"notifiedAt": time.time(), "notice": 1}}), encoding="utf-8")
-        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": ""}):
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": ""}):
             self.assertEqual(status(path=self.path)["reason"], "default")
             self.server_starts("dev")
             self.assertEqual(install_channel.channel(), "dev")
@@ -883,7 +883,7 @@ class InstallChannelTest(_Tmp):
         (self.tmp / "app").mkdir(exist_ok=True)
         server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
                         analytics=Recorder(path=self.path, send=lambda _payload: True))
-        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": "claude-github"}):
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": "claude-github"}):
             params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                         "clientInfo": {"name": "claude-code", "version": "2.1.0"}})
         server.handle("initialize", params, None)
@@ -910,7 +910,7 @@ class BeforeTelemetryTest(_Tmp):
         self.assertEqual((status(path=self.path)["sharing"], status(path=self.path)["reason"]), (True, "default"))
 
     def test_a_no_here_also_stops_an_older_cadgen_and_deletes_what_it_sent(self) -> None:
-        # A plugin not yet updated runs 0.7.x beside this cadgen (`uvx cadgen telemetry off` runs the newest) and
+        # A plugin not yet updated runs 0.7.x beside this cadgen (`uvx cad telemetry off` runs the newest) and
         # reads only `analytics`: its yes would go on sending, under an id this no deletes too.
         self.legacy({"choice": "on", "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
         asked: list[str] = []
@@ -925,7 +925,7 @@ class BeforeTelemetryTest(_Tmp):
 
 
 class NoticeTest(_Tmp):
-    """What is sent by default is said once, by a ``cadgen`` command, before anything is sent."""
+    """What is sent by default is said once, by a ``cad`` command, before anything is sent."""
 
     def test_said_once_on_stderr_and_kept_as_said(self) -> None:
         said = io.StringIO()
@@ -946,49 +946,49 @@ class NoticeTest(_Tmp):
         from cad_server.analytics import off_command
 
         uvx = "uvx --no-config --managed-python --python 3.14 --from"
-        script = self.tmp / "bin" / ("cadgen.exe" if os.name == "nt" else "cadgen")
+        script = self.tmp / "bin" / ("cad.exe" if os.name == "nt" else "cad")
         script.parent.mkdir()
         script.write_text("#!/bin/sh\n", encoding="utf-8")
         script.chmod(0o755)
         launcher = self.tmp / "launcher"
-        env = {"CADGEN_STATE_DIR": str(self.tmp / "state"), "CADGEN_LAUNCHER_DIR": str(launcher),
-               "CADGEN_INSTALLATION_VERSION": "", "PATH": str(self.tmp / "nowhere")}
+        env = {"CAD_STATE_DIR": str(self.tmp / "state"), "CAD_LAUNCHER_DIR": str(launcher),
+               "CAD_INSTALLATION_VERSION": "", "PATH": str(self.tmp / "nowhere")}
         made = self.tmp / "uv" / "archive-v0" / "abc"  # an environment uvx made
         record = made / "lib" / "site-packages" / "texttocad_server-0.8.0.dist-info"
         record.mkdir(parents=True)
         with mock.patch.dict("os.environ", env), mock.patch("sys.prefix", str(made)), \
                 mock.patch("sysconfig.get_path", return_value=str(record.parent)) as site:
             # Installed from an index: the release's own requirement, which uvx reuses.
-            self.assertEqual(off_command(), f"{uvx} texttocad-server==0.8.0 cadgen telemetry off")
+            self.assertEqual(off_command(), f"{uvx} texttocad-server==0.8.0 cad telemetry off")
             self.assertEqual(site.call_args.kwargs["vars"], {"base": str(made), "platbase": str(made)})
             # From a wheel -- a development install's, whose number no index has: that wheel, while it is there.
             wheel = self.tmp / "wheels" / "texttocad_server-0.8.0-py3-none-any.whl"
             wheel.parent.mkdir()
             wheel.write_bytes(b"")
             (record / "direct_url.json").write_text(json.dumps({"url": wheel.as_uri(), "archive_info": {}}), encoding="utf-8")
-            self.assertEqual(off_command(), f"{uvx} {wheel} cadgen telemetry off")
-            # Registered (its CAD app's server started, or `cadgen doctor` ran): the `cadgen` command, by the version
-            # the record names -- by its path while it is not the `cadgen` on PATH.
-            python, console = made / "bin" / "python", made / "bin" / "cadgen"
+            self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off")
+            # Registered (its CAD app's server started, or `cad doctor` ran): the `cad` command, by the version
+            # the record names -- by its path while it is not the `cad` on PATH.
+            python, console = made / "bin" / "python", made / "bin" / "cad"
             for path in (python, console):
                 path.parent.mkdir(exist_ok=True)
                 path.write_text("", encoding="utf-8")
             installations.register("0.8.0-dev.20261026120000", (str(console), str(python), str(made)))
-            self.assertEqual(off_command(), f"{uvx} {wheel} cadgen telemetry off", "no `cadgen` command to run it")
+            self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off", "no `cad` command to run it")
             installations.write_proxy()
             proxy = installations.proxy_path()
             self.assertEqual(off_command(), f"{proxy} +0.8.0-dev.20261026120000 telemetry off")
             with mock.patch.dict("os.environ", {"PATH": str(launcher)}):
-                self.assertEqual(off_command(), "cadgen +0.8.0-dev.20261026120000 telemetry off")
+                self.assertEqual(off_command(), "cad +0.8.0-dev.20261026120000 telemetry off")
             wheel.unlink()  # the wheel gone and nothing registered: this interpreter, as it runs now
             installations.forget("0.8.0-dev.20261026120000")
             with mock.patch("sys.argv", ["/x/cad_server/cli/__main__.py"]), mock.patch("sys.executable", "/venv/bin/python"):
                 self.assertEqual(off_command(), "/venv/bin/python -m cad_server.cli telemetry off")
         with mock.patch.dict("os.environ", env):
-            # The cadgen on PATH is the one that runs; one off PATH is named by its path.
+            # The cad on PATH is the one that runs; one off PATH is named by its path.
             with mock.patch("sys.argv", [str(script)]):
                 with mock.patch.dict("os.environ", {"PATH": str(script.parent)}):
-                    self.assertEqual(off_command(), "cadgen telemetry off")
+                    self.assertEqual(off_command(), "cad telemetry off")
                 with mock.patch.dict("os.environ", {"PATH": str(self.tmp)}):
                     self.assertEqual(off_command(), f"{script.resolve()} telemetry off")
             with mock.patch("sys.argv", ["/x/cad_server/cli/__main__.py"]), mock.patch("sys.executable", "/venv/bin/python"):
@@ -1003,8 +1003,8 @@ class NoticeTest(_Tmp):
             self.assertEqual(status(path=self.path)["reason"], "default")
 
     def test_nothing_is_said_where_nothing_would_be_sent_by_default(self) -> None:
-        for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
-                            ("CADGEN_TELEMETRY", "0"), ("CADGEN_TELEMETRY", "1"),
+        for name, value in (("CI", "true"), ("CAD_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
+                            ("CAD_TELEMETRY", "0"), ("CAD_TELEMETRY", "1"),
                             (NOTICE_ENV, "0")):
             with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {name: value}):
                 said = io.StringIO()
@@ -1025,13 +1025,13 @@ class NoticeTest(_Tmp):
             cli.main(["--help"])
         self.assertEqual(told.call_count, 3)
 
-    def test_cadgen_telemetry_says_it_where_a_person_looks(self) -> None:
+    def test_cad_telemetry_says_it_where_a_person_looks(self) -> None:
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": str(self.tmp)}), \
+        with mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.tmp)}), \
                 mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
             self.assertEqual(telemetry_cli.main([]), 0)
         self.assertEqual(err.getvalue(), notice_text() + "\n")
-        self.assertRegex(out.getvalue(), r"^Telemetry is on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\.\n")
+        self.assertRegex(out.getvalue(), r"^Telemetry is on: by default, since text-to-cad said so on \d{4}-\d{2}-\d{2}\.\n")
 
 
 class NeverInTheWayTest(_Tmp):
@@ -1123,7 +1123,7 @@ class NeverInTheWayTest(_Tmp):
         exiting = Recorder(path=self.path, send=lambda payload: True)
         exiting.called("cad_show", True)
         exiting.close()
-        with mock.patch.dict("os.environ", {"CADGEN_TELEMETRY": "0"}):  # a process that may not send leaves them
+        with mock.patch.dict("os.environ", {"CAD_TELEMETRY": "0"}):  # a process that may not send leaves them
             Recorder(path=self.path, send=lambda payload: self.fail("sent")).send_kept()
         self.assertTrue((self.tmp / KEPT).exists())
         with mock.patch("cad_server.analytics.time.time", return_value=time.time() + 60):

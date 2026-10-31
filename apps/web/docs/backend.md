@@ -17,11 +17,11 @@ reads, meshes and measures it in processes of its own.
 ## Launching
 
 The engine serves every CAD file by absolute path on port 3245, or the port this
-installation rolled to when another program held it (`cadgen status` says which and why),
-or the one `--port N` or `CADGEN_ENGINE_PORT` names. Run the installed CLI from anywhere:
+installation rolled to when another program held it (`cad status` says which and why),
+or the one `--port N` or `CAD_ENGINE_PORT` names. Run the installed CLI from anywhere:
 
 ```bash
-cadgen viewer --host 127.0.0.1 --json
+cad viewer --host 127.0.0.1 --json
 ```
 
 The equivalent Python entry point is `python -m cad_server.viewer`, using the
@@ -31,11 +31,11 @@ select it explicitly:
 
 ```bash
 npm run build:web
-export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
-cadgen viewer --host 127.0.0.1 --json
+export CAD_VIEWER_DIST="$PWD/apps/web/dist"
+cad viewer --host 127.0.0.1 --json
 ```
 
-`--dist <directory>` is the command-line equivalent of `CADGEN_VIEWER_DIST`.
+`--dist <directory>` is the command-line equivalent of `CAD_VIEWER_DIST`.
 Repository setup and editable-install instructions live in
 `CONTRIBUTING.md`.
 
@@ -47,7 +47,7 @@ must match a running engine. There is one page per engine and no page session: e
 folder becomes the folder the home shows, replacing the last. Always use the printed URL,
 including its token query; the browser exchanges the token for a same-site HTTP-only cookie.
 
-`cadgen stop` stops the installation's whole engine, including its workers and
+`cad stop` stops the installation's whole engine, including its workers and
 MCP sessions. Closing a page, a Vite process or a host's stdio shim does not stop it.
 Python source edits require restarting your own test engine. There is no viewer
 server process, source re-exec, detached launch log or per-port shutdown route.
@@ -194,7 +194,7 @@ fetch every read of it is made with (the CAD app's goes over its tunnel).
 | `GET /__cad/version` | `{notice, release, update}`: whether a newer text-to-cad is out (the update button's `notice`, `{latest, version}`, or null), the release the engine runs, and the update a press started (`state`: `idle`, `working`, `restarting` or `failed`; its `target`, its last `progress` frame, its `error`). |
 | `POST /__cad/update` | The update button's press (`cad_server._internal.update`): the newest release installed, set up and switched to; answers `202` with what `GET /__cad/version` says, at once. Not on an engine that cannot hand itself over (409). |
 | `GET /__cad/mcp-app` | The CAD app's module (`app.js`), which the shell a host keeps loads (`cad_server.mcp.ui`); 404 with none built. |
-| `POST /__cad/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cadgen snapshot --job` draws the packet later. Carries `x-cadgen-viewer`, as the GET below does. |
+| `POST /__cad/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cad snapshot --job` draws the packet later. Carries `x-cadgen-viewer`, as the GET below does. |
 | `GET /__cad/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |
 
 Every POST must send `x-cadgen-viewer: 1`. The custom header forces a browser
@@ -225,7 +225,7 @@ drawing add-on over the `.dxf`'s modelspace and returns what every entity
 flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
-`cadgen snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
+`cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
 hairlines in their pens, on the light or dark paper. This route is the pane's alone.
 

@@ -1,6 +1,6 @@
 """Quick Edit writes replayable JSON synchronously, never starting a render.
 
-A packet is what ``cadgen snapshot`` reads: ``--annotation PACKET`` draws its ink, and
+A packet is what ``cad snapshot`` reads: ``--annotation PACKET`` draws its ink, and
 ``--camera authored`` draws the view the ink was drawn in, found in the packet's jobs by label
 (``cad.engine.snapshot``). Its readers are the replay asserted here.
 """
@@ -200,7 +200,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             # Measure's measurements are the person's alone: they never travel in a prompt.
             (self.request(measurements=[]), "unknown field(s): measurements"),
             # a file snapshot does not draw
-            (self.request(input=str(self.notes)), "is no file cadgen snapshot draws"),
+            (self.request(input=str(self.notes)), "is no file cad snapshot draws"),
         ):
             status, body, _ = self.call("POST", "/__cad/prompt-files", request)
             self.assertEqual(status, 400, request)

@@ -63,7 +63,7 @@ class IdsTest(unittest.TestCase):
     def test_a_model_s_id_is_the_same_in_another_process_and_asks_no_engine(self) -> None:
         probe = ("import json, sys; sys.path.insert(0, sys.argv[1]); import parts; "
                  "print(json.dumps(parts.part.id))")
-        env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.folder / "no-engine")}
+        env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.folder / "no-engine")}
         done = subprocess.run([sys.executable, "-c", probe, str(self.folder)], capture_output=True, text=True,
                               env=env, cwd=self.folder, timeout=120)
         self.assertEqual(done.returncode, 0, done.stderr)

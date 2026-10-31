@@ -19,7 +19,7 @@ Every name that appears in the SRDF is **copied from this table**. If a name you
 2. Read or create the planning ledger (`references/planning-ledger.md`); keep the compact form as a comment block in the `.srdf`.
 3. Author or edit the SRDF XML directly per `references/authoring-contract.md`, in element order: virtual joints, groups, group states, end effectors, passive joints, disabled collisions. Save it next to the URDF with the same robot name — colocation plus name match is how every consumer pairs the files.
 4. Derive — do not invent — disabled collisions (`references/disabled-collisions.md`) and group-state values (URDF-native units, within limits).
-5. Validate with `cadgen srdf validate <file.srdf>`; fix findings until clean.
+5. Validate with `cad srdf validate <file.srdf>`; fix findings until clean.
 6. Show the result for review ([Show the model](../SKILL.md#show-the-model)).
 7. Run MoveIt smoke tests when a MoveIt environment is available; otherwise report them skipped.
 8. Report assumptions: inferred TCP links, manual collision pairs, unverified planner behavior.

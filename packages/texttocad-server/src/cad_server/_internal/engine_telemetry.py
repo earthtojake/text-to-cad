@@ -32,7 +32,7 @@ are: the CAD app's or the viewer's next send takes it (as a ``cli`` batch of its
 nothing taking it for a window, the sender a command starts (``telemetry_send``). Nothing is counted where
 the environment turns telemetry off
 (``analytics.refused``, read first), in an engine worker (what a build asks for is that build's), or for a
-server's own work (``cadgen viewer``, ``cadgen mcp``: each counts what it serves). Never raises.
+server's own work (``cad viewer``, ``cad-mcp``: each counts what it serves). Never raises.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ def observe(facts: dict[str, Any]) -> None:
     try:
         import os
 
-        if os.environ.get("CADGEN_ENGINE_WORKER") == "1":
+        if os.environ.get("CAD_ENGINE_WORKER") == "1":
             return
         from cad_server import analytics
 

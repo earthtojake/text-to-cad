@@ -693,7 +693,7 @@ class CadApp:
         return self._recents_payload()
 
     def delete_document(self, ident):
-        """A model's Delete: the one deletion ``cadgen delete`` is too (``cad_server.engine.models.delete``)
+        """A model's Delete: the one deletion ``cad delete`` is too (``cad_server.engine.models.delete``)
         -- its record and its document in the engine's cache, and, from the engine's own page
         (``engine_app.ViewerApp``), what the engine holds of it first. Never a file of the person's."""
         from cad_server.engine.models import delete

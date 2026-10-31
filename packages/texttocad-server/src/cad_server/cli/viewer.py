@@ -1,4 +1,4 @@
-"""``cadgen viewer`` ensures the engine, prints or opens its page URL, and exits.
+"""``cad viewer`` ensures the engine, prints or opens its page URL, and exits.
 
 The parser and launcher contract live in ``cad_server.viewer.main``.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen viewer"
+DEFAULT_PROG = "cad viewer"
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:

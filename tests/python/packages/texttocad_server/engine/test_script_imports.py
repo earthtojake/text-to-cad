@@ -183,7 +183,7 @@ class PackageScriptTest(unittest.TestCase):
         helper.write_text("WIDTH=1\n", encoding="utf-8")
         editable.write_text("HEIGHT=1\n", encoding="utf-8")
         script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
-        script.write_text("import build123d as bd\nfrom cadgen import xbf\n@xbf('XBF/body.xbf')\n"
+        script.write_text("import build123d as bd\nfrom cad import xbf\n@xbf('XBF/body.xbf')\n"
                           "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
                           "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
 
@@ -348,8 +348,8 @@ class PackageScriptRunTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="engine-package-run-")).resolve()
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.state),
-                                          "CADGEN_ENGINE_MESH": "inline"}, self.addCleanup)
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
+                                          "CAD_ENGINE_MESH": "inline"}, self.addCleanup)
         self.addCleanup(self._stop)
 
     def _stop(self) -> None:
@@ -410,11 +410,11 @@ class LibraryRootsTest(unittest.TestCase):
         prefix, site = root / "proj", root / "proj" / "lib" / "python3" / "site-packages"
         write(root, {"proj/pyvenv.cfg": "include-system-site-packages = false\n", "proj/work/helpers.py": "WIDTH = 3\n",
                      "proj/lib/python3/site-packages/installed.py": "",
-                     "proj/lib/python3/site-packages/shipped.py": "import build123d as bd\nfrom cadgen import model\n"
+                     "proj/lib/python3/site-packages/shipped.py": "import build123d as bd\nfrom cad import model\n"
                                                                   "@model\ndef shipped():\n    return bd.Box(1, 1, 1)\n",
                      "proj/work/block.py": """
             import build123d as bd
-            from cadgen import model
+            from cad import model
 
             import helpers
 
@@ -444,7 +444,7 @@ class LibraryRootsTest(unittest.TestCase):
             self.assertEqual(lines, [], "the project's own script is no library's")
             [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
         self.assertTrue(shipped["ok"], shipped.get("error"))
-        said = (f"cadgen: shipped.py lies in a library folder, {site}: edits to it and to what it "
+        said = (f"cad: shipped.py lies in a library folder, {site}: edits to it and to what it "
                 "imports rebuild nothing; keep the project outside the interpreter's library folders")
         self.assertEqual(lines, [said])
         # On Windows the venv's standard library folder (proj\Lib) holds its site-packages too: the

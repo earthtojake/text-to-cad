@@ -4,7 +4,7 @@ The lid's hinge is the mechanism (a revolute joint, two configurations, one moti
 keeps it, and every GLB of the box carries the motion `open_close` as a clip. The showcase is the
 GLB's own (`animation`): the lid opens through the mechanism's forward kinematics, the feet drop
 out one after the other, the latch spins off and is hidden. The document never holds it; a GLB
-exported while the model is live bakes it (`cadgen export <id> GLB/hinged_box_showcase.glb`, the
+exported while the model is live bakes it (`cad export <id> GLB/hinged_box_showcase.glb`, the
 id its run prints); one exported from a saved xbf carries the motion alone.
 """
 

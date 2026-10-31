@@ -67,7 +67,7 @@ waits) -- and nothing once the document is in, or what failed.
 Meshing runs off the request's thread (``Mesher``): by default on a pool of processes
 started as an inspection's facts need them (never by a build alone), or all at once with the
 first page or mesh (``warm``), and kept warm, each handed one part's shape bytes; or ``inline``
-(``CADGEN_ENGINE_MESH=inline``, or ``?mode=inline``), one part after another on one thread,
+(``CAD_ENGINE_MESH=inline``, or ``?mode=inline``), one part after another on one thread,
 each spread over the kernel's own threads. A document's parts go to the pool largest
 first, by their shape bytes (of face count, bounding diagonal and bytes, the bytes
 predicted a part's mesh time best), and a part of ``PARALLEL_BYTES`` or more is meshed
@@ -134,9 +134,9 @@ FOREIGN_HELD = 8
 
 
 def find_three(start: Path | None = None) -> Path | None:
-    """The ``three`` package folder: ``CADGEN_ENGINE_THREE``, else the nearest
+    """The ``three`` package folder: ``CAD_ENGINE_THREE``, else the nearest
     ``node_modules/three`` above ``start`` (the working directory) or above this file."""
-    override = os.environ.get("CADGEN_ENGINE_THREE")
+    override = os.environ.get("CAD_ENGINE_THREE")
     if override:
         return Path(override)
     for base in (Path(start or os.getcwd()).resolve(), Path(__file__).resolve()):
@@ -325,11 +325,11 @@ def _cgroup_limit() -> int | None:
 
 
 def memory_budget() -> int:
-    """The daemon's memory budget, in bytes: ``CADGEN_ENGINE_MEMORY_MB``, else a quarter of the
+    """The daemon's memory budget, in bytes: ``CAD_ENGINE_MEMORY_MB``, else a quarter of the
     machine's physical memory (of its cgroup's limit, when that is less), else 4 GiB where neither
     can be read."""
     try:
-        given = float(os.environ.get("CADGEN_ENGINE_MEMORY_MB", "").strip() or 0)
+        given = float(os.environ.get("CAD_ENGINE_MEMORY_MB", "").strip() or 0)
     except ValueError:
         given = 0.0
     if given > 0:
@@ -352,11 +352,11 @@ class Pressure:
     ``memory.pressure``, else ``/proc/pressure/memory``: ``some avg10`` past ``PSI_SOME``). None of
     them anywhere else, or unreadable: never under pressure, and the budget alone applies.
     ``simulate`` is the test hook: it answers in place of the system's signal and wakes the poller.
-    ``CADGEN_ENGINE_PRESSURE`` is its form for a daemon in another process (``from_environment``):
+    ``CAD_ENGINE_PRESSURE`` is its form for a daemon in another process (``from_environment``):
     ``0`` never under pressure, ``1`` always, unset measured; any other value is refused."""
 
     PSI_SOME = 10.0
-    ENVIRONMENT = "CADGEN_ENGINE_PRESSURE"
+    ENVIRONMENT = "CAD_ENGINE_PRESSURE"
 
     def __init__(self) -> None:
         self.simulated: bool | None = None
@@ -369,14 +369,14 @@ class Pressure:
 
     @classmethod
     def from_environment(cls, environ: Any = None) -> "Pressure":
-        """A daemon's signal: ``simulate``d as ``CADGEN_ENGINE_PRESSURE`` says (``override``)."""
+        """A daemon's signal: ``simulate``d as ``CAD_ENGINE_PRESSURE`` says (``override``)."""
         found = cls()
         found.simulate(cls.override(os.environ if environ is None else environ))
         return found
 
     @classmethod
     def override(cls, environ: Any) -> bool | None:
-        """``CADGEN_ENGINE_PRESSURE``'s answer: False for ``0``, True for ``1``, None (measured) unset
+        """``CAD_ENGINE_PRESSURE``'s answer: False for ``0``, True for ``1``, None (measured) unset
         or empty. ``ValueError``, in one line, for anything else."""
         text = (environ.get(cls.ENVIRONMENT) or "").strip()
         if text in ("", "0", "1"):
@@ -577,7 +577,7 @@ def _timed(shape: Any, parallel: bool) -> tuple[bytes, dict[int, str], float]:
 
 def exit_with_parent() -> None:
     """A pool process's start (meshing, reading): it exits once the process that started it is
-    gone, however that one ended -- ``cadgen stop``, a signal, a crash -- so no pool process
+    gone, however that one ended -- ``cad stop``, a signal, a crash -- so no pool process
     outlives its engine (or its worker) holding the kernel's memory."""
     import multiprocessing
 
@@ -615,9 +615,9 @@ class _Job:
 
 class Mesher:
     def __init__(self, mode: str | None = None, workers: int | None = None) -> None:
-        self.mode = mode or os.environ.get("CADGEN_ENGINE_MESH", "processes")
+        self.mode = mode or os.environ.get("CAD_ENGINE_MESH", "processes")
         if self.mode not in MODES:
-            raise ValueError(f"CADGEN_ENGINE_MESH is one of {', '.join(MODES)}")
+            raise ValueError(f"CAD_ENGINE_MESH is one of {', '.join(MODES)}")
         self.workers = workers or max(1, (os.cpu_count() or 2))
         # One thread runs inline meshing: the kernel's threads are its parallelism.
         self._inline = concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="mesh")
@@ -1027,7 +1027,7 @@ class Server:
             self.cache.grown = self._grown
         self.isolated = isolated
         self.mesher = Mesher("processes" if isolated else mesh_mode,
-                             workers=1 if isolated and (mesh_mode or os.environ.get("CADGEN_ENGINE_MESH")) == "inline" else None)
+                             workers=1 if isolated and (mesh_mode or os.environ.get("CAD_ENGINE_MESH")) == "inline" else None)
         self.three = Path(three) if three else find_three()
         self.touch = touch
         self.clients_active = lambda: False
@@ -1981,7 +1981,7 @@ class Server:
                     except KeyError:
                         if self.holds(ident):
                             raise
-                        # Deleted while the page waited (`cadgen delete`): not found, as every read of it is now.
+                        # Deleted while the page waited (`cad delete`): not found, as every read of it is now.
                         lost = self.lost(ident)
                         if lost is not None:
                             return self.send(handler, 404, json.dumps(lost).encode(), "application/json")

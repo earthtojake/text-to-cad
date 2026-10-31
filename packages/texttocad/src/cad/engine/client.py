@@ -36,7 +36,7 @@ SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"
 # status to tell it from a Python traceback.
 WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             "(the CAD plugin's server starts the engine) or run `cadgen server` outside the sandbox")
+             "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
 
 
 def _connect(address: Path | None = None) -> Connection | None:
@@ -92,7 +92,7 @@ def _sandboxed() -> bool:
 def _denied(cause: str) -> ConnectionError:
     """The engine refused by the system (a sandbox that forbids writing in the engine's folder),
     said to the agent or person who runs the command."""
-    return ConnectionError(f"the system denies cadgen's local engine ({cause}); a sandbox that forbids "
+    return ConnectionError(f"the system denies text-to-cad's local engine ({cause}); a sandbox that forbids "
                            "it does: run this command outside it, or with the sandbox's permission")
 
 
@@ -121,11 +121,11 @@ def _not_started(code: int) -> ConnectionError:
 
 
 # Switches that govern only the process they are set in -- ``DO_NOT_TRACK`` and
-# ``CADGEN_TELEMETRY`` (the distribution's ``cad_server.analytics.ENVIRONMENT``). The daemon serves
+# ``CAD_TELEMETRY`` (the distribution's ``cad_server.analytics.ENVIRONMENT``). The daemon serves
 # every later client, so it is one of the "processes started for others" that go by the
 # person's saved choice, never by the switch of whichever client happened to start it. The
 # engine imports nothing of cadgen (law 3), so it carries the names here rather than importing them.
-_PER_PROCESS_TELEMETRY = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
+_PER_PROCESS_TELEMETRY = ("DO_NOT_TRACK", "CAD_TELEMETRY")
 
 
 def environment() -> dict[str, str]:
@@ -320,7 +320,7 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
             # The request that bound the engine's port, when that start retired an older engine or
             # moved the port (``daemon.bind``): a line each.
             for said in (notice or "").splitlines():
-                print(f"cadgen: {said}", file=sys.stderr)
+                print(f"cad: {said}", file=sys.stderr)
             return answer
     raise ConnectionError("the engine server closed the connection")
 

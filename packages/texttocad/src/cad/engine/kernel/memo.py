@@ -156,7 +156,7 @@ entry just before the next build asks for it. A build is one program's pass over
 models it builds (``_mark``): a script building more models than ``RUNS_KEPT`` (a robot
 and its links) is one build, so each model's next run finds what this one used, and a
 program building a model again in one pass begins another. Nothing of it is ever written anywhere,
-and a new process computes everything. ``CADGEN_ENGINE_MEMO=0`` turns hits off and nothing else.
+and a new process computes everything. ``CAD_ENGINE_MEMO=0`` turns hits off and nothing else.
 """
 
 from __future__ import annotations
@@ -242,7 +242,7 @@ class _Unkeyable(Exception):
 
 
 def enabled() -> bool:
-    return os.environ.get("CADGEN_ENGINE_MEMO", "1").strip() != "0"
+    return os.environ.get("CAD_ENGINE_MEMO", "1").strip() != "0"
 
 
 # --- what is patched ----------------------------------------------------------------------
@@ -1945,7 +1945,7 @@ def body(name: str, source: Callable[[], str], function: Callable[[], Any], *, i
     state = getattr(_LOCAL, "run", None)
     if state is None or not enabled():
         return function()
-    if os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0":
+    if os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         # Bodies off: every body runs, its calls hit one by one, nothing is logged.
         try:
             return function()
@@ -2053,7 +2053,7 @@ def adopt(name: str, result: Any) -> Any:
     miss. A result any shape of which the memo made already, a call not kept, or none running:
     ``result`` as it is."""
     state = getattr(_LOCAL, "run", None)
-    if state is None or state.depth or not enabled() or os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0":
+    if state is None or state.depth or not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return result
     record = _BODIES.get(name)
     if record is None or not record.direct:
@@ -2089,7 +2089,7 @@ def harvest_of(state: _Run, name: str, tree: Any) -> tuple[Any, list] | None:
     a verifying run, a run with retention off, a file changed. ``state`` is the build's run,
     asked as its files are written, after it."""
     if (state.verify or not enabled() or state.statuses.get(name) != "replayed"
-            or os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0"):
+            or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0"):
         return None
     record = _BODIES.get(name)
     if record is None or record.harvest is None or state.records.get(name) is not record:
@@ -2155,7 +2155,7 @@ def listened(sample: Callable[[], list]) -> list:
     is sampled (``_audited``) and held to their bytes in the ``motion_reads`` around it; outside
     one, or with retention off, just sampled."""
     held_by = getattr(_LOCAL, "motions", None)
-    if held_by is None or not enabled() or os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0":
+    if held_by is None or not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return sample()
     log = _BodyLog()
     previous = getattr(_LOCAL, "sampling", None)
@@ -2400,7 +2400,7 @@ def used(name: str) -> None:
 def replayable(name: str, source: str) -> bool:
     """Whether ``body(name, ...)``, its source ``source``, would replay the body's last run
     in this process rather than run it."""
-    if not enabled() or os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0":
+    if not enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return False
     record = _BODIES.get(name)
     return record is not None and record.source == source and _replayable(record)

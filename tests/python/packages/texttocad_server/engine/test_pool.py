@@ -299,13 +299,13 @@ class StandbyTest(unittest.TestCase):
         self.standing(pool)
 
     def test_the_pressure_switch_answers_for_the_host_and_anything_else_is_refused(self) -> None:
-        # CADGEN_ENGINE_PRESSURE is Pressure.simulate for a daemon in another process.
+        # CAD_ENGINE_PRESSURE is Pressure.simulate for a daemon in another process.
         from cad_server.engine import daemon as engine
 
         for value, simulated in (("0", False), ("1", True), ("", None), (None, None)):
-            with self.subTest(value=value), mock.patch.dict(os.environ, {"CADGEN_ENGINE_PRESSURE": value or ""}):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {"CAD_ENGINE_PRESSURE": value or ""}):
                 if value is None:
-                    os.environ.pop("CADGEN_ENGINE_PRESSURE")
+                    os.environ.pop("CAD_ENGINE_PRESSURE")
                 made = Daemon(cap=1)
                 self.addCleanup(made.shutdown)
                 self.assertEqual(made.pressure.simulated, simulated, "unset: the system's signal, measured")
@@ -313,12 +313,12 @@ class StandbyTest(unittest.TestCase):
                     self.assertEqual((made.pressure.under(), made.pool.pressed()), (simulated, simulated))
         folder = Path(tempfile.mkdtemp(prefix="eng-"))
         self.addCleanup(shutil.rmtree, folder, True)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_PRESSURE": "yes", "CADGEN_ENGINE_DIR": str(folder)}):
-            with self.assertRaisesRegex(ValueError, "CADGEN_ENGINE_PRESSURE is 'yes': 0 .*, 1 .*, or unset"):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_PRESSURE": "yes", "CAD_ENGINE_DIR": str(folder)}):
+            with self.assertRaisesRegex(ValueError, "CAD_ENGINE_PRESSURE is 'yes': 0 .*, 1 .*, or unset"):
                 Daemon(cap=1)
             with mock.patch("sys.stderr"):
                 self.assertEqual(engine.main([]), 1, "refused at the start")
-            self.assertIn("CADGEN_ENGINE_PRESSURE is 'yes'", json.loads(engine.failure_path().read_text(encoding="utf-8"))["reason"])
+            self.assertIn("CAD_ENGINE_PRESSURE is 'yes'", json.loads(engine.failure_path().read_text(encoding="utf-8"))["reason"])
 
     def test_status_shows_the_standby_with_its_memory_and_never_as_a_script_s_worker(self) -> None:
         from cad_server.engine.cli import status_text
@@ -494,11 +494,11 @@ class DaemonPoolTest(unittest.TestCase):
         # Its engine, its registry of documents and its cache are its own, never the developer's.
         own = Path(tempfile.mkdtemp(prefix="engine-own-"))  # beside the project: nothing lands in it
         self.addCleanup(shutil.rmtree, own, True)
-        private = {"CADGEN_ENGINE_DIR": str(self.state), "CADGEN_STATE_DIR": str(own / "state"),
-                   "CADGEN_CACHE_DIR": str(own / "cache")}
+        private = {"CAD_ENGINE_DIR": str(self.state), "CAD_STATE_DIR": str(own / "state"),
+                   "CAD_CACHE_DIR": str(own / "cache")}
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), **private,
-                                          "CADGEN_ENGINE_MESH": "inline",
-                                          "CADGEN_ENGINE_WORKERS": "1"}, self.addCleanup)
+                                          "CAD_ENGINE_MESH": "inline",
+                                          "CAD_ENGINE_WORKERS": "1"}, self.addCleanup)
         # This process asks the test's daemon what it holds (``status``), never starting one.
         self.enterContext(mock.patch.dict(os.environ, private))
         self.addCleanup(self._stop)
@@ -578,8 +578,8 @@ class DaemonPoolTest(unittest.TestCase):
 
     def test_a_new_script_s_first_build_takes_the_standby_and_another_stands_by(self) -> None:
         # The runners' standby is off; and the host's memory pressure, which keeps a standby from
-        # starting, is no part of this test (``CADGEN_ENGINE_PRESSURE``).
-        env = {**self.env, "CADGEN_ENGINE_WORKERS": "", "CADGEN_ENGINE_STANDBY": "1", "CADGEN_ENGINE_PRESSURE": "0"}
+        # starting, is no part of this test (``CAD_ENGINE_PRESSURE``).
+        env = {**self.env, "CAD_ENGINE_WORKERS": "", "CAD_ENGINE_STANDBY": "1", "CAD_ENGINE_PRESSURE": "0"}
 
         def standby(besides: int | None = None) -> dict:
             found: dict = {}

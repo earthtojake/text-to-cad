@@ -1,4 +1,4 @@
-"""``cadgen mcp``: CAD beside an agent's chat, as an MCP App.
+"""``cad-mcp``: CAD beside an agent's chat, as an MCP App.
 
 Nothing heavy happens until a tool needs it: initialize and tools/list read no
 model file and import no CAD kernel. The engine already owns this session. Everything the views share --
@@ -49,7 +49,7 @@ it says the tab opens with its answer where the host shows CAD tabs, and gives t
 the user otherwise; a ``cad_show`` after it waits for that tab, and a tab that never comes is
 evidence that this host shows none.
 
-``CADGEN_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
+``CAD_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
 Apps without advertising them (the reference host, ``basic-host``, is one).
 """
 
@@ -942,7 +942,7 @@ class Server:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
             raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
-                             f"`cadgen viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
+                             f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         self.warm()  # the browser page's first document meshes on a pool already starting
         name = os.path.basename(model)
@@ -1015,7 +1015,7 @@ class Server:
     def _tool_cad_screenshot(self, arguments, context):
         deadline = time.monotonic() + CAPTURE_SECONDS
         if self._no_app(context):
-            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cadgen snapshot`.", "no_view")
+            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad snapshot`.", "no_view")
         if self.tabs:
             view = self._target(context, arguments.get("view"), needs_model=True)
             if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
@@ -1027,7 +1027,7 @@ class Server:
             raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
-                             "or render headless with `cadgen snapshot`.", "no_view")
+                             "or render headless with `cad snapshot`.", "no_view")
         if isinstance(view, SidebarView):
             reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
             if reply is None:

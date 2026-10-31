@@ -20,7 +20,7 @@ python scripts/mold_tool.py pulls part.stl
 ```
 
 Input is a mesh (`.stl`, `.obj`, `.ply`, `.3mf`). For a STEP, export an STL
-with `$cad` first: `cadgen export <id> part.stl` writes one from the model (or `cadgen export part.step part.stl` from a STEP) with `$cad`'s launch command.
+with `$cad` first: `cad export <id> part.stl` writes one from the model (or `cad export part.step part.stl` from a STEP) with `$cad`'s launch command.
 Its mesh comes at one fixed tolerance; the tool splits faces further where it
 needs to, so a 1 mm feature gets facets of its own.
 

@@ -35,7 +35,7 @@ process changes: the aggregate support-area facts are binned against it.
 
 STEP/STP input is boundary-representation CAD, not a mesh. When the `$cad`
 skill is installed, export an STL with it first, then measure the STL here.
-With `$cad`, `cadgen export <id> part.stl` writes one from the model (or `cadgen export part.step part.stl` from a STEP).
+With `$cad`, `cad export <id> part.stl` writes one from the model (or `cad export part.step part.stl` from a STEP).
 Report that remediation instead of attempting raw STEP parsing. `measure`
 on a STEP exits 1 with `{"error": "failed to load mesh: ..."}`; that is the
 wrong-input signal, not a missing dependency — do not install extra mesh

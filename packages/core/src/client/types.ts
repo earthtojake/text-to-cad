@@ -20,7 +20,7 @@ export interface CadEntry {
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
-  /** The folder of the most recent launch (`cadgen viewer`), which a launch's relative files are read from. */
+  /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;

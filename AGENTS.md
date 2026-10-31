@@ -52,27 +52,27 @@ local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
 (Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
-`scripts/install/` runs the newest release's `cadgen setup` through uvx, which installs that
+`scripts/install/` runs the newest release's `cad setup` through uvx, which installs that
 release in its own folder (`<state>/releases/<release>`), sets up the plugin in every agent app on
 the device (the skills alone, through the Skills CLI, for the agents without a plugin) and moves the
 device's engine to it, asking nothing, and, run again, updates them; the update button in the CAD
-Viewer and the CAD app, and `cadgen update`, take the same steps. cadgen itself
+Viewer and the CAD app, and `cad update`, take the same steps. cadgen itself
 installs as ONE uvx command, `uvx --no-config --managed-python --python
 3.14 --from cadgen==<VERSION> <tool>` (`cad_server._internal.launch`), which the
 plugin server configs run: the wheel's core (engine, command, viewer server, MCP
 shim). The CAD kernel is its `kernel` extra, which the engine installs with uv into
 one base environment per installation that every model and kernel process runs in
 (`cad_server._internal.base`). That installation registers itself and writes the
-`cadgen` command, `~/.local/bin/cadgen`; every cadgen skill's SKILL.md runs
-`cadgen +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
+`cad` command, `~/.local/bin/cad`; every cadgen skill's SKILL.md runs
+`cad +<VERSION>` through it (uvx cannot start in an agent's sandbox, the
 command can). The release stamps every pin and `+<VERSION>` (`sync-version.mjs`),
 with the installer's fallback release, and `scripts/release/check-version.sh` and the
 tests assert they all equal `VERSION`. The device runs one engine, the current installation's
 (`<state>/installations/current`): the server, every thread and every skill command share one
 daemon whatever release each names, and only an update moves it to another
 ([CONTRIBUTING.md, "Development dependencies"](CONTRIBUTING.md#development-dependencies)).
-A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR` and
-`CADGEN_ENGINE_DIR`. In a checkout, install
+A test or an experiment gets an engine of its own with its own `CAD_STATE_DIR` and
+`CAD_ENGINE_DIR`. In a checkout, install
 `requirements-dev.txt` (the editable cadgen with its kernel extra: its own base) and test in agent apps with
 `scripts/install/dev_install.py`, which points both at the checkout.
 
@@ -92,13 +92,13 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the engine
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
-  Codex, cards in Claude Desktop (its server is `cadgen mcp`).
+  Codex, cards in Claude Desktop (its server is `cad-mcp`).
 - `packages/` ([README](packages/README.md)): the three shared packages.
   `packages/cadgen` ([README](packages/texttocad/README.md)) is the published distribution,
   not just the Python: the engine (`cadgen/engine`: models built into documents it holds,
   and the XBF, STEP, GLB, STL, 3MF and DXF files written from them; the daemon and its
   workers; exports; the OCCT stills; the verbs the cadgen skills' commands run), the
-  `cadgen` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
+  `cad` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
   app server (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built by
   `scripts/bundle/cadgen-runtime.sh`); skills consume it as an installed distribution.
   `packages/core` ([README](packages/core/README.md)) is `@text-to-cad/core`, shared
@@ -149,7 +149,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
 - Shared runtime comes from the **`cadgen` distribution**. A skill that uses it
-  defines `cadgen` and `python` in its SKILL.md as `cadgen +<VERSION>` above
+  defines `cadgen` and `python` in its SKILL.md as `cad +<VERSION>` above
   (the release stamps every pin); no skill installs cadgen
   any other way (no `requirements.txt` naming it), because a second installation
   is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
@@ -161,7 +161,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:
   generate small fixtures in fresh temporary directories or use tiny test-owned
-  fixtures, with their own engine daemon (`CADGEN_ENGINE_DIR`) and cleanup. Repo `tmp/` is fine.
+  fixtures, with their own engine daemon (`CAD_ENGINE_DIR`) and cleanup. Repo `tmp/` is fine.
   Enforced by `tests/python/global/test_tests_are_self_contained.py`.
 - Every test runs in CI. Each test file is reached by a runner under
   `scripts/test/`, every runner is called by a `test.yml` job on the changes that
@@ -201,7 +201,7 @@ A test or an experiment gets an engine of its own with its own `CADGEN_STATE_DIR
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
-- The CAD Viewer is `cadgen viewer`: the engine hosts `cad_server.viewer` (Python, in
+- The CAD Viewer is `cad viewer`: the engine hosts `cad_server.viewer` (Python, in
   `packages/cadgen`), the React client's source is `apps/web/` and its build
   ships in the wheel at `cad_server/_runtime/viewer` (built, never committed; a
   checkout serves `apps/web/dist`). The CAD, DXF and robot-description skills document that verb directly.

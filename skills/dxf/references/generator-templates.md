@@ -4,7 +4,7 @@ Read this file when creating a new `<name>.py` drawing script. Copy the
 template for the workflow that applies and replace the TODO markers.
 
 Every template follows one contract: **the parameterless `@model` function returns
-build123d 2D geometry on z=0, and `cadgen export <id> <name>.dxf` writes the DXF.**
+build123d 2D geometry on z=0, and `cad export <id> <name>.dxf` writes the DXF.**
 You never construct a document, name a file in the model, or think about entities.
 
 - Return **one shape** for a single-operation drawing: it lands on the `CUT`
@@ -21,7 +21,7 @@ You never construct a document, name a file in the model, or think about entitie
   bend/engrave/reference-named layer.
 - Decoration only declares: the script's `__main__` block calls the drawing, and
   `python <name>.py` builds what it calls and prints each drawing's id. Then
-  `cadgen export <id> DXF/<name>.dxf` writes the file.
+  `cad export <id> DXF/<name>.dxf` writes the file.
 
 ## 1. Standalone drafting (DXF from scratch)
 
@@ -32,7 +32,7 @@ behind them. Keep meaningful dimensions as named constants.
 """Standalone 2D drawing: <description>."""
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 # TODO: named dimension constants
 WIDTH_MM = 40.0
@@ -58,7 +58,7 @@ Two layers, when the part is both cut and marked:
 """Standalone 2D drawing with a marking layer."""
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 WIDTH_MM = 40.0
 HEIGHT_MM = 20.0
@@ -93,7 +93,7 @@ imported from the part counts by its value.
 ```python
 """Flat-pattern DXF drawing for <name>; geometry reused from <name>.py."""
 
-from cadgen import flatten, model
+from cad import flatten, model
 
 from <name> import <name>          # the model: importing builds nothing
 
@@ -135,7 +135,7 @@ def drawing():
 ## 3. Flat pattern of an imported STEP
 
 For a vendor `.step` with no Python source. Read it with `read_step`, or convert
-it once with `cadgen export vendor_panel.step vendor_panel.xbf` and read the xbf
+it once with `cad export vendor_panel.step vendor_panel.xbf` and read the xbf
 with `read_xbf`, which is faster. Like every file a run reads, it is an input:
 replacing it re-runs the drawing.
 
@@ -151,7 +151,7 @@ drawing, and give the drawing its own stem:
 
 from pathlib import Path
 
-from cadgen import flatten, model, read_step
+from cad import flatten, model, read_step
 
 STEP_PATH = Path(__file__).resolve().parent / "vendor" / "vendor_panel.step"
 KERF = 0.15
@@ -181,7 +181,7 @@ if __name__ == "__main__":
   included. If a drawing comes out as hundreds of short `LINE`s, something fell
   back to the sampled path: check the union inputs rather than accepting it.
 - **Why did it (not) rebuild?** The run's report says how each body went (`run` or
-  `replayed`); `cadgen inspect <id>`, the id the run printed, prints what the drawing
+  `replayed`); `cad inspect <id>`, the id the run printed, prints what the drawing
   was built from.
 - **Kept current**: an `exports.py` beside the drawings calls `export(drawing, path)`
   for each, the model function itself, with paths anchored on `__file__`.

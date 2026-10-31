@@ -1,12 +1,12 @@
 """The engine daemon: one per device -- its engine folder's one door, lock and port file, the current
 installation's engine, which every client starts or attaches to (``client``) --, started on demand,
-and never stopped by a timer: it stops on ``cadgen stop`` (or a terminate), once it has drained for
+and never stopped by a timer: it stops on ``cad stop`` (or a terminate), once it has drained for
 an update (``drain``: nothing in flight, then the switch's helper starts the next release's), when its
 door is gone and no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
 
 It holds a pool of warm workers, one per model script (``Pool``), and hands each build to its
 script's worker: one build at a time per worker, builds of different scripts at once, and at
-most ``CADGEN_ENGINE_WORKERS`` workers alive (by default, the machine's cores). A build for a
+most ``CAD_ENGINE_WORKERS`` workers alive (by default, the machine's cores). A build for a
 script with a live worker waits for it while it is busy. One for a script with none starts one
 when fewer than the cap are alive; at the cap the least recently used idle worker no page
 watches is retired first (its stdin closed: it exits), and when every idle worker is watched the
@@ -15,7 +15,7 @@ for the first to come free. Nothing is refused, and nothing is predicted: no adm
 
 No timer retires a worker: memory alone does (``Pool.shed``). The workers' resident memory --
 each one's as it measured it at its start and after each build, the standby's and the render
-processes' with them -- is held to one cap (``CADGEN_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``).
+processes' with them -- is held to one cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``).
 Past it, or under the system's memory-pressure signal (``serve.Pressure``), idle processes are
 retired, least recently used first: the standby, then render processes, then the workers no page
 watches, and a watched one only when no other is left. A worker alone over the cap after its build
@@ -31,12 +31,12 @@ for a script with no live worker takes the standby when its environment shapes t
 the standby's does (``RESTARTS``), and starts a fresh worker otherwise; taken, the standby is that
 script's worker from then on (``Worker.adopt``), so a new script's first build pays no kernel load.
 The standby counts toward the cap, is the first retired for room or memory, and is never a
-script's worker in ``status``. ``CADGEN_ENGINE_STANDBY=0`` keeps none (``standby``): an operator's
+script's worker in ``status``. ``CAD_ENGINE_STANDBY=0`` keeps none (``standby``): an operator's
 seam for CI and machines short of memory.
 
 It also serves documents over HTTP (``serve``), holding each loaded document and its
 parts' tessellations in its memory under one budget (``serve.memory_budget``,
-``CADGEN_ENGINE_MEMORY_MB``; past it, or on the system's memory-pressure signal, what is held
+``CAD_ENGINE_MEMORY_MB``; past it, or on the system's memory-pressure signal, what is held
 is evicted: ``serve.Server.trim``), and draws them (``draw``): each served document a
 snapshot asks for gets a render process of its own (``render/service.py``), started on its
 first picture, sent each new version of it at the picture that asks for it, gone with the daemon or under the
@@ -111,12 +111,12 @@ TEND_SECONDS = 30.0
 PRESSURE_SHARE = 0.5
 # The standby's name where a worker's script would be (``Pool.stand``): it builds no script yet.
 STANDBY = "standby"
-# The engine's HTTP port when nothing names one (0xCAD): ``--port`` on ``cadgen server`` (or a
-# request's own), then ``CADGEN_ENGINE_PORT``, then the installation's remembered port, then this
+# The engine's HTTP port when nothing names one (0xCAD): ``--port`` on ``cad server`` (or a
+# request's own), then ``CAD_ENGINE_PORT``, then the installation's remembered port, then this
 # (``bind``). Held by another program, the engine rolls to the next free port and remembers it.
 DEFAULT_PORT = 3245
 # A test suite's own "default" (``default_port``), so no test binds or rolls from the machine's 3245.
-DEFAULT_PORT_ENV = "CADGEN_ENGINE_DEFAULT_PORT"
+DEFAULT_PORT_ENV = "CAD_ENGINE_DEFAULT_PORT"
 # How many ports past a held default (or remembered) one the engine tries before any free one.
 PORTS_TRIED = 64
 # How long the engine waits for another engine on its port that it asked to stop to let the port go.
@@ -164,15 +164,15 @@ def _prune(ours: Path) -> None:
 
 
 def standby() -> bool:
-    """Whether the daemon keeps a standby (``Daemon.stand``): ``CADGEN_ENGINE_STANDBY=0`` is the
+    """Whether the daemon keeps a standby (``Daemon.stand``): ``CAD_ENGINE_STANDBY=0`` is the
     operator's seam to keep none (CI, a machine short of memory); unset or anything else, it does."""
-    return os.environ.get("CADGEN_ENGINE_STANDBY", "").strip() != "0"
+    return os.environ.get("CAD_ENGINE_STANDBY", "").strip() != "0"
 
 
 def worker_cap() -> int:
-    """The live workers' cap: ``CADGEN_ENGINE_WORKERS``, else the machine's cores."""
+    """The live workers' cap: ``CAD_ENGINE_WORKERS``, else the machine's cores."""
     try:
-        given = int(os.environ.get("CADGEN_ENGINE_WORKERS", "").strip() or 0)
+        given = int(os.environ.get("CAD_ENGINE_WORKERS", "").strip() or 0)
     except ValueError:
         given = 0
     return given if given > 0 else (os.cpu_count() or 1)
@@ -184,7 +184,7 @@ def _note_failure(reason: str, error: OSError) -> None:
 
 def _note(said: str, denied: bool = False) -> None:
     """Why this daemon exits failing: on its stderr and in its note beside its lock."""
-    print(f"cadgen: {said}", file=sys.stderr)  # ``cadgen server``'s terminal; nowhere when started for a client
+    print(f"cad: {said}", file=sys.stderr)  # ``cad server``'s terminal; nowhere when started for a client
     try:
         failure_path().write_text(json.dumps({"reason": said, "denied": denied}), encoding="utf-8")
     except OSError:
@@ -240,7 +240,7 @@ the daemon runs, its folder first on its path; one of the base imports the base'
         own = {name: os.environ[name] for name in BYTECODE if name in os.environ}
         env = {name: value for name, value in env.items() if name not in BYTECODE}
         env.update(own or bytecode({}))
-        env["CADGEN_ENGINE_WORKER"] = "1"
+        env["CAD_ENGINE_WORKER"] = "1"
         self.process = subprocess.Popen([self.python, "-X", "faulthandler", "-P", "-m", "cad.engine.worker",
                                          *(["--standby"] if standby else [])], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
@@ -891,21 +891,21 @@ class Pool:
 
 
 def environment_port() -> int | None:
-    """``CADGEN_ENGINE_PORT`` as a port (0: any free one), or None when it names none."""
-    given = os.environ.get("CADGEN_ENGINE_PORT", "").strip()
+    """``CAD_ENGINE_PORT`` as a port (0: any free one), or None when it names none."""
+    given = os.environ.get("CAD_ENGINE_PORT", "").strip()
     if not given:
         return None
     try:
         port = int(given)
     except ValueError:
-        raise ValueError(f"CADGEN_ENGINE_PORT={given!r} is not a port") from None
+        raise ValueError(f"CAD_ENGINE_PORT={given!r} is not a port") from None
     if not 0 <= port <= 65535:
-        raise ValueError(f"CADGEN_ENGINE_PORT={given!r} is not a port")
+        raise ValueError(f"CAD_ENGINE_PORT={given!r} is not a port")
     return port
 
 
 def default_port() -> int:
-    """``DEFAULT_PORT``, or the port ``CADGEN_ENGINE_DEFAULT_PORT`` names (1-65535): a test's seam,
+    """``DEFAULT_PORT``, or the port ``CAD_ENGINE_DEFAULT_PORT`` names (1-65535): a test's seam,
     the default it holds or frees without touching the machine's 3245."""
     given = os.environ.get(DEFAULT_PORT_ENV, "").strip()
     return int(given) if given.isdigit() and 0 < int(given) <= 65535 else DEFAULT_PORT
@@ -932,7 +932,7 @@ def _answers(host: str, port: int) -> bool:
 
 class PortHeld(ValueError):
     """The engine's port is another process's (``bind``): ``who`` holds it, in words. A port named
-    (``--port``, ``CADGEN_ENGINE_PORT``) is refused in one line that names the holder; the default
+    (``--port``, ``CAD_ENGINE_PORT``) is refused in one line that names the holder; the default
     or remembered one is rolled from."""
 
     def __init__(self, said: str, who: str) -> None:
@@ -955,7 +955,7 @@ def _uses(status: dict[str, Any]) -> list[str] | None:
 def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tuple[Any, dict[str, Any]]:
     """The engine's HTTP server, listening, and where its port came from. ``listen(port, token)``
     makes it. A port named -- ``asked`` (``--port``, or the switch's: the port the engine before it
-    served), else ``CADGEN_ENGINE_PORT`` -- is taken or refused by name (``PortHeld``). Else the
+    served), else ``CAD_ENGINE_PORT`` -- is taken or refused by name (``PortHeld``). Else the
     device's port: 3245 (``DEFAULT_PORT``) when it is free, else the port it remembers, else the one it
     rolls to (``_installation_port``). Either way an engine of another engine folder or of an earlier
     cadgen on it that nothing uses is asked to stop and its port taken (``_listen``); one in use is
@@ -963,7 +963,7 @@ def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tup
     first to start (``_new_token``); one there that cannot be read is refused by name, and nothing is
     served.
 
-    ``where``: ``source`` (``--port``, ``CADGEN_ENGINE_PORT``, ``default`` or ``rolled``), for a
+    ``where``: ``source`` (``--port``, ``CAD_ENGINE_PORT``, ``default`` or ``rolled``), for a
     rolled port ``because`` (who holds 3245), and ``notice``, the line this start says once: a move of
     its port (a roll, or the return to 3245)."""
     from cad_server.engine import registry
@@ -975,7 +975,7 @@ def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tup
     if asked is not None:
         server, where = _listen(host, asked, "--port", token, listen), {"source": "--port"}
     elif (named := environment_port()) is not None:
-        server, where = _listen(host, named, "CADGEN_ENGINE_PORT", token, listen), {"source": "CADGEN_ENGINE_PORT"}
+        server, where = _listen(host, named, "CAD_ENGINE_PORT", token, listen), {"source": "CAD_ENGINE_PORT"}
     else:
         server, where = _installation_port(host, remembered, token, listen)
         remembered = server.port if where["source"] == "rolled" else None
@@ -1078,7 +1078,7 @@ def _listen(host: str, port: int, source: str, token: str, listen: Callable[[int
             deadline = time.monotonic() + RETIRE_SECONDS
         elif time.monotonic() > deadline:
             raise PortHeld(f"port {port} is held by {retired}, which was asked to stop and still holds it after "
-                           f"{RETIRE_SECONDS:.0f} s: run `cadgen stop` with that version", retired) from None
+                           f"{RETIRE_SECONDS:.0f} s: run `cad stop` with that version", retired) from None
         time.sleep(0.1)
 
 
@@ -1088,7 +1088,7 @@ def _holder(port: int, source: str) -> str:
     ``PortHeld``, naming the holder: that engine and what uses it, one this cadgen cannot ask, or the
     process the system names (``port_holder``). ``source``: where the port came from (``bind``), which
     says how to name another."""
-    other = "pass another --port" if source == "--port" else "start cadgen with another CADGEN_ENGINE_PORT"
+    other = "pass another --port" if source == "--port" else "start the server with another CAD_ENGINE_PORT"
     remedy = f"stop it, or {other}"
     found = _engine_serving(port)
     if found is not None:
@@ -1096,22 +1096,22 @@ def _holder(port: int, source: str) -> str:
         who = _engine_name(status)
         uses = _uses(status)
         if uses is None:
-            raise PortHeld(f"port {port} is held by {who}, which this cadgen cannot ask whether it is in use: "
-                           f"run `cadgen stop` with that version, or {other}", who)
+            raise PortHeld(f"port {port} is held by {who}, which this server cannot ask whether it is in use: "
+                           f"run `cad stop` with that version, or {other}", who)
         if uses:
             then = "quit that app" if (status.get("holders") or 0) else "close that page" if status["watched"] \
                 else "let it finish"
             raise PortHeld(f"port {port} is held by {who}, still in use by {' and '.join(uses)}: {then} "
-                           "or run `cadgen stop` with that version", who)
+                           "or run `cad stop` with that version", who)
         if _ask(address, {"op": "stop"}) is None:
             raise PortHeld(f"port {port} is held by {who}, which did not answer when asked to stop: "
-                           "run `cadgen stop` with that version", who)
+                           "run `cad stop` with that version", who)
         return who
     pid, name, command = port_holder(port)
     if pid is None:
         raise PortHeld(f"port {port} is held by another process: {remedy}", "another process")
     if _CADGEN.search(command or ""):
-        who = f"another cadgen ({name}, pid {pid})"
+        who = f"another text-to-cad ({name}, pid {pid})"
         raise PortHeld(f"port {port} is held by {who}, which this one cannot ask to stop: {remedy}", who)
     who = f"{name or 'a process'} (pid {pid})"
     raise PortHeld(f"port {port} is held by {who}: {remedy}", who)
@@ -1120,7 +1120,7 @@ def _holder(port: int, source: str) -> str:
 def _engine_name(status: dict[str, Any]) -> str:
     """Another engine, by its ``status``: the version its installation runs as and its pid."""
     version = status.get("installation") or status.get("version")
-    return (f"cadgen {version}'s engine" if version else "another cadgen's engine") + f" (pid {status.get('pid')})"
+    return (f"text-to-cad {version}'s engine" if version else "another release's engine") + f" (pid {status.get('pid')})"
 
 
 def _who(port: int) -> str:
@@ -1131,12 +1131,13 @@ def _who(port: int) -> str:
     pid, name, command = port_holder(port)
     if pid is None:
         return "another process"
-    return f"another cadgen ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
+    return f"another text-to-cad ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
 
 
 # A command line that runs a server's engine or viewer, this release's or an earlier one's: ``-m cad_server.…``
-# or ``-m cadgen.…``, or the ``cadgen`` command's ``viewer``, ``server`` or ``mcp``.
-_CADGEN = re.compile(r"(-m\s+(cad_server|cadgen)(\.\w+)*|[/\\]cadgen(\.exe)?\s+(viewer|server|mcp))(\s|$)")
+# or ``-m cadgen.…``, or the command's -- ``cad``, an earlier release's ``cadgen`` -- ``viewer``, ``server`` or
+# ``mcp``.
+_CADGEN = re.compile(r"(-m\s+(cad_server|cadgen)(\.\w+)*|[/\\](cad|cadgen)(\.exe)?\s+(viewer|server|mcp))(\s|$)")
 
 
 def _engine_serving(port: int) -> tuple[Path, dict[str, Any]] | None:
@@ -1258,7 +1259,7 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
 
 
 def rotate_token() -> str | None:
-    """Replace the user's page token (``cadgen server --rotate-token``): every link shared before
+    """Replace the user's page token (``cad server --rotate-token``): every link shared before
     stops working, whichever installation's engine served it. The new token; None where there is no
     state folder to keep it in."""
     import secrets
@@ -1288,7 +1289,7 @@ def others_running() -> list[Path]:
 
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
-        self.port = port  # ``cadgen server --port``: the HTTP port this engine must take, or None
+        self.port = port  # ``cad server --port``: the HTTP port this engine must take, or None
         self.port_source = ""  # where the HTTP port the server took came from (``bind``)
         self.port_because = ""  # a rolled port: who holds the default one
         self.port_notice = ""  # a start that moved the port: the line it says, once (``bind``)
@@ -1303,7 +1304,7 @@ class Daemon:
                          rss_cap_mb)
         # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
         # pool sheds its standby and its least recently used workers (``Pool.shed``); as
-        # ``CADGEN_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
+        # ``CAD_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
         self.pressure = Pressure.from_environment()
         self.pool.pressed = self.pressure.under
         self.workers_lock = threading.Lock()  # each worker's ``held``
@@ -1351,7 +1352,7 @@ class Daemon:
         never makes it, so it never waits on, or asks, the network (``_spare``) --; each standby after
         it in that of the build that took the last one. And
         the bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in
-        the background (``prune_bytecode``). With ``CADGEN_ENGINE_STANDBY=0`` (``standby``) the pool
+        the background (``prune_bytecode``). With ``CAD_ENGINE_STANDBY=0`` (``standby``) the pool
         is given no standby to start: none stands by, and none replaces one."""
         prune_bytecode()
         if not standby():
@@ -1545,12 +1546,12 @@ class Daemon:
                                                    http_factory=HTTP_FACTORY, budget=memory_budget(), token=token))
                 except PortHeld as refusal:
                     if request.get("port"):
-                        # The request's own port (``cadgen viewer --port``): that request is refused,
+                        # The request's own port (``cad viewer --port``): that request is refused,
                         # and the engine -- the builds and warm workers of its other clients -- runs
                         # on, unbound, for the next request that serves.
                         raise
-                    # An engine whose own port is held (``cadgen server --port``, its
-                    # ``CADGEN_ENGINE_PORT``) can never serve: it says why and stops, once the
+                    # An engine whose own port is held (``cad server --port``, its
+                    # ``CAD_ENGINE_PORT``) can never serve: it says why and stops, once the
                     # request that found it has its answer (``_serve``).
                     self.refusal = refusal
                     _note(str(refusal))
@@ -1758,7 +1759,7 @@ class Daemon:
             send({"ok": True, "models": self.models.listing()})
             return
         if op == "delete":
-            # ``cadgen delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
+            # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
             deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
@@ -2049,7 +2050,7 @@ class Daemon:
         standby = ({"pid": spare.pid, "rssMb": None if spare.rss is None else round(spare.rss),
                     "seconds": round(time.time() - spare.started, 1)} if spare is not None
                    else {"pid": None, "rssMb": None, "seconds": None, "starting": True} if readying else None)
-        # What uses it, which `cadgen status` says (and a later cadgen's engine asks an earlier one's before
+        # What uses it, which `cad status` says (and a later cadgen's engine asks an earlier one's before
         # it takes its port, ``bind``): its holds, the documents pages watch, its builds and draws, and HTTP
         # work underway.
         return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
@@ -2136,7 +2137,7 @@ class Daemon:
                 try:
                     then()
                 except Exception as error:  # noqa: BLE001 - the stop goes on: the next client starts current's engine
-                    print(f"cadgen: the update's switch could not start: {type(error).__name__}: {error}",
+                    print(f"cad: the update's switch could not start: {type(error).__name__}: {error}",
                           file=sys.stderr, flush=True)
             self.stopping.set()
 
@@ -2403,11 +2404,11 @@ def _identity(path: Path) -> tuple[int, int] | None:
 
 def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool = False,
          foreground: bool = False) -> int:
-    """Run the engine here. ``port``: the HTTP port it must take (``cadgen server --port``);
+    """Run the engine here. ``port``: the HTTP port it must take (``cad server --port``);
     ``rotate``: a new page token first (``--rotate-token``), refused while another engine runs;
-    ``foreground`` (``cadgen server``): its HTTP server bound before anything else, so a port
+    ``foreground`` (``cad server``): its HTTP server bound before anything else, so a port
     another process holds fails the command at once (``bind``). An engine a client starts binds
-    on the first request that serves, which may name its own port (``cadgen viewer --port``)."""
+    on the first request that serves, which may name its own port (``cad viewer --port``)."""
     from cad.engine.serve import Pressure
 
     try:
@@ -2425,30 +2426,30 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
         return 1
     if held is None:
         if rotate:
-            print("cadgen: an engine server is running; run cadgen stop first, then cadgen server --rotate-token",
+            print("cad: an engine server is running; run cad stop first, then cad server --rotate-token",
                   file=sys.stderr)
             return 1
-        if foreground:  # ``cadgen server``: said, never a silent success that serves nothing it asked
-            print("cadgen: the engine server is already running: `cadgen status` says where it "
-                  "serves, `cadgen stop` stops it" + (f" (to serve on {port})" if port is not None else ""),
+        if foreground:  # ``cad server``: said, never a silent success that serves nothing it asked
+            print("cad: the engine server is already running: `cad status` says where it "
+                  "serves, `cad stop` stops it" + (f" (to serve on {port})" if port is not None else ""),
                   file=sys.stderr)
             return 1 if port is not None else 0
         return 0  # another daemon is up
     if rotate:
         others = others_running()
         if others:
-            print("cadgen: another engine server is running, serving with the token: stop it "
-                  f"first ({', '.join(str(door) for door in others)}), then cadgen server --rotate-token", file=sys.stderr)
+            print("cad: another engine server is running, serving with the token: stop it "
+                  f"first ({', '.join(str(door) for door in others)}), then cad server --rotate-token", file=sys.stderr)
             let_go(held)
             return 1
         try:
             if rotate_token() is None:
                 raise OSError("no state folder")
         except OSError as error:
-            print(f"cadgen: cannot replace the page token: {error.strerror or error}", file=sys.stderr)
+            print(f"cad: cannot replace the page token: {error.strerror or error}", file=sys.stderr)
             let_go(held)
             return 1
-        print("cadgen: a new page token: every link shared before no longer works", file=sys.stderr)
+        print("cad: a new page token: every link shared before no longer works", file=sys.stderr)
     try:
         listener = _bind() if WINDOWS else None
         if listener is not None:
@@ -2472,7 +2473,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
         daemon.identity = migrate(daemon.models.registry())
     except Exception as error:  # noqa: BLE001
         daemon.identity = {"filled": 0, "moved": 0, "skipped": [f"the pass failed: {type(error).__name__}: {error}"]}
-        print(f"cadgen: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+        print(f"cad: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
     daemon.stand()
     if foreground:
         try:
@@ -2486,12 +2487,12 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             let_go(held, failed=True)
             return 1
         for said in daemon.port_notice.splitlines():
-            print(f"cadgen: {said}", file=sys.stderr)  # ``cadgen server``'s terminal
+            print(f"cad: {said}", file=sys.stderr)  # ``cad server``'s terminal
             daemon.unsaid = ""
     if not WINDOWS:
         import signal
 
-        # A terminate (a logout, ``kill``) stops the daemon as ``cadgen stop`` does: its workers,
+        # A terminate (a logout, ``kill``) stops the daemon as ``cad stop`` does: its workers,
         # pools, door and listener go with it. A client gone mid-answer is a write's BrokenPipeError.
         signal.signal(signal.SIGTERM, lambda _signum, _frame: daemon.stopping.set())
         signal.signal(signal.SIGPIPE, signal.SIG_IGN)

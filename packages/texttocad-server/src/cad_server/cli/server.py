@@ -1,4 +1,4 @@
-"""``cadgen server``: the engine server, run in this process (``cad_server.engine.cli``).
+"""``cad server``: the engine server, run in this process (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
 verb ``python -m cad_server.engine server`` takes.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen server"
+DEFAULT_PROG = "cad server"
 ENGINE_VERB = "server"
 
 

@@ -3,7 +3,7 @@
 ``<state>/documents/<id>/document.json`` is a document's record, one shape for every kind:
 ``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?,
 revision, built, facts?, program?, cache?, opened?, pinned?, preview?}`` (identity's fields: ``identity``). ``kind`` is ``model``, a model built from a script (``home`` and ``entry``: the
-script and the function it points at; the command that builds it again is always ``cadgen run``
+script and the function it points at; the command that builds it again is always ``cad run``
 of its home); ``shape``, a shape a program handed over (``home``: the script that handed it over,
 or the folder it was handed over in; ``program``: that program, where there is one; nothing builds
 it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
@@ -34,7 +34,7 @@ serves with, whatever its release (``Registry.token``; the first engine makes it
 and ``<state>/engines/engine.json`` the engine's record (``Registry.engine``, ``put_engine``, its own
 ``ENGINE_SCHEMA``): while the default port is another program's, the port the engine rolled to
 (``port``). Both are written this user's alone (0600). Links stay valid across restarts and updates
-because of them (``daemon.bind``); ``cadgen server --rotate-token`` replaces the token.
+because of them (``daemon.bind``); ``cad server --rotate-token`` replaces the token.
 
 A record's shape, and the words said of one (``home``, ``rerun``), are the library's (``records``): a
 model's run reads a record of its own in its process, where the registry is not installed. The state and
@@ -81,7 +81,7 @@ _LOCKS_LOCK = threading.Lock()
 
 def current() -> "Registry | None":
     """The registry of the user's state folder and its cache folder (``places``), where they are now
-    (``CADGEN_STATE_DIR`` and ``CADGEN_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
+    (``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
     if FACTORY is not None:
         return FACTORY()
     from cad.engine.places import cache_dir, state_dir
@@ -275,7 +275,7 @@ class Registry:
         return self.state.create(TOKEN, (token + "\n").encode("ascii"), mode=0o600)
 
     def put_token(self, token: str) -> None:
-        """Replace the user's page token (``cadgen server --rotate-token``), this user's alone."""
+        """Replace the user's page token (``cad server --rotate-token``), this user's alone."""
         self.state.write(TOKEN, (token + "\n").encode("ascii"), mode=0o600)
 
     def engine(self, installation: str) -> dict[str, Any]:

@@ -1,5 +1,5 @@
 // A cadgen engine document -- an `.xbf`, or a STEP the engine read -- as a page reads it from the
-// engine that serves it (`cadgen serve`, `cad/engine/serve.py`): its structure as JSON
+// engine that serves it (`cad serve`, `cad/engine/serve.py`): its structure as JSON
 // (prototypes with their names, geometry keys, colours and element names by ordinal; instances
 // with world matrices; the tree; the version) and one XBM2 buffer per prototype, read as views
 // over the fetched bytes (`xbm.js`). The viewer's xbf renderer and the parity page's headless stage

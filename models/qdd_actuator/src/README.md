@@ -46,9 +46,9 @@ The `drive` coupling is the gear train: one control in input revolutions,
 so the rotor, cages, carrier and planets turn only through it. Its range is
 the joints' limits over their rates, 0..4.5. The old `quarter_output` and
 `full_output` poses are configurations naming it (`rest` is as built):
-`cadgen snapshot "$ID" q.png --pose '{"drive": 2.25}'` (ID: the id: line the run prints).
+`cad snapshot "$ID" q.png --pose '{"drive": 2.25}'` (ID: the id: line the run prints).
 
-The old `ANIMATION_JS` clips by name (`cadgen export "$ID" GLB/qdd_actuator.glb` bakes
+The old `ANIMATION_JS` clips by name (`cad export "$ID" GLB/qdd_actuator.glb` bakes
 all three). The old clips looped; neither a motion nor an animation has a loop, and a
 player repeats it:
 

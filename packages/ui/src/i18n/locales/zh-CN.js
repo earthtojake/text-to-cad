@@ -11,9 +11,9 @@ export default {
 
   "app.start.notAnswering": "CAD 查看器没有响应",
   "app.engine.notRunning": "引擎没有运行；它恢复后页面会重新连接。",
-  "app.engine.startIt": "运行 cadgen run <script>.py 或 cadgen viewer 来启动它。",
+  "app.engine.startIt": "运行 cad run <script>.py 或 cad viewer 来启动它。",
   "app.engine.linkReplaced": "此页面的链接已被替换；打开新链接后页面会重新连接。",
-  "app.engine.openNewLink": "运行 cadgen viewer 并打开它打印出的链接。",
+  "app.engine.openNewLink": "运行 cad viewer 并打开它打印出的链接。",
 
   "file.opening": "正在打开…",
   "file.missing": "文件不存在",
@@ -510,9 +510,9 @@ export default {
   "alert.drawingStillShown": "{message} 现有图纸仍然可见。",
   "alert.captureDrawingFailed": "无法截取图纸",
   "alert.schema.summary": "版本不匹配",
-  "alert.schema.title": "此应用与 cadgen 的图纸格式不一致",
+  "alert.schema.title": "此应用与服务器的图纸格式不一致",
   "alert.schema.message": "查看器收到的图纸数据为 schemaVersion {received}，但此版本的应用读取的是版本 {version}。",
-  "alert.schema.recovery": "请同时更新 cadgen 和此应用，然后重新加载。正因如此，它们随同一个版本一起发布。",
+  "alert.schema.recovery": "请同时更新服务器和此应用，然后重新加载。正因如此，它们随同一个版本一起发布。",
   "alert.srdf.summary": "未找到 URDF",
   "alert.srdf.title": "此 SRDF 旁没有 URDF",
   "alert.srdf.message": "SRDF 描述的是机器人的规划方式，而不是它的外观，因此查看器会绘制它所属的 URDF。查看器在“{folder}”中查找恰好一个具有相同 <robot name> 的 .urdf 文件，但没有找到，或找到了不止一个。{detail}",

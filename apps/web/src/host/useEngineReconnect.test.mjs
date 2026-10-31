@@ -107,7 +107,7 @@ test('an engine that refuses the page\'s token is told apart from none answering
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-000000000001' });
   const previous = new Map(['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  // After `cadgen server --rotate-token` the engine runs and refuses the tab's token; it is stopped
+  // After `cad server --rotate-token` the engine runs and refuses the tab's token; it is stopped
   // a moment (nothing answers), refuses it again, and then admits it: the new link was opened beside it.
   const answers = ['forbidden', 'forbidden', 'down', 'forbidden', 'back'];
   const ask = async () => {

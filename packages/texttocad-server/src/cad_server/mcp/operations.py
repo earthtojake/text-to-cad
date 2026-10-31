@@ -56,7 +56,7 @@ STARTS = {"cad_export": (("source", "destinations"),), "cad_snapshot": (("source
 DESCRIPTIONS = {
     "cad_export": "Export a document to explicit absolute destinations on the engine host (.xbf/.step/.glb/.stl/.3mf/.dxf). The source is an absolute CAD file path or a document id (a model's, which running its script prints); a document id is exported as the engine holds it. A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only, each holding what its format carries. Reuses the Python export operation. Viewer downloads instead choose a destination in the user's browser and use temporary artifacts.",
     "cad_snapshot": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged.",
-    "cad_inspect": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cadgen inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again.",
+    "cad_inspect": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cad inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again.",
 }
 
 
@@ -364,7 +364,7 @@ class Operations(Jobs):
                 result = {"pictures": [serial(api.snapshot(**args, out=absolute(output), progress=progress))]}
         elif name == "cad_inspect":
             if "ref" not in args and "query" not in args and "#" not in args["source"]:
-                args["query"] = "summary"  # what `cadgen inspect SOURCE` prints (``engine.cli``)
+                args["query"] = "summary"  # what `cad inspect SOURCE` prints (``engine.cli``)
             found = serial(api.inspect(**args, progress=progress))
             if isinstance(found, dict) and isinstance(found.get("summary"), dict):
                 from cad_server.engine.cli import summary_text

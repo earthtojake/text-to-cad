@@ -51,7 +51,7 @@ class DaemonWorkingFolderTest(unittest.TestCase):
     def test_the_daemon_stands_in_its_own_folder_never_the_shared_one_above_it(self) -> None:
         engine = Path(tempfile.mkdtemp(prefix="eng-")).resolve()
         self.addCleanup(shutil.rmtree, engine, True)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}), \
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}), \
                 mock.patch.object(client.subprocess, "Popen") as started:
             client._start()
         self.assertEqual(started.call_args.kwargs["cwd"], str(engine))
@@ -62,7 +62,7 @@ class DaemonWorkingFolderTest(unittest.TestCase):
 
         engine = Path(tempfile.mkdtemp(prefix="eng-")).resolve()
         self.addCleanup(shutil.rmtree, engine, True)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}):
             self.assertEqual(worker._neutral_folder(), str(engine))
             engine.chmod(0o777)
             self.assertEqual(worker._neutral_folder(), tempfile.gettempdir())

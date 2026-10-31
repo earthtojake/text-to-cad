@@ -4,7 +4,7 @@
 [--preview] [--pose NAME|JSON] [--explode AMOUNT] [--annotation FILE] [--measurements FILE]
 [--path-trace N] [--mesh-cache DIR] [--width W --height H] [--json]``
 
-The flags are ``cadgen snapshot``'s where it has them, and mean what the viewer means:
+The flags are ``cad snapshot``'s where it has them, and mean what the viewer means:
 
 - The document is read (``document.Loaded``: structure, names, colours, the mechanism) and every
   part's mesh is the engine's XBM buffer -- from the daemon, or a folder of them -- turned into

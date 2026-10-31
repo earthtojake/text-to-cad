@@ -38,7 +38,7 @@ class MemoCase(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        os.environ.pop("CADGEN_ENGINE_MEMO", None)
+        os.environ.pop("CAD_ENGINE_MEMO", None)
 
 
 class PlacementTest(MemoCase):

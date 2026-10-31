@@ -1,5 +1,5 @@
 """Exports: a document translated to STEP, GLB, STL, 3MF and xbf by one writer
-(``export.translate``), whether a decorator declares the file or ``cadgen export`` asks
+(``export.translate``), whether a decorator declares the file or ``cad export`` asks
 for it. The STEP reads back through the engine's own reader with its names, colours,
 materials and instance tree; the meshes are parsed and counted; a posed model's STEP is the
 same bytes in every process; a build keeps a file its document did not change, writes only
@@ -439,7 +439,7 @@ class BuildFilesTest(unittest.TestCase):
         [report] = engine_build.build(script, ["plate"], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         self.assertFalse(any(row["written"] for row in report["files"].values()), report["files"])
-        source = engine_build.held(script, "plate")  # what ``cadgen export`` translates
+        source = engine_build.held(script, "plate")  # what ``cad export`` translates
         self.assertEqual(translate(source, None, out / "plate.step"), (out / "plate.step").stat().st_size)
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
         refusal = f"its folder {out} is read-only (mode 0555)"
@@ -453,7 +453,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
 
     def test_a_verb_given_a_declared_file_reads_the_file_and_consults_no_model(self) -> None:
-        """A declared file is an export of its model, never a tie to it: ``cadgen export
+        """A declared file is an export of its model, never a tie to it: ``cad export
         <declared>.xbf out.step`` reads the file as a file document, in the documents worker, though
         the worker that built the model holds its document -- the same STEP, no model consulted."""
         from cad_server.engine import daemon
@@ -1048,7 +1048,7 @@ class StepBytesTest(unittest.TestCase):
 
     def test_a_build_s_step_is_its_xbf_s_read_cold_in_another_process(self) -> None:
         self.assertEqual(self.fresh("cold.step"), self.built)
-        # So exporting the xbf over the build's STEP keeps the file (``cadgen export``: unchanged).
+        # So exporting the xbf over the build's STEP keeps the file (``cad export``: unchanged).
         stamp = self.step.stat().st_mtime_ns
         translate(self.xbf, None, self.step)
         self.assertEqual(self.step.stat().st_mtime_ns, stamp)

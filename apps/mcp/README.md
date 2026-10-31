@@ -3,7 +3,7 @@
 The page an agent host renders for CAD: the same `@text-to-cad/ui` FileViewer and
 renderers `apps/web` composes, behind a different host — an MCP Apps bridge
 instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
-`cadgen mcp` is the stateless stdio shim that agent hosts launch: it ensures that
+`cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
 engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
@@ -24,7 +24,7 @@ terminal UI show none and are served as text clients.
   (`cad_open`) and drives it (`cad_show`). These remain separate because the host mounts
   the UI from static tool metadata: adding that metadata to `cad_show` would mount a new
   view on updates too. A conditional server result cannot promise host-side tab reuse. A host that declares tabs does what
-  Codex does: it starts one `cadgen mcp` shim per thread. Each connects to a separate
+  Codex does: it starts one `cad-mcp` shim per thread. Each connects to a separate
   engine session, so an unnamed view belongs to that thread.
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
@@ -43,7 +43,7 @@ model's page in this machine's CAD Viewer, `/<id>` (the file registered by its i
 a launch registers it), started if none runs (`cad_server/mcp/browser.py`), in the person's
 browser through an owner-only redirect file (`cad_mcp/browser.py`), and answers with the page's URL
 for the agent to give the person: "opened in your browser at <url>". The host's stdio process
-(`cadgen mcp`) makes that open, in the agent's own environment (its `BROWSER`, its display), from
+(`cad-mcp`) makes that open, in the agent's own environment (its `BROWSER`, its display), from
 the page the engine's answer names (`_meta["dev.texttocad/open"]`, stripped before the host sees
 it), and tells the engine whether it opened before the host has the answer
 (`notifications/dev.texttocad/opened`); the engine, which runs in the environment of whatever
@@ -65,7 +65,7 @@ opens with that answer where the app shows CAD tabs, and gives the page's URL fo
 otherwise. A `cad_show` after a `cad_open` waits for that tab (`OPENING_SECONDS`) and shows the
 model in it, says it is still opening (and shows the model once it opens), or, where nothing
 said the host shows tabs, takes a tab that never came as evidence that it shows none and opens
-the browser page. A host that renders apps never has a browser opened by a tool. `CADGEN_MCP_PRESENTATION=inline|text`
+the browser page. A host that renders apps never has a browser opened by a tool. `CAD_MCP_PRESENTATION=inline|text`
 settles how a client that does not say so presents CAD: `inline`, a client that renders apps
 without advertising them, as the reference host `basic-host` does; `text`, one that renders
 nothing.
@@ -138,7 +138,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
 - **Two requests to the network: the version check, and analytics with consent.**
   Both go to `api.texttocad.dev` (`apps/api`). Once a day at most, cadgen
   reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
-  nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
+  nothing about the person (`CAD_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). A server of a newer release than the engine's -- an app whose plugin
   moved ahead -- says a release is out too, with no request (`updates.see`). While this
   install is behind, the navbar shows the shared blue `UpdateButton`
@@ -156,8 +156,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   A text client gets one line with its first `cad_show` result instead, naming the install
   command. Where the
   install came from is its channel, which each plugin's startup config names in
-  the server's environment (`CADGEN_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
-  with `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
+  the server's environment (`CAD_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
+  with `CAD_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
   Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
   the button shows there too, and moves the engine to that release. The telemetry: the server
@@ -176,11 +176,11 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   blob URL that replaces it, and the chunk's debug
   id is the one its edited text and map decide (`@text-to-cad/core/chunk-ids`), never the
   id of the unedited chunk the CAD Viewer may ship. It is on by default once
-  a `cadgen` command has said so, once, and nothing asks. The app menu's **Telemetry**
+  a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. The channel is reported with the
   counts; it decides nothing there. No tool of the agent's reads or changes it:
-  the person answers in the menu or with `cadgen telemetry`. Opt-out deletes the
+  the person answers in the menu or with `cad telemetry`. Opt-out deletes the
   installation ID and requests deletion of data sent under it.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
@@ -341,7 +341,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
 ## Protocol migration
 
 `cad_http` is app-only, as the page's other tools are: agents no longer read or turn
-off telemetry through it (the person does, in the menu or with `cadgen telemetry`). The
+off telemetry through it (the person does, in the menu or with `cad telemetry`). The
 page is unchanged, so the protocol is too.
 Protocol 9 replaces protocol 8: `cad_sync` and `cad_capture_reply` take the session's
 app capability as an argument, as `cad_http` takes it as a header, and refuse a call
@@ -420,7 +420,7 @@ session at their next call. Only a view from before the host restarted the shim 
 no session takes.
 Host-specific capability corrections live in the stdio transport (`cad_mcp/shim.py`). Version polls use `wait=0`
 in the page’s tunnel so they never occupy a host call slot. The engine has no such
-host-specific timing rule. The manifests continue to launch `cadgen mcp`.
+host-specific timing rule. The manifests continue to launch `cad-mcp`.
 
 ## Develop
 
@@ -436,8 +436,8 @@ scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
 `@text-to-cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
 `v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
-`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
-(`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
+`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad-mcp` serves `apps/mcp/dist` when it exists
+(`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.
 
 ## Live models

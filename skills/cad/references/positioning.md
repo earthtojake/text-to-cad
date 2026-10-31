@@ -40,7 +40,7 @@ For example, `src/enclosure.py` seats a lid on a base with a gasket gap:
 
 ```python
 import build123d as bd
-from cadgen import model
+from cad import model
 
 BASE_HEIGHT = 30.0
 LID_THICKNESS = 3.0
@@ -78,10 +78,10 @@ assembly's body, on the parts it places.
 ## Child models and imported components
 
 A project model is composed by calling it; `read_xbf` reads a vendor part converted
-once from its STEP (`cadgen export vendor.step vendor.xbf`), and `read_step` a STEP
+once from its STEP (`cad export vendor.step vendor.xbf`), and `read_step` a STEP
 as it is. Both are inputs, like every file a run reads
 ([inputs](model-contract.md#inputs)). An imported part keeps its vendor's origin and
-orientation; a snapshot or `cadgen inspect` shows them and its functional features, and the
+orientation; a snapshot or `cad inspect` shows them and its functional features, and the
 measured offsets or joint frames go in the source.
 
 ## Alignment and measurement checks

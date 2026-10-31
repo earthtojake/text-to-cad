@@ -284,7 +284,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }, [bridge, sync, superseded, direct]);
 
   // The usage stats cadgen sends (its telemetry), the same as the browser viewer's: nothing asks here (a
-  // cadgen command says it once), and the app menu's switch changes it.
+  // cad command says it once), and the app menu's switch changes it.
   // The person's language: inferred from the host's locale (its context's `locale`), else the frame's
   // browser languages, until they choose one in the app menu, which their settings keep for every CAD
   // view (`useLanguage`, the same as the browser viewer's).

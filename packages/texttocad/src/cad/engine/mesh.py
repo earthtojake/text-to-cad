@@ -512,7 +512,7 @@ def measured(data: Any) -> dict[str, Any]:
     into a fresh shape, as the mesher reads them: its volume in cubic millimetres, of its solids
     (``BRepGProp``), and how many it has -- a part of faces or wires alone has none, and no volume to
     weigh -- and its box in its own frame (``{"min", "max"}``, None for an empty part), which
-    ``cadgen inspect`` places where each occurrence stands for the document's bounds. A function
+    ``cad inspect`` places where each occurrence stands for the document's bounds. A function
     of those bytes alone, so the engine keeps it by the part's geometry key."""
     return _whole(read_shape(data))
 

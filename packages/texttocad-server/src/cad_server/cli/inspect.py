@@ -1,4 +1,4 @@
-"""``cadgen inspect DOC [REF]``: the build closure an xbf holds, or what one thing a ref names is
+"""``cad inspect DOC [REF]``: the build closure an xbf holds, or what one thing a ref names is
 and what made it (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen inspect"
+DEFAULT_PROG = "cad inspect"
 ENGINE_VERB = "inspect"
 
 

@@ -29,8 +29,8 @@ class LibraryTest(unittest.TestCase):
         self.model = self.tmp / "anywhere" / "a.stl"
         self.model.parent.mkdir()
         self.model.write_bytes(STL)
-        state = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"),
-                                             "CADGEN_CACHE_DIR": str(self.tmp / "cache")})
+        state = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"),
+                                             "CAD_CACHE_DIR": str(self.tmp / "cache")})
         state.start()
         self.addCleanup(state.stop)
         server = handler_module.serve(create_cad_app(host="127.0.0.1", port=0), "127.0.0.1", 0)

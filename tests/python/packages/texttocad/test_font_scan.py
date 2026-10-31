@@ -1,7 +1,7 @@
 """Keeping the fonts that break `import build123d` out of its font scan (#322, #636).
 
 build123d registers every font in the system font folders at import time with no
-per-file guard, so one malformed file aborts the import and every cadgen command with
+per-file guard, so one malformed file aborts the import and every cad command with
 it, raising a fontTools error that names no file. A font with no family name aborts it
 the same way, with OCCT's error (`EmptyFamily`, #636).
 
@@ -136,7 +136,7 @@ class GlobGuard(unittest.TestCase):
     def test_it_can_be_switched_off(self):
         import glob
 
-        with mock.patch.dict(os.environ, {"CADGEN_FONT_GUARD": "0"}):
+        with mock.patch.dict(os.environ, {"CAD_FONT_GUARD": "0"}):
             self.assertFalse(font_scan.install_font_guard())
         self.assertIs(glob.glob, self._real_glob)
 

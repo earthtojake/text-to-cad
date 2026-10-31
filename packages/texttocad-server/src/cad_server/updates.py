@@ -5,11 +5,11 @@ At most once a day, cadgen reads the version feed (``GET /versions``, ``cad_serv
     {"latest": "0.9.0"}
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
-any web request carries. ``CADGEN_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
+any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
 set) or for a copy that is not told. The feed as last read is kept in the state directory
 (``versions.json``), where every process of the person's reads it. It only says a release is out:
 nothing is fetched and nothing switches until the person asks -- the update button in the CAD Viewer
-and the CAD app (``cad_server._internal.update``), ``cadgen update``, or the install command run again.
+and the CAD app (``cad_server._internal.update``), ``cad update``, or the install command run again.
 
 A release is also known with no network at all: an agent app whose plugin moved ahead runs the newer
 release's CAD server, which says its release as it connects (``see``), and that proves the release
@@ -18,7 +18,7 @@ exists. The newer of the two is offered.
 Only a copy nothing else updates is told of the feed's release (``told``: ``cad_server/_internal/channel.py``):
 a plugin the person installed and updates by hand, and a process no plugin started, such as the CAD
 Viewer of a skills-only install. A plugin that something else keeps up to date -- a store, once a
-release passes its review -- says so in its startup config (``CADGEN_AUTO_UPDATED=1``) and is never
+release passes its review -- says so in its startup config (``CAD_AUTO_UPDATED=1``) and is never
 told of it; nor is a development install. A newer server's release is offered to every copy but a
 development install: the store moved the plugin, and the device's engine is still behind it. An
 update a person asks for reads the feed whatever the copy (``checking(asked=True)``).
@@ -27,7 +27,7 @@ The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update b
 nothing else, while this install is behind; a click updates (``POST /__cad/update``). A text-only app
 gets one line (``line``) with its first ``cad_show`` result: the release, and the install command
 (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's), which updates text-to-cad in
-every agent app on the computer (``cadgen setup``). A skill's ``cadgen`` command says nothing.
+every agent app on the computer (``cad setup``). A skill's ``cadgen`` command says nothing.
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
 the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
@@ -79,11 +79,11 @@ def parse_feed(data: Any) -> dict[str, Any] | None:
 
 
 def checking(*, asked: bool = False) -> bool:
-    """Whether to read the feed at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, and a copy
+    """Whether to read the feed at all: not turned off (``CAD_UPDATE_CHECK=0``), not in CI, and a copy
     that is told -- not one something else keeps up to date, nor a development install -- unless a
-    person ``asked`` for an update (the update button, ``cadgen update``), which reads it whatever the
+    person ``asked`` for an update (the update button, ``cad update``), which reads it whatever the
     copy."""
-    if str(os.environ.get("CADGEN_UPDATE_CHECK") or "").strip().lower() in _OFF:
+    if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in _OFF:
         return False
     if str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF):
         return False
@@ -188,7 +188,7 @@ def newest(*, fetch: bool = True) -> str | None:
 
 def command(system: str | None = None) -> str:
     """The install command for this computer (or for ``system``, an ``os.name``), which updates
-    text-to-cad when run again (``cadgen setup``, ``cad_server.cli.setup``)."""
+    text-to-cad when run again (``cad setup``, ``cad_server.cli.setup``)."""
     return INSTALL_WINDOWS if (system or os.name) == "nt" else INSTALL
 
 

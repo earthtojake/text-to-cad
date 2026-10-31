@@ -52,9 +52,6 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
     # repeatable key/value map is outside the derivable set.
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
-    # A host starts it and speaks MCP on its standard streams; it takes no options. Where the
-    # install came from is in the server's environment, which the plugin's startup config sets.
-    "mcp": frozenset(),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli), each a command of its own.
@@ -135,11 +132,11 @@ class Manifest(unittest.TestCase):
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "step snapshot", "stl build", "stl snapshot", "3mf build",
                         "3mf snapshot", "glb build", "glb snapshot", "store", "daemon", "daemon status", "xbf", "where",
-                        "install"):
+                        "install", "mcp"):
             self.assertNotIn(command, cli._COMMANDS)
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.step", "cadgen.store", "cadgen.daemon",
-                       "cad_server.cli.install"):
+                       "cad_server.cli.install", "cad_server.cli.mcp"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 
@@ -161,7 +158,7 @@ class Manifest(unittest.TestCase):
                     self.assertEqual("", out)
                     # The NOUN is right: it is never reported as the unknown thing.
                     self.assertNotIn(f"unknown command {noun!r}", err)
-                    self.assertIn(f"usage: cadgen {noun} <verb>", err)
+                    self.assertIn(f"usage: cad {noun} <verb>", err)
                     for verb in verbs:
                         self.assertIn(verb, err)
                     self.assertNotIn("sdf validate" if noun == "urdf" else "urdf validate", err)
@@ -192,7 +189,7 @@ class Manifest(unittest.TestCase):
         for verb in ("export", "snapshot", "serve", "inspect", "status", "stop", "delete", "server"):
             with self.subTest(verb=verb):
                 module = importlib.import_module(cli._COMMANDS[verb][0])
-                self.assertEqual(module.build_parser().prog, f"cadgen {verb}")
+                self.assertEqual(module.build_parser().prog, f"cad {verb}")
 
     def test_every_verb_goes_through_the_engine(self):
         # No command runs a build or a verb in its own process: --no-daemon is an unrecognized argument like any

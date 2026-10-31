@@ -25,7 +25,7 @@ differently:
   observes native point and location edits that leave build123d's cached
   ``X``/``Y``/``Z`` unchanged.
 
-``CADGEN_ENGINE_DETERMINISM=0`` disables both. ``install()`` is idempotent and never
+``CAD_ENGINE_DETERMINISM=0`` disables both. ``install()`` is idempotent and never
 raises: build123d is an external dependency, so a version whose shape does not
 match is left alone rather than guessed at — the worst case is the old
 nondeterminism, never a wrong build.
@@ -167,7 +167,7 @@ def install() -> bool:
     global _installed
     if _installed:
         return True
-    if os.environ.get("CADGEN_ENGINE_DETERMINISM", "").strip() == "0":
+    if os.environ.get("CAD_ENGINE_DETERMINISM", "").strip() == "0":
         return False
     try:
         import importlib

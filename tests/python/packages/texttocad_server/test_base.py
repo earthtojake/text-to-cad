@@ -1,6 +1,6 @@
 """The base (``cad_server._internal.base``): the one environment, ``texttocad[kernel]`` at the installation's
 release on its Python, made once and reused; an installation that carries the kernel is its own; and
-``cadgen run`` runs the script with its Python.
+``cad run`` runs the script with its Python.
 
 uv is stood in for (``Fake``): each step it is asked is recorded, ``venv`` makes the environment's
 Python as a file, ``pip`` answers what the test gives it. The real uv, a model built in the base and
@@ -57,7 +57,7 @@ class BaseTest(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory(prefix="cadgen-base-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name).resolve()
-        cache = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "cache")})
+        cache = mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.root / "cache")})
         cache.start()
         self.addCleanup(cache.stop)
         self.core = self.root / "core"
@@ -137,7 +137,7 @@ class BaseTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
-    """``cadgen run``: the arguments run by the base's Python, in the caller's folder, the program's own folder last
+    """``cad run``: the arguments run by the base's Python, in the caller's folder, the program's own folder last
     on its path (the library's runner, ``cad._internal.program``)."""
 
     def test_the_script_runs_with_the_bases_python(self) -> None:
@@ -160,7 +160,7 @@ class RunTest(unittest.TestCase):
                 mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err):
             self.assertEqual(run.main(["model.py"]), 1)
         execv.assert_not_called()
-        self.assertEqual(err.getvalue(), "cadgen run: the CAD kernel environment needs the network once: dns error\n")
+        self.assertEqual(err.getvalue(), "cad run: the CAD kernel environment needs the network once: dns error\n")
 
 
 class SpawnTest(unittest.TestCase):

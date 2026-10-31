@@ -20,7 +20,7 @@ why a run ran what it ran.
 ```python
 # src/plate.py
 import build123d as bd
-from cadgen import model
+from cad import model
 
 WIDTH, DEPTH, THICKNESS = 60.0, 40.0, 4.0
 
@@ -89,7 +89,7 @@ id and page.
 ```python
 # src/standoff.py
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 def standoff_body(height, outer_d, bore_d):
@@ -139,7 +139,7 @@ of the first one's result. Outside a run it is its function.
   once; marking one that returns `body` renames nothing.
 
 ```python
-from cadgen import memo, model
+from cad import memo, model
 
 
 @memo
@@ -160,7 +160,7 @@ Each call that runs every time is named, with why, in the report's
 ```python
 # src/assembly.py
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from plate import THICKNESS, plate
 from standoff import standoff_m3
@@ -229,8 +229,8 @@ worker and builds cold. Every run says how each body went: `bodies 2 run, 1 repl
 `bracket.build(verify=True)` runs every body the engine would replay and compares each
 fresh result with the logged one (`.models[0]["verify"]`); a body whose result differs
 runs on every call for the worker's life. `bracket.build(profile=True)` adds function
-timings of the run as it happened. `CADGEN_ENGINE_BODIES=0` turns replay off, and
-`CADGEN_ENGINE_MEMO=0` every memo hit.
+timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
+`CAD_ENGINE_MEMO=0` every memo hit.
 
 ## Inputs
 
@@ -243,8 +243,8 @@ re-runs the body that read it:
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
-  `cadgen export`: export it again from its CAD tool as one file.
-- **A vendor STEP is converted once**: `cadgen export vendor.step vendor.xbf` writes an
+  `cad export`: export it again from its CAD tool as one file.
+- **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
   xbf of it, which `read_xbf` reads many times faster than `read_step` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
@@ -269,7 +269,7 @@ Anchor paths on the script, so a run reads the same file from any working folder
 from pathlib import Path
 
 import build123d as bd
-from cadgen import model, read_mesh, read_xbf
+from cad import model, read_mesh, read_xbf
 
 HERE = Path(__file__).resolve().parent
 
@@ -294,35 +294,35 @@ script's folder and that name, independent of which file in the folder declares 
 names in one folder are refused with both declaration locations. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
 is the script's folder, with no project detection. Moving a named model to another file of its folder
-keeps its id: run the file it left with `cadgen run` (or delete it) first, since until then the engine
+keeps its id: run the file it left with `cad run` (or delete it) first, since until then the engine
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
-`/<id>` on the engine's address; `cadgen export`, `snapshot` and `inspect`, and the
+`/<id>` on the engine's address; `cad export`, `snapshot` and `inspect`, and the
 CAD app's tools, take the id and read the document as the engine holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
 it again.
 
 - **Documents outlive their workers.** A document stays held after its script's worker
-  retires (`cadgen status`: `live` with its worker, `held` without one, where `made_by`
-  is null), under one memory budget (`CADGEN_ENGINE_MEMORY_MB`, default a quarter of the
+  retires (`cad status`: `live` with its worker, `held` without one, where `made_by`
+  is null), under one memory budget (`CAD_ENGINE_MEMORY_MB`, default a quarter of the
   machine's) that never drops a document a page watches.
 - **The engine never reruns code.** A document it no longer holds (its file in the engine's
   cache deleted, or never saved) is refused with the command that
-  brings it back, `cadgen run <the script that defines it>`, by the page, `cadgen inspect`
-  and `cad_show` alike (`cadgen status`: `unsaved`, or `detached` once its script is gone).
+  brings it back, `cad run <the script that defines it>`, by the page, `cad inspect`
+  and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in cadgen's state folder (`documents/<uuid>/document.json`:
-  the script and function that build it (the rebuild command is always `cadgen run` of that script); never
+  the script and function that build it (the rebuild command is always `cad run` of that script); never
   geometry). The home lists the records, models and files alike, pinned first, then by
   last activity. A record whose
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.
 - **A restart reopens what was built.** The engine keeps each model document's bytes in
   the platform's cache folder (`~/.cache/cadgen/documents/`), once it is idle, so after a
-  restart its id answers every verb as last built (`cadgen status`: `held`, on `disk`).
+  restart its id answers every verb as last built (`cad status`: `held`, on `disk`).
   A document is what its last run made: the engine never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
-  (`cadgen run /work/arm.py`) to update the document and its open pages.
-  The cache keeps every document until you delete it (`cadgen delete <id>`, or a script's
+  (`cad run /work/arm.py`) to update the document and its open pages.
+  The cache keeps every document until you delete it (`cad delete <id>`, or a script's
   path for every document of it, or Delete in a card's menu on the home); nothing evicts
   from it. Deleting removes the record and the cached document, never a file.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
@@ -333,11 +333,11 @@ it again.
   shape go with it; a GLB's animations are passed as `animations=[...]`. Nothing builds
   it again: its record says a program the engine did not run showed it, so run that
   program again. A decorated function in no saved file is refused, with these words.
-- `cadgen status` lists the workers and the documents the engine holds (`--json` as
-  data); `cadgen stop` stops the engine and any older one still running. At most
-  `CADGEN_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
-  when the workers' memory is over `CADGEN_ENGINE_WORKER_RSS_MB`, never for idleness,
-  and its script's next run starts cold. `CADGEN_ENGINE_DIR` moves the
+- `cad status` lists the workers and the documents the engine holds (`--json` as
+  data); `cad stop` stops the engine and any older one still running. At most
+  `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
+  when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
+  and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
   engine's door and lock (one engine per folder).
 
 ## Progress and the report

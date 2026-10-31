@@ -1,4 +1,4 @@
-"""`cadgen mcp`: its catalog, the launches it computes, and the agent driving a view, for both kinds of host."""
+"""`cad-mcp`: its catalog, the launches it computes, and the agent driving a view, for both kinds of host."""
 
 from __future__ import annotations
 
@@ -57,8 +57,8 @@ def offer_an_update(test: unittest.TestCase) -> None:
     """A feed read today that offers 99.0.0 to the Claude plugin installed from GitHub (`cad_server/updates.py`)."""
     state = Path(tempfile.mkdtemp())
     test.addCleanup(shutil.rmtree, state, ignore_errors=True)
-    patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "claude-github", "CADGEN_AUTO_UPDATED": "", "CI": "",
-                                           "CADGEN_UPDATE_CHECK": ""})
+    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "", "CI": "",
+                                           "CAD_UPDATE_CHECK": ""})
     patched.start()
     test.addCleanup(patched.stop)
     (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
@@ -106,7 +106,7 @@ class _Session(unittest.TestCase):
         engine.mkdir(mode=0o700)
         from cad_mcp import browser as transport
         from cad_server.viewer import browser_open
-        for patched in (mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}),
+        for patched in (mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}),
                         mock.patch.object(browser_open, "display_refusal", return_value=None),
                         mock.patch.object(transport, "display_refusal", return_value=None)):
             patched.start()
@@ -247,7 +247,7 @@ class TabServerTest(_Session):
         # Removed settings routes have exactly the unknown-route behavior, even with a stale file.
         settings = self.tmp / "settings.json"
         settings.write_text('{"features":{"quickEdit":false}}', encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp)}):
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp)}):
             for method, expected in (("GET", 404), ("POST", 404)):
                 self.assertEqual(request("/__cad/features", {"x-cadgen-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
 
@@ -674,7 +674,7 @@ class InlineServerTest(_Session):
         self.server._viewer_url = lambda model=None: "http://127.0.0.1:3245/" + ("doc" if model else "") + "?token=t"
         self.server._browser_opener = opener
         route = "http://cad.invalid/__cad/browser/open"
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(engine)}), \
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}), \
                 mock.patch.object(browser_open, "display_refusal", return_value=None):
             self.assertEqual(self.http("POST", route, {"model": self.bracket}), (200, {"opened": True}))
             self.assertEqual(self.http("POST", route, {"model": None}), (200, {"opened": True}))
@@ -1054,12 +1054,12 @@ class TextServerTest(_Session):
         self.server._viewer_url = refuse
         failed = self.call("cad_show", {"source": self.bracket})
         self.assertTrue(failed["isError"])
-        self.assertIn(f"`cadgen viewer --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
+        self.assertIn(f"`cad viewer --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
 
     def test_an_app_that_renders_without_advertising_it_can_be_told(self) -> None:
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"CADGEN_MCP_PRESENTATION": "inline"}):
+        with mock.patch.dict(os.environ, {"CAD_MCP_PRESENTATION": "inline"}):
             server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
             server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}), None)
         self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
@@ -1280,7 +1280,7 @@ class ToolArgumentsTest(unittest.TestCase):
         server = self.served("text")
         step = self.tmp / "box.step"
         step.write_text("ISO-10303-21;\n", encoding="utf-8")
-        # What `cadgen inspect --json box.step` answered for a 10 x 20 x 30 mm box (``api._summary``).
+        # What `cad inspect --json box.step` answered for a 10 x 20 x 30 mm box (``api._summary``).
         summary = {"name": "COMPOUND", "id": DOCUMENT_ID, "state": {"state": "file", "path": str(step)},
                    "parts": {"occurrences": 1, "distinct": 1, "root": "COMPOUND"},
                    "bounds": {"min": [-5.0, -10.0, -15.0], "max": [5.0, 10.0, 15.0], "size": [10.0, 20.0, 30.0]},
@@ -1305,7 +1305,7 @@ class ToolArgumentsTest(unittest.TestCase):
         self.assertIn("volume      6,000 mm^3", inspection["text"])
         self.assertEqual(part["result"]["inspection"], {"volume": 6000.0})
         cad_inspect = next(tool for tool in server.handle("tools/list", {}, None)["tools"] if tool["name"] == "cad_inspect")
-        self.assertIn("Without a ref it answers what `cadgen inspect SOURCE` prints", cad_inspect["description"])
+        self.assertIn("Without a ref it answers what `cad inspect SOURCE` prints", cad_inspect["description"])
         self.assertIn("summary", cad_inspect["inputSchema"]["properties"]["query"]["enum"])
 
     def test_a_snapshot_with_no_output_is_refused_at_its_start(self) -> None:
@@ -1359,7 +1359,7 @@ class ToolArgumentsTest(unittest.TestCase):
         answer = failed["structuredContent"]
         self.assertEqual(answer["state"], "failed")
         self.assertEqual(answer["error"], "l_bracket.py is no document: an export reads an .xbf, a .step, a mesh (.glb, "
-                                          f".stl, .3mf) or a document id; run `cadgen run {script}` first, then export "
+                                          f".stl, .3mf) or a document id; run `cad run {script}` first, then export "
                                           "its document by id")
         self.assertEqual(answer["result"], {"outputsMayHaveBeenWritten": False})  # refused before the engine was asked
 

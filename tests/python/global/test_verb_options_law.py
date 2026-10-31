@@ -5,7 +5,7 @@
 command, the root function nor a document's handle (`Document.export`, what a model call returns)
 takes an option that selects a part or a state. A posed or partial file is a function in the
 model's code (`cad.ap242.posed`, a part's own model). This pins the surface where such an option
-would come back: the parser `cadgen export` runs and the Python signatures. The verbs moved from
+would come back: the parser `cad export` runs and the Python signatures. The verbs moved from
 the decorated function (`Model`) to the handle deliberately: the function is the declaration and
 its id; the document a call returns is what a verb reads. Nothing here needs the CAD kernel.
 """
@@ -39,7 +39,7 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
         found = {(action.dest, tuple(action.option_strings), action.nargs) for action in parser._actions
                  if not isinstance(action, argparse._HelpAction)}
         self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("json", ("--json",), 0)},
-                         f"`cadgen export` takes SRC DST [DST ...] [--json] alone; {LAW}")
+                         f"`cad export` takes SRC DST [DST ...] [--json] alone; {LAW}")
 
     def test_the_function_takes_a_source_destinations_and_its_seams_alone(self) -> None:
         parameters = inspect.signature(cad.export).parameters.values()
@@ -49,7 +49,7 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
             ("log", inspect.Parameter.KEYWORD_ONLY, None),
             ("daemon", inspect.Parameter.KEYWORD_ONLY, True),
             ("progress", inspect.Parameter.KEYWORD_ONLY, None),
-        ], f"cadgen.export is (source, *destinations, log=None, daemon=True, progress=None); {LAW}")
+        ], f"cad.export is (source, *destinations, log=None, daemon=True, progress=None); {LAW}")
 
     def test_a_handle_exports_its_document_to_destinations_alone(self) -> None:
         parameters = inspect.signature(Document.export).parameters.values()

@@ -249,7 +249,7 @@ class Model:
         except (ConnectionError, api.EngineError) as error:
             # The engine not reached, or refusing the call before any build (``api._ask``): one line,
             # said only if nothing catches it (``_told``).
-            _told(error, f"cadgen: {error}")
+            _told(error, f"cad: {error}")
             raise
         finally:
             _CONTEXT.program = previous

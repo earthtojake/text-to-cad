@@ -1,6 +1,6 @@
 // Two kinds of ref. Every document the engine draws -- an `.xbf`, a STEP (`.step`, `.stp`), a
 // document the engine holds by its id -- is named in the engine's own grammar, at the end of this
-// module ("The engine's grammar"), the one `cadgen inspect` and `select` read. Any other file the
+// module ("The engine's grammar"), the one `cad inspect` and `select` read. Any other file the
 // viewer draws (a robot description, a mesh, a drawing) names what is picked by its renderer's own
 // name for it, a plain label a selector (`robot.urdf#upper_arm`, `bracket.dxf#h2F`, `part.glb#glb:3`).
 //
@@ -97,9 +97,9 @@ export function buildCadRefToken({ cadPath = "", selector = "", selectors } = {}
 // ---- The engine's grammar -----------------------------------------------------------------------
 //
 // A document the engine draws (an `.xbf`, a STEP, a document by its id) is named as the engine names
-// it, in the grammar `cadgen inspect` and `select` read: cad/engine/refs.py's `parse`, mirrored
+// it, in the grammar `cad inspect` and `select` read: cad/engine/refs.py's `parse`, mirrored
 // here case for case. The `refCases` of cadRefs.parity.json are asserted against both parsers, and
-// its `spellingCases` against `spellEngineRefs` here and the resolution `cadgen inspect` runs there.
+// its `spellingCases` against `spellEngineRefs` here and the resolution `cad inspect` runs there.
 //   REF      = [FILE "#"] SELECTOR ("," SELECTOR)*     a bare ELEMENT after an owner is that owner's
 //   SELECTOR = OWNER | [OWNER "/"] ELEMENT              no OWNER: the document's root
 //   OWNER    = SEGMENT ("/" SEGMENT)*                   an occurrence's path, or its last segments
@@ -349,7 +349,7 @@ function engineSegmentOf(text) {
 }
 
 /**
- * The canonical refs of a served engine document's occurrences and elements, as `cadgen inspect`
+ * The canonical refs of a served engine document's occurrences and elements, as `cad inspect`
  * answers them and `select` labels what it selects (`refs.owner_text`, `refs.path_text`): an
  * occurrence by its label where that names it alone in the document (`palm`), else by its path from
  * the root, each segment its label numbered among the siblings that share it (`hand/finger.2`); an

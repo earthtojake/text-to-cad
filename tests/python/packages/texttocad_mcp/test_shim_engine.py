@@ -29,8 +29,8 @@ class StartTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, True)
         self.state = self.root / "state"
         self.elsewhere = self.root / "elsewhere"
-        patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.state), "CADGEN_ENGINE_DIR": str(self.root / "engine"),
-                                               "CADGEN_CACHE_DIR": str(self.root / "cache"),
+        patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                               "CAD_CACHE_DIR": str(self.root / "cache"),
                                                "PYTHONPATH": "/a/checkout/src", "DO_NOT_TRACK": "1"})
         patched.start()
         self.addCleanup(patched.stop)

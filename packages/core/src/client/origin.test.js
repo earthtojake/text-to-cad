@@ -1,6 +1,6 @@
 // Every URL the file-view surface builds, at both origins it is ever built for:
 // "" (the standalone viewer, served BY its own backend) and an absolute origin
-// (a host embedding <CadFileView> against another `cadgen viewer`).
+// (a host embedding <CadFileView> against another `cad viewer`).
 //
 // The "" column is the regression guard that matters most: it is the shipping
 // viewer, and every one of these must stay byte-identical to the root-relative

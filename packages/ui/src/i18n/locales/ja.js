@@ -10,9 +10,9 @@ export default {
 
   "app.start.notAnswering": "CAD ビューアーが応答しません",
   "app.engine.notRunning": "エンジンが動いていません。戻るとページは自動で再接続します。",
-  "app.engine.startIt": "cadgen run <script>.py か cadgen viewer を実行して起動してください。",
+  "app.engine.startIt": "cad run <script>.py か cad viewer を実行して起動してください。",
   "app.engine.linkReplaced": "このページのリンクは置き換えられました。新しいリンクを開くとページは自動で再接続します。",
-  "app.engine.openNewLink": "cadgen viewer を実行し、表示されたリンクを開いてください。",
+  "app.engine.openNewLink": "cad viewer を実行し、表示されたリンクを開いてください。",
 
   "file.opening": "開いています…",
   "file.missing": "ファイルが存在しません",
@@ -509,9 +509,9 @@ export default {
   "alert.drawingStillShown": "{message} 現在の図面は表示されたままです。",
   "alert.captureDrawingFailed": "図面をキャプチャできませんでした",
   "alert.schema.summary": "バージョンの不一致",
-  "alert.schema.title": "このアプリと cadgen で図面の形式が一致しません",
+  "alert.schema.title": "このアプリとサーバーで図面の形式が一致しません",
   "alert.schema.message": "ビューアーが受け取った図面データは schemaVersion {received} ですが、このビルドのアプリが読めるのはバージョン {version} です。",
-  "alert.schema.recovery": "cadgen とアプリを一緒に更新してから再読み込みしてください。両者が同じリリースで配布されているのはこのためです。",
+  "alert.schema.recovery": "サーバーとアプリを一緒に更新してから再読み込みしてください。両者が同じリリースで配布されているのはこのためです。",
   "alert.srdf.summary": "URDF が見つかりません",
   "alert.srdf.title": "この SRDF と同じ場所に URDF がありません",
   "alert.srdf.message": "SRDF はロボットの計画方法を記述するもので、外観は記述しません。そのためビューアーは、それが属する URDF を描画します。「{folder}」で同じ <robot name> を持つ .urdf ファイルをちょうど 1 つ探しましたが、見つからないか、複数ありました。{detail}",

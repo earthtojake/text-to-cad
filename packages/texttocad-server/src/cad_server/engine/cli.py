@@ -2,14 +2,14 @@
 ordinary Python scripts call decorated models explicitly.
 
     python SCRIPT.py                                 the models the script explicitly calls
-    cadgen export SRC DST [DST ...] [--json]
-    cadgen snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
+    cad export SRC DST [DST ...] [--json]
+    cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
-    cadgen serve DOC [--port N] [--three DIR]
-    cadgen status [--json] | stop [--json] | server [--port N] [--rotate-token]
-    cadgen delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
-    cadgen inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
+    cad serve DOC [--port N] [--three DIR]
+    cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
+    cad delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
+    cad inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path or a document's id (``ids``): a model's id is what
 ``python SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
@@ -71,7 +71,7 @@ def _delete_arguments(delete: argparse.ArgumentParser) -> None:
 def _server_arguments(server: argparse.ArgumentParser) -> None:
     server.add_argument("--port", type=int, default=None,
                         help="the HTTP port the engine takes, refused when another process holds it (else "
-                             "CADGEN_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
+                             "CAD_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
                              "any free port")
     server.add_argument("--rotate-token", action="store_true",
                         help="replace this installation's page token first: every link shared before stops working")
@@ -145,8 +145,8 @@ def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
     return parser
 
 
-def _snapshot(args: argparse.Namespace, prog: str = "cadgen snapshot") -> int:
-    """``cadgen snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
+def _snapshot(args: argparse.Namespace, prog: str = "cad snapshot") -> int:
+    """``cad snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
     failure raised as ``Failed``, which the command says (``answered``)."""
     from cad.engine import snapshot
 
@@ -180,7 +180,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cadgen snapshot") -> int:
 
 
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
-    """``cadgen snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
+    """``cad snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
     memory of the worker holding it (``api.snapshot``); nothing is built."""
     from cad.engine import api, snapshot
 
@@ -204,7 +204,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
 
 def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
-    """``cadgen snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
+    """``cad snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
     a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
     import time
 
@@ -235,7 +235,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
 
 def build_parser(prog: str = "python -m cad_server.engine") -> argparse.ArgumentParser:
     """The engine's own command: its verbs as subcommands, each with its options."""
-    parser = argparse.ArgumentParser(prog=prog, description="Export, draw and serve cadgen engine documents.")
+    parser = argparse.ArgumentParser(prog=prog, description="Export, draw and serve the engine's documents.")
     verbs = parser.add_subparsers(dest="verb", required=True)
     for verb, (help_text, arguments, _runner) in VERBS.items():
         arguments(verbs.add_parser(verb, help=help_text, description=help_text))
@@ -243,16 +243,16 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 
 
 def parser_for(verb: str, prog: str | None = None) -> argparse.ArgumentParser:
-    """One verb's parser, as a command of its own (``cadgen export``, ``cadgen snapshot``, ...)."""
+    """One verb's parser, as a command of its own (``cad export``, ``cad snapshot``, ...)."""
     help_text, arguments, _runner = VERBS[verb]
-    parser = argparse.ArgumentParser(prog=prog or f"cadgen {verb}", description=help_text)
+    parser = argparse.ArgumentParser(prog=prog or f"cad {verb}", description=help_text)
     arguments(parser)
     return parser
 
 
 def run(verb: str, argv: list[str] | None = None, prog: str | None = None) -> int:
     """One verb run as a command of its own: its arguments parsed by ``parser_for``."""
-    prog = prog or f"cadgen {verb}"
+    prog = prog or f"cad {verb}"
     args = parser_for(verb, prog).parse_args(argv)
     return answered(VERBS[verb][2], args, prog)
 
@@ -328,7 +328,7 @@ def state_notice(model: dict[str, Any], doing: str) -> str | None:
 
 
 def _export(args: argparse.Namespace, prog: str) -> int:
-    """``cadgen export SRC DST...``: an ``.xbf``, a ``.step``, a document id or a mesh file written
+    """``cad export SRC DST...``: an ``.xbf``, a ``.step``, a document id or a mesh file written
     to each destination (``api.export`` refuses any other source); with ``--json``, what was written
     as one JSON object."""
     from cad.engine import api
@@ -364,13 +364,13 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def inspect_parser(prog: str = "cadgen inspect") -> argparse.ArgumentParser:
-    """``cadgen inspect``'s parser: a document, and a ref into it or none."""
+def inspect_parser(prog: str = "cad inspect") -> argparse.ArgumentParser:
+    """``cad inspect``'s parser: a document, and a ref into it or none."""
     return parser_for("inspect", prog)
 
 
-def inspect_main(argv: list[str] | None = None, prog: str = "cadgen inspect") -> int:
-    """``cadgen inspect DOC``: the build closure the xbf holds; ``cadgen inspect DOC REF``: what the
+def inspect_main(argv: list[str] | None = None, prog: str = "cad inspect") -> int:
+    """``cad inspect DOC``: the build closure the xbf holds; ``cad inspect DOC REF``: what the
     kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
     document no live worker built; none of a file, which names no model)."""
     return run("inspect", argv, prog)
@@ -402,7 +402,7 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
             print("closure     none: a STEP file carries none, only an .xbf does (a model's document, inspected by its "
                   "id, has one)")
         elif found["closure"] is None:
-            print("closure     none: no cadgen build wrote this document")
+            print("closure     none: no build of text-to-cad's wrote this document")
         else:
             print("closure")
             print(json.dumps(found["closure"], indent=2))
@@ -433,7 +433,7 @@ def _joint_value(value: Any) -> str:
 
 
 def summary_text(summary: dict[str, Any]) -> str:
-    """``cadgen inspect DOC``'s first screen (``api._summary``): a line per fact the document
+    """``cad inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""
     import time
@@ -578,7 +578,7 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
 
 
 def delete(documents: Any) -> list[dict[str, Any]]:
-    """``cadgen delete``: documents deleted, each by the one deletion the home's Delete is too
+    """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
     (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
     record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
     script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
@@ -613,7 +613,7 @@ def delete(documents: Any) -> list[dict[str, Any]]:
         idents.extend(ident for ident in found if ident not in idents)
     if unknown:
         raise ValueError(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
-                         "script or a CAD file a page opened (`cadgen status` lists the documents); nothing "
+                         "script or a CAD file a page opened (`cad status` lists the documents); nothing "
                          "was deleted")
     answer = request({"op": "delete", "ids": idents}, start=False)
     if answer is not None:
@@ -659,7 +659,7 @@ def _gb(megabytes: Any) -> str:
 
 
 def _port(serving: dict[str, Any]) -> str:
-    """Where the served port came from, in words -- the default, ``--port``, ``CADGEN_ENGINE_PORT``
+    """Where the served port came from, in words -- the default, ``--port``, ``CAD_ENGINE_PORT``
     or a roll from a held default -- as the serving line's parenthesis; nothing for an answer that
     does not say."""
     port, default = serving.get("port"), serving.get("defaultPort")
@@ -670,12 +670,12 @@ def _port(serving: dict[str, Any]) -> str:
     source = serving.get("portSource") or ""
     if source == "rolled":
         return f" (rolled from {default} because {serving.get('portBecause') or 'another process'} holds it)"
-    return " (" + {"--port": "the port --port named", "CADGEN_ENGINE_PORT": "the port CADGEN_ENGINE_PORT names"
+    return " (" + {"--port": "the port --port named", "CAD_ENGINE_PORT": "the port CAD_ENGINE_PORT names"
                    }.get(source, f"not the default {default}") + ")"
 
 
 def cache_text(root: Any, documents: Any, size: Any) -> str:
-    """The engine's document cache as ``cadgen status`` and ``cadgen doctor`` say it, after the word
+    """The engine's document cache as ``cad status`` and ``cad doctor`` say it, after the word
     ``cache``: its folder, and the documents and bytes it keeps, which stay until a person deletes
     them (no cap)."""
     return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_said.size(size)}, "
@@ -683,14 +683,14 @@ def cache_text(root: Any, documents: Any, size: Any) -> str:
 
 
 def workers_text(answer: dict[str, Any]) -> str:
-    """The workers against their count cap, as ``cadgen status`` (and ``cadgen doctor``) says them:
+    """The workers against their count cap, as ``cad status`` (and ``cad doctor``) says them:
     the standby holds a slot of the cap, counted with the workers, never one of them."""
     counted = len(answer.get("workers") or []) + (1 if answer.get("standby") else 0)
     return f"workers {counted}/{answer.get('cap')}" + (" with the standby" if answer.get("standby") else "")
 
 
 def status_text(answer: dict[str, Any]) -> str:
-    """``cadgen status``: the server and its pool's rules -- its workers against their count cap,
+    """``cad status``: the server and its pool's rules -- its workers against their count cap,
     their memory against its cap -- a line per worker -- busy or idle, its script, process, builds
     and memory after its last build, where a busy one's build is (its last progress frame), how long
     it has been busy or idle -- the standby's line (its process and memory: no script), the builds
@@ -705,7 +705,7 @@ def status_text(answer: dict[str, Any]) -> str:
     memory = (f"RSS {_gb(resident)} of {_gb(cap)}" if resident is not None else f"RSS cap {_gb(cap)}") if cap \
         else "no RSS cap"
     version = answer.get("installation") or answer.get("version")  # the installation's: two are told apart
-    lines = [" · ".join([f"engine server {answer.get('pid')}" + (f" (cadgen {version})" if version else "")
+    lines = [" · ".join([f"engine server {answer.get('pid')}" + (f" (text-to-cad {version})" if version else "")
                          + f", up {_span(answer.get('up'))}", workers_text(answer),
                          *([f"held by {answer['holders']} app server{'' if answer['holders'] == 1 else 's'}"]
                            if answer.get("holders") else []),

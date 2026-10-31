@@ -1,5 +1,5 @@
 """cadgen's telemetry: usage counts and crash reports from the processes that do CAD's work --
-``cadgen mcp`` (the CAD app in an agent app), ``cadgen viewer`` (the browser viewer), and every ``cadgen``
+``cad-mcp`` (the CAD app in an agent app), ``cad viewer`` (the browser viewer), and every ``cadgen``
 command and model script, whose builds, exports and snapshots the engine runs: how many people use
 CAD, how often, what they make, how it goes and where cadgen's own code fails -- counts, times,
 metadata and crash signatures, never what anything says. A ``cadgen`` command sends nothing itself:
@@ -61,7 +61,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
 force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``python model.py``, a
-``cadgen export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
+``cad export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
 them (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
 the process ``cli`` with no app named (``Recorder._spooled``): never in the CAD app's or the viewer's
 batch, whose client and presentation say who looked, not who built. With nothing taking it for a
@@ -74,13 +74,13 @@ without a release.
 
 It is sent by default once the person has been told, and never after their no. Strongest first:
 
-1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_TELEMETRY=0`` turns it off,
-   ``CADGEN_TELEMETRY=1`` on, over the person's choice -- for the process it is set in, but never written
+1. The environment: ``DO_NOT_TRACK=1`` or ``CAD_TELEMETRY=0`` turns it off,
+   ``CAD_TELEMETRY=1`` on, over the person's choice -- for the process it is set in, but never written
    to the settings, and not inherited by the processes it starts for others (``for_others``): a detached
    viewer and the telemetry sender go by the settings.
 2. The person's choice, kept as the ``telemetry`` section of their settings (``cad_server/settings.py``:
    ``settings.json`` in the state directory) and shared by every process: either app's menu,
-   or ``cadgen telemetry on|off``. A yes sends all of
+   or ``cad telemetry on|off``. A yes sends all of
    the above; a no, nothing.
 3. Otherwise the default: all of the above, from the moment the person has been told -- one line,
    said once by the first ``cadgen`` command that may (``notify``). What a running process noted
@@ -109,7 +109,7 @@ Telemetry never gets in the way of CAD:
 
 - Nothing here raises into the process that counts. Every ``Recorder`` method is guarded: a failure
   (an unreadable state directory, a broken receiver, a bug here) is logged at debug level, below
-  what ``cadgen mcp`` prints, so nothing reaches a host's or an agent's logs, and answered with a
+  what ``cad-mcp`` prints, so nothing reaches a host's or an agent's logs, and answered with a
   safe default: not sharing, nothing sent, nothing said.
 - No tool call, build or command waits on the network, and none needs it: offline, everything
   works and nothing is sent. Noting use is in memory; sending, and the deletion an opt-out asks
@@ -183,16 +183,16 @@ NOTICE = 1
 def notice_text() -> str:
     """The notice (``notify``), its command to turn telemetry off the one that runs this installation
     (``off_command``)."""
-    return ("cadgen now sends usage stats and crash reports, tagged with a random ID — never your files, paths or "
+    return ("text-to-cad now sends usage stats and crash reports, tagged with a random ID — never your files, paths or "
             f"prompts. Turn off: {off_command()} · {PRIVACY_URL}")
 
 
 def off_command() -> str:
-    """``cadgen telemetry off`` as a command that runs this installation when pasted, never one naming a
-    version it is not (a development wheel's is on no index): the ``cadgen`` command with the version this
-    installation is registered as (``cadgen +<version>``, ``_through_proxy``) where it is registered; else, for
+    """``cad telemetry off`` as a command that runs this installation when pasted, never one naming a
+    version it is not (a development wheel's is on no index): the ``cad`` command with the version this
+    installation is registered as (``cad +<version>``, ``_through_proxy``) where it is registered; else, for
     an installation uvx made, the ``uvx`` line that makes it from what it was installed from (``_installed_from``:
-    the release's requirement, or the wheel); else ``cadgen`` where the ``cadgen`` on PATH is the script that runs
+    the release's requirement, or the wheel); else ``cad`` where the ``cad`` on PATH is the script that runs
     now, that script by its path, or this interpreter with ``-m cad_server.cli``."""
     import shlex
     import shutil
@@ -210,19 +210,19 @@ def off_command() -> str:
     if "archive-v0" in Path(sys.prefix).parts:  # uv's cache: an installation of the exact requirement
         source = _installed_from()
         if source is not None:
-            return " ".join((*LAUNCHER, quote(source), "cadgen telemetry off"))
+            return " ".join((*LAUNCHER, quote(source), "cad telemetry off"))
     script = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
-    if script is not None and script.stem == "cadgen" and script.suffix.lower() in ("", ".exe") and script.is_file():
-        found = shutil.which("cadgen")
+    if script is not None and script.stem == "cad" and script.suffix.lower() in ("", ".exe") and script.is_file():
+        found = shutil.which("cad")
         if found and Path(found).resolve() == script:
-            return "cadgen telemetry off"
+            return "cad telemetry off"
         return f"{quote(str(script))} telemetry off"
     return f"{quote(sys.executable)} -m cad_server.cli telemetry off"
 
 
 def _through_proxy(quote: Callable[[str], str]) -> str | None:
-    """``cadgen +<version>``: the ``cadgen`` command (``cad_server._internal.installations``) running this installation
-    by the version its record names -- ``cadgen`` where that command is the one on PATH, else by its path. ``None``
+    """``cad +<version>``: the ``cad`` command (``cad_server._internal.installations``) running this installation
+    by the version its record names -- ``cad`` where that command is the one on PATH, else by its path. ``None``
     where no record names this installation, or the command is not there."""
     import shutil
 
@@ -233,9 +233,9 @@ def _through_proxy(quote: Callable[[str], str]) -> str | None:
     if record is None or installations.proxy_status(proxy) not in (installations.OK, installations.NEWER,
                                                                      installations.STALE):
         return None
-    found = shutil.which("cadgen")
+    found = shutil.which("cad")
     on_path = found is not None and os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(proxy))
-    return f"{'cadgen' if on_path else quote(proxy)} +{record['version']}"
+    return f"{'cad' if on_path else quote(proxy)} +{record['version']}"
 
 
 def _installed_from() -> str | None:
@@ -291,7 +291,7 @@ def _windows_quote(text: str) -> str:
 
 
 # ``0``: what this command says reaches nobody -- a CAD app's own launch of one, its output thrown away.
-NOTICE_ENV = "CADGEN_TELEMETRY_NOTICE"
+NOTICE_ENV = "CAD_TELEMETRY_NOTICE"
 # A batch is the counts of a window this long: a few events, however busy the window was.
 FLUSH_SECONDS = 300
 # How long a send waits for the receiver. Sends run in the background, so this delays nothing; a
@@ -325,7 +325,7 @@ KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual
 # commands counted (``cad_server._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
 # Who asked for a build: a model script (``python model.py``, or a Python caller's ``Model.build()``) or a
-# ``cadgen`` command (``cadgen export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
+# ``cadgen`` command (``cad export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
 # source text (``cadgen build``); the receiver reads it still, as it reads every schema a release sent.
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
@@ -448,7 +448,7 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
-# Errors that are never cadgen's bug: a command's own output closed by whatever read it (``cadgen ... | head``,
+# Errors that are never cadgen's bug: a command's own output closed by whatever read it (``cad ... | head``,
 # which the command answers by stopping quietly) -- that pipe, not another the command wrote to (``stdout_closed``);
 # a page leaving a viewer route mid-reply is the response writer's to swallow (``cad_server.viewer.response``), so a
 # route's connection error that reaches here is cadgen's own connection failing, and is reported. A
@@ -581,14 +581,14 @@ def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> d
 
 # What an environment says (``_environment``): read from this process's environment, or one handed in, so a no
 # holds for its builds there too.
-ENVIRONMENT = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
+ENVIRONMENT = ("DO_NOT_TRACK", "CAD_TELEMETRY")
 
 
 def _environment(env: Any = None) -> bool | None:
     env = os.environ if env is None else env
     if str(env.get("DO_NOT_TRACK") or "").strip().lower() in _ON:
         return False
-    value = str(env.get("CADGEN_TELEMETRY") or "").strip().lower()
+    value = str(env.get("CAD_TELEMETRY") or "").strip().lower()
     return False if value in _OFF else True if value in _ON else None
 
 
@@ -1465,7 +1465,7 @@ class Recorder:
 
     def _first_use(self) -> Any:
         """The answer the first batch began under, read as its first use is noted -- not at start, where
-        ``cadgen mcp`` reads nothing of the person's until a tool needs it -- and ``_UNREAD`` once known.
+        ``cad-mcp`` reads nothing of the person's until a tool needs it -- and ``_UNREAD`` once known.
         Every later batch begins under the answer the flush before it read."""
         return self._decision() if self._basis is _UNREAD else _UNREAD
 

@@ -19,8 +19,8 @@
    "version"
   ],
   "release_command": {
-   "nt": "Scripts/cadgen.exe",
-   "posix": "bin/cadgen"
+   "nt": "Scripts/cad.exe",
+   "posix": "bin/cad"
   },
   "release_marker": "cadgen-release.json",
   "release_schema": "cadgen release/1",

@@ -1,6 +1,6 @@
 """Every job the engine runs says where it is in one progress event (``progress.py``): a build's stages
 and each body it runs, by name, one frame each, over the worker's pipe and through the daemon -- to the
-build's caller, to ``cadgen status`` from another shell, to a page waiting on a served document, and,
+build's caller, to ``cad status`` from another shell, to a page waiting on a served document, and,
 last, in each report; an export's, a snapshot's and a measurement's stages the same way, to their
 callers; and a terminal draws any of them as a bar."""
 
@@ -379,13 +379,13 @@ class DaemonProgressTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="engine-progress-")).resolve()
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.state),
-                                          "CADGEN_STATE_DIR": str(self.state / "state"),
-                                          "CADGEN_CACHE_DIR": str(self.state / "cache"),
-                                          "CADGEN_LAUNCHER_DIR": str(self.state / "bin"),
-                                          "CADGEN_ENGINE_MESH": "inline"}, self.addCleanup)
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
+                                          "CAD_STATE_DIR": str(self.state / "state"),
+                                          "CAD_CACHE_DIR": str(self.state / "cache"),
+                                          "CAD_LAUNCHER_DIR": str(self.state / "bin"),
+                                          "CAD_ENGINE_MESH": "inline"}, self.addCleanup)
         # This process asks the test's daemon what it holds (``busy``), never starting one.
-        self.enterContext(mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)}))
+        self.enterContext(mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)}))
         self.addCleanup(self._stop)
 
     def _stop(self) -> None:
@@ -418,7 +418,7 @@ class DaemonProgressTest(unittest.TestCase):
         engine_daemon.reap(process)
 
     def busy(self) -> dict | None:
-        """The busy worker's last frame, as ``cadgen status`` has it."""
+        """The busy worker's last frame, as ``cad status`` has it."""
         from cad.engine.client import request
 
         status = request({"op": "status"}, start=False) or {}

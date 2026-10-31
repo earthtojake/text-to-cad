@@ -38,8 +38,8 @@ class AttackFixture:
         os.makedirs(self.root)
         self.engine = os.path.join(self.base, "engine")
         os.makedirs(self.engine)
-        self._previous_engine = os.environ.get("CADGEN_ENGINE_DIR")
-        os.environ["CADGEN_ENGINE_DIR"] = self.engine
+        self._previous_engine = os.environ.get("CAD_ENGINE_DIR")
+        os.environ["CAD_ENGINE_DIR"] = self.engine
 
         self.write("ok.step", "public step\n")
         self.write("ok.stl", "solid public\n")
@@ -83,9 +83,9 @@ class AttackFixture:
         self.server.server_close()
         self.thread.join(timeout=5)
         if self._previous_engine is None:
-            os.environ.pop("CADGEN_ENGINE_DIR", None)
+            os.environ.pop("CAD_ENGINE_DIR", None)
         else:
-            os.environ["CADGEN_ENGINE_DIR"] = self._previous_engine
+            os.environ["CAD_ENGINE_DIR"] = self._previous_engine
         shutil.rmtree(self.base, ignore_errors=True)
 
     def request(self, method, target, *, headers=None, body=None):

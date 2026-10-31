@@ -16,7 +16,7 @@ Every model of `models/moonwatch`, on cadgen 0.8 (each a `@model`; a run writes 
 
 Build from this folder: `python case.py`, `python dial.py`, `python bracelet.py`,
 `python finishing_sampler.py`, `python movement.py`, `python moonwatch.py`. A build
-writes nothing; `cadgen export <id> GLB/moonwatch.glb` writes the watch's GLB, its four
+writes nothing; `cad export <id> GLB/moonwatch.glb` writes the watch's GLB, its four
 clips baked, on request.
 
 The case, dial and bracelet are plain functions in `lib/watch.py` (each with its

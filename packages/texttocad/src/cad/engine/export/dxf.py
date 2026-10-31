@@ -23,7 +23,7 @@ metadata: two GUIDs, four Julian dates and two version markers) and its CLASSES 
 from a set and so in hash-seed order, is sorted; a pin that stops holding fails the write
 (``DxfDeterminismError``) rather than letting the bytes drift. Each part's geometry is its shape
 bytes read once (``Source.shape_data``), the form its document holds, so a build's file and
-``cadgen export model.xbf model.dxf`` are the same bytes.
+``cad export model.xbf model.dxf`` are the same bytes.
 
 **The drawing checks** run on the document the bytes are written from, before they are written:
 units set, no zero-length or degenerate entity, no exact duplicate (a double cut), cut profiles

@@ -19,7 +19,7 @@ OpenGL draws a row apart past that bound, the row has a golden of the platform's
 held to the same bound. A row missed in CI prints the picture it drew (`GOLDEN <platform>/<row>`,
 base64), which is that platform's golden once a person has looked at it. A test that draws makes
 an OpenGL context and is skipped, saying why, where none can be made (on CI with a display, fails). A deliberate change to the
-look makes them again: `CADGEN_RENDER_GOLDENS=write`.
+look makes them again: `CAD_RENDER_GOLDENS=write`.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from tests.python.support.paths import SOURCE_PATH
 
 GOLDEN = Path(__file__).resolve().parent / "formats_golden"
 PLATFORM = context.platform()
-WRITE = os.environ.get("CADGEN_RENDER_GOLDENS") == "write"
+WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 SIZE = (320, 240)
 
 KINEMATICS = """<?xml version="1.0"?>
@@ -1103,7 +1103,7 @@ class DaemonFileTest(unittest.TestCase):
         gl()
         self.folder = Path(tempfile.mkdtemp(prefix="engine-formats-daemon-")).resolve()
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        env = {**os.environ, "PYTHONPATH": SOURCE_PATH, "CADGEN_ENGINE_DIR": str(self.state)}
+        env = {**os.environ, "PYTHONPATH": SOURCE_PATH, "CAD_ENGINE_DIR": str(self.state)}
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
 

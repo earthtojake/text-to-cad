@@ -27,7 +27,7 @@ an argument-parsing framework:
   the parser holds the signature and nothing else.
 
 Stdlib only, and light: building a parser at dispatch costs microseconds, and
-nothing here may pull the CAD stack in — ``cadgen <verb> --help`` must stay off
+nothing here may pull the CAD stack in — ``cad <verb> --help`` must stay off
 the ~2.5s OCP import. The verb functions keep their own heavy imports inside
 their bodies for the same reason.
 """

@@ -390,7 +390,7 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const { queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
-  // cadgen's telemetry is on by default once a `cadgen` command has said so: the page never asks.
+  // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
   expect(server.asked('/__cad/analytics')).toEqual([null]);

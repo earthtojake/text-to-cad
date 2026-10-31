@@ -33,7 +33,7 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # the session cookie, ``<expires>.<mac>`` too, good for 30 days from its last use, which renews it
 # (``SESSION_SECONDS``, ``EngineApp._admitted``). A mac is the token's HMAC of the credential's kind and expiry, so
 # each is checked by recomputing it: no engine keeps a session, every engine of this user -- on any
-# port, of any installation, after any restart -- admits what another issued, and ``cadgen server
+# port, of any installation, after any restart -- admits what another issued, and ``cad server
 # --rotate-token`` ends every link and session at once. The cookie is named for the token too
 # (``EngineApp.cookie``): one name on every port of the host, while another user's engine, or one
 # with a rotated token, reads a name of its own and never sees, refuses or replaces this one.
@@ -64,7 +64,7 @@ def standing(master, kind, value):
 
 # What a page load without a credential this engine admits is answered with (``EngineApp._refused``):
 # a link past its day says so (``LINK_EXPIRED_PAGE``); any other -- none, or one the token never
-# signed, from before ``cadgen server --rotate-token`` -- that the page needs a link
+# signed, from before ``cad server --rotate-token`` -- that the page needs a link
 # (``TOKEN_NEEDED_PAGE``). Each names the one thing to do.
 _PAGE_HEAD = (
     '<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -74,13 +74,13 @@ _PAGE_HEAD = (
 )
 LINK_EXPIRED_PAGE = (
     _PAGE_HEAD + '<h1>This CAD Viewer link has expired</h1>'
-    '<p>A link opens the viewer for a day. Run <code>cadgen viewer</code> and open the link it '
+    '<p>A link opens the viewer for a day. Run <code>cad viewer</code> and open the link it '
     'prints.</p></body></html>\n'
 ).encode('utf-8')
 TOKEN_NEEDED_PAGE = (
     _PAGE_HEAD + '<h1>This CAD Viewer page needs its link</h1>'
     '<p>This browser has not opened the viewer in the last 30 days, or its links were replaced '
-    'since. Run <code>cadgen viewer</code> and open the link it prints.</p></body></html>\n'
+    'since. Run <code>cad viewer</code> and open the link it prints.</p></body></html>\n'
 ).encode('utf-8')
 
 
@@ -257,7 +257,7 @@ class EngineApp:
         return sign(self.token, 'link', LINK_SECONDS)
 
     def launch(self, options):
-        """A launch of the one page (``cadgen viewer``, a text-only host's link, the dev client's
+        """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
         folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with a fresh link,
         which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
@@ -266,7 +266,7 @@ class EngineApp:
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
-            return {'failed': 'CAD Viewer client is not built; build apps/web or install the cadgen wheel'}
+            return {'failed': 'CAD Viewer client is not built; build apps/web or install the texttocad-server wheel'}
         try:
             documents = [self.document(name, start) for name in options.get('files') or []]
         except ValueError as error:

@@ -1425,7 +1425,7 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
     except ImportError as exc:
         raise RuntimeError(
             "@eng_drawing writes a PDF and its renderer is missing: "
-            f"{exc}. Install cadgen's dependencies (pip install matplotlib pillow)."
+            f"{exc}. Install the library with its kernel (pip install 'texttocad[kernel]')."
         ) from exc
     from cad._internal.atomic_replace import temp_suffix
 
@@ -1500,7 +1500,7 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
         if out is None:
             raise ValueError(
                 f"@eng_drawing {fn.__name__} needs out=<path>.pdf: the drawing is that PDF, "
-                "and cadgen does not choose where it lands."
+                "and the library does not choose where it lands."
             )
         target_spec = Path(out)
         if target_spec.suffix.lower() != ".pdf":

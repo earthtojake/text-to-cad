@@ -1,4 +1,4 @@
-"""``cadgen snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
+"""``cad snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
 drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 
 - ``.xbf``, ``.step``: a document, served by the engine (the daemon, so its meshes are the ones

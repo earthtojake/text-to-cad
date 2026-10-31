@@ -5,8 +5,8 @@ script and its worker run there, and so do the engine's documents worker and mes
 engine's daemon runs the core.
 
 uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
-own (the runner's ``CADGEN_ENGINE_DIR``), started by ``cadgen run`` with the core's Python and stopped
-by the core's ``cadgen stop``. The fake-uv contracts (keys, commands, refusals) are test_base.py's.
+own (the runner's ``CAD_ENGINE_DIR``), started by ``cad run`` with the core's Python and stopped
+by the core's ``cad stop``. The fake-uv contracts (keys, commands, refusals) are test_base.py's.
 """
 
 from __future__ import annotations
@@ -85,8 +85,8 @@ class CoreAndBaseTest(unittest.TestCase):
             wrapper.chmod(0o755)
         environ = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         cls.env = engine_daemon.watched({**environ, "PATH": os.pathsep.join((str(folder), os.environ["PATH"])),
-                                         "CADGEN_VIEWER_WARM": "0"}, cls.addClassCleanup)
-        cls.cadgen = str(cls.core / ("Scripts/cadgen.exe" if os.name == "nt" else "bin/cadgen"))
+                                         "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup)
+        cls.cadgen = str(cls.core / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad"))
         cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "stop"], env=cls.env, capture_output=True))
 
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -102,7 +102,7 @@ class CoreAndBaseTest(unittest.TestCase):
         return Path(lines[0][len("CALLER "):]).resolve()
 
     def test_a_model_and_the_engines_kernel_processes_run_in_the_base_the_engine_in_the_core(self) -> None:
-        cache = Path(os.environ["CADGEN_CACHE_DIR"]).resolve()
+        cache = Path(os.environ["CAD_CACHE_DIR"]).resolve()
         self.assertNotEqual(subprocess.run([str(base.interpreter(self.core)), "-c", "import build123d"],
                                            env=self.env, capture_output=True).returncode, 0, "the core has no kernel")
         project = self.root / "project"
@@ -112,7 +112,7 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr)
         made = self.caller(first)
         self.assertEqual(made.parent, cache / base.BASE)
-        self.assertIn("cadgen run: making the CAD kernel environment, once: texttocad[kernel] ", first.stderr)
+        self.assertIn("cad run: making the CAD kernel environment, once: texttocad[kernel] ", first.stderr)
         self.assertEqual(Path((project / "worker.txt").read_text(encoding="utf-8")).resolve(), made,
                          "the model's worker runs in the base")
         self.assertEqual(self.asked(), ["venv", "pip"])

@@ -1,6 +1,6 @@
-"""The device's page links outlive its engine: one HTTP port (``--port``, else ``CADGEN_ENGINE_PORT``,
+"""The device's page links outlive its engine: one HTTP port (``--port``, else ``CAD_ENGINE_PORT``,
 else 3245 or the port it rolled to when 3245 was another's, remembered) and the user's one page token,
-the same at every start until ``cadgen server --rotate-token``. A named port another process holds
+the same at every start until ``cad server --rotate-token``. A named port another process holds
 is refused by name; another engine on it (an earlier cadgen's, its door another name) that nothing
 uses is asked to stop, and one in use is rolled from. One engine a device: a client of another
 release attaches to the engine running, and starts the current installation's, never its own."""
@@ -81,14 +81,14 @@ class EnginePortTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="eport-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, self.root, True)
-        environment = {key: value for key, value in os.environ.items() if key != "CADGEN_ENGINE_PORT"}
+        environment = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_PORT"}
         # The test's own default port (``daemon.default_port``): nothing here touches the machine's 3245.
         self.default = free_port()
         self.env = engine_daemon.watched({**environment, "PYTHONPATH": str(SRC),
-                                          "CADGEN_ENGINE_DEFAULT_PORT": str(self.default),
-                                          "CADGEN_ENGINE_DIR": str(self.root / "engine"),
-                                          "CADGEN_STATE_DIR": str(self.root / "state"),
-                                          "CADGEN_CACHE_DIR": str(self.root / "cache")},
+                                          "CAD_ENGINE_DEFAULT_PORT": str(self.default),
+                                          "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                          "CAD_STATE_DIR": str(self.root / "state"),
+                                          "CAD_CACHE_DIR": str(self.root / "cache")},
                                          self.addCleanup)
         self.addCleanup(self.stop)
         self.addCleanup(self.stop_every)
@@ -98,7 +98,7 @@ class EnginePortTest(unittest.TestCase):
         its own door, ``daemon._tag``), and awaited gone."""
         from cad_server.engine import daemon
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
             for door in (self.root / "engine").glob("*.port" if os.name == "nt" else "*.door"):
                 daemon._ask(door, {"op": "stop"})
         self.answering()
@@ -135,7 +135,7 @@ class EnginePortTest(unittest.TestCase):
         """The engine's door in the test's engine folder (on Windows, its port file)."""
         from cad.engine import places
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
             return places.address()
 
     def earlier(self, port: int) -> tuple[Path, dict]:
@@ -153,7 +153,7 @@ class EnginePortTest(unittest.TestCase):
         self.addCleanup(engine_daemon.reap, process)
         door = self.root / "engine" / f"{EARLIER}.{'port' if os.name == 'nt' else 'door'}"
         deadline = time.monotonic() + 60
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
             while (connection := client._connect(door)) is None:
                 self.assertIsNone(process.poll(), "the earlier engine exited before its door answered")
                 self.assertLess(time.monotonic(), deadline, "the earlier engine's door answered")
@@ -164,13 +164,13 @@ class EnginePortTest(unittest.TestCase):
             return door, daemon._ask(door, {"op": "status"}) or {}
 
     def server(self, *args: str) -> None:
-        """``cadgen server ARGS`` in the background, once its door answers."""
+        """``cad server ARGS`` in the background, once its door answers."""
         from cad.engine import client, places
 
         process = subprocess.Popen([sys.executable, "-m", "cad_server.engine", "server", *args], env=self.env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(engine_daemon.reap, process)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
             deadline = time.monotonic() + 60
             while (found := client._connect(places.address())) is None:
                 self.assertIsNone(process.poll(), "the server exited before its door answered")
@@ -226,9 +226,9 @@ class EnginePortTest(unittest.TestCase):
         (closed at the end) and where its port came from. ``extra``: this process's environment."""
         from cad_server.engine import daemon, registry
 
-        environment = {key: value for key, value in os.environ.items() if key != "CADGEN_ENGINE_PORT"}
-        with mock.patch.dict(os.environ, {**environment, "CADGEN_ENGINE_DIR": self.env["CADGEN_ENGINE_DIR"],
-                                          "CADGEN_ENGINE_DEFAULT_PORT": str(default), **extra},
+        environment = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_PORT"}
+        with mock.patch.dict(os.environ, {**environment, "CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"],
+                                          "CAD_ENGINE_DEFAULT_PORT": str(default), **extra},
                              clear=True), \
                 mock.patch.object(registry, "FACTORY", lambda: registry.Registry(self.root / "state")):
             server, where = daemon.bind("127.0.0.1", None, Listener)
@@ -245,18 +245,18 @@ class EnginePortTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         self.assertEqual(daemon.DEFAULT_PORT, 3245)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DEFAULT_PORT": ""}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DEFAULT_PORT": ""}):
             self.assertEqual(daemon.default_port(), 3245)
         self.assertEqual(self.launch()["port"], self.default)  # the test's stand-in for 3245, free
         self.assertIn(f"serving http://127.0.0.1:{self.default} (the default port)", self.cli("status").stdout)
 
     def test_a_port_another_program_holds_is_refused_by_name_and_leaves_no_engine(self) -> None:
         port = held_port(self)
-        done = self.started(CADGEN_ENGINE_PORT=str(port))
+        done = self.started(CAD_ENGINE_PORT=str(port))
         self.assertEqual(done.returncode, 1, done.stdout)
         (said,) = done.stderr.strip().splitlines()[-1:]
         self.assertRegex(said, rf"^CAD Viewer: port {port} is held by (.+ \(pid (\d+)\)|another process): "
-                               r"stop it, or start cadgen with another CADGEN_ENGINE_PORT$")
+                               r"stop it, or start the server with another CAD_ENGINE_PORT$")
         if os.name != "nt":  # the system names the holder: this process
             self.assertIn(f" (pid {os.getpid()}): ", said)
         self.answering()
@@ -267,7 +267,7 @@ class EnginePortTest(unittest.TestCase):
         own = free_port()
         before = engine_daemon.run([sys.executable, "-c", "from cad.engine import client; "
                                     "print(client.request({'op': 'pid'})['pid'])"],
-                                   env={**self.env, "CADGEN_ENGINE_PORT": str(own)})
+                                   env={**self.env, "CAD_ENGINE_PORT": str(own)})
         self.assertEqual(before.returncode, 0, before.stderr)
         port = held_port(self)
         done = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--api-only", "--json", "--port", str(port)],
@@ -285,11 +285,11 @@ class EnginePortTest(unittest.TestCase):
         done = self.cli("server", "--port", str(port))  # no request is ever sent: it binds at its start
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertRegex(done.stderr.strip().splitlines()[-1],
-                         rf"^cadgen: port {port} is held by .+: stop it, or pass another --port$")
+                         rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
         self.answering()
 
     def test_cadgen_server_beside_a_running_engine_says_so_and_a_port_it_cannot_take_fails(self) -> None:
-        running = self.launch(CADGEN_ENGINE_PORT=str(free_port()))
+        running = self.launch(CAD_ENGINE_PORT=str(free_port()))
         asked = free_port()
         done = self.cli("server", "--port", str(asked))
         self.assertEqual(done.returncode, 1, done.stderr)
@@ -305,14 +305,14 @@ class EnginePortTest(unittest.TestCase):
 
     def test_a_held_default_rolls_to_the_next_free_port_says_so_once_and_keeps_it(self) -> None:
         default = held_port(self)  # the test's default, held by this process: another program's
-        extra = {"CADGEN_ENGINE_DEFAULT_PORT": str(default)}
+        extra = {"CAD_ENGINE_DEFAULT_PORT": str(default)}
         done = self.started(**extra)
         self.assertEqual(done.returncode, 0, done.stderr)
         port = json.loads(done.stdout)["port"]
         self.assertTrue(default < port <= default + 64, port)
         pid = str(os.getpid()) if os.name != "nt" else r"\d+"  # the system names the holder
         said = rf"{default} is held by (.+pid {pid}\)|another process); the engine serves on {port} and keeps it"
-        self.assertRegex(done.stderr, rf"(?m)^cadgen: {said}$")
+        self.assertRegex(done.stderr, rf"(?m)^cad: {said}$")
         self.assertEqual(self.record()["port"], port)
         status = self.cli("status", **extra).stdout
         self.assertRegex(status, rf"serving http://127\.0\.0\.1:{port} \(rolled from {default} because .+ holds it\)")
@@ -368,7 +368,7 @@ class EnginePortTest(unittest.TestCase):
     def test_an_unused_earlier_engine_on_the_port_is_asked_to_stop_and_its_port_taken(self) -> None:
         port = free_port()
         door, theirs = self.earlier(port)
-        ours = self.launch(CADGEN_ENGINE_PORT=str(port))
+        ours = self.launch(CAD_ENGINE_PORT=str(port))
         self.assertEqual(ours["port"], port)
         self.assertNotEqual(ours["pid"], theirs["pid"])
         # One token for every engine: a link outlives an update.
@@ -381,16 +381,16 @@ class EnginePortTest(unittest.TestCase):
         port = free_port()
         door, theirs = self.earlier(port)
         self.held(door)  # an app server's hold on it, as ``client.hold`` asks one
-        done = self.started(CADGEN_ENGINE_PORT=str(port))
+        done = self.started(CAD_ENGINE_PORT=str(port))
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertEqual(done.stderr.strip().splitlines()[-1],
-                         f"CAD Viewer: port {port} is held by cadgen {previous.version()}'s engine "
-                         f"(pid {theirs['pid']}), still in use by 1 app server: quit that app or run `cadgen stop` "
+                         f"CAD Viewer: port {port} is held by text-to-cad {previous.version()}'s engine "
+                         f"(pid {theirs['pid']}), still in use by 1 app server: quit that app or run `cad stop` "
                          "with that version")
         self.answering(door)
         server, where = self.bound(port)  # its port the default: rolled from, never asked to stop
         self.assertGreater(server.port, port)
-        self.assertEqual(where["notice"], f"{port} is held by cadgen {previous.version()}'s engine (pid "
+        self.assertEqual(where["notice"], f"{port} is held by text-to-cad {previous.version()}'s engine (pid "
                                           f"{theirs['pid']}); the engine serves on {server.port} and keeps it")
         # It serves with the token it started with: a new one is refused while it runs.
         refused = self.cli("server", "--rotate-token")
@@ -406,11 +406,11 @@ class EnginePortTest(unittest.TestCase):
         found = installations.targets()
         if found is None:
             self.skipTest("this interpreter has no console script to register")
-        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": self.env["CADGEN_STATE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": self.env["CAD_STATE_DIR"]}):
             installations.register("1.0.0", found)
             installations.point("1.0.0")
         theirs = other_installation(self.root)  # another release's client, its environment its own
-        first = self.launch(CADGEN_ENGINE_PORT=str(free_port()))
+        first = self.launch(CAD_ENGINE_PORT=str(free_port()))
         attached = self.launch(theirs)
         self.assertEqual(attached["pid"], first["pid"], "it attaches to the engine running")
         self.stop()
@@ -423,7 +423,7 @@ class EnginePortTest(unittest.TestCase):
 
     def test_a_named_port_wins_and_rotate_token_replaces_the_token(self) -> None:
         named = free_port()
-        first = self.launch(CADGEN_ENGINE_PORT=str(named))
+        first = self.launch(CAD_ENGINE_PORT=str(named))
         self.assertEqual(first["port"], named)
         self.assertNotIn("port", self.record(), "a named port is never remembered")
         self.assertEqual(first["token"], self.token())
@@ -438,15 +438,15 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(status, 302)
         cookie = headers["set-cookie"].split(";")[0]
         self.stop()
-        moved = self.launch(CADGEN_ENGINE_PORT=str(free_port()))
+        moved = self.launch(CAD_ENGINE_PORT=str(free_port()))
         self.assertNotEqual((moved["pid"], moved["port"]), (first["pid"], named))
         self.assertEqual(self.ask(moved["port"], "/__cad/server", Cookie=cookie)[0], 200)
         self.assertEqual(self.ask(moved["port"], f"/?token={link}")[0], 302)
         self.stop()
-        # --port on ``cadgen server`` outranks CADGEN_ENGINE_PORT; --rotate-token retires every link
+        # --port on ``cad server`` outranks CAD_ENGINE_PORT; --rotate-token retires every link
         # and every session: each page then needs a new link.
         other = free_port()
-        self.env["CADGEN_ENGINE_PORT"] = str(named)
+        self.env["CAD_ENGINE_PORT"] = str(named)
         self.server("--port", str(other), "--rotate-token")
         for headers in ({"Cookie": cookie}, {}):
             self.assertEqual(self.ask(other, "/" if headers else f"/?token={link}", Sec_Fetch_Dest="document",
@@ -458,7 +458,7 @@ class EnginePortTest(unittest.TestCase):
         # Refused while an engine runs, which keeps the token it started with.
         refused = self.cli("server", "--rotate-token")
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("run cadgen stop first", refused.stderr)
+        self.assertIn("run cad stop first", refused.stderr)
         self.assertEqual(self.token(), rotated["token"])
 
 

@@ -1,4 +1,4 @@
-"""``cadgen urdf validate`` — an ADAPTER over :func:`cad.urdf.validate`.
+"""``cad urdf validate`` — an ADAPTER over :func:`cad.urdf.validate`.
 
 The one validator that is not a generated mirror: ``--package NAME=PATH`` is
 repeatable, and a repeatable key/value map is outside the annotation set a
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
-DEFAULT_PROG = "cadgen urdf validate"
+DEFAULT_PROG = "cad urdf validate"
 VERB = ("cad.urdf", "validate")
 
 

@@ -1,5 +1,5 @@
-"""What cadgen leaves behind that no cadgen running now needs, which ``cadgen doctor`` reports and
-``cadgen doctor --prune`` removes. Nothing here removes anything by itself.
+"""What cadgen leaves behind that no cadgen running now needs, which ``cad doctor`` reports and
+``cad doctor --prune`` removes. Nothing here removes anything by itself.
 
 Five classes, each found by what it is, never by a guess:
 
@@ -20,7 +20,7 @@ Five classes, each found by what it is, never by a guess:
   never reads them; a 0.7 still installed (a plugin not yet updated) does, and nothing tells from
   here whether one is -- 0.7 never registered itself -- so they go once nothing in them has been
   written for ``QUIET_DAYS`` days, or at once when the person says no version needs them
-  (``cadgen doctor --prune --all-versions``).
+  (``cad doctor --prune --all-versions``).
 
 Nothing written in the last ``QUIET_DAYS`` days is removed, of any class (but 0.7's with
 ``--all-versions``): a write that recent may be a cadgen at work.

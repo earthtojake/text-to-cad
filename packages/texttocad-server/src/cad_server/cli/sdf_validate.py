@@ -1,4 +1,4 @@
-"""``cadgen sdf validate`` — a GENERATED CLI over :func:`cad.sdf.validate`.
+"""``cad sdf validate`` — a GENERATED CLI over :func:`cad.sdf.validate`.
 
 There is no parser here on purpose: everything the command accepts is derived
 from the verb function's signature (:mod:`cad_server._internal.cli_from_function`), so a
@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 from cad_server._internal.cli_from_function import generated_main, generated_parser
 
-DEFAULT_PROG = "cadgen sdf validate"
+DEFAULT_PROG = "cad sdf validate"
 VERB = ("cad.sdf", "validate")
 
 

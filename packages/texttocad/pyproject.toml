@@ -89,7 +89,7 @@ include = ["cad", "cad.*", "cadgen"]
 
 [tool.setuptools.package-data]
 cad = ["py.typed", "*.pyi"]
-# The page `cadgen serve` shows a document in (cad.engine.serve reads it beside itself).
+# The page `cad serve` shows a document in (cad.engine.serve reads it beside itself).
 "cad.engine" = ["page/*"]
 # The engine's look lights the regular display modes with this environment image, which the
 # engine serves to the viewer and the OCCT stills read (cad.engine.render.look).

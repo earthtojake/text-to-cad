@@ -20,7 +20,7 @@ export function isEngineGone(error) {
 
 /**
  * Whether an engine answered and refused this page's token (`isEngineGone`'s second case): the
- * engine runs, and the link the page was opened from no longer admits it (`cadgen server
+ * engine runs, and the link the page was opened from no longer admits it (`cad server
  * --rotate-token`, or another installation's engine on its port).
  */
 export function isEngineRefused(error) {

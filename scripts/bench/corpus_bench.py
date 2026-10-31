@@ -54,7 +54,7 @@ EDIT_KEYS = frozenset({"file", "from", "to"})
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 TARGET = re.compile(r"[^:]+\.py")
 DOCUMENT = re.compile(r"[^:]+\.py::[A-Za-z_][A-Za-z0-9_]*")
-TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "0"}
 MARK = "corpus-bench:"  # the line the build process answers on
 
 # Record only builds requested by the program's own calls. The normal Python control flow,
@@ -273,7 +273,7 @@ def build_row(answer: Any, document: str | None = None) -> dict[str, Any]:
 
 def worker_memory(status: Any, scripts: Iterable[str]) -> int | None:
     """The resident memory in MB of the workers that build ``scripts``, as each measured it after its
-    last build (``cadgen status --json``), summed; None when the daemon names none of them."""
+    last build (``cad status --json``), summed; None when the daemon names none of them."""
     if not isinstance(status, dict):
         return None
     wanted = [str(script) for script in scripts]
@@ -539,10 +539,10 @@ def prepare(spec: dict[str, Any], out: Path, engine_dir: Path, cadgen_src: Path)
     selected_script, _, function = spec["document"].partition("::")
     path = os.pathsep.join([str(cadgen_src), *(str(work / folder) for folder in spec.get("pythonpath", []))])
     private = out / "runtime" / spec["name"]
-    env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine_dir / spec["name"]),
-           "CADGEN_STATE_DIR": str(private / "state"), "CADGEN_CACHE_DIR": str(private / "cache"),
-           "CADGEN_LAUNCHER_DIR": str(private / "launcher"), "CADGEN_ENGINE_PORT": "0",
-           "CADGEN_ENGINE_STANDBY": "0", "PYTHONPATH": path,
+    env = {**os.environ, "CAD_ENGINE_DIR": str(engine_dir / spec["name"]),
+           "CAD_STATE_DIR": str(private / "state"), "CAD_CACHE_DIR": str(private / "cache"),
+           "CAD_LAUNCHER_DIR": str(private / "launcher"), "CAD_ENGINE_PORT": "0",
+           "CAD_ENGINE_STANDBY": "0", "PYTHONPATH": path,
            "PYTHONPYCACHEPREFIX": str(private / "cache" / "pycache"),
            "BROWSER": str(out / "no-browser.py") + " %s", **TELEMETRY_OFF}
     env.pop("PYTHONDONTWRITEBYTECODE", None)  # compile into this model's private prefix
@@ -754,7 +754,7 @@ class Bench:
                 elif step in ("restart", "restart-cold"):
                     self.stop(model)
                     if step == "restart-cold":
-                        remove(Path(model.env["CADGEN_CACHE_DIR"]) / "documents")
+                        remove(Path(model.env["CAD_CACHE_DIR"]) / "documents")
                 if not self.build(model, step)["ok"]:
                     return
             phase = "document"
@@ -912,7 +912,7 @@ def main(argv: list[str] | None = None) -> int:
            "cadgen": found_cadgen["cadgen"], "python": found_cadgen["python"], "interpreter": args.python,
            "platform": platform.platform(), "cpus": os.cpu_count(), "memory_gb": memory_gb(),
            "engine_dir": str(args.engine_dir), "config": str(args.config), "models": [model["name"] for model in chosen],
-           "environment": {key: value for key, value in os.environ.items() if key.startswith("CADGEN_")}}
+           "environment": {key: value for key, value in os.environ.items() if key.startswith("CAD_")}}
     bench.emit(run)
     print(f"corpus_bench: {len(chosen)} model{'s' if len(chosen) != 1 else ''} into {out}", file=sys.stderr, flush=True)
     for spec in chosen:

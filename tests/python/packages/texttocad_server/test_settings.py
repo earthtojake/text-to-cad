@@ -42,9 +42,9 @@ class StateFolderTest(unittest.TestCase):
         state.mkdir()
         (state / "versions.json").write_text(json.dumps({"checked": 0, "feed": {"latest": "1.0.0"}, "dismissed": "1.0.0"}),
                                             encoding="utf-8")  # a field nothing reads, kept by an earlier write
-        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "claude-github",
-                                          "CADGEN_AUTO_UPDATED": "", "CADGEN_UPDATE_CHECK": "", "CI": "",
-                                          "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": ""}):
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github",
+                                          "CAD_AUTO_UPDATED": "", "CAD_UPDATE_CHECK": "", "CI": "",
+                                          "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""}):
             language.change({"locale": "ja"})
             analytics.choose(True, by="cli")
             self.assertEqual(channel.remember(), "claude-github")

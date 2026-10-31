@@ -1,11 +1,11 @@
-"""``cadgen telemetry`` -- show or change the usage stats and crash reports cadgen sends: from CAD's apps
-(``cadgen mcp`` and ``cadgen viewer``) and its build daemon.
+"""``cad telemetry`` -- show or change the usage stats and crash reports text-to-cad sends: from CAD's apps
+(``cad-mcp`` and ``cad viewer``) and its build daemon.
 
-They are sent by default once a ``cadgen`` command has said so (``cad_server/analytics.py``). ``status`` (the
+They are sent by default once a ``cad`` command has said so (``cad_server/analytics.py``). ``status`` (the
 default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``
-keep the person's choice in the state directory, which every cadgen process reads: ``on`` sends what the
+keep the person's choice in the state directory, which every process of the server's reads: ``on`` sends what the
 default does, as the person's own answer, and ``off`` sends nothing. ``DO_NOT_TRACK=1`` or
-``CADGEN_TELEMETRY=0`` in a process's environment turns it off for that process, and ``CADGEN_TELEMETRY=1``
+``CAD_TELEMETRY=0`` in a process's environment turns it off for that process, and ``CAD_TELEMETRY=1``
 on, without changing the choice kept here.
 """
 
@@ -17,19 +17,19 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PROG = "cadgen telemetry"
+DEFAULT_PROG = "cad telemetry"
 
 _REASONS = {
-    "environment": "set by DO_NOT_TRACK or CADGEN_TELEMETRY in this environment",
+    "environment": "set by DO_NOT_TRACK or CAD_TELEMETRY in this environment",
     "choice": "your choice",
-    "default": "by default, since cadgen said so{when}",
-    "untold": "not until a cadgen command says so, which none does in CI or from a development install",
+    "default": "by default, since text-to-cad said so{when}",
+    "untold": "not until a cad command says so, which none does in CI or from a development install",
     "unavailable": "the telemetry setting could not be read",
 }
 
 
 def describe(found: dict[str, Any] | None = None, *, path: Path | None = None) -> str:
-    """``on`` or ``off``, and why: what ``cadgen telemetry`` and ``cadgen doctor`` say."""
+    """``on`` or ``off``, and why: what ``cad telemetry`` and ``cad doctor`` say."""
     from cad_server.analytics import status, told_at
 
     found = found if found is not None else status(path=path)
@@ -42,11 +42,11 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "Show or change the usage stats and crash reports cadgen sends from CAD's apps (the CAD app in an agent "
-            "app, and the CAD Viewer) and its build daemon. By default, once a cadgen command has said so: a random "
+            "Show or change the usage stats and crash reports text-to-cad sends from CAD's apps (the CAD app in an agent "
+            "app, and the CAD Viewer) and its build daemon. By default, once a cad command has said so: a random "
             "install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the "
             "viewer's tools and settings are used (never a value or a name), files shown by format, builds and "
-            "snapshots, how they ended and how long they took, and where cadgen's own code failed (never a "
+            "snapshots, how they ended and how long they took, and where text-to-cad's own code failed (never a "
             "message). `off` sends nothing. Never file names, paths, contents or prompts."
         ),
     )
@@ -63,25 +63,25 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         # An off is kept before the receiver is asked to delete (a person at a terminal waits for that).
         chosen = choose(args.action == "on", by="cli", forget=request_deletion if args.action == "off" else None)
         if not chosen["saved"]:
-            print(f"Could not save the choice: cadgen's state directory ({settings_path().parent}) could not be written. "
+            print(f"Could not save the choice: the state directory ({settings_path().parent}) could not be written. "
                   "Telemetry is unchanged; DO_NOT_TRACK=1 in an app's environment keeps it off there.")
             return 1
         if args.action == "off":
             print("Telemetry is off; the install id was deleted"
                   + (" and the data sent under it was deleted." if chosen.get("forgotten")
-                     else ". The data sent under it will be deleted the next time cadgen can reach its server."))
+                     else ". The data sent under it will be deleted the next time text-to-cad can reach its server."))
     else:
         notify()  # where a person looks for it: said here when no command has said it yet
     found = status()
     if args.action != "off":
         print(f"Telemetry is {describe(found)}.")
         if found["reason"] == "default":
-            print("It counts CAD's tool calls, views, files shown, builds and snapshots, and reports where cadgen's "
+            print("It counts CAD's tool calls, views, files shown, builds and snapshots, and reports where text-to-cad's "
                   f"own code failed -- never what they hold: `{off_command()}` turns it off.")
         if found["id"]:
             print(f"Install id: {found['id']}")
     if found["reason"] == "environment" and args.action in ("on", "off"):
-        print("Note: this environment's DO_NOT_TRACK or CADGEN_TELEMETRY overrides the choice here.")
+        print("Note: this environment's DO_NOT_TRACK or CAD_TELEMETRY overrides the choice here.")
     print(f"Privacy policy: {PRIVACY_URL}")
     return 0
 

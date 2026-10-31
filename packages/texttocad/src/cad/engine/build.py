@@ -456,7 +456,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     library = max((root for root in _library_roots() if root in script.parents), key=lambda root: len(root.parts), default=None)
     if library is not None:
         # Never right for a model's own script: its edits, and its modules', would rebuild nothing.
-        log(f"cadgen: {shown} lies in a library folder, {library}: edits to it and to what it imports "
+        log(f"cad: {shown} lies in a library folder, {library}: edits to it and to what it imports "
             "rebuild nothing; keep the project outside the interpreter's library folders")
     reports: list[dict[str, Any]] = []
     started = time.perf_counter()
@@ -542,7 +542,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 _reattach(models, Path(cache))
             except Exception as error:  # noqa: BLE001 - identity never fails a build: a new document
-                print(f"cadgen: re-attachment failed: {type(error).__name__}: {error}", file=sys.stderr)
+                print(f"cad: re-attachment failed: {type(error).__name__}: {error}", file=sys.stderr)
         for model in models:
             body_started = time.perf_counter()
             tally = dict(run.tally)
@@ -833,7 +833,7 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
     """A model's declared files, each exactly an export of its document appended to the run: the xbf
     first (``save``: the document's own bytes), then each derived file translated from the document (``source``:
     ``export.translate``) -- every one landed only where the file does not hold its bytes already
-    (``atomic_replace.put``), as ``cadgen export`` writes. Nothing remembers what was written: every
+    (``atomic_replace.put``), as ``cad export`` writes. Nothing remembers what was written: every
     run that reaches a declared file translates it and compares, so a file someone deleted or edited
     is written again from the document, and one nobody touched keeps its bytes and its time. The
     report's ``files``: each file's kind, whether it was written, the seconds and its bytes. ``log``
@@ -1017,7 +1017,7 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
     xbf = next((Path(path) for kind, path in targets if kind == "xbf"), None)
     name = f"{model.script}::{model.name}"
     remembered = _WRITTEN.get(name)
-    if not memo.enabled() or os.environ.get("CADGEN_ENGINE_BODIES", "1").strip() == "0":
+    if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return {"used": False, "reason": "retention is off"}, None
     folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
     clock = time.perf_counter()

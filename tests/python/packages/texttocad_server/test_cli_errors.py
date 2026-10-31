@@ -48,7 +48,7 @@ class ReportCliErrorTest(unittest.TestCase):
 
     def _report(self, exc, **kwargs) -> str:
         stream = io.StringIO()
-        code = report_cli_error(exc, tool="cadgen urdf validate", stream=stream, **kwargs)
+        code = report_cli_error(exc, tool="cad urdf validate", stream=stream, **kwargs)
         self.assertEqual(1, code, "a reported failure is still a failure")
         return stream.getvalue()
 

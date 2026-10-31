@@ -15,7 +15,7 @@ export interface ClipboardPort {
 }
 /**
  * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
- * and measurements, with one job per drawn view (`cadgen snapshot --annotation PACKET --camera authored` draws each).
+ * and measurements, with one job per drawn view (`cad snapshot --annotation PACKET --camera authored` draws each).
  * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@text-to-cad/core/client`) is the
  * viewer server's.
  */

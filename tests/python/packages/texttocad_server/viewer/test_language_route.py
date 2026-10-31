@@ -21,7 +21,7 @@ class ViewerLanguageTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state")})
+        environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state")})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"

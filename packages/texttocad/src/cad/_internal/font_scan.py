@@ -6,7 +6,7 @@ whose ``__init__`` calls ``register_system_fonts() -> register_folder() ->
 register_font()``, and ``register_font`` hands each file straight to
 ``fontTools.ttLib.TTFont`` with no per-file guard. One malformed file, or one font with
 no family name (whose empty name OCCT refuses, #636), therefore takes down
-``import build123d`` itself, and with it every cadgen command -- on Windows, where that
+``import build123d`` itself, and with it every cad command -- on Windows, where that
 scan is the one platform build123d runs it on (OCCT does not pick up user fonts there).
 
 ``install_font_guard`` hides such a file from the one folder listing build123d makes;
@@ -47,7 +47,7 @@ def system_font_dirs() -> list[str]:
 # which is exactly how the first version of it did nothing.
 _GLOB_PATTERN_SUFFIXES = ("ttf", "otf", "ttc")
 
-_ENV_DISABLE = "CADGEN_FONT_GUARD"
+_ENV_DISABLE = "CAD_FONT_GUARD"
 
 skipped_fonts: list[str] = []
 
@@ -115,7 +115,7 @@ def install_font_guard() -> bool:
     ``Font_SystemFont`` into OCCT's global manager.
 
     Returns True when the guard is installed. Idempotent, and a no-op when
-    ``CADGEN_FONT_GUARD=0``.
+    ``CAD_FONT_GUARD=0``.
     """
     if os.environ.get(_ENV_DISABLE) == "0":
         return False

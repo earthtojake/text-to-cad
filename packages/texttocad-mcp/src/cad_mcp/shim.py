@@ -1,7 +1,7 @@
 """The host's stdio transport: forward JSON-RPC to the device's CAD server.
 
 Only connection metadata lives here. Tools, views, pages and document state belong to the server. Host
-capability corrections are made at this boundary: what the person said (``CADGEN_MCP_PRESENTATION``), and
+capability corrections are made at this boundary: what the person said (``CAD_MCP_PRESENTATION``), and
 which host launched this process, read from its parent processes (``host.launcher``), which only this
 process can see. So is the one act a text host's ``cad_show`` asks of the person's machine, opening their
 browser: made here, in the environment the host gave this process, never in the server's
@@ -29,32 +29,32 @@ LOG = logging.getLogger("cad_mcp")
 
 def initialize_params(params, launcher=None, holder=None, app=None):
     """The host's initialize as the server is sent it: with what the person said of the host
-    (``CADGEN_MCP_PRESENTATION``) as a declaration, ``launcher``, the host that started this process
+    (``CAD_MCP_PRESENTATION``) as a declaration, ``launcher``, the host that started this process
     (``host.launcher``), for the server to weigh (its ``host.presentation``), ``holder``, the name of this
     process's hold (``Holder``), whose end ends the session, ``app``, the capability the session hands its
     views (``Proxy.app``), ``browser``: that this process opens the browser a text host's ``cad_show`` asks
     for (``browser.deliver``), and whether it can here, ``release``: the release this process is, which
     the server's update button offers when it is newer than the server's own, and ``channel`` and
-    ``autoUpdated``: where its plugin came from, as its startup config says (``CADGEN_INSTALL_CHANNEL``,
-    ``CADGEN_AUTO_UPDATED``), which the server reports and writes down for its installation."""
+    ``autoUpdated``: where its plugin came from, as its startup config says (``CAD_INSTALL_CHANNEL``,
+    ``CAD_AUTO_UPDATED``), which the server reports and writes down for its installation."""
     from cad_mcp import __version__
 
     params = copy.deepcopy(params)
     offered = params.setdefault("capabilities", {})
     extensions = offered.setdefault("extensions", {})
-    told = os.environ.get("CADGEN_MCP_PRESENTATION")
+    told = os.environ.get("CAD_MCP_PRESENTATION")
     if told == "inline":
         extensions[UI_EXTENSION] = {"mimeTypes": [MIME]}
     elif told == "text":
         extensions.pop(UI_EXTENSION, None)
         extensions.pop(TABS_EXTENSION, None)
-        launcher = {"host": "CADGEN_MCP_PRESENTATION=text", "renders": False}
-    channel = str(os.environ.get("CADGEN_INSTALL_CHANNEL") or "").strip()
+        launcher = {"host": "CAD_MCP_PRESENTATION=text", "renders": False}
+    channel = str(os.environ.get("CAD_INSTALL_CHANNEL") or "").strip()
     params.setdefault("_meta", {})["dev.texttocad/transport"] = {
-        "appDir": os.environ.get("CADGEN_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
+        "appDir": os.environ.get("CAD_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
         "browser": transport_browser(), "release": __version__,
         **({"channel": channel} if channel else {}),
-        **({"autoUpdated": True} if str(os.environ.get("CADGEN_AUTO_UPDATED") or "").strip() == "1" else {}),
+        **({"autoUpdated": True} if str(os.environ.get("CAD_AUTO_UPDATED") or "").strip() == "1" else {}),
         **({"holder": holder} if holder else {}), **({"app": app} if app else {}),
     }
     return params
@@ -65,7 +65,7 @@ class Holder:
     server when none runs -- the current installation's, whatever release this transport is -- and kept
     while the host runs, so a shell the host runs in a sandbox that cannot start a server always finds one.
     Once the host has quit, and this process with it, the server runs on unheld until it is stopped or an
-    update replaces it. A server that goes while held (``cadgen stop``, a crash, an update's switch) is held
+    update replaces it. A server that goes while held (``cad stop``, a crash, an update's switch) is held
     again at the host's next request, never at once: a stop is obeyed."""
 
     def __init__(self, host=lambda: None):
@@ -232,7 +232,7 @@ class Proxy:
             ident = self.session
         if ident:
             # The session's end, told to the server that holds it: never a server started to hear it (a
-            # host closing after `cadgen stop` would start one up for nothing).
+            # host closing after `cad stop` would start one up for nothing).
             try:
                 self.client.call("DELETE", "/mcp", headers={"Mcp-Session-Id": ident}, start=False)
             except OSError:
@@ -245,7 +245,7 @@ def _leave(number, _frame):
 
 def serve(argv=None):
     """Serve the host on standard input and output until it closes them, or ends this process."""
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cad-mcp: %(message)s")
     output = claim_stdout()
     requests = claim_stdin()
     # Which host started this process, read from its parents while the host starts to greet it.
@@ -258,7 +258,7 @@ def serve(argv=None):
         return found.get("host")
 
     # The server up and held from the start, not from the first card; the hold names the host once it is
-    # read, so the `cadgen` command in that host's shells runs this installation.
+    # read, so the `cad` command in that host's shells runs this installation.
     holder = Holder(host=lambda: family(launched()))
     holder.start()
 
@@ -283,10 +283,10 @@ def main(argv=None):
     and output. There is nothing to configure: the app's plugin starts it."""
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
-        sys.stdout.write("usage: cadgen mcp\n\nServe CAD to an agent app over MCP (stdio). The app starts one process "
+        sys.stdout.write("usage: cad-mcp\n\nServe CAD to an agent app over MCP (stdio). The app starts one process "
                          "per thread, from its plugin's startup config; there is nothing to configure.\n")
         return 0
     if args:
-        sys.stderr.write(f"cadgen mcp: unrecognized arguments: {' '.join(args)}\n")
+        sys.stderr.write(f"cad-mcp: unrecognized arguments: {' '.join(args)}\n")
         return 2
     return serve()

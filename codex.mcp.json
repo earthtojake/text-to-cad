@@ -8,13 +8,12 @@
         "--python",
         "3.14",
         "--from",
-        "cadgen==0.8.4",
-        "cadgen",
-        "mcp"
+        "texttocad-mcp==0.8.4",
+        "cad-mcp"
       ],
       "startup_timeout_sec": 300,
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "codex-github"
+        "CAD_INSTALL_CHANNEL": "codex-github"
       }
     }
   }

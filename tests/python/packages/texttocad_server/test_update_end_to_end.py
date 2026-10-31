@@ -1,7 +1,7 @@
 """The update end to end, as a person's machine runs it (``cad_server._internal.update``, ``switch``,
-``releases``): release A set up by its own ``cadgen setup`` in a home of this test's own, its engine
+``releases``): release A set up by its own ``cad setup`` in a home of this test's own, its engine
 started as any client starts it; release B published -- its wheel in a folder uv reads beside the
-index (``CADGEN_UPDATE_FIND_LINKS``), and named by a version feed served here (``CADGEN_API_URL``);
+index (``CAD_UPDATE_FIND_LINKS``), and named by a version feed served here (``CAD_API_URL``);
 then the button's request (``POST /__cad/update``, ``cad_server.viewer.http_app``), and the engine back on
 the same port, with the same token, running B -- the answer a page reloads on --, A's folder kept as
 the way back.
@@ -163,8 +163,8 @@ def free_port() -> int:
 
 
 def command(env: Path) -> Path:
-    """The ``cadgen`` command of the environment at ``env``."""
-    return env / ("Scripts/cadgen.exe" if WINDOWS else "bin/cadgen")
+    """The ``cad`` command of the environment at ``env``."""
+    return env / ("Scripts/cad.exe" if WINDOWS else "bin/cad")
 
 
 class UpdateEndToEndTest(unittest.TestCase):
@@ -207,17 +207,17 @@ class UpdateEndToEndTest(unittest.TestCase):
         dropped = ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "CONDA_PREFIX", "CI", "CODEX_HOME",
                    "CLAUDE_CONFIG_DIR", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
                    "XDG_BIN_HOME", "UV_INSTALL_DIR")
-        env = {key: value for key, value in os.environ.items() if not key.startswith("CADGEN_") and key not in dropped}
+        env = {key: value for key, value in os.environ.items() if not key.startswith("CAD_") and key not in dropped}
         system = os.environ.get("SystemRoot", r"C:\Windows")
         bypass = ",".join(filter(None, ("127.0.0.1,localhost", os.environ.get("NO_PROXY") or os.environ.get("no_proxy"))))
         env.update({
             "HOME": str(home), "PATH": os.pathsep.join([rf"{system}\System32", system] if WINDOWS else ["/usr/bin", "/bin"]),
             "UV_CACHE_DIR": uv_cache, "NO_PROXY": bypass, "no_proxy": bypass, "DO_NOT_TRACK": "1",
             "BROWSER": "true", "CODEX_CLI": str(self.work / "no-codex"),
-            "CADGEN_STATE_DIR": str(self.work / "state"), "CADGEN_CACHE_DIR": str(self.work / "cache"),
-            "CADGEN_ENGINE_DIR": str(self.work / "engine"), "CADGEN_LAUNCHER_DIR": str(self.work / "bin"),
-            "CADGEN_ENGINE_PORT": str(self.port), "CADGEN_API_URL": f"http://127.0.0.1:{self.feed.server_port}/v1",
-            "CADGEN_UPDATE_FIND_LINKS": str(self.wheels),
+            "CAD_STATE_DIR": str(self.work / "state"), "CAD_CACHE_DIR": str(self.work / "cache"),
+            "CAD_ENGINE_DIR": str(self.work / "engine"), "CAD_LAUNCHER_DIR": str(self.work / "bin"),
+            "CAD_ENGINE_PORT": str(self.port), "CAD_API_URL": f"http://127.0.0.1:{self.feed.server_port}/v1",
+            "CAD_UPDATE_FIND_LINKS": str(self.wheels),
         })
         if WINDOWS:
             env.update({"USERPROFILE": str(home), "APPDATA": str(home / "AppData" / "Roaming"),
@@ -267,7 +267,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         return log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no update log)"
 
     def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
-        # Release A, as the install command sets it up: uvx's environment, whose `cadgen setup` makes A's
+        # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
         # release folder and sets it up from there. Claude Desktop's folder is there: its config gets CAD's
         # server, A's, which the update moves to B's (an app updated with no app's command, no network).
         release(A, self.wheels)
@@ -287,7 +287,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), A)
         self.assertTrue(desktop.is_file(), set_up.stdout + set_up.stderr)
-        self.assertIn(f"cadgen=={A}", desktop.read_text(encoding="utf-8"))
+        self.assertIn(f"texttocad-mcp=={A}", desktop.read_text(encoding="utf-8"))
 
         # A's engine, started as any client starts it, serving on the port.
         started = self.run_here([base.interpreter(self.release(A)), "-c",
@@ -344,9 +344,9 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
             self.assertTrue((self.release(version) / "cadgen-release.json").is_file(), version)
-        self.assertIn(f"cadgen=={B}", desktop.read_text(encoding="utf-8"))
-        proxy = self.work / "bin" / ("cadgen.cmd" if WINDOWS else "cadgen")  # the cadgen command runs current
-        self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cadgen {B}")
+        self.assertIn(f"texttocad-mcp=={B}", desktop.read_text(encoding="utf-8"))
+        proxy = self.work / "bin" / ("cad.cmd" if WINDOWS else "cad")  # the cad command runs current
+        self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
         print(f"\nupdate {A} -> {B}: {back - clicked:.1f} s from the click to {B}'s engine answering; no engine "
               f"for {switched['gapMs']} ms (the switch), {round((back - (gone or back)) * 1000)} ms as the page "
               "saw it", file=sys.stderr)

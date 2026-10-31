@@ -27,7 +27,7 @@ class ShellTest(unittest.TestCase):
         self.page = Path(scratch.name)
         (self.page / ui.SHELL).write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
         (self.page / ui.APP).write_bytes(b"export const app = 1;\n")  # bytes: Windows writes no \r
-        patched = mock.patch.dict(os.environ, {"CADGEN_MCP_APP_DIR": str(self.page)})
+        patched = mock.patch.dict(os.environ, {"CAD_MCP_APP_DIR": str(self.page)})
         patched.start()
         self.addCleanup(patched.stop)
 

@@ -1,4 +1,4 @@
-"""References to geometry: ``cadgen inspect`` resolves a ref -- a part's label or an occurrence's
+"""References to geometry: ``cad inspect`` resolves a ref -- a part's label or an occurrence's
 path (``hand/finger.2``), and an element's name or ordinal -- by name in the latest build; a model
 never reads a file its own build writes."""
 
@@ -134,14 +134,14 @@ class ReadAndPlaceTest(_Folder):
 
 
 class WhereTest(unittest.TestCase):
-    """``cadgen inspect`` resolves the same grammar, through a daemon of the test's own."""
+    """``cad inspect`` resolves the same grammar, through a daemon of the test's own."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.folder = Path(tempfile.mkdtemp(prefix="engine-where-")).resolve()
         cls.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.state),
-                                         "CADGEN_ENGINE_MESH": "inline"}, cls.addClassCleanup)
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.state),
+                                         "CAD_ENGINE_MESH": "inline"}, cls.addClassCleanup)
         (cls.folder / "hand.py").write_text(textwrap.dedent(HAND), encoding="utf-8")
         (report,) = engine_build.build(cls.folder / "hand.py", cwd=cls.folder)
         assert report["ok"], report

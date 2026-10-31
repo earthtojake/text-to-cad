@@ -292,7 +292,7 @@ def stand():
         before = self.derivations(self.names(BLOCK, insert="", relief="relief"))
         memo.clear()
         engine_build._PARTS.clear()
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_BODIES": "0"}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_BODIES": "0"}):
             after = self.derivations(self.names("# moved\n\n\n" + BLOCK, insert="", relief="relief"))
         self.assertEqual(before, after)
         from cad.engine import previous
@@ -546,7 +546,7 @@ class RunOrderTest(unittest.TestCase):
         def named(seed: str) -> dict:
             # A cold build in a process of its own: no daemon, no memo carried over.
             env = {**os.environ, "PYTHONPATH": SOURCE_PATH, "PYTHONHASHSEED": seed,
-                   "CADGEN_ENGINE_DIR": str(folder / "engine")}
+                   "CAD_ENGINE_DIR": str(folder / "engine")}
             done = subprocess.run([sys.executable, "-B", "-c", "import grid; grid.grid.build(daemon=False)"],
                                   cwd=folder, env=env, capture_output=True, text=True, timeout=300)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

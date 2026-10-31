@@ -149,7 +149,7 @@ class WorkerLoopTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.script = self.folder / "pair.py"
         self.script.write_text(textwrap.dedent(LOADS), encoding="utf-8")
-        env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_WORKER": "1"}
+        env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_WORKER": "1"}
         self.worker = subprocess.Popen([sys.executable, "-P", "-m", "cad.engine.worker"], stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd=self.folder)
         self.addCleanup(self._stop)
@@ -278,13 +278,13 @@ class AdoptTest(unittest.TestCase):
     def test_a_run_adopts_its_caller_s_environment_but_what_started_the_worker(self) -> None:
         from cad.engine.worker import adopt
 
-        started = {"PYTHONPATH": "/engine", "CADGEN_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1",
+        started = {"PYTHONPATH": "/engine", "CAD_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1",
                    "PATH": "/turn/1", "GONE": "x"}
         with mock.patch.dict(os.environ, started, clear=True):
             adopt({"PATH": "/turn/2", "TURN": "2", "PYTHONPATH": "/caller"}, {"PYTHONPATH": "/engine",
-                  "CADGEN_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1"})
+                  "CAD_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1"})
             self.assertEqual(dict(os.environ), {"PATH": "/turn/2", "TURN": "2", "PYTHONPATH": "/engine",
-                                                "CADGEN_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1"})
+                                                "CAD_ENGINE_WORKER": "1", "PYTHONDONTWRITEBYTECODE": "1"})
             adopt(None, {})
             self.assertEqual(os.environ["TURN"], "2", "a request with no environment leaves it as it is")
 
@@ -449,7 +449,7 @@ class ConnectTest(unittest.TestCase):
 
         engine = tempfile.mkdtemp(prefix="eng-")
         self.addCleanup(shutil.rmtree, engine, True)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": engine}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": engine}):
             door = places.door_path()
             os.mkfifo(door, 0o600)  # a dead daemon's: the file stays, and nothing reads it
             with warnings.catch_warnings(record=True) as caught:
@@ -470,7 +470,7 @@ class SandboxTest(unittest.TestCase):
         self.engine = tempfile.mkdtemp(prefix="eng-")
         self.addCleanup(shutil.rmtree, self.engine, True)
         cleared = {key: value for key, value in os.environ.items() if not key.startswith("CODEX_SANDBOX")}
-        patched = mock.patch.dict(os.environ, {**cleared, "CADGEN_ENGINE_DIR": self.engine}, clear=True)
+        patched = mock.patch.dict(os.environ, {**cleared, "CAD_ENGINE_DIR": self.engine}, clear=True)
         patched.start()
         self.addCleanup(patched.stop)
 
@@ -538,7 +538,7 @@ class EngineFolderTest(unittest.TestCase):
 
         from cad.engine import client, places
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             self.assertIsNone(places.folder_refusal(places.engine_dir()))
             os.chmod(self.engine, 0o777)
             refusal = places.folder_refusal(places.engine_dir())
@@ -572,21 +572,21 @@ class EngineFolderTest(unittest.TestCase):
         from cad_server.engine import cli
         from cad.engine import places
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             os.mkfifo(places.door_path(), 0o600)  # a dead daemon's door: status sweeps it, taking the lock
             os.chmod(self.engine, 0o500)
             self.addCleanup(os.chmod, self.engine, 0o700)
             for verb in ("status", "stop"):
                 with mock.patch("sys.stderr", new_callable=io.StringIO) as said, mock.patch("sys.stdout"):
                     self.assertEqual(cli.run(verb, []), 1)
-                self.assertRegex(said.getvalue(), rf"^cadgen {verb}: the system denies cadgen's local engine "
+                self.assertRegex(said.getvalue(), rf"^cad {verb}: the system denies text-to-cad's local engine "
                                  r"\(taking the lock in the engine's folder .+: Permission denied\); .+ "
                                  r"run this command outside it, or with the sandbox's permission\n$")
 
 
 @unittest.skipIf(os.name == "nt", "the per-user folders are POSIX's")
 class DefaultEngineFolderTest(unittest.TestCase):
-    """With no ``CADGEN_ENGINE_DIR``, the engine's folder is one no other user can make first."""
+    """With no ``CAD_ENGINE_DIR``, the engine's folder is one no other user can make first."""
 
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp")).resolve()
@@ -599,7 +599,7 @@ class DefaultEngineFolderTest(unittest.TestCase):
         from cad.engine import places
 
         cleared = {key: value for key, value in os.environ.items()
-                   if key not in ("CADGEN_ENGINE_DIR", "XDG_RUNTIME_DIR", "TMPDIR")}
+                   if key not in ("CAD_ENGINE_DIR", "XDG_RUNTIME_DIR", "TMPDIR")}
         with mock.patch.dict(os.environ, {**cleared, **env}, clear=True), \
                 mock.patch.object(places, "_darwin_temp", return_value=self.system):
             return places.engine_dir()
@@ -827,7 +827,7 @@ class StandbyStartTest(unittest.TestCase):
         root = places.engine_root()
         with mock.patch.object(engine.pool, "stand", side_effect=asked.append), \
                 mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join((root, "/mine")),
-                                             "CADGEN_ENGINE_STANDBY": "1"}):
+                                             "CAD_ENGINE_STANDBY": "1"}):
             engine.stand()
         self.assertEqual(engine.pool.spare, engine._spare)
         self.assertEqual(len(asked), 1)
@@ -841,7 +841,7 @@ class StandbyStartTest(unittest.TestCase):
         engine = daemon.Daemon()
         self.addCleanup(engine.pool.stop)
         with mock.patch.object(engine.pool, "stand") as stand, \
-                mock.patch.dict(os.environ, {"CADGEN_ENGINE_STANDBY": "0"}):
+                mock.patch.dict(os.environ, {"CAD_ENGINE_STANDBY": "0"}):
             engine.stand()
         stand.assert_not_called()
         self.assertIsNone(engine.pool.spare, "no standby to start after an adoption or a fresh worker either")
@@ -867,11 +867,11 @@ class DaemonEnvironmentTest(unittest.TestCase):
             def __init__(self, _argv, **kwargs):
                 captured.update(kwargs.get("env") or {})
 
-        with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "1", "PATH": os.environ.get("PATH", "")}), \
+        with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "1", "PATH": os.environ.get("PATH", "")}), \
                 mock.patch.object(client.subprocess, "Popen", FakePopen):
             client._start()
         self.assertNotIn("DO_NOT_TRACK", captured)
-        self.assertNotIn("CADGEN_TELEMETRY", captured)
+        self.assertNotIn("CAD_TELEMETRY", captured)
 
     def test_the_daemon_and_its_workers_cache_bytecode_in_the_engine_s_folder_alone(self) -> None:
         from cad.engine import client, places
@@ -903,28 +903,28 @@ class DaemonEnvironmentTest(unittest.TestCase):
             return found
 
         ours = str(cache / places.PYCACHE / places.bytecode_tag())
-        found = started({"CADGEN_CACHE_DIR": str(cache), "PYTHONDONTWRITEBYTECODE": "1"})
+        found = started({"CAD_CACHE_DIR": str(cache), "PYTHONDONTWRITEBYTECODE": "1"})
         for process in ("daemon", "worker"):
             self.assertEqual(found[process].get("PYTHONPYCACHEPREFIX"), ours, process)
             self.assertNotIn("PYTHONDONTWRITEBYTECODE", found[process], f"a caller's switch is not the {process}'s")
         if os.name != "nt":  # a folder's mode bits are POSIX's; Windows' per-user temporary folder is the user's
             self.assertEqual(stat.S_IMODE(os.stat(ours).st_mode) & 0o077, 0, "this user's alone")
-        given = started({"CADGEN_CACHE_DIR": str(cache), "PYTHONPYCACHEPREFIX": str(cache / "theirs")})
+        given = started({"CAD_CACHE_DIR": str(cache), "PYTHONPYCACHEPREFIX": str(cache / "theirs")})
         self.assertEqual(given["daemon"]["PYTHONPYCACHEPREFIX"], str(cache / "theirs"), "a prefix given is honoured")
         if os.name != "nt":
             os.chmod(ours, 0o777)
-            self.assertEqual(started({"CADGEN_CACHE_DIR": str(cache)})["daemon"].get("PYTHONDONTWRITEBYTECODE"), "1",
+            self.assertEqual(started({"CAD_CACHE_DIR": str(cache)})["daemon"].get("PYTHONDONTWRITEBYTECODE"), "1",
                              "a folder others can write to is none of the engine's")
 
 
 class SweepTest(unittest.TestCase):
-    """``cadgen stop`` reaches every server of the installation, whatever protocol it speaks, and
+    """``cad stop`` reaches every server of the installation, whatever protocol it speaks, and
     ``stop`` and ``status`` take away the files of a dead one."""
 
     def setUp(self) -> None:
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.addCleanup(shutil.rmtree, self.state, True)
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.state)},
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state)},
                                          self.addCleanup)
 
     def cli(self, *args: str) -> subprocess.CompletedProcess:
@@ -936,7 +936,7 @@ class SweepTest(unittest.TestCase):
 
         from cad.engine import places
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)}):
             path, lock = places.door_path(), places.lock_path()
         os.mkfifo(path, 0o600)  # the file stays, and nothing reads it
         lock.write_text("", encoding="utf-8")
@@ -952,7 +952,7 @@ class SweepTest(unittest.TestCase):
         self.assertEqual(done.stderr, f"removed stale engine file {path}\n", "a swept file a line on stderr")
 
     def test_status_starts_no_engine_a_verb_that_starts_one_says_so_and_stop_leaves_none(self) -> None:
-        self.env.update(CADGEN_STATE_DIR=str(self.state / "state"), CADGEN_CACHE_DIR=str(self.state / "cache"))
+        self.env.update(CAD_STATE_DIR=str(self.state / "state"), CAD_CACHE_DIR=str(self.state / "cache"))
         for _ in range(2):
             done = self.cli("status")
             self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))
@@ -975,10 +975,10 @@ class OwnFilesTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.state, True)
         own = Path(tempfile.mkdtemp(prefix="own-"))
         self.addCleanup(shutil.rmtree, own, True)
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(self.state),
-                                          "CADGEN_STATE_DIR": str(own / "state"), "CADGEN_CACHE_DIR": str(own / "cache"),
-                                          "CADGEN_ENGINE_STANDBY": "0"}, self.addCleanup)
-        patch = mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)})
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
+                                          "CAD_STATE_DIR": str(own / "state"), "CAD_CACHE_DIR": str(own / "cache"),
+                                          "CAD_ENGINE_STANDBY": "0"}, self.addCleanup)
+        patch = mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)})
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -1114,20 +1114,20 @@ class StateDirSpellingTest(unittest.TestCase):
         dotted = f"{state / 'sub'}{os.sep}..{os.sep}{engine}{os.sep}"  # a `..` and a trailing separator
         plain = str(state / engine)
         env = {**os.environ, "PYTHONPATH": str(SRC)}
-        dotted_env = engine_daemon.watched({**env, "CADGEN_ENGINE_DIR": dotted}, self.addCleanup)
-        plain_env = engine_daemon.watched({**env, "CADGEN_ENGINE_DIR": plain}, self.addCleanup)
+        dotted_env = engine_daemon.watched({**env, "CAD_ENGINE_DIR": dotted}, self.addCleanup)
+        plain_env = engine_daemon.watched({**env, "CAD_ENGINE_DIR": plain}, self.addCleanup)
         self.addCleanup(engine_daemon.run, [sys.executable, "-m", "cad_server.engine", "stop"], env=plain_env)
         probe = "from cad.engine.client import request; print(request({'op': 'status'})['pid'])"
         started = engine_daemon.run([sys.executable, "-c", probe], env=dotted_env)
         self.assertEqual(started.returncode, 0, started.stderr)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": plain}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": plain}):
             found = client.request({"op": "status"}, start=False)
             address = places.address()
         self.assertIsNotNone(found, "the plain spelling reaches the server the dotted one started")
         self.assertEqual(str(found["pid"]), started.stdout.split()[-1])
         done = engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=plain_env)
         self.assertEqual((done.returncode, done.stdout), (0, f"stopped the engine server at {address}\n"), done.stderr)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": dotted}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": dotted}):
             self.assertIsNone(client.request({"op": "status"}, start=False), "stopped under either spelling")
 
 
@@ -1143,7 +1143,7 @@ class InstallationTest(unittest.TestCase):
         for name in names:
             with mock.patch.object(sys, "executable", name):
                 tags.add(places.address())
-        self.assertEqual(len(tags), 1, "`python3 model.py` and `cadgen viewer` share one engine")
+        self.assertEqual(len(tags), 1, "`python3 model.py` and `cad viewer` share one engine")
 
     def test_a_relative_and_an_absolute_launch_reach_one_engine(self) -> None:
         # `../../.venv/bin/python model.py` from a model folder, and the absolute path.
@@ -1222,8 +1222,8 @@ class DaemonTest(unittest.TestCase):
         """An engine folder and its environment, the engine stopped and the folder removed at ``cleanup``."""
         state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         cleanup(shutil.rmtree, state, True)
-        env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(state),
-                                     "CADGEN_ENGINE_MESH": "inline", **extra}, cleanup)
+        env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(state),
+                                     "CAD_ENGINE_MESH": "inline", **extra}, cleanup)
         cleanup(cls.stopped, state, env)
         return state, env
 
@@ -1276,7 +1276,7 @@ class DaemonTest(unittest.TestCase):
 
         # The registry alone, a cache folder nothing can write: a restart is refused with the command
         # (what the cache reopens is ``test_cache``'s).
-        self.own(CADGEN_CACHE_DIR=engine_daemon.unwritable(self.folder))
+        self.own(CAD_CACHE_DIR=engine_daemon.unwritable(self.folder))
 
         marker = self.folder / "executed.txt"
         main = self.folder / "main.txt"
@@ -1308,7 +1308,7 @@ class DaemonTest(unittest.TestCase):
         missing = self.cli("inspect", ident, "face 1")
         self.assertEqual(missing.returncode, 2)
         self.assertIn(f"block ({ident}) is not saved: the engine's cache holds no file of its last build; run "
-                      "`cadgen run ", missing.stderr)
+                      "`cad run ", missing.stderr)
         self.assertFalse(marker.exists())
         inspected = self.cli("inspect", str(self.folder / "XBF/block.xbf"), "--query", "build")
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
@@ -1327,7 +1327,7 @@ class DaemonTest(unittest.TestCase):
 
         aside = Path(tempfile.mkdtemp(prefix="engine-daemon-cache-")).resolve()
         self.addCleanup(shutil.rmtree, aside, True)
-        self.own(CADGEN_CACHE_DIR=engine_daemon.unwritable(aside))  # nothing kept: ``test_cache``'s
+        self.own(CAD_CACHE_DIR=engine_daemon.unwritable(aside))  # nothing kept: ``test_cache``'s
 
         address = self._bare()
         first = self.built("bracket")
@@ -1359,7 +1359,7 @@ class DaemonTest(unittest.TestCase):
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)
         self.assertIn(f"bracket ({address}) is not saved: the engine's cache holds no file of its last build; "
-                      "run `cadgen run ", missing.stderr)
+                      "run `cad run ", missing.stderr)
         self.assertEqual(json.loads(self.cli("status", "--json").stdout)["models"], [],
                          "a restart holds nothing: status lists what this server built")
 
@@ -1425,7 +1425,7 @@ class DaemonTest(unittest.TestCase):
 
     def test_main_calls_bare_and_file_models_in_order_and_keeps_its_arguments(self) -> None:
         self.script.write_text("""import sys
-from cadgen import model, step, xbf
+from cad import model, step, xbf
 import build123d as bd
 @model
 def bare(): return bd.Box(1, 2, 3)
@@ -1492,7 +1492,7 @@ if __name__ == '__main__':
 
     def test_a_caller_s_other_path_keeps_the_warm_worker_and_another_pythonpath_replaces_it(self) -> None:
         # Each load of the script in the worker says which caller's environment it runs in.
-        seen = "import os\nif os.environ.get('CADGEN_ENGINE_WORKER'):\n" \
+        seen = "import os\nif os.environ.get('CAD_ENGINE_WORKER'):\n" \
                "    open('seen.txt', 'a').write(os.environ.get('TURN', '') + ' ' + os.environ['PATH'] + '\\n')\n"
         self.script.write_text(seen + textwrap.dedent(MODEL.format(size=10)), encoding="utf-8")
 
@@ -1607,7 +1607,7 @@ if __name__ == '__main__':
                          ["XBF/block.xbf", "block.py"])
 
     def test_a_worker_over_its_memory_cap_is_retired_and_the_next_build_restarts(self) -> None:
-        capped = {**self.env, "CADGEN_ENGINE_WORKER_RSS_MB": "1"}
+        capped = {**self.env, "CAD_ENGINE_WORKER_RSS_MB": "1"}
         self.script.write_text(textwrap.dedent(MODEL.format(size=10)), encoding="utf-8")
         report = self.built("block", env=capped)
         self.assertIn("over its 1 MB cap", report["retired"])
@@ -1650,7 +1650,7 @@ if __name__ == '__main__':
             """), encoding="utf-8")
 
         def status() -> dict:
-            with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.state)}):
+            with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)}):
                 return client.request({"op": "status"}, start=False) or {}
 
         def until(condition) -> None:
@@ -1710,7 +1710,7 @@ if __name__ == '__main__':
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()  # no engine yet, so none an import started goes unseen
         self.script.write_text(textwrap.dedent("""
-            from cadgen import model, xbf
+            from cad import model, xbf
 
             @model
             def unused():
@@ -1818,10 +1818,10 @@ if __name__ == '__main__':
     def test_a_build_with_no_page_starts_no_meshing_process(self) -> None:
         """``python model.py`` serves its document, so the daemon starts its server; the meshing
         pool waits for a page, a view or a mesh: the daemon's only child is the worker (with no
-        standby, ``CADGEN_ENGINE_STANDBY=0``)."""
+        standby, ``CAD_ENGINE_STANDBY=0``)."""
         self.own()
-        env = {name: value for name, value in self.env.items() if name != "CADGEN_ENGINE_MESH"}
-        env["CADGEN_ENGINE_STANDBY"] = "0"
+        env = {name: value for name, value in self.env.items() if name != "CAD_ENGINE_MESH"}
+        env["CAD_ENGINE_STANDBY"] = "0"
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)), encoding="utf-8")
         done = self.run_script("block.py", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)

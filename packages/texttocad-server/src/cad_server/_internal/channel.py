@@ -1,7 +1,7 @@
 """Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
 
 Each plugin says both in its CAD server's startup config, as the server's environment:
-``CADGEN_INSTALL_CHANNEL=<id>``, plus ``CADGEN_AUTO_UPDATED=1`` when something other than the person
+``CAD_INSTALL_CHANNEL=<id>``, plus ``CAD_AUTO_UPDATED=1`` when something other than the person
 keeps that copy up to date (the store that reviewed it). The build
 that makes the plugin writes them; nothing works them out from folders, ids or a host's
 internals. The CAD Viewer the server starts inherits them. They are environment, not flags,
@@ -24,7 +24,7 @@ a plugin's server once ran from its installation, whose channel it then shares.
 cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
 its name but ``dev``, a development install (and a source tree, installed editable or imported from
 a checkout by path), which hears of no release and sends no telemetry by default. A process of an
-installation no plugin's server ever ran from -- a skills-only install, or cadgen run by hand -- is
+installation no plugin's server ever ran from -- a skills-only install, or cad run by hand -- is
 ``unknown``. Which app runs a server is not a channel either: the MCP handshake says that
 (``clientInfo``), so a plugin several apps read names one channel.
 
@@ -43,8 +43,8 @@ import os
 import re
 from pathlib import Path
 
-ENV = "CADGEN_INSTALL_CHANNEL"
-AUTO_UPDATED_ENV = "CADGEN_AUTO_UPDATED"
+ENV = "CAD_INSTALL_CHANNEL"
+AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
 DEV = "dev"
 UNKNOWN = "unknown"
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")

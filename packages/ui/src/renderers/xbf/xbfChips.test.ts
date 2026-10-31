@@ -5,7 +5,7 @@ import { useXbfSelectionChips, xbfCopyText, xbfNodeRefs } from '../../../dist/re
 import { presentXbfTree, xbfCoveringIds } from '../../../dist/renderers/xbf/xbfTree.js';
 
 // What an engine document's selection copies: the engine's canonical refs, one line each, the file's
-// path first -- what `cadgen inspect DOC REF` and `select(DOC, REF)` read (cad.engine.refs) -- and
+// path first -- what `cad inspect DOC REF` and `select(DOC, REF)` read (cad.engine.refs) -- and
 // what a paste of one names. A STEP is an engine document too, and copies the same.
 
 const part = (name: string, prototype: number, instance: number) => ({ name, prototype, instance });
@@ -93,7 +93,7 @@ it("a STEP is named as an .xbf is: the engine's canonical refs, an unnamed face 
   ]);
 });
 
-// A STEP of one part labelled with spaces, its document named as its part is (`cadgen inspect`).
+// A STEP of one part labelled with spaces, its document named as its part is (`cad inspect`).
 const LABEL = 'L bracket 80 x 60 x 6 mm';
 const bracketStructure = {
   name: LABEL, version: '1-1', units: 'mm',

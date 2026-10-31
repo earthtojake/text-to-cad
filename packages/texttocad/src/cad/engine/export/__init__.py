@@ -5,7 +5,7 @@ file of ``kind`` (``KINDS``: ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, `
 document: a ``Source`` -- the document a build made, held in the worker's memory
 (``Source.built``), or one read from an ``.xbf`` or a ``.step`` (``Source.read``), or a mesh
 file's triangles (``.glb``, ``.stl``, ``.3mf``: ``export/mesh_file.py``). A
-derived file a decorator declares and a file ``cadgen export`` asks for are the same
+derived file a decorator declares and a file ``cad export`` asks for are the same
 call, so the same document writes the same bytes.
 
 The file holds the document as its code built it: every part, placed where the document

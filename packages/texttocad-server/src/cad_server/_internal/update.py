@@ -3,17 +3,17 @@
 One at a time, in the engine's own process, in the background: the request that asked for it is
 answered at once, and the page or card that asked reads where it is (``GET /__cad/version``'s
 ``update``) until the engine goes and comes back with the new release. Nothing here starts on its
-own: no fetch and no switch without that click, ``cadgen update`` or the install command.
+own: no fetch and no switch without that click, ``cad update`` or the install command.
 
 1. **The release**: the newest the version feed names, read now (``cad_server/updates.py``), or a newer
    one an agent app's CAD server runs (``updates.seen``, which needs no network).
 2. **Its folder**: ``<state>/releases/<release>`` made with uv (``cad_server._internal.releases``).
-3. **Its setup**: that release's own ``cadgen setup``, run from its folder, which registers it, makes
+3. **Its setup**: that release's own ``cad setup``, run from its folder, which registers it, makes
    its base -- so the first build after the restart is warm -- and updates each agent app's plugin
-   exactly as ``cadgen setup`` does, but switches nothing (``--engine-update``); it says where it is
+   exactly as ``cad setup`` does, but switches nothing (``--engine-update``); it says where it is
    on stdout, a progress frame a line.
 4. **The switch**: the engine drains (``cad_server.engine.daemon.Daemon.drain``: nothing in flight, open
-   pages and held sessions not counted) and, as it exits, starts the helper, ``cadgen update --switch``
+   pages and held sessions not counted) and, as it exits, starts the helper, ``cad update --switch``
    (``cad_server._internal.switch``), which starts the new release's engine on the same port, with the same
    token, and goes back to this one should it fail.
 
@@ -91,12 +91,12 @@ class Update:
         from cad_server._internal import base, installations, releases, switch
 
         try:
-            self._frame("install", f"cadgen {target}")
+            self._frame("install", f"text-to-cad {target}")
             made = releases.make(target, told=lambda _line: None)
             self._frame("kernel")
             code, said = self._setup(made["cadgen"])
             if code != 0:
-                self._failed(said or f"cadgen {target}'s setup failed (exit status {code})")
+                self._failed(said or f"text-to-cad {target}'s setup failed (exit status {code})")
                 return
             self._frame("restart")
             with self.lock:
@@ -110,7 +110,7 @@ class Update:
             self._failed(f"{type(error).__name__}: {error}")
 
     def _setup(self, command: str) -> tuple[int, str]:
-        """The release's own ``cadgen setup --engine-update``, its progress frames taken as they come:
+        """The release's own ``cad setup --engine-update``, its progress frames taken as they come:
         its exit status, and the last line it said when it failed."""
         errors: list[str] = []
         # The release runs its own cadgen: no import path of this engine's (a source tree's) goes with it.

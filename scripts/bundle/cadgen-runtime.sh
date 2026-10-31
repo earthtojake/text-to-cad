@@ -4,7 +4,7 @@ set -euo pipefail
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/texttocad-server/src/cad_server/_runtime).
 #
 # cadgen ships two things it does not write in Python: the CAD Viewer's built client
-# (`cadgen viewer` serves it) and the one-file CAD app an agent host renders (`cadgen mcp`
+# (`cad viewer` serves it) and the one-file CAD app an agent host renders (`cad-mcp`
 # serves it). (The OCCT parity bench's headless page of the viewer's scene is not one of
 # them: cadgen's snapshots are OCCT's, so lib/snapshot_runtime.sh builds that page into
 # tmp/ when the bench asks for it, never into the wheel.)

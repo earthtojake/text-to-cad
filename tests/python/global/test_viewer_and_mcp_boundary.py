@@ -24,7 +24,7 @@ sys.modules.setdefault("select_checks", selector)
 _spec.loader.exec_module(selector)
 
 SERVER = REPO_ROOT / selector.SERVER_SRC
-SHELLS = {"cli/viewer.py", "cli/mcp.py"}
+SHELLS = {"cli/viewer.py"}
 ALLOWED = {"cad_server.viewer.recents"}
 
 
@@ -66,8 +66,8 @@ class ViewerAndMcpAreLeaves(unittest.TestCase):
 
     def test_the_selector_draws_the_same_line(self):
         self.assertEqual(set(selector.VIEWER_CODE), {f"{selector.SERVER_SRC}/viewer/**",
-                                                     *(f"{selector.SERVER_SRC}/{shell}" for shell in SHELLS - {"cli/mcp.py"})})
-        self.assertEqual(set(selector.MCP_CODE), {f"{selector.SERVER_SRC}/mcp/**", f"{selector.SERVER_SRC}/cli/mcp.py"})
+                                                     *(f"{selector.SERVER_SRC}/{shell}" for shell in SHELLS)})
+        self.assertEqual(set(selector.MCP_CODE), {f"{selector.SERVER_SRC}/mcp/**"})
         self.assertEqual(set(selector.VIEWER_SHARED), {f"{selector.SERVER_SRC}/viewer/__init__.py",
                                                        f"{selector.SERVER_SRC}/viewer/recents.py"})
 

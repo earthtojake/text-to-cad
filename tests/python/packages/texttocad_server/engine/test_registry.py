@@ -64,17 +64,17 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual([record["revision"] for record in heard], ["a", "b"])
         self.assertEqual([record["id"] for record in self.registry.list()], [self.ident])
         self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
-                         f"cadgen run {self.state / 'parts.py'}", "the script that defines it, not its caller")
+                         f"cad run {self.state / 'parts.py'}", "the script that defines it, not its caller")
         self.assertTrue(self.registry.delete(self.ident))
         self.assertEqual((self.registry.get(self.ident), self.registry.list()), (None, []))
 
     def test_the_rebuild_command_pastes_into_the_platform_s_shell(self) -> None:
         # Printed for a person to paste: quoted for a POSIX shell there; on Windows as cmd.exe and
         # PowerShell both read it, where a single quote would be part of the path.
-        cases = ((False, "/m/caller.py", "cadgen run /m/caller.py"),
-                 (False, "/my models/caller.py", "cadgen run '/my models/caller.py'"),
-                 (True, "C:\\m\\caller.py", "cadgen run C:\\m\\caller.py"),
-                 (True, "C:\\my models\\caller.py", 'cadgen run "C:\\my models\\caller.py"'))
+        cases = ((False, "/m/caller.py", "cad run /m/caller.py"),
+                 (False, "/my models/caller.py", "cad run '/my models/caller.py'"),
+                 (True, "C:\\m\\caller.py", "cad run C:\\m\\caller.py"),
+                 (True, "C:\\my models\\caller.py", 'cad run "C:\\my models\\caller.py"'))
         for windows, program, pasted in cases:
             with self.subTest(program=program), mock.patch.object(records, "WINDOWS", windows):
                 self.assertEqual(records.rerun(program), pasted)
@@ -135,7 +135,7 @@ class StoreTest(unittest.TestCase):
 
 PARTS = """
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 @model
@@ -146,7 +146,7 @@ def cube():
 # Two scripts whose models claim one explicit name.
 NAMED = """
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 @model(name="arm")
@@ -170,10 +170,10 @@ class RegistryDaemonTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         # The registry alone, with a cache folder nothing can write: a restart knows an id by its
         # record and its command. What the cache adds is ``test_cache``'s.
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(cls.engine),
-                                         "CADGEN_STATE_DIR": str(cls.state),
-                                         "CADGEN_CACHE_DIR": engine_daemon.unwritable(cls.folder),
-                                         "CADGEN_ENGINE_MESH": "inline"},
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.engine),
+                                         "CAD_STATE_DIR": str(cls.state),
+                                         "CAD_CACHE_DIR": engine_daemon.unwritable(cls.folder),
+                                         "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(cls.cli, "stop")
 
@@ -194,7 +194,7 @@ class RegistryDaemonTest(unittest.TestCase):
     def ask(self, message: dict) -> dict:
         from cad.engine.client import request
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             return request(message, start=False) or {}
 
     def records(self) -> dict[str, dict]:
@@ -213,7 +213,7 @@ class RegistryDaemonTest(unittest.TestCase):
         record = self.records()[cube]
         self.assertEqual((record["kind"], record["home"], Path(record["root"])), ("model", "parts.py", project))
         # What a restart needs and no more: no closure (the document's own), no versions, no stamps,
-        # no command (always `cadgen run` of its home), no record of the files it declared.
+        # no command (always `cad run` of its home), no record of the files it declared.
         self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created", "facts", "namespace", "name", "fingerprint", "module", "declares"})
         self.assertEqual(record["declares"], [], "the explicit names its script declares: none")
         self.assertEqual((record["namespace"], record["name"]), (str(project), "cube"))
@@ -229,9 +229,9 @@ class RegistryDaemonTest(unittest.TestCase):
         self.assertEqual(self.cli("stop").returncode, 0)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
-        self.assertIn(f"run `cadgen run {project / 'parts.py'}`", inspected.stderr)
+        self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)
         answer = self.ask({"op": "state", "id": cube})
-        self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", f"cadgen run {project / 'parts.py'}"))
+        self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", f"cad run {project / 'parts.py'}"))
         from cad_server.viewer.recents import RecentStore
 
         listed = {entry.path: entry.public() for entry in RecentStore(self.state).list()}

@@ -1,5 +1,5 @@
 // The page's motions against the engine's GLB bake of the same motions: `__fixtures__/arm` is a
-// document with every kind of motion, and the GLB the engine exports from it (`cadgen export
+// document with every kind of motion, and the GLB the engine exports from it (`cad export
 // XBF/arm.xbf arm.glb`). The arm: a base, a link on revolute `elbow` (-10..120), a tip on prismatic
 // `slide` (0..80) along it, a door on revolute `door` (0..120) and a drawer on prismatic `drawer`
 // (0..40), the two coupled as `open` (door 90, drawer 30 per unit); configurations `raised`

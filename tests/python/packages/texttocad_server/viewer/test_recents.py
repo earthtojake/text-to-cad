@@ -134,7 +134,7 @@ class RecentStoreTest(unittest.TestCase):
         [entry] = [recent.public() for recent in store.list()]
         self.assertEqual((entry["path"], entry["id"], entry["kind"], entry["name"], entry["missing"]),
                          (ident, ident, "model", "plate", False))
-        self.assertEqual(entry["rebuild"], f"cadgen run {self.tmp / 'parts.py'}")
+        self.assertEqual(entry["rebuild"], f"cad run {self.tmp / 'parts.py'}")
         script.unlink()  # moved away: detached, still listed, and says so
         self.assertTrue(store.list()[0].public()["missing"])
         store.remove(ident)

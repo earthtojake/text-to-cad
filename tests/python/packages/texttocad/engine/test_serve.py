@@ -103,7 +103,7 @@ class ServeTest(unittest.TestCase):
         self.assertEqual(waited.call_args.args[2], 0.0, "a negative wait waits not at all")
 
     def test_a_version_wait_on_a_model_deleted_meanwhile_ends_not_found(self) -> None:
-        # A page waits on a model's next version; `cadgen delete` forgets the model: the wait ends 404,
+        # A page waits on a model's next version; `cad delete` forgets the model: the wait ends 404,
         # as every read of it does now, never as the server's own failure.
         held = self.server.document(self.ident)
         model = "a0000000-0000-5000-8000-00000000000d"
@@ -340,7 +340,7 @@ class ServedStepTest(unittest.TestCase):
 
 class ServerUrlTest(unittest.TestCase):
     def test_a_wildcard_bind_reports_a_loopback_url_and_keeps_its_bind(self) -> None:
-        # `cadgen viewer --host 0.0.0.0` printed and opened http://0.0.0.0:<port>, which Chrome
+        # `cad viewer --host 0.0.0.0` printed and opened http://0.0.0.0:<port>, which Chrome
         # refuses. A stand-in listener answers the bind: binding 0.0.0.0 in a test would expose a port.
         from types import SimpleNamespace
 
@@ -442,7 +442,7 @@ def kernel_facts(data: bytes) -> dict:
 
 
 class InspectionReadTest(unittest.TestCase):
-    """What ``cadgen inspect`` reads through the engine's door (``Server.read``): a structure that
+    """What ``cad inspect`` reads through the engine's door (``Server.read``): a structure that
     sends no part to the mesher, and each part's facts measured once by its geometry key -- an edit
     measures only the parts whose key is new. Measuring is lazy: a build of a document no inspection
     measured reads and measures nothing; once one has, each later build's new parts are measured

@@ -21,8 +21,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-OUT_DIR="${CADGEN_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/cadgen-wheel-check}"
-KEEP_WHEEL="${CADGEN_KEEP_WHEEL:-0}"
+OUT_DIR="${CAD_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/cadgen-wheel-check}"
+KEEP_WHEEL="${CAD_KEEP_WHEEL:-0}"
 
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [ -z "$PYTHON_BIN" ]; then

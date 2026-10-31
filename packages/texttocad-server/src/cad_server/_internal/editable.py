@@ -2,7 +2,7 @@
 
 ``pip install -e <dir>`` (and ``uv pip install -e``) records the source directory beside the
 distribution's metadata (``direct_url.json``, PEP 610), and the import path then points at that
-live directory. ``cadgen doctor`` names it when a skill's pin disagrees with the version that
+live directory. ``cad doctor`` names it when a skill's pin disagrees with the version that
 install recorded, and the install channel counts a source tree as a development install
 (``channel.py``).
 """

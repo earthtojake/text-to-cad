@@ -300,7 +300,7 @@ written as one temporary `.snapshot.json` and named by path. Hosts use
 path, keeping destination binding inside the gesture. Drawing, selecting and typing
 keep data in memory. Nothing renders at the press. The agent saves inline JSON to
 a temporary file, then draws a view the ink was drawn in with
-`cadgen snapshot <document> <out.png> --annotation <file> --camera authored`.
+`cad snapshot <document> <out.png> --annotation <file> --camera authored`.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
 inside the gesture while the files are still being made; its references name their
@@ -540,7 +540,7 @@ logo's menu and the home's; nothing of them reaches a renderer, and Display hold
 host owns what each one does and where it is kept.
 `@text-to-cad/ui/consent` is the usage stats toggle both apps share:
 `useAnalyticsConsent(consent, locale)`, which turns the host's consent call into its `appSettings` row
-(Telemetry). Nothing asks: cadgen's telemetry is on by default once a `cadgen` command
+(Telemetry). Nothing asks: cadgen's telemetry is on by default once a `cad` command
 has said so. The host supplies the call and where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,

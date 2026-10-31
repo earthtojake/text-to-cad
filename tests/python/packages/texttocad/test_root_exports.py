@@ -1,9 +1,9 @@
-"""What `from cadgen import ...` offers, and what it costs.
+"""What `from cad import ...` offers, and what it costs.
 
 Two properties that are easy to break together. Every name in ``__all__`` must actually
 resolve -- the lazy ``__getattr__`` dispatches on hand-written name sets, so adding a name
 to ``__all__`` and forgetting the branch advertises an AttributeError. And importing the
-package must stay cheap: the whole point of the lazy dispatch is that `import cadgen`
+package must stay cheap: the whole point of the lazy dispatch is that `import cad`
 does not pay for OCP, which costs seconds and is useless to a caller who only wanted
 `__version__`.
 """
@@ -102,7 +102,7 @@ class RootExports(unittest.TestCase):
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.
-        # ``build`` among them: a model builds by a decorated function's call, never cadgen.build (law 12).
+        # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 12).
         for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
                      "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "build123d"):
@@ -122,13 +122,13 @@ class RootExports(unittest.TestCase):
         self.assertEqual(["HEAVY:"], marked, "importing cadgen pulled in the CAD stack")
 
     def test_model_body_helpers_do_not_import_the_cad_stack(self):
-        """`from cadgen import flatten` sits in a model's MODULE BODY, so the module behind it
+        """`from cad import flatten` sits in a model's MODULE BODY, so the module behind it
         must defer the kernel -- its `import build123d` bound lazily (`_internal/lazy_kernel.py`)
         -- or every such model pays the ~2.5s import in the process that only asks the daemon to
         build it."""
         code = (
             "import sys, cad.flatten;"
-            "from cadgen import flatten;"
+            "from cad import flatten;"
             "from cad._internal.lazy_kernel import loaded;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if loaded(m)))"
         )

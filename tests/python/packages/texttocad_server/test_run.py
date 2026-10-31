@@ -1,4 +1,4 @@
-"""``cadgen run`` runs a program with its own folder LAST on the module search path (the library's
+"""``cad run`` runs a program with its own folder LAST on the module search path (the library's
 ``cad._internal.program``), and the engine's worker seats a model's folder so (``cad.engine.model.seat``):
 a project's ``cad.py`` beside a model never stands in for the library, while the model's own modules
 still import by their names. A model script that would be imported under the library's name is refused,
@@ -45,10 +45,10 @@ class ProjectFolderLastTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         cls.addClassCleanup(shutil.rmtree, engine, True)
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": SRC, "CADGEN_ENGINE_DIR": str(engine),
-                                         "CADGEN_STATE_DIR": str(cls.folder / "state"),
-                                         "CADGEN_CACHE_DIR": str(cls.folder / "cache"),
-                                         "CADGEN_ENGINE_MESH": "inline"},
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": SRC, "CAD_ENGINE_DIR": str(engine),
+                                         "CAD_STATE_DIR": str(cls.folder / "state"),
+                                         "CAD_CACHE_DIR": str(cls.folder / "cache"),
+                                         "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(engine_daemon.run, [sys.executable, "-m", "cad_server.engine", "stop"], env=cls.env)
         cls.project = cls.folder / "project"

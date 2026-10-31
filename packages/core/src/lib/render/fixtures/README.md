@@ -32,4 +32,4 @@ through the lid's hinge, written as the engine writes every GLB's keys, STEP as 
 LINEAR within a tenth of a millimetre and of a degree of the bake; `motion.glb` a box whose only
 animation is its motion `open_close`, an AP242 configuration sequence. `bakedGlbAnimation.test.js` runs the Khronos glTF-Validator over both and
 plays them with three.js. When the baker changes, write them again:
-`CADGEN_WRITE_FIXTURES=1 .venv/bin/python -m unittest tests.python.packages.texttocad.engine.test_animation`.
+`CAD_WRITE_FIXTURES=1 .venv/bin/python -m unittest tests.python.packages.texttocad.engine.test_animation`.

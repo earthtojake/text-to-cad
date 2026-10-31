@@ -32,7 +32,7 @@ FIXTURES = Path(__file__).resolve().parents[2] / "texttocad" / "engine" / "fixtu
 from cad.engine.ids import file_id, model_id  # noqa: E402
 from cad_server.engine.registry import Registry  # noqa: E402
 
-IDLE = 0.3  # the cache's idle seam (``CADGEN_ENGINE_CACHE_IDLE``), in seconds
+IDLE = 0.3  # the cache's idle seam (``CAD_ENGINE_CACHE_IDLE``), in seconds
 
 SCRIPT = """
 import pathlib
@@ -147,9 +147,9 @@ class CacheTest(unittest.TestCase):
         # The class engine keeps its bytecode where the engine does (the first test reads it there),
         # whatever folder a test run shares.
         given = {name: value for name, value in os.environ.items() if name != "PYTHONPYCACHEPREFIX"}
-        env = engine_daemon.watched({**given, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
-                                     "CADGEN_STATE_DIR": str(state), "CADGEN_CACHE_DIR": str(cache),
-                                     "CADGEN_ENGINE_MESH": "inline", "CADGEN_ENGINE_CACHE_IDLE": str(IDLE),
+        env = engine_daemon.watched({**given, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
+                                     "CAD_STATE_DIR": str(state), "CAD_CACHE_DIR": str(cache),
+                                     "CAD_ENGINE_MESH": "inline", "CAD_ENGINE_CACHE_IDLE": str(IDLE),
                                      **extra}, cleanup)
         cleanup(lambda: engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], env=dict(env)))
         return env
@@ -159,7 +159,7 @@ class CacheTest(unittest.TestCase):
         self.project = self.folder / "project"
         self.project.mkdir()
         (self.state, self.cache), self.env = self.shared, self.engine_env
-        self.engine = Path(self.env["CADGEN_ENGINE_DIR"])
+        self.engine = Path(self.env["CAD_ENGINE_DIR"])
         self.reset()
 
     def reset(self) -> None:
@@ -167,7 +167,7 @@ class CacheTest(unittest.TestCase):
         from cad_server.engine import cli
 
         with mock.patch.dict(os.environ, {name: self.env[name] for name in
-                                          ("CADGEN_ENGINE_DIR", "CADGEN_STATE_DIR", "CADGEN_CACHE_DIR")}):
+                                          ("CAD_ENGINE_DIR", "CAD_STATE_DIR", "CAD_CACHE_DIR")}):
             left = [row["id"] for row in Registry(self.state).list()]
             if left:
                 cli.delete(left)
@@ -176,7 +176,7 @@ class CacheTest(unittest.TestCase):
         """The engine the test talks to from now on: one of its own, on ``state`` and ``cache``."""
         self.state, self.cache = state, cache
         self.env = self.environment(state, cache, self.addCleanup, PYTHONPYCACHEPREFIX=self.bytecode, **extra)
-        self.engine = Path(self.env["CADGEN_ENGINE_DIR"])
+        self.engine = Path(self.env["CAD_ENGINE_DIR"])
 
     def cli(self, *args: str, env: dict | None = None):
         return engine_daemon.run([sys.executable, "-m", "cad_server.engine", *args], cwd=self.project, env=env or self.env)
@@ -193,7 +193,7 @@ class CacheTest(unittest.TestCase):
     def ask(self, message: dict) -> dict:
         from cad.engine.client import request
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             return request(message, start=False) or {}
 
     def record(self, ident: str) -> dict:
@@ -332,7 +332,7 @@ class CacheTest(unittest.TestCase):
         self.assertEqual([Path(worker["script"]).name for worker in listed["workers"]], ["documents"])
         from cad_server.mcp.server import _say_not_held
 
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             self.assertIsNone(_say_not_held(ident), "cad_show shows it, with nothing to add")
         self.assertFalse(self.ran("cube"), "nothing ran the script")
 
@@ -345,7 +345,7 @@ class CacheTest(unittest.TestCase):
         self.assertEqual((inspected.returncode, inspected.stderr), (0, ""))
         self.assertTrue(inspected.stdout.splitlines()[1].startswith("state       held (in memory and disk), cached, "
                                                                     "built "), inspected.stdout)
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": str(self.engine)}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.engine)}):
             self.assertIsNone(_say_not_held(ident))
         self.assertFalse(self.ran("cube"), "nothing reran it")
 
@@ -418,7 +418,7 @@ class CacheTest(unittest.TestCase):
         exported = self.cli("export", ident, str(out))
         self.assertEqual(exported.returncode, 2, exported.stderr)
         self.assertIn(f"the engine's cache of {ident} does not read", exported.stderr)
-        self.assertIn(f"run `cadgen run {self.project / 'cube.py'}` to build it again", exported.stderr)
+        self.assertIn(f"run `cad run {self.project / 'cube.py'}` to build it again", exported.stderr)
         self.assertFalse(out.exists())
         self.assertNotIn("cache", self.record(ident))
         self.assertFalse(self.file(ident).exists())
@@ -511,7 +511,7 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(self.ran("cube"))
 
     def test_failed_revisions_before_a_restart_leave_the_cache_to_take(self) -> None:
-        self.use(self.folder / "state", self.folder / "cache", CADGEN_ENGINE_CACHE_IDLE="600")  # saved at the stop, as a person's is
+        self.use(self.folder / "state", self.folder / "cache", CAD_ENGINE_CACHE_IDLE="600")  # saved at the stop, as a person's is
         self.said()
         self.run_script("cube")
         self.run_script("cube")
@@ -557,7 +557,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(document.read_bytes(payload), "the whole document's bytes")
 
     def test_a_stop_saves_a_document_built_in_its_last_idle_window(self) -> None:
-        self.use(self.folder / "state", self.folder / "cache", CADGEN_ENGINE_CACHE_IDLE="600")
+        self.use(self.folder / "state", self.folder / "cache", CAD_ENGINE_CACHE_IDLE="600")
         ident = self.write("cube")
         self.run_script("cube")
         self.assertFalse(self.file(ident).exists(), "not idle yet")
@@ -573,8 +573,8 @@ class CacheTest(unittest.TestCase):
     def test_every_document_stays_until_deleted_and_nothing_else_in_the_folder_is_touched(self) -> None:
         # Its workers go after each build, over a memory cap of 1 MB, and its memory budget is past at
         # once: every document leaves memory, and the cache keeps them all.
-        self.use(self.folder / "state", self.folder / "cache", CADGEN_ENGINE_WORKER_RSS_MB="1",
-                 CADGEN_ENGINE_MEMORY_MB="0.001")
+        self.use(self.folder / "state", self.folder / "cache", CAD_ENGINE_WORKER_RSS_MB="1",
+                 CAD_ENGINE_MEMORY_MB="0.001")
         foreign = self.cache / "objects" / "ab" / "0.7-object"
         foreign.parent.mkdir(parents=True)
         foreign.write_bytes(b"a 0.7 store object")
@@ -627,7 +627,7 @@ class CacheTest(unittest.TestCase):
         self.assertNotIn("files", self.record(ident), "nothing records which files a model wrote")
         self.assertEqual(self.cli("stop").returncode, 0)
         # Unchanged after a restart: taken by its key, nothing run; its STEP is the document's export, as
-        # `cadgen export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
+        # `cad export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
         # the first run after a restart may write it once, the same geometry).
         done = self.run_script("plate")
         self.assertIn("took plate.py::plate cold in", done.stdout)

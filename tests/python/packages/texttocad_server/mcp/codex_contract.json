@@ -99,7 +99,7 @@
   "cad_screenshot": {
    "content": [
     {
-     "text": "No CAD viewer with a model is open in this thread. Open one with cad_open, or render headless with `cadgen snapshot`.",
+     "text": "No CAD viewer with a model is open in this thread. Open one with cad_open, or render headless with `cad snapshot`.",
      "type": "text"
     }
    ],
@@ -1142,7 +1142,7 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cadgen inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again. To start: {requestId, source}, optionally with ref, query, waitMs. To follow one: {action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs. A start returns an asynchronous operation (waitMs waits for its result): call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
+   "description": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cad inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again. To start: {requestId, source}, optionally with ref, query, waitMs. To follow one: {action: status or cancel, operationId, epoch}, optionally with afterSequence, waitMs. A start returns an asynchronous operation (waitMs waits for its result): call this same tool with action=status, operationId and epoch (optionally afterSequence and waitMs) for progress/result, or action=cancel while queued. Disconnect does not cancel. Status of this MCP session's 64 most recent finished operations lasts up to 24 hours; restart loses it. Running file writes cannot be cancelled.",
    "inputSchema": {
     "additionalProperties": false,
     "anyOf": [

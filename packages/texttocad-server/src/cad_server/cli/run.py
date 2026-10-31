@@ -1,5 +1,5 @@
-"""``cadgen run ARGS`` -- ``python ARGS`` in the CAD kernel environment: a model script
-(``cadgen run model.py``), ``-m`` or ``-c``.
+"""``cad run ARGS`` -- ``python ARGS`` in the CAD kernel environment: a model script
+(``cad run model.py``), ``-m`` or ``-c``.
 
 The environment is the installation's base (``cad_server._internal.base``): the library with the CAD
 kernel, on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import sys
 
-PROG = "cadgen run"
+PROG = "cad run"
 # The library's runner of a program: ``python ARGS``, the program's folder last on its module search path.
 PROGRAM = "cad._internal.program"
 
@@ -25,7 +25,7 @@ PROGRAM = "cad._internal.program"
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
-        sys.stdout.write("usage: cadgen run SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE\n\n"
+        sys.stdout.write("usage: cad run SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE\n\n"
                          "Run python with the arguments in the CAD kernel environment (a model script builds by "
                          "running it).\n")
         return 0

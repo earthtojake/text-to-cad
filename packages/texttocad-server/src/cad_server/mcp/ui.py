@@ -16,7 +16,7 @@ restored with.
 The page must not change while the host runs. Each MCP session reports the
 URI, and a host that sees it change drops the frames showing the old one. An
 installed wheel's page never changes; a build directory's changes with every
-rebuild, so serve a copy of it (``CADGEN_MCP_APP_DIR``) to a running host.
+rebuild, so serve a copy of it (``CAD_MCP_APP_DIR``) to a running host.
 """
 
 from __future__ import annotations

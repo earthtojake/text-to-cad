@@ -317,10 +317,10 @@ class HingeTest(_Folder):
         from cad.engine.snapshot import SnapshotRefused, snapshot
 
         self.hinge()
-        previous = os.environ.get("CADGEN_ENGINE_MESH")
-        os.environ["CADGEN_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
-        self.addCleanup(lambda: os.environ.pop("CADGEN_ENGINE_MESH") if previous is None
-                        else os.environ.__setitem__("CADGEN_ENGINE_MESH", previous))
+        previous = os.environ.get("CAD_ENGINE_MESH")
+        os.environ["CAD_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
+        self.addCleanup(lambda: os.environ.pop("CAD_ENGINE_MESH") if previous is None
+                        else os.environ.__setitem__("CAD_ENGINE_MESH", previous))
         path = self.folder / "XBF/hinge.xbf"
         out = self.folder / "stale.png"
         for pose, words in (({"elbw": 1}, "names no joint 'elbw'"), ({"elbow": 150}, "'elbow' at 150 deg is outside"),
@@ -419,10 +419,10 @@ class RangeTest(_Folder):
         with self.assertRaises(mechanism.KinematicsError) as refused:
             mechanism.resolve(document.Loaded(path).structure()["kinematics"], {"steer": 32})
         self.assertEqual(str(refused.exception), refusal)
-        previous = os.environ.get("CADGEN_ENGINE_MESH")
-        os.environ["CADGEN_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
-        self.addCleanup(lambda: os.environ.pop("CADGEN_ENGINE_MESH") if previous is None
-                        else os.environ.__setitem__("CADGEN_ENGINE_MESH", previous))
+        previous = os.environ.get("CAD_ENGINE_MESH")
+        os.environ["CAD_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
+        self.addCleanup(lambda: os.environ.pop("CAD_ENGINE_MESH") if previous is None
+                        else os.environ.__setitem__("CAD_ENGINE_MESH", previous))
         out = self.folder / "stale.png"
         out.write_bytes(b"before")
         with self.assertRaises(SnapshotRefused) as refused:

@@ -39,7 +39,7 @@ class MissingRuntimeNamesTheBundler(unittest.TestCase):
         with mock.patch.object(assets, "_in_source_checkout", return_value=False):
             hint = assets.runtime_build_hint(Path("_runtime") / "mcp" / "index.html")
         self.assertNotIn(BUNDLER, hint)
-        self.assertIn("Reinstall cadgen", hint)
+        self.assertIn("Reinstall text-to-cad", hint)
 
 
 class ExplicitRuntimeAssets(unittest.TestCase):
@@ -48,7 +48,7 @@ class ExplicitRuntimeAssets(unittest.TestCase):
             packaged = Path(tmp) / "cad_server" / "_runtime"
             with mock.patch.object(assets, "_RUNTIME", packaged), \
                     mock.patch.object(assets, "_dev_viewer_dist_dir", return_value=None), \
-                    mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": ""}):
+                    mock.patch.dict(os.environ, {"CAD_VIEWER_DIST": ""}):
                 self.assertEqual(assets.viewer_dist_dir(), packaged / "viewer")
 
     def test_a_checkout_serves_its_own_web_build(self):
@@ -77,7 +77,7 @@ class ExplicitRuntimeAssets(unittest.TestCase):
             packaged = installed / "_runtime"
             with mock.patch.object(assets, "__file__", str(installed / "assets.py")), \
                     mock.patch.object(assets, "_RUNTIME", packaged), \
-                    mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": "", "CADGEN_MCP_APP_DIR": ""}):
+                    mock.patch.dict(os.environ, {"CAD_VIEWER_DIST": "", "CAD_MCP_APP_DIR": ""}):
                 self.assertIsNone(assets.checkout_root())
                 self.assertFalse(assets._in_source_checkout())
                 self.assertEqual(assets.viewer_dist_dir(), packaged / "viewer")
@@ -86,7 +86,7 @@ class ExplicitRuntimeAssets(unittest.TestCase):
     def test_development_overrides_are_explicit(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
-            with mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": str(root / "web")}):
+            with mock.patch.dict(os.environ, {"CAD_VIEWER_DIST": str(root / "web")}):
                 self.assertEqual(assets.viewer_dist_dir(), root / "web")
 
 

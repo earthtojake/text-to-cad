@@ -1,7 +1,7 @@
 """cadgen's stills drawn by OCCT: an engine document drawn by OCCT's own OpenGL renderer from the
 engine's own meshes (the XBM buffers ``mesh.py`` writes and the daemon serves), never a mesh of
 OCCT's own; a file no document (a mesh file, a robot) from the buffers its reader made
-(``formats/``), and a DXF as a drawing. ``cadgen snapshot`` draws every kind through it.
+(``formats/``), and a DXF as a drawing. ``cad snapshot`` draws every kind through it.
 
 - ``service.py``: a document held and drawn (``Held``), the daemon's render process per served
   document and per file (``Renders``, ``python -m cad.engine.render.service``), and a document

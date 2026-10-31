@@ -12,28 +12,28 @@ starts fine there. So an installation registers itself, and one command runs the
   it, as it writes everything there.
 - ``<state>/installations/current``, the version of the installation that is the device's: its
   engine is the one every client starts or attaches to (``cad.engine.client``), whatever its own
-  release, and the ``cadgen`` command runs it. ``cadgen setup`` (and so ``cadgen update`` and the
+  release, and the ``cadgen`` command runs it. ``cad setup`` (and so ``cad update`` and the
   install command run again) points it at the release it sets up, through the switch
   (``cad_server._internal.switch``); a client that finds none -- no installation before it -- points it
   at itself once (``bootstrap``).
-- ``~/.local/bin/cadgen`` (``CADGEN_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
+- ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
   script that runs the current installation's interpreter with ``-m cad_server._internal.proxy`` (with
   no current one, the one registered last), which runs that installation's ``cadgen``. Every version
   writes the same file (``REVISION``), so the proxy is no installation's. On Windows it is
-  ``cadgen.cmd``, the same logic.
+  ``cad.cmd``, the same logic.
 
-The records and the proxy are written at install moments only: ``cadgen setup`` (the release it
-sets up), ``cadgen doctor``, the skills' one-time step, which says what it found, and the CAD app's
-server (``cadgen mcp``) as it starts (:func:`startup`), which the host does outside any sandbox:
+The records and the proxy are written at install moments only: ``cad setup`` (the release it
+sets up), ``cad doctor``, the skills' one-time step, which says what it found, and the CAD app's
+server (``cad-mcp``) as it starts (:func:`startup`), which the host does outside any sandbox:
 that one writes the proxy, and registers itself only where no installation is current. A folder
 either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``. No
 other command writes either. A file named ``cadgen`` there that is not the proxy (``uv tool
-install``'s link) is left alone, and said. ``cadgen doctor --prune`` removes the records whose
+install``'s link) is left alone, and said. ``cad doctor --prune`` removes the records whose
 interpreter is gone.
 
 An editable install (a checkout's environment) registers nothing by itself: it reports the release's
 version, and its record would take a user's place. A development install names its own
-(``CADGEN_INSTALLATION_VERSION``), which the ``cadgen`` command sets for it as it runs it
+(``CAD_INSTALLATION_VERSION``), which the ``cadgen`` command sets for it as it runs it
 (``named``, ``cad_server._internal.proxy``).
 """
 
@@ -47,13 +47,13 @@ import time
 
 from cad.engine.places import VERSION, alive, installation_record
 
-DIR_ENV = "CADGEN_LAUNCHER_DIR"
-NAME_ENV = "CADGEN_INSTALLATION_VERSION"
+DIR_ENV = "CAD_LAUNCHER_DIR"
+NAME_ENV = "CAD_INSTALLATION_VERSION"
 FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients read
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
-MARK = "cadgen proxy: "
+MARK = "cad proxy: "
 REVISION = 5
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
@@ -76,7 +76,7 @@ def proxy_folder() -> str:
 
 
 def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
-    return os.path.join(where or proxy_folder(), "cadgen.cmd" if windows else "cadgen")
+    return os.path.join(where or proxy_folder(), "cad.cmd" if windows else "cad")
 
 
 def state():
@@ -101,7 +101,7 @@ def targets() -> tuple[str, str, str] | None:
 
         scripts = sysconfig.get_path("scripts")
         python = sys.executable
-    console = os.path.join(scripts, "cadgen.exe" if WINDOWS else "cadgen")
+    console = os.path.join(scripts, "cad.exe" if WINDOWS else "cad")
     if not (python and os.path.isfile(console)):
         return None
     return os.path.abspath(console), os.path.abspath(python), os.path.abspath(sys.prefix)
@@ -140,7 +140,7 @@ def own_version() -> str | None:
 
 def _inside(version: str) -> str:
     if not VERSION.fullmatch(version or ""):
-        raise ValueError(f"not a cadgen version: {version!r}")
+        raise ValueError(f"not a version: {version!r}")
     return f"{FOLDER}/{version}.json"
 
 
@@ -152,7 +152,7 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
     inside = _inside(version)
     path = str(folder.path(inside))
     if found is None:
-        raise OSError(f"this cadgen has no console script to register ({sys.prefix})")
+        raise OSError(f"this installation has no console script to register ({sys.prefix})")
     console, python, prefix = found
     before = installation_record(folder.read(inside))
     if before and (before["cadgen"], before["python"], before["prefix"]) == (console, python, prefix):
@@ -233,16 +233,24 @@ def prune(folder=None) -> list[str]:
 # (a symlink to an environment's console script; on Windows a copy, ``.exe``) and
 # ``cadgen-python-<version>`` (a script whose first lines carry ``LEGACY_MARK``).
 LEGACY_MARK = "cadgen launcher: "
+# 0.8's proxy, ``cadgen`` (``cadgen.cmd``), which the ``cad`` command replaces: the installations it
+# read moved to this release's state folder (``cad.engine.places.adopt_earlier``).
+EARLIER_PROXY, EARLIER_MARK = "cadgen", "cadgen proxy: "
 
 
-def _legacy_python(path: str) -> bool:
-    """Whether ``path`` is a python launcher an earlier build wrote: it carries ``LEGACY_MARK``."""
+def _marked(path: str, mark: str) -> bool:
+    """Whether ``path`` is a file whose first lines carry ``mark``: a launcher of ours."""
     try:
         with open(path, encoding="utf-8", errors="replace") as handle:
             head = handle.read(4096)
     except (OSError, ValueError):
         return False
-    return any(LEGACY_MARK in line for line in head.splitlines()[:3])
+    return any(mark in line for line in head.splitlines()[:3])
+
+
+def _legacy_python(path: str) -> bool:
+    """Whether ``path`` is a python launcher an earlier build wrote: it carries ``LEGACY_MARK``."""
+    return _marked(path, LEGACY_MARK)
 
 
 def _legacy_console(path: str) -> bool:
@@ -268,10 +276,11 @@ def _registered_environment(path: str) -> bool:
 
 
 def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
-    """Remove the per-version launchers earlier 0.8 builds published in the proxy's folder (``where``):
-    each ``cadgen-python-<version>`` carrying ``LEGACY_MARK``, and each ``cadgen-<version>`` symlink
-    into a cadgen environment (on Windows the ``.exe`` copy beside a marked ``.cmd``). Anything else
-    there -- the proxy, another program's file -- is left alone. The paths removed."""
+    """Remove the launchers earlier releases published in the proxy's folder (``where``): 0.8's proxy,
+    ``cadgen`` carrying ``EARLIER_MARK``, each ``cadgen-python-<version>`` carrying ``LEGACY_MARK``, and
+    each ``cadgen-<version>`` symlink into a cadgen environment (on Windows the ``.exe`` copy beside a
+    marked ``.cmd``). Anything else there -- the proxy, another program's file -- is left alone. The
+    paths removed."""
     folder = where or proxy_folder()
     try:
         names = sorted(os.listdir(folder))
@@ -287,7 +296,9 @@ def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]
     for name in names:
         path = os.path.join(folder, name)
         stem = name[:-4] if windows and name.lower().endswith((".cmd", ".exe")) else name
-        if stem.startswith("cadgen-python-"):
+        if stem == EARLIER_PROXY and (name.lower().endswith(".cmd") if windows else name == stem):
+            legacy = not os.path.islink(path) and _marked(path, EARLIER_MARK)
+        elif stem.startswith("cadgen-python-"):
             legacy = stem[len("cadgen-python-"):] in marked
         elif stem.startswith("cadgen-") and VERSION.fullmatch(stem[len("cadgen-"):]):
             version = stem[len("cadgen-"):]
@@ -369,12 +380,12 @@ def bootstrap(version: str, folder=None) -> bool:
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cadgen command: runs the current installation of cadgen (cad_server._internal.proxy), else
-# the one registered last. Every cadgen writes this same file (cadgen setup, cadgen doctor, the
+# The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),
+# else the one registered last. Every release writes this same file (cad setup, cad doctor, the
 # CAD app's server).
-if [ -n "$CADGEN_STATE_DIR" ]; then state=$CADGEN_STATE_DIR
-elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cadgen"
-else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cadgen"
+if [ -n "$CAD_STATE_DIR" ]; then state=$CAD_STATE_DIR
+elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/texttocad"
+else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/texttocad"
 fi
 current=$(sed -n '1p' "$state/installations/current" 2>/dev/null)
 case $current in ''|*[!0-9A-Za-z.+_-]*) current= ;; esac
@@ -388,21 +399,21 @@ for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2
   record="$state/installations/$name"
   python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
   console=$(sed -n 's/^ *"cadgen": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
-  # Alive as ``alive`` says it: its python and its console script (an uninstalled cadgen leaves the python).
+  # Alive as ``alive`` says it: its python and its console script (an uninstalled server leaves the python).
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 done
 case $1 in +?*) version=${{1#+}} ;; *) version= ;; esac
-echo "cadgen${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python {python} \\
---from cadgen${{version:+==$version}} cadgen doctor\\` once, outside any sandbox or with its permission" >&2
+echo "text-to-cad${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python {python} \\
+--from texttocad-server${{version:+==$version}} cad doctor\\` once, outside any sandbox or with its permission" >&2
 exit 1
 """
 
 _CMD = """@echo off\r
 rem {mark}{revision}\r
-rem The cadgen command: runs the current installation of cadgen (cad_server._internal.proxy), else\r
-rem the one registered last.\r
+rem The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),\r
+rem else the one registered last.\r
 setlocal EnableDelayedExpansion\r
-if defined CADGEN_STATE_DIR (set "state=!CADGEN_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cadgen-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cadgen-state")\r
+if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\texttocad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\texttocad-state")\r
 set "current="\r
 if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
 if defined current if exist "!state!\\installations\\!current!.json" (\r
@@ -416,9 +427,9 @@ if defined current if exist "!state!\\installations\\!current!.json" (\r
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-rem A record's python and cadgen lines are: space "KEY": "PATH", -- split at each quote, PATH is the\r
-rem fourth piece. Alive as alive() says it: its python and its console script (an uninstalled cadgen\r
-rem leaves the python), else the next record.\r
+rem A record's python and cadgen (its console script's) lines are: space "KEY": "PATH", -- split at each\r
+rem quote, PATH is the fourth piece. Alive as alive() says it: its python and its console script (an\r
+rem uninstalled server leaves the python), else the next record.\r
 for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') do (\r
   set "python="\r
   set "console="\r
@@ -430,7 +441,7 @@ for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') 
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-echo cadgen is not installed: run `uvx --no-config --managed-python --python {python} --from cadgen cadgen doctor` once, outside any sandbox or with its permission 1>&2\r
+echo text-to-cad is not installed: run `uvx --no-config --managed-python --python {python} --from texttocad-server cad doctor` once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
 endlocal & "%python%" -P -m cad_server._internal.proxy %*\r
@@ -481,7 +492,7 @@ def proxy_status(path: str | None = None, windows: bool = WINDOWS) -> str:
 
 def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str, str, str | None]:
     """Write the proxy when it is missing or stale: ``(path, status before, error or None)``. A
-    folder it cannot write is not raised but returned as the error, for ``cadgen doctor`` to say."""
+    folder it cannot write is not raised but returned as the error, for ``cad doctor`` to say."""
     where = where or proxy_folder()
     path = proxy_path(where, windows)
     status = proxy_status(path, windows)
@@ -508,7 +519,11 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
 def setup(version: str, *, make_current: bool = False) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None]]:
     """Register this installation as ``version`` and write the proxy: each ``(path, status, error)``.
     With ``make_current`` (a development install), it is pointed at as ``current``; else only when no
-    live installation is (``bootstrap``)."""
+    live installation is (``bootstrap``). On a device an earlier release set up, what this release keeps
+    of its state folder is moved into this one's first (``cad.engine.places.adopt_earlier``)."""
+    from cad.engine.places import adopt_earlier
+
+    adopt_earlier()
     try:
         path, status = register(version)
         registered: tuple[str, str, str | None] = (path, status, None)

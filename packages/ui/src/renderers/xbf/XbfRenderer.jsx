@@ -215,7 +215,7 @@ function XbfSurface({ view, data }) {
     requestRender();
   }, [scene, poseValues, poseApplied, requestRender]);
   // A prompt's view, as a STEP's carried its pose and what it hid: the pose Position holds off as
-  // built, as `cadgen snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
+  // built, as `cad snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
   // its `--display` takes them (`hidden`, `isolated`), each node as Copy Prompt copies it and the
   // hidden parts by the fewest nodes that name them -- so the view ink was drawn in is drawn as it was.
   // While a motion owns the pose, the pose on screen is its frame.

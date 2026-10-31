@@ -4,7 +4,7 @@ The cadquery-ocp wheels ship ``OCP``'s native module unsigned, and Windows 11's
 Smart App Control blocks it with a bare ``ImportError: DLL load failed while
 importing OCP``. That message says nothing about who refused the load, and the
 fix is a machine setting, not a reinstall -- so the CLI failure report and
-``cadgen doctor`` say so. The hint must fire on exactly that shape: not on a
+``cad doctor`` say so. The hint must fire on exactly that shape: not on a
 missing install, not on another module's loader failure, and never off Windows.
 """
 
@@ -58,7 +58,7 @@ class KernelLoadHintTest(unittest.TestCase):
         )
 
     def test_stderr_text_is_read_the_same_way(self) -> None:
-        # ``cadgen doctor`` probes the kernel in a subprocess and only has its stderr.
+        # ``cad doctor`` probes the kernel in a subprocess and only has its stderr.
         line = "ImportError: DLL load failed while importing OCP: Access is denied."
         self.assertIsNotNone(kernel_load_hint(line, platform="win32"))
         self.assertIsNone(kernel_load_hint(line, platform="linux"))

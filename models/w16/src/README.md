@@ -9,12 +9,12 @@ working kinematics. `w16.py` is the one model (`@model`; a run writes nothing):
 | `block.py` ... `ancillaries.py` (13) | nothing | One system each, a `@memo` stage the engine calls in its body |
 
 Build from this folder: `python w16.py`. The GLB is exported on demand
-(`cadgen export "$ID" GLB/w16.glb`, the id the run prints), its three clips baked.
+(`cad export "$ID" GLB/w16.glb`, the id the run prints), its three clips baked.
 
 ```
 python w16.py
-cadgen snapshot "$ID" w16.png
-cadgen export "$ID" STEP/w16.step
+cad snapshot "$ID" w16.png
+cad export "$ID" STEP/w16.step
 ```
 
 ## How it is built

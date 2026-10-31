@@ -4,16 +4,16 @@ The ``cadgen`` wheel's required dependencies are the core -- the engine's server
 command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
 its ``kernel`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
 itself: the engine makes one environment per installation, the base, and every process that loads
-the kernel starts from it -- the script ``cadgen run`` runs, its worker, and the engine's own kernel
+the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
 processes (the standby, the documents worker, the meshing and reading pools, the render processes:
 ``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``).
 
-- **What it is**: ``cadgen[kernel]`` at the installation's own release -- or the source tree, or the
+- **What it is**: ``texttocad[kernel]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
   Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
   base are one Python. uv makes it at ``base/<key>`` in the cache folder, its files hard links into
   uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
-  extra: ``pip install 'cadgen[kernel]'``, a checkout's development environment) is its own base, and
+  extra: ``pip install 'texttocad[kernel]'``, a checkout's development environment) is its own base, and
   none is made.
 - **The key** digests the installation (its environment, the version it runs as, its release and
   where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
@@ -76,7 +76,7 @@ DENIED = re.compile(r"Operation not permitted|Permission denied|Access is denied
 WHAT = "the CAD kernel environment"
 # A folder of wheels uv reads beside its index for every cadgen it installs (``--find-links``): a test's
 # seam, a local release a test publishes there, never a setting of a person's.
-FIND_LINKS_ENV = "CADGEN_UPDATE_FIND_LINKS"
+FIND_LINKS_ENV = "CAD_UPDATE_FIND_LINKS"
 
 
 class Refused(Exception):
@@ -286,8 +286,8 @@ def find_uv() -> str:
         pass
     from cad_server.updates import command
 
-    raise Refused("cadgen makes its CAD kernel environment with uv, and finds none: cadgen depends on the uv "
-                  f"package, which carries it; install cadgen again: run `{command()}`")
+    raise Refused("the server makes its CAD kernel environment with uv, and finds none: it depends on the uv "
+                  f"package, which carries it; install text-to-cad again: run `{command()}`")
 
 
 @dataclass(frozen=True)
@@ -297,7 +297,7 @@ class Recipe:
     an installation names them (``Installation``): a release on the index (``source`` None) is asked for
     again with its index page fetched anew when uv's cached page predates it."""
 
-    what: str  # the environment, in words: "the CAD kernel environment", "cadgen 0.9.1"
+    what: str  # the environment, in words: "the CAD kernel environment", "text-to-cad 0.9.1"
     python: str  # the interpreter its virtual environment is made of
     requirement: tuple[str, ...]  # what ``uv pip install`` installs
     release: str
@@ -325,7 +325,7 @@ def recipe(installation: Installation) -> Recipe:
 
 
 def _say(line: str) -> None:
-    print(f"cadgen: {line}", file=sys.stderr, flush=True)
+    print(f"cad: {line}", file=sys.stderr, flush=True)
 
 
 def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
@@ -419,7 +419,7 @@ def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
     """That ``what`` (a file or folder of ``environment``) cannot be written, in one line: a denial as a
     sandbox's, which this once outside it, or with its permission, makes."""
     if isinstance(error, PermissionError):
-        return (f"the system denies cadgen {what} ({error.strerror or error}); a sandbox that forbids it does: "
+        return (f"the system denies text-to-cad {what} ({error.strerror or error}); a sandbox that forbids it does: "
                 "run this once outside it, or with its permission")
     return f"cannot write {what}: {error.strerror or error}"
 

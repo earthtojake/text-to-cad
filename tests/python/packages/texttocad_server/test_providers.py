@@ -1,4 +1,4 @@
-"""The agent apps ``cadgen setup`` reads and changes (``cad_server._internal.providers``).
+"""The agent apps ``cad setup`` reads and changes (``cad_server._internal.providers``).
 
 Every test builds a temporary home, and puts on a temporary PATH fake ``claude``, ``codex``,
 ``gemini``, ``grok``, ``git`` and ``npx`` commands: one small emulator (``EMULATOR``) that records each call
@@ -314,8 +314,8 @@ class Home:
 
 
 ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.14", "--from",
-                                          f"cadgen=={RELEASE}", "cadgen", "mcp"],
-         "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}}
+                                          f"texttocad-mcp=={RELEASE}", "cad-mcp"],
+         "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
 
 
 def actions(steps: list) -> list[tuple[str, str]]:
@@ -616,13 +616,13 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         where = providers.shown(folder, home.machine)
         record = {"windsurf": {"release": RELEASE, "skills": added["skills"]}}
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
-                         [("leave", f"the skills in {where}, from cadgen {RELEASE}: up to date")])
+                         [("leave", f"the skills in {where}, from text-to-cad {RELEASE}: up to date")])
         # A recorded skill gone, or another release: added again, said why.
         providers.remove_path(folder / "dxf")
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
                          [("update", f"the skills in {where}: dxf missing")])
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record, release="1.2.4")],
-                         [("update", f"the skills in {where}, from cadgen {RELEASE} -> 1.2.4")])
+                         [("update", f"the skills in {where}, from text-to-cad {RELEASE} -> 1.2.4")])
         (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": record}, machine=home.machine)
         self.assertEqual(step.commands, [[home.machine.which("npx"), "-y", "skills@latest", "remove", "-g", "-a", "windsurf",
                                           "-s", *sorted(name for name in skipped if name != "dxf"), "-y"]])

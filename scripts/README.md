@@ -53,7 +53,7 @@ where those files ship, so these scripts are what produces them.
   build is half its contract.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
-  its own interpreter with an engine daemon of its own, `CADGEN_TEST_JOBS` at a
+  its own interpreter with an engine daemon of its own, `CAD_TEST_JOBS` at a
   time (default: the core count; CI sets 4). `--keep-going` runs all suites and
   reports every failure. PATHs (repo-relative files or directories) narrow the
   run to the test files at or under them — CI passes what the change selected
@@ -67,13 +67,13 @@ where those files ship, so these scripts are what produces them.
 - `unittest_files.py` — the runner underneath, invoked by `common.sh`. Loads each
   test file under its full dotted path so an import failure names the file, and
   runs the files `--jobs` at a time, each in its own interpreter with an engine
-  directory of its own (`CADGEN_ENGINE_DIR`), and stops the daemon a file left
+  directory of its own (`CAD_ENGINE_DIR`), and stops the daemon a file left
   there after it; run one test file through it too, rather than
   `python -m unittest`, which would build on your own daemon.
-  Each file's state, cache and `cadgen` command folders are its own too
-  (`CADGEN_STATE_DIR`, `CADGEN_CACHE_DIR`, `CADGEN_LAUNCHER_DIR`), and a document,
+  Each file's state, cache and `cad` command folders are its own too
+  (`CAD_STATE_DIR`, `CAD_CACHE_DIR`, `CAD_LAUNCHER_DIR`), and a document,
   engine or installation record the run's cadgen writes in your own state folder,
-  or your `cadgen` command written, fails the run, naming the test that was running
+  or your `cad` command written, fails the run, naming the test that was running
   (what another cadgen of yours writes there meanwhile is listed, and fails nothing).
   A file still running after 15 minutes is hung: it prints every thread's stack
   and fails.
@@ -86,9 +86,9 @@ where those files ship, so these scripts are what produces them.
   `deploy-api.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
   the exact artifact already built), installs it into a scratch venv and
-  exercises cadgen from outside the repo, including `cadgen mcp` serving the
+  exercises cadgen from outside the repo, including `cad-mcp` serving the
   packaged CAD app over stdio. Called by `test.yml` and `release-publish.yml`.
-- `test-viewer-launch.sh` — launches `cadgen viewer` against the built client and
+- `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`.
 - `test-viewer-browser.sh` — creates tiny inputs and owns its temporary project,
@@ -121,12 +121,12 @@ where those files ship, so these scripts are what produces them.
   the sha256 PyPI lists, go to `--released`; a file PyPI holds that the run did
   not build fails it. Called by `release-publish.yml`'s `pypi` job.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
-  skill's main file and setup guide pin `cadgen==VERSION` or run `cadgen +VERSION`, the one-line
+  skill's main file and setup guide pin `cadgen==VERSION` or run `cad +VERSION`, the one-line
   installer falls back to `VERSION`, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (Version Check), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
-  lockfile and `pyproject.toml` metadata, the cadgen pins, the skills' `cadgen +VERSION` in each
+  lockfile and `pyproject.toml` metadata, the cadgen pins, the skills' `cad +VERSION` in each
   skill's main file and `references/setup.md`, and the one-line installer's fallback release) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
 - `check-wheel-contents.sh` — builds the wheel and asserts the Python modules,
@@ -192,7 +192,7 @@ where those files ship, so these scripts are what produces them.
   https://texttocad.dev/install.sh | sh`; `irm https://www.texttocad.dev/install.ps1 | iex`): finds uv or
   installs it with uv's own installer, resolves the newest release from the version feed (else the
   release stamped into the script, `sync-version.mjs`; `--version` picks one), and runs that
-  release's `cadgen setup` through uvx (with `--uninstall`, `cadgen uninstall`), every other argument
+  release's `cad setup` through uvx (with `--uninstall`, `cad uninstall`), every other argument
   passed on. The docs site copies both into its `public/` as it builds
   (`apps/docs/scripts/install-scripts.mjs`), and `release-publish.yml` attaches them, with their
   `SHA256SUMS`, to each GitHub Release. Their structure and behaviour are tested by

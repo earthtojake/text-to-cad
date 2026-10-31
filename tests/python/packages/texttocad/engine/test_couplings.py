@@ -358,10 +358,10 @@ class FingerTest(_Folder):
         from cad.engine.snapshot import SnapshotRefused, snapshot
 
         self.finger()
-        previous = os.environ.get("CADGEN_ENGINE_MESH")
-        os.environ["CADGEN_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
-        self.addCleanup(lambda: os.environ.pop("CADGEN_ENGINE_MESH") if previous is None
-                        else os.environ.__setitem__("CADGEN_ENGINE_MESH", previous))
+        previous = os.environ.get("CAD_ENGINE_MESH")
+        os.environ["CAD_ENGINE_MESH"] = "inline"  # one part at a time on this thread: no pool
+        self.addCleanup(lambda: os.environ.pop("CAD_ENGINE_MESH") if previous is None
+                        else os.environ.__setitem__("CAD_ENGINE_MESH", previous))
         path = self.folder / self.XBF
         out = self.folder / "stale.png"
         out.write_bytes(b"before")

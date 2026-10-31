@@ -54,7 +54,7 @@ read from its file instead:
 ```python
 from pathlib import Path
 
-from cadgen import read_step
+from cad import read_step
 
 part = read_step(Path(__file__).parent / "../vendor/enclosure.step")
 ```

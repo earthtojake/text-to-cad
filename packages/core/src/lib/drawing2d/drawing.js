@@ -311,7 +311,7 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
   if (payload.schemaVersion !== DRAWING_SCHEMA_VERSION) {
     throw new Error(
       `This drawing was rendered at payload schemaVersion ${describe(payload.schemaVersion)}, but `
-      + `this build reads version ${DRAWING_SCHEMA_VERSION}. Update cadgen and the app together so `
+      + `this build reads version ${DRAWING_SCHEMA_VERSION}. Update text-to-cad and the app together so `
       + "the server and the viewer agree on the payload."
     );
   }

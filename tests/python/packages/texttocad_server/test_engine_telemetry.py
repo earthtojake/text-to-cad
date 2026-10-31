@@ -43,8 +43,8 @@ class EngineTelemetryTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="engine-telemetry-")).resolve()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "",
-                                                   "CADGEN_TELEMETRY": "", "CADGEN_ENGINE_WORKER": ""})
+        environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "",
+                                                   "CAD_TELEMETRY": "", "CAD_ENGINE_WORKER": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.settings = self.tmp / "state" / "settings.json"
@@ -190,7 +190,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertNotIn(ident, json.dumps(payload))
 
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
-        for switch in ({"DO_NOT_TRACK": "1"}, {"CADGEN_TELEMETRY": "0"}, {"CADGEN_ENGINE_WORKER": "1"}):
+        for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
             with mock.patch.dict(os.environ, switch):
                 engine_telemetry.observe(facts())
         with mock.patch.object(engine_telemetry, "command", "viewer"):  # a server's own work: it counts its own
@@ -219,7 +219,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual(started, [self.settings, self.settings])
         # Detached: no window, a session or group of its own, no output, the command's telemetry switches not
         # inherited (it goes by the person's settings).
-        with mock.patch.object(subprocess, "Popen") as popen, mock.patch.dict(os.environ, {"CADGEN_TELEMETRY": "1"}):
+        with mock.patch.object(subprocess, "Popen") as popen, mock.patch.dict(os.environ, {"CAD_TELEMETRY": "1"}):
             self.spawn(self.settings)
         [call] = popen.call_args_list
         self.assertEqual(call.args[0], [sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"])
@@ -227,9 +227,9 @@ class EngineTelemetryTest(unittest.TestCase):
                     if os.name == "nt" else {"start_new_session": True})
         self.assertEqual({key: call.kwargs[key] for key in (*detached, "stdin", "stdout", "stderr")},
                          {**detached, "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL})
-        self.assertNotIn("CADGEN_TELEMETRY", call.kwargs["env"])
+        self.assertNotIn("CAD_TELEMETRY", call.kwargs["env"])
         # The program itself: it sends what waits, keeps what the receiver did not take, and exits.
-        env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_API_URL": "http://127.0.0.1:9"}  # nothing answers there
+        env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_API_URL": "http://127.0.0.1:9"}  # nothing answers there
         done = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
@@ -249,10 +249,10 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, True)
         self.folder, self.state = self.root / "models", self.root / "state"
         self.folder.mkdir()
-        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_STATE_DIR": str(self.state),
-                                          "CADGEN_ENGINE_DIR": str(self.root / "engine"),
-                                          "CADGEN_CACHE_DIR": str(self.root / "cache"),
-                                          "CADGEN_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": ""},
+        self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_STATE_DIR": str(self.state),
+                                          "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                          "CAD_CACHE_DIR": str(self.root / "cache"),
+                                          "CAD_ENGINE_MESH": "inline", "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""},
                                          self.addCleanup)
         self.addCleanup(self._stop)
         analytics.choose(True, by="cli", path=self.state / "settings.json")
@@ -353,7 +353,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")
         # What the sender sends: the spool taken into a batch, kept beside the settings when nothing answers.
-        env = {**self.env, "CADGEN_API_URL": "http://127.0.0.1:9"}
+        env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
         sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)
         self.assertEqual(sent.returncode, 0, sent.stderr)

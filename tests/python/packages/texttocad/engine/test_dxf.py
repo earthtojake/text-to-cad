@@ -208,7 +208,7 @@ class DrawingTest(unittest.TestCase):
         warm = _built(self.script, "plate")["plate"]
         self.assertEqual(warm["bodies"], {"drawings.py::plate": "loaded"})
         self.assertEqual(self.plate.read_bytes(), self.bytes)
-        # And an export of the xbf, read from the file, writes them: `cadgen export plate.xbf
+        # And an export of the xbf, read from the file, writes them: `cad export plate.xbf
         # plate.dxf` in a process that never built it.
         again = self.folder / "again.dxf"
         translate(self.folder / "XBF/plate.xbf", None, again)

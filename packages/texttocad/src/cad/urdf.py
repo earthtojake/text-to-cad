@@ -2,9 +2,9 @@
 
 This namespace carries no decorator: a robot description is an AUTHORED file,
 not a document cadgen generates, so there is nothing to declare. It is a plain
-module. ``cadgen snapshot`` draws one (``cad.engine.snapshot``).
+module. ``cad snapshot`` draws one (``cad.engine.snapshot``).
 
-``cadgen urdf validate`` is an ADAPTER over :func:`validate` rather than a
+``cad urdf validate`` is an ADAPTER over :func:`validate` rather than a
 generated mirror: ``--packages NAME=PATH`` is repeatable, and a repeatable
 key/value map is outside the annotation set a parser can be derived from. The
 verb still answers with the same :class:`~cad.results.ValidationResult` the

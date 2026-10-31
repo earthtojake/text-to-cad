@@ -77,7 +77,7 @@ def claimed(held: Any, source: dict[str, Any], name: str) -> None:
         return
     raise ValueError(f"name {name!r} in namespace {namespace} is claimed by {other}:{record['line']} and "
                      f"{script}:{source.get('line', '?')}; give one declaration another name, or once "
-                     f"{other.name} no longer declares it, run `cadgen run {other.name}` so the engine knows")
+                     f"{other.name} no longer declares it, run `cad run {other.name}` so the engine knows")
 
 
 def released(held: Any, script: str | os.PathLike, names: Iterable[str]) -> list[str]:
@@ -331,5 +331,5 @@ def migrate(held: Any | None, *, log: Callable[[str], None] | None = None) -> di
         line = f"identity migration: filled {filled}, moved {moved}, skipped {len(skipped)}"
         if skipped:
             line += "; " + "; ".join(skipped)
-        (log or (lambda message: print(f"cadgen: {message}", file=sys.stderr, flush=True)))(line)
+        (log or (lambda message: print(f"cad: {message}", file=sys.stderr, flush=True)))(line)
     return result

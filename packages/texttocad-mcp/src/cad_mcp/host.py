@@ -21,9 +21,9 @@ MIME = "text/html;profile=mcp-app"  # an MCP App's page, which the ui extension 
 # The processes between a host and this server that are not the host: what runs a command for it
 # (Claude Desktop's ``disclaimer`` helper among them, which starts Claude Code's sessions), and the
 # init a walk ends at, pid 1, when that is not the host itself (a container's entrypoint can be).
-# A Python is not one: a host's plugin config runs cadgen through uvx (uv, then this process) or a
-# venv's Python (this process), so a Python above this one is a client of its own, as a test is.
-_LAUNCHERS = frozenset({"uv", "uvx", "sh", "bash", "zsh", "dash", "fish", "env", "nohup", "cadgen", "disclaimer",
+# A Python is not one: a host's plugin config runs this transport through uvx (uv, then this process) or
+# a venv's Python (this process), so a Python above this one is a client of its own, as a test is.
+_LAUNCHERS = frozenset({"uv", "uvx", "sh", "bash", "zsh", "dash", "fish", "env", "nohup", "cad", "cadgen", "disclaimer",
                         "npx", "npm", "init", "systemd", "tini", "docker-init", "dumb-init"})
 # Codex's options that take a value spelled apart from it (``-c key=value``), before its subcommand.
 _CODEX_VALUED = frozenset({"-c", "--config", "-m", "--model", "-p", "--profile", "-s", "--sandbox",

@@ -3,8 +3,8 @@ deletes it, so a restart opens every project at once -- with the code still the 
 
 For every ``model`` and ``shape`` document (never a file's document: that is its own file),
 the engine keeps ``<cache>/documents/<id>/document.xbf`` -- ``<cache>`` the platform's cache folder
-the distribution names (``Registry.cache``: ``CADGEN_CACHE_DIR``, else ``$XDG_CACHE_HOME/cadgen`` or
-``%LOCALAPPDATA%\\cadgen``, else ``~/.cache/cadgen``), the record staying in the state folder
+the distribution names (``Registry.cache``: ``CAD_CACHE_DIR``, else ``$XDG_CACHE_HOME/texttocad`` or
+``%LOCALAPPDATA%\\texttocad``, else ``~/.cache/texttocad``), the record staying in the state folder
 (``registry``) -- written through a ``registry.Folder`` (``replace_atomic``): the bytes the hold
 makes of it (``document.to_bytes``: the document, its closure record and its compiled animation
 tracks). It is the engine's own file, always: a model's declared ``@xbf`` or an exported xbf is the
@@ -18,7 +18,7 @@ When it is written, never on the run path:
   build arriving meanwhile waits for the one serialisation). A document no worker holds is written
   from the bytes the daemon holds.
 - **At retirement.** The drain (``models.Models.drain``) hands the bytes it takes to the cache.
-- **At shutdown** (``cadgen stop``, a terminate): the documents whose timer has not fired yet --
+- **At shutdown** (``cad stop``, a terminate): the documents whose timer has not fired yet --
   built or read in the last idle window -- are saved, best effort, within ``SHUTDOWN_SECONDS``.
 
 The cache folder is shared: a cadgen 0.7 installation keeps its store there too, in folders of its
@@ -49,7 +49,7 @@ with an error; they are not corrupt cache entries. It moves only with its record
 script's record re-attached, a ``key::`` record migrated), landed at the new id before the old goes.
 The memory budget is another thing (``serve.Server.trim``): a document that leaves memory for it is
 read again from here. A save that fails is logged and listed in
-``cadgen status``, never raised to anyone: with the cache folder read-only, or not writable at all,
+``cad status``, never raised to anyone: with the cache folder read-only, or not writable at all,
 the engine does everything it did, and saves nothing.
 """
 from __future__ import annotations
@@ -76,9 +76,9 @@ FAILURES_KEPT = 12
 
 
 def idle() -> float:
-    """``CADGEN_ENGINE_CACHE_IDLE`` seconds (a test's seam), else ``CACHE_IDLE_SECONDS``."""
+    """``CAD_ENGINE_CACHE_IDLE`` seconds (a test's seam), else ``CACHE_IDLE_SECONDS``."""
     try:
-        given = float(os.environ.get("CADGEN_ENGINE_CACHE_IDLE", "").strip() or -1)
+        given = float(os.environ.get("CAD_ENGINE_CACHE_IDLE", "").strip() or -1)
     except ValueError:
         given = -1.0
     return given if given > 0 else CACHE_IDLE_SECONDS
@@ -354,7 +354,7 @@ class Cache:
         """A save that failed: logged, and listed by ``status``; never raised."""
         with self.lock:
             self.failures.appendleft({"id": ident, "error": error, "at": time.time()})
-        print(f"cadgen engine: the cache could not save {ident}: {error}", file=sys.stderr, flush=True)
+        print(f"cad: the cache could not save {ident}: {error}", file=sys.stderr, flush=True)
 
     # --- the end ---------------------------------------------------------------------------
 
@@ -376,7 +376,7 @@ class Cache:
                 self.lock.wait(max(0.01, min(0.2, deadline - time.monotonic())))
 
     def status(self) -> dict[str, Any]:
-        """What ``cadgen status`` says of the cache: whether there is one, its folder, the documents and
+        """What ``cad status`` says of the cache: whether there is one, its folder, the documents and
         bytes in it, the saves done since start, and the failed saves."""
         held = self.registry()
         found = {"enabled": False, "root": None if held is None else str(held.cache.root), "documents": 0, "bytes": 0,

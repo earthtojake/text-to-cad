@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-# A document's states, as ``cadgen status`` lists them (``state``).
+# A document's states, as ``cad status`` lists them (``state``).
 STATES = ("live", "held", "building", "failed", "unsaved", "detached")
 
 
@@ -60,7 +60,7 @@ def unsaved(name: str, ident: str, command: str | None, shown: str | None = None
 
 
 def delete(held: Any, ident: str, book: "Models | None" = None) -> dict[str, Any] | None:
-    """Delete document ``ident``: the one deletion, which ``cadgen delete`` and the home's Delete both
+    """Delete document ``ident``: the one deletion, which ``cad delete`` and the home's Delete both
     are. What the engine holds of it goes first, where an engine runs (``book``: ``Models.forget``),
     then its record and its document in the engine's cache (``held``, the registry:
     ``Registry.delete``). Never a file of the person's: a model's script and its declared files, and a
@@ -241,7 +241,7 @@ class Models:
         old = held.get(ident) or {}
         root = str(script.parent)
         # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
-        # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cadgen run``
+        # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cad run``
         # of its home, always), the revision the cache and the delta compare, when it was built (the
         # home's order) and when it was first built (``created``, the home's Created: kept from the
         # record it had; a record from before the time was kept stays without one). The closure is
@@ -392,7 +392,7 @@ class Models:
 
     def rebuild(self, ident: str) -> dict[str, Any] | None:
         """What the engine knows of a model document it does not hold: its state (``unsaved``), the
-        command that builds it again -- ``cadgen run`` and the script that defines it -- and why, in
+        command that builds it again -- ``cad run`` and the script that defines it -- and why, in
         words (the page's ``error``). None for a document it holds or never built. The engine never
         runs the command."""
         self.adopt(ident)
@@ -416,7 +416,7 @@ class Models:
         return {"error": unsaved(name, ident, command), "state": "unsaved", "rebuild": command}
 
     def command(self, ident: str) -> str | None:
-        """The command that builds model document ``ident`` again: ``cadgen run`` and the script that
+        """The command that builds model document ``ident`` again: ``cad run`` and the script that
         defines its model -- never a program that imported it and called it -- from this process's
         book or the registry's record. None for an id the engine never built."""
         with self.lock:

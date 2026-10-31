@@ -18,8 +18,8 @@ and page; a run writes nothing.
 
 ```
 python falcon_heavy.py
-cadgen snapshot "$STACK_ID" falcon_heavy.png        # the id: lines the run printed
-cadgen snapshot "$CUTAWAY_ID" cutaway.png --camera back
+cad snapshot "$STACK_ID" falcon_heavy.png        # the id: lines the run printed
+cad snapshot "$CUTAWAY_ID" cutaway.png --camera back
 ```
 
 The sources, confidence and estimates behind every number
@@ -61,4 +61,4 @@ replays the engine (1.8 s); reverted, the files are the cold build's bytes.
 ## Not ported
 
 Nothing: the three models are the three scripts. The STEP each wrote is an export
-on request now (`cadgen export "$STACK_ID" STEP/falcon_heavy.step`).
+on request now (`cad export "$STACK_ID" STEP/falcon_heavy.step`).

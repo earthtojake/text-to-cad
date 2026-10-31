@@ -31,7 +31,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry: usage counts and crash reports, when it is on.</strong> cadgen’s
             long-running parts -- the CAD app that shows models in your agent app (the plugin’s{" "}
-            <code>cad</code> server) and the CAD viewer in your browser (<code>cadgen viewer</code>), and
+            <code>cad</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
             in earlier releases the build daemon that built models for them -- send to api.texttocad.dev,
             with what <code>cadgen</code> commands and model scripts counted, at most once every five
             minutes while you use them and once as each stops:
@@ -108,7 +108,7 @@ export default function PrivacyPolicyPage() {
             about you or your work; like any request, it reaches our host with your IP address, the
             time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
             or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
-            for (CAD’s update button, or <code>cadgen update</code>) asks again, then downloads the
+            for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
             release from PyPI, as the install command does.
           </li>
           <li>
@@ -220,24 +220,26 @@ export default function PrivacyPolicyPage() {
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen telemetry off</code>, use{" "}
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad telemetry off</code>, use{" "}
             <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.14 --from cadgen==0.8.4 cadgen telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.14 --from texttocad-server==0.8.4 cad telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
-            Setting <code>DO_NOT_TRACK=1</code> or <code>CADGEN_TELEMETRY=0</code> where cadgen runs
-            (your agent app’s environment, or the shell that runs a <code>cadgen</code> command or a
-            model script) turns telemetry off for that process and the builds it asks for, whatever your
-            setting says; <code>CADGEN_TELEMETRY=1</code> turns it on for that process the same way.
+            Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}
+            before 0.9) where cadgen runs (your agent app’s environment, or the shell that runs a{" "}
+            <code>cad</code> command or a model script) turns telemetry off for that process and the builds it
+            asks for, whatever your setting says; <code>CAD_TELEMETRY=1</code> turns it on for that process the
+            same way.
             Neither changes your setting, and the parts of cadgen that process starts to run on their
             own, a viewer started in the background and the short-lived sender, go by your setting.
           </li>
           <li>
-            Setting <code>CADGEN_UPDATE_CHECK=0</code> where cadgen runs turns the daily version check
+            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.9) where cadgen
+            runs turns the daily version check
             off; CAD then never says when there is an update.
           </li>
           <li>

@@ -54,7 +54,7 @@ onto whatever axis it is given:
 ```python
 # src/hinge.py
 import build123d as bd
-from cadgen import model
+from cad import model
 from cad.ap242 import configuration_sequence, mechanism_state
 
 ELBOW = ((40, 0, 20), (0, -1, 0))   # the elbow's origin and direction: +angle lifts the arm
@@ -87,7 +87,7 @@ slide along +Y would stand the child on end:
 ```python
 # src/linear_guide.py
 import build123d as bd
-from cadgen import model
+from cad import model
 from cad.ap242 import configuration_sequence, mechanism_state
 
 SLIDE = ((0, -50, 10), (0, 1, 0))   # the slide's origin and direction: +position runs the carriage along +Y
@@ -164,7 +164,7 @@ to make instead.
 
 ```python
 # src/hinge_poses.py
-from cadgen import model
+from cad import model
 from cad.ap242 import posed
 
 from hinge import hinge
@@ -201,7 +201,7 @@ turn) have no pair: drive them by a configuration sequence.
 ```python
 # src/index_finger.py
 import build123d as bd
-from cadgen import model
+from cad import model
 from cad.ap242 import configuration_sequence, gear_pair
 
 CURL = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full curl
@@ -285,8 +285,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cadgen snapshot "$ID" tmp/open.png --pose open
-cadgen snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad snapshot "$ID" tmp/open.png --pose open
+cad snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn

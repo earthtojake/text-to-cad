@@ -27,7 +27,7 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # ``bad``, which fails once the script says so. cadgen is imported first, so its lazy kernel binds
 # ``build123d`` (an editable install has no ``.pth`` to do it sooner).
 SCRIPT = """
-from cadgen import model
+from cad import model
 
 import build123d as bd
 
@@ -63,10 +63,10 @@ class VerbsTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         cls.addClassCleanup(shutil.rmtree, engine, True)
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
-                                         "CADGEN_STATE_DIR": str(cls.folder / "state"),
-                                         "CADGEN_CACHE_DIR": str(cls.folder / "cache"),
-                                         "CADGEN_ENGINE_MESH": "inline"},
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
+                                         "CAD_STATE_DIR": str(cls.folder / "state"),
+                                         "CAD_CACHE_DIR": str(cls.folder / "cache"),
+                                         "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(cls.run_, "-m", "cad_server.engine", "stop")
         script = cls.folder / "parts.py"
@@ -79,7 +79,7 @@ class VerbsTest(unittest.TestCase):
         cls.failed = cls.run_("parts.py")
         with script.open("a", encoding="utf-8") as handle:
             handle.write("# an edit\n")
-        cls.command = f"cadgen run {script}"
+        cls.command = f"cad run {script}"
 
     @classmethod
     def run_(cls, *args: str):
@@ -169,7 +169,7 @@ class VerbsTest(unittest.TestCase):
         self.assertEqual(closure.returncode, 1)
         self.assertEqual(closure.stderr, "python -m cad_server.engine inspect: box.step holds no build closure: a STEP file "
                                          "carries none, only an .xbf does; inspect the model's document by its id for "
-                                         "its closure, or name a ref in the file (cadgen inspect box.step REF)\n")
+                                         "its closure, or name a ref in the file (cad inspect box.step REF)\n")
         summary = self.cli("inspect", "box.step")
         self.assertEqual(summary.returncode, 0, summary.stderr)
         self.assertEqual(summary.stdout.splitlines()[-1], "closure     none: a STEP file carries none, only an .xbf "
@@ -215,9 +215,9 @@ class MeshTest(unittest.TestCase):
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(refused.stderr, "python -m cad_server.engine inspect: rotor.stl is a mesh: it has no B-rep for a "
                                          "ref to name and no build closure (only an .xbf carries one); inspect reads "
-                                         "nothing more of it: `cadgen viewer rotor.stl` shows it, and the document it "
+                                         "nothing more of it: `cad viewer rotor.stl` shows it, and the document it "
                                          "was exported from, inspected, tells the rest\n")
-        self.assertIn("`cadgen inspect rotor.glb` alone tells its nodes, meshes and animations",
+        self.assertIn("`cad inspect rotor.glb` alone tells its nodes, meshes and animations",
                       inspect("rotor.glb", "rotor").stderr)
 
 

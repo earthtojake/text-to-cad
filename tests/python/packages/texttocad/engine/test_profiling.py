@@ -24,7 +24,7 @@ class ProfilingTest(unittest.TestCase):
         cls.root = Path(temporary.name).resolve()
         state = tempfile.TemporaryDirectory(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
         cls.addClassCleanup(state.cleanup)
-        cls.enterClassContext(mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": state.name}))
+        cls.enterClassContext(mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": state.name}))
         # A warm worker keeps its cwd open on Windows. Stop this class's own engine
         # before removing any fixture directory; all cases still share its warm daemon.
         cls.addClassCleanup(stop)
@@ -58,7 +58,7 @@ class ProfilingTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import json
             import build123d as bd
-            from cadgen import xbf
+            from cad import xbf
 
             def make_block():
                 return bd.Box(3, 4, 5)
@@ -87,7 +87,7 @@ class ProfilingTest(unittest.TestCase):
         script = self.folder / "pin.py"
         script.write_text(textwrap.dedent('''
             import build123d as bd
-            from cadgen import model
+            from cad import model
 
             def make_pin():
                 return bd.Cylinder(2, 5)

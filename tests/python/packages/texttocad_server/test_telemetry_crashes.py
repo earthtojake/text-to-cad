@@ -303,8 +303,8 @@ class _Recording(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp), "DO_NOT_TRACK": "",
-                                                   "CADGEN_TELEMETRY": ""})
+        environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp), "DO_NOT_TRACK": "",
+                                                   "CAD_TELEMETRY": ""})
         environment.start()
         self.addCleanup(environment.stop)
         analytics.choose(True, by="cli", path=self.tmp / "settings.json")
@@ -409,7 +409,7 @@ class CommandCrashTest(unittest.TestCase):
     def test_a_command_whose_output_is_closed_stops_quietly_and_reports_nothing(self) -> None:
         import subprocess
 
-        # `cadgen ... | head`, its reader gone before it writes: no traceback, the exit a shell gives
+        # `cad ... | head`, its reader gone before it writes: no traceback, the exit a shell gives
         # `yes | head`, and nothing handed over, which a command would do through `report`.
         read, write = os.pipe()
         os.close(read)
@@ -419,7 +419,7 @@ class CommandCrashTest(unittest.TestCase):
                 "sys.exit(cli.main(['telemetry', 'status']))\n")
         try:
             done = subprocess.run([sys.executable, "-c", code], stdout=write, stderr=subprocess.PIPE,
-                                  env={**os.environ, "CADGEN_TELEMETRY": "0"}, timeout=60)
+                                  env={**os.environ, "CAD_TELEMETRY": "0"}, timeout=60)
         finally:
             os.close(write)
         self.assertEqual((done.returncode, done.stderr), (141, b""))
@@ -428,7 +428,7 @@ class CommandCrashTest(unittest.TestCase):
         code = ("import sys\nfrom cad_server import cli\n"
                 "def run(*a):\n    raise BrokenPipeError(32, 'Broken pipe')\n"
                 "cli._run = run\nsys.exit(cli.main(['telemetry', 'status']))\n")
-        done = subprocess.run([sys.executable, "-c", code], capture_output=True, env={**os.environ, "CADGEN_TELEMETRY": "0"},
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, env={**os.environ, "CAD_TELEMETRY": "0"},
                               timeout=60)
         self.assertEqual(done.returncode, 1)
         self.assertIn(b"BrokenPipeError", done.stderr)
@@ -442,7 +442,7 @@ class CommandCrashTest(unittest.TestCase):
             raise ValueError("no such file: /home/someone/secret.step")
 
         for invoke in (told, _cadgen_bug):
-            emit(invoke, prog="cadgen urdf validate", as_json=True, stdout=io.StringIO())
+            emit(invoke, prog="cad urdf validate", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
         self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cadgen/analytics.py"))
 

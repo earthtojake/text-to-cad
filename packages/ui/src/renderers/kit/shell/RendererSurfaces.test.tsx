@@ -175,7 +175,7 @@ it("an annotation opens Quick Edit, which sends the note with the files made of 
     display: { mode: 'solid', grid: false }, width: 1600, height: 1200 }]);
   const context = send.mock.calls[0][0] as any;
   expect(context.parts.map((part: any) => [part.kind, part.label ?? part.id])).toEqual([['text', 'text'], ['reference', 'file'],
-    ['attachment', 'Snapshot (cadgen snapshot --annotation)']]);
+    ['attachment', 'Snapshot (cad snapshot --annotation)']]);
   expect(await context.parts[2].path).toBe('/tmp/p/one-1.snapshot.json');
   expect(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => part.mimeType)).toEqual(['application/json']);
   expect(promptFiles.read).not.toHaveBeenCalled();
@@ -476,7 +476,7 @@ it('text-only Quick Edit captures the current view at Copy without any annotatio
   fireEvent.click(screen.getByRole('menuitem', { name: 'Clear the note' }));
   expect(promptFiles.create).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied).toContain('Snapshot JSON (cadgen snapshot --annotation):'));
+  await waitFor(() => expect(copied).toContain('Snapshot JSON (cad snapshot --annotation):'));
   expect(promptFiles.create.mock.calls[0][0]).toMatchObject({ annotation: null,
     views: [{ label: 'current view', camera: { position: [0, -100, 0] } }] });
 });

@@ -128,7 +128,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
   // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
-  // cadgen command says it once), and the app menu's switch changes it. The answer is the person's,
+  // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
   // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first

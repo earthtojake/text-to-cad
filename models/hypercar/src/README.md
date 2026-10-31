@@ -9,12 +9,12 @@ from one master surface. `hypercar.py` is the one model (`@model`; a run writes 
 | `body.py` ... `details.py` (13) | nothing | One system each, a `@memo` stage the car calls in its body |
 
 Build from this folder: `python hypercar.py`. The GLB is exported on demand
-(`cadgen export "$ID" GLB/hypercar.glb`, the id the run prints), its three clips baked.
+(`cad export "$ID" GLB/hypercar.glb`, the id the run prints), its three clips baked.
 
 ```
 python hypercar.py
-cadgen snapshot "$ID" open.png --pose open
-cadgen snapshot "$ID" half.png --pose '{"door_left": [-31, 155], "door_right": [31, 155]}'
+cad snapshot "$ID" open.png --pose open
+cad snapshot "$ID" half.png --pose '{"door_left": [-31, 155], "door_right": [31, 155]}'
 ```
 
 A half-open STEP is a model of its own: one returning `posed(hypercar(), {"door_left": [-31, 155],

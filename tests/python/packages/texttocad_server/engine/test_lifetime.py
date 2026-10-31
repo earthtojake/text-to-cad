@@ -161,7 +161,7 @@ class NotHeldRefusalTest(unittest.TestCase):
         answers: list[dict] = []
         engine.handle({"op": "document", "id": ident}, answers.append)
         (answer,) = answers
-        command = f"cadgen run {script}"
+        command = f"cad run {script}"
         self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", command))
         error = api._failed(answer)
         self.assertIsInstance(error, NotHeld, "raised as its type: the CLI exits 2 for a ValueError")
@@ -314,11 +314,11 @@ class LifetimeDaemonTest(unittest.TestCase):
         # Its engine, its registry of documents and its cache are its own, never the developer's.
         own = Path(tempfile.mkdtemp(prefix="engine-own-"))  # beside the project: nothing lands in it
         self.addCleanup(shutil.rmtree, own, True)
-        private = {"CADGEN_ENGINE_DIR": str(self.state), "CADGEN_STATE_DIR": str(own / "state"),
-                   "CADGEN_CACHE_DIR": str(own / "cache")}
+        private = {"CAD_ENGINE_DIR": str(self.state), "CAD_STATE_DIR": str(own / "state"),
+                   "CAD_CACHE_DIR": str(own / "cache")}
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), **private,
-                                          "CADGEN_ENGINE_MESH": "inline",
-                                          "CADGEN_ENGINE_WORKER_RSS_MB": "1"}, self.addCleanup)
+                                          "CAD_ENGINE_MESH": "inline",
+                                          "CAD_ENGINE_WORKER_RSS_MB": "1"}, self.addCleanup)
         # This process asks the test's daemon (``status``, ``export``), never starting one.
         self.enterContext(mock.patch.dict(os.environ, private))
         self.addCleanup(self._stop)
@@ -396,7 +396,7 @@ class LifetimeDaemonTest(unittest.TestCase):
     def test_a_child_model_is_live_and_answers_by_its_id_from_the_worker_that_built_it(self) -> None:
         (self.folder / "part.py").write_text(textwrap.dedent(PART), encoding="utf-8")
         (self.folder / "assembly.py").write_text(textwrap.dedent(ASSEMBLY), encoding="utf-8")
-        env = {**self.env, "CADGEN_ENGINE_WORKER_RSS_MB": ""}  # no small cap: the assembly's worker holds both
+        env = {**self.env, "CAD_ENGINE_WORKER_RSS_MB": ""}  # no small cap: the assembly's worker holds both
         for _ in range(2):  # the second run: the child's body marks it building, and the run's end built
             done = engine_daemon.run([sys.executable, "assembly.py"], cwd=self.folder, env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -477,9 +477,9 @@ class LifetimeDaemonTest(unittest.TestCase):
 
     def test_a_document_no_cache_keeps_names_its_rebuild_and_nothing_runs_it(self) -> None:
         # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache``'s).
-        tiny = {**self.env, "CADGEN_ENGINE_MEMORY_MB": "0.001", "CADGEN_CACHE_DIR": engine_daemon.unwritable(self.folder)}
+        tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
         unsaved = self.built("arm", env=tiny)
-        command = f"cadgen run {self.folder / 'arm.py'}"
+        command = f"cad run {self.folder / 'arm.py'}"
         row = self.row(unsaved, "unsaved")
         self.assertEqual(row["rebuild"], command, "the script that defines it, not the program that called it")
         status, body = self.page(unsaved)

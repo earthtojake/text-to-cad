@@ -297,9 +297,9 @@ jobs:
           [ -n "$wheel" ] || { echo "no wheel under packages/texttocad/dist" >&2; exit 1; }
           python3 -m venv "$RUNNER_TEMP/install-test"
           "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
-          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
-          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" viewer --help >/dev/null)
-          "$RUNNER_TEMP/install-test/bin/cadgen" doctor --no-server skills/cad
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
+          "$RUNNER_TEMP/install-test/bin/cad" doctor --no-server skills/cad
           scripts/test/test-installed.sh --wheel "$wheel"
 
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of

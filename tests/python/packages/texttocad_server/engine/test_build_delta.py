@@ -3,7 +3,7 @@ configuration sequences against its build before (``delta``). A first build has 
 an edit that adds parts says how many and the bounds they were; an edit that keeps the bounds says
 how many parts' geometry changed, or that only their materials did; a failed build says none; and
 the report a build returns carries it as data. The bounds are each part's exact box placed where it
-stands, as ``cadgen inspect`` measures it, where the kernel's quick box is wrong: a free-form
+stands, as ``cad inspect`` measures it, where the kernel's quick box is wrong: a free-form
 face bulging past its edges, a spline edge's poles, a torus's octagons."""
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ SCRIPT = """
 import json
 import sys
 
-from cadgen import model
+from cad import model
 
 import build123d as bd
 
@@ -71,7 +71,7 @@ class BoundsTest(unittest.TestCase):
     @staticmethod
     def exact(*placed) -> list:
         """The world box's size from each (shape, location) pair's exact box (``AddOptimal``) in the
-        shape's own frame placed at the location, as ``cadgen inspect`` measures it, to the run line's
+        shape's own frame placed at the location, as ``cad inspect`` measures it, to the run line's
         figures."""
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib
@@ -135,10 +135,10 @@ class DeltaTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         cls.addClassCleanup(shutil.rmtree, engine, True)
-        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_DIR": str(engine),
-                                         "CADGEN_STATE_DIR": str(cls.folder / "state"),
-                                         "CADGEN_CACHE_DIR": engine_daemon.unwritable(cls.folder),
-                                         "CADGEN_ENGINE_MESH": "inline"},
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(engine),
+                                         "CAD_STATE_DIR": str(cls.folder / "state"),
+                                         "CAD_CACHE_DIR": engine_daemon.unwritable(cls.folder),
+                                         "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
         cls.addClassCleanup(cls.run_, "-m", "cad_server.engine", "stop")
 

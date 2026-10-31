@@ -1,8 +1,8 @@
-"""``cadgen``, the command (``~/.local/bin/cadgen``): the current installation, run.
+"""``cad``, the command (``~/.local/bin/cad``): the current installation, run.
 
 The proxy's ``sh`` runs this module with the current installation's interpreter
 (``cad_server._internal.installations``: ``current``), or with no current one the interpreter registered
-last; it runs one installation's ``cadgen`` console script with the arguments:
+last; it runs one installation's ``cad`` console script with the arguments:
 
 a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
@@ -15,7 +15,7 @@ other command. With no installation at all it says, in one line, the command tha
 The console script runs by ``exec``, so the proxy adds no process and no output of its own -- or,
 when the installation chosen is the one this interpreter is (the usual case), as its console script
 would, in this process. A development or source registration cannot know the version it is
-registered as (it reports its release's), so it runs with ``CADGEN_INSTALLATION_VERSION`` set to its
+registered as (it reports its release's), so it runs with ``CAD_INSTALLATION_VERSION`` set to its
 record's (``installations.named``): its ``doctor``, its records and its engine name it rightly, and
 the processes it starts, the same installation, inherit it.
 """
@@ -27,9 +27,9 @@ import sys
 
 from cad_server._internal.launch import LAUNCHER
 
-# The ``cadgen`` command's own words (``installations._SH``) when no installation is registered.
-NONE_INSTALLED = ("cadgen is not installed: run `" + " ".join(LAUNCHER) + " cadgen "
-                  "cadgen doctor` once, outside any sandbox or with its permission")
+# The ``cad`` command's own words (``installations._SH``) when no installation is registered.
+NONE_INSTALLED = ("text-to-cad is not installed: run `" + " ".join(LAUNCHER) + " texttocad-server "
+                  "cad doctor` once, outside any sandbox or with its permission")
 
 
 class Refused(Exception):
@@ -58,7 +58,8 @@ def choose(found: dict | None, records: list[dict]) -> dict:
 
 
 def command(record: dict, args: list[str]) -> list[str]:
-    """What runs: the installation's console script."""
+    """What runs: the installation's console script (its record's ``cadgen``, the key every release's
+    records name it by)."""
     return [record["cadgen"], *args]
 
 
@@ -81,9 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     if _same(sys.prefix, record["prefix"]):
         # The installation this interpreter is: its console script's work, here, without a second start.
         sys.argv = run
-        from cad_server.cli import main as cadgen
+        from cad_server.cli import main as cad
 
-        return cadgen(args)
+        return cad(args)
     if os.name == "nt":  # no exec on Windows: a child, and its exit code
         import subprocess
 
@@ -91,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         os.execve(run[0], run, os.environ)
     except OSError as error:
-        print(f"cadgen: cannot run {run[0]}: {error.strerror or error}", file=sys.stderr)
+        print(f"cad: cannot run {run[0]}: {error.strerror or error}", file=sys.stderr)
         return 1
     return 1  # not reached
 

@@ -18,15 +18,15 @@ screenshot the card to confirm your own work ([Pictures](../SKILL.md#pictures)).
 - [Targeted additions](#targeted-additions)
 - [Diagnostic review](#diagnostic-review)
 
-`cadgen snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
+`cad snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the engine holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (`.dxf`). A
 script is never a source. Nothing is written but OUT.
 
 ```bash
-cadgen snapshot "$ID" tmp/review.png
-cadgen snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
+cad snapshot "$ID" tmp/review.png
+cad snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
 A face the mesher left without triangles is drawn without it and named in a
@@ -54,10 +54,10 @@ side view for a pattern or silhouette, or a clipped view for internal geometry. 
 fixed set of views proves every face or feature is correct.
 
 ```bash
-cadgen snapshot "$ID" tmp/iso.png
-cadgen snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cadgen snapshot "$ID" tmp/top.png --camera top
-cadgen snapshot "$ID" tmp/front.png --camera front
+cad snapshot "$ID" tmp/iso.png
+cad snapshot "$ID" tmp/below_behind.png --camera 225:-30
+cad snapshot "$ID" tmp/top.png --camera top
+cad snapshot "$ID" tmp/front.png --camera front
 ```
 
 With no flags a snapshot is the `solid` display, Light appearance, an orthographic
@@ -119,7 +119,7 @@ millimetres, a robot's or a GLB's metres, a 3MF's declared unit) and `invert`; t
 cut is capped. Look straight at the cut:
 
 ```bash
-cadgen snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -129,7 +129,7 @@ Edit packet given to `--annotation` carries the person's own, which `--display` 
 override:
 
 ```bash
-cadgen snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
 ```
 
 ## Annotations and Quick Edit views
@@ -153,12 +153,12 @@ absolute path of a `.snapshot.json`. Save inline JSON to a temporary
 
 The views' cameras, the ink and the measurements are in the viewer's scene coordinates
 -- a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit -- and
-`cadgen snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
+`cad snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
 
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cadgen snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 `--annotation FILE` draws the ink over the model, each mark on its part wherever the
@@ -176,8 +176,8 @@ display, hidden and isolated parts and pose, the ink and the dimensions over eac
 into the files its outputs name:
 
 ```bash
-cadgen snapshot --job tmp/bracket.snapshot.json
-cadgen snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad snapshot --job tmp/bracket.snapshot.json
+cad snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
 `--job` takes a packet, a job (`{input, camera, display, jointValues, outputs, ...}`)

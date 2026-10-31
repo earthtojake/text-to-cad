@@ -51,7 +51,7 @@ for a drawing. Render is no mode. Every
 renderer hands its list to the shell, which configures the view-settings store
 (`configure({ features })`) and Display's settings from it, and to its Explode and Clip
 tools. The OCCT parity bench's headless page (core's `common/renderMeshScene.js`) resolves a job
-of each family under the same rule; `cadgen snapshot` itself draws every family by OCCT in the
+of each family under the same rule; `cad snapshot` itself draws every family by OCCT in the
 engine.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
@@ -123,7 +123,7 @@ flattener.
 
 ### One scene builder per family: the viewer and the parity page
 
-`cadgen snapshot` draws every family by OCCT in the engine (`engine/snapshot.py`,
+`cad snapshot` draws every family by OCCT in the engine (`engine/snapshot.py`,
 `render/occt.py`; a DXF through `render/drawing.py`), never through these builders. What calls
 them beside the viewer is the OCCT parity bench's headless page, which draws each family beside
 OCCT's still to measure how alike they are (`scripts/bench/occt_parity.py`): a family's scene
@@ -148,7 +148,7 @@ file's unit, the cut capped as a STEP's is), Explode through the scene's `setExp
 Quick Edit's view hid come back in its job's `selection.hide`. A robot opens at
 `openingControlValues` (core's `common/articulation.js`: every joint's default, then an SRDF's
 `home` state) and the job's `resolved.controls` go on top through the same joint matrices
-(`cadgen snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
+(`cad snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
 section and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core) and `kit/view-settings/renderState.test.js` (one look from either route); the engine's
 stills of each family are `tests/python/packages/texttocad_server/engine/test_snapshot.py`'s.
@@ -295,7 +295,7 @@ it, the file sidebar, Quick Edit at the top-right.
   under it the block references placed on it, a click picking one.
 - **Quick Edit** carries the picks and the ink; its views are the window on screen as a
   plan-view camera (`planCamera`: looking straight down, `up` +Y, `orthographicHalfHeight` the
-  window's half height), each with its label, which the ink's marks name. `cadgen snapshot --job
+  window's half height), each with its label, which the ink's marks name. `cad snapshot --job
   PACKET` draws each view's window with the ink on the sheet, and `--annotation PACKET
   --camera authored` the view the ink was last drawn in. Quick Edit puts no measurement in its
   packet: they are the person's.
@@ -314,7 +314,7 @@ it, the file sidebar, Quick Edit at the top-right.
   colour for strokes and per primitive for fills; text kept as strings) and
   `drawDrawing(ctx, drawable, …)` (text set with `fillText`, stretched to the width the
   server measured, so the page's face keeps the drawing's layout).
-  `cadgen snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
+  `cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
   this pane draws it: from above, fitted, hairlines in their pens, on the light or dark paper
   (`--display light|dark`), with the plan-view `camera` and the `annotation` on the sheet a
   Quick Edit's view carries.
@@ -626,7 +626,7 @@ of the document's motions with Explode and the pose (below): taking it up puts b
 and Explode used puts it at rest, nothing set aside.
 
 What an engine document's selection copies -- an `.xbf`'s, a STEP's alike; a chip, Copy Reference,
-Copy Prompt -- is the engine's canonical ref of each thing, the file's path first, the ref `cadgen inspect` answers and
+Copy Prompt -- is the engine's canonical ref of each thing, the file's path first, the ref `cad inspect` answers and
 `select` labels its shapes with (`cad.engine.refs`): a part or subassembly by its label where that
 names it alone in the document, else by its occurrence path, each segment its label numbered among the
 siblings sharing it (`/work/XBF/kit.xbf#kit/hand/finger.2`); an element by its name, else its kind and
@@ -982,7 +982,7 @@ A pair reads what the two make (`@text-to-cad/core/lib/viewer/measureEntities.js
 every measurement is. Completed rulers are chips in its sub-toolbar while it is the tool
 (`kit/tools/measure/measurementChips.jsx`'s `MeasurementsBar`, Quick Edit's chips, their card
 `MeasurementCard.jsx`), and no row while there are none. They are the person's alone: nothing of
-them reaches Quick Edit or its snapshots (`cadgen snapshot --measurements` draws the rulers it is
+them reaches Quick Edit or its snapshots (`cad snapshot --measurements` draws the rulers it is
 given). Leaving Measure cancels its draft but keeps completed rulers, drawn on the model, under
 every other tool.
 

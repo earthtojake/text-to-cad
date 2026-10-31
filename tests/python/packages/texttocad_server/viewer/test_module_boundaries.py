@@ -3,7 +3,7 @@
 The viewer server is part of cadgen, so cadgen's own modules are fair game. What
 must never happen is the CAD KERNEL loading into the server:
 
-* ``cadgen viewer`` has to start in the time ``cadgen --help`` does. An OCP or
+* ``cad viewer`` has to start in the time ``cad --help`` does. An OCP or
   build123d import at module scope anywhere in the package costs seconds and
   ~300MB before the first request.
 * The long-lived server must not hold a kernel it never uses. A STEP or an
@@ -69,7 +69,7 @@ class NoKernelInTheServer(unittest.TestCase):
             offenders,
             [],
             "the CAD kernel is imported inside the compile worker's function bodies, "
-            "never at module scope: `cadgen viewer` must start without it",
+            "never at module scope: `cad viewer` must start without it",
         )
 
     def test_importing_the_whole_package_leaves_the_kernel_unloaded(self) -> None:

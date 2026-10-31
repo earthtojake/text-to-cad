@@ -1,7 +1,7 @@
 """Find the font file that breaks ``import build123d``.
 
 build123d parses every font in the system font folders at import time and has no
-per-file guard, so one malformed file aborts the import and every cadgen command with
+per-file guard, so one malformed file aborts the import and every cad command with
 it. The resulting error names no file. This parses the same folders the same way and
 prints the ones that fail.
 
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         sys.stderr.write(
             "fontTools is not installed, so the fonts cannot be checked.\n"
-            "Install the CAD requirements first: pip install cadgen\n"
+            "Install the CAD requirements first: pip install 'texttocad[kernel]'\n"
         )
         return 2
 
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(f"  {path}\n      {error}\n")
     sys.stdout.write(
         "\nMove or rename these out of the font folder and rerun. build123d parses\n"
-        "every font when it is imported, so one unreadable file blocks every cadgen\n"
+        "every font when it is imported, so one unreadable file blocks every cad\n"
         "command until it is out of the way.\n"
     )
     return 1

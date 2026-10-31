@@ -1,4 +1,4 @@
-"""``python -m cad_server.viewer``: the same launcher the ``cadgen viewer`` front door runs."""
+"""``python -m cad_server.viewer``: the same launcher the ``cad viewer`` front door runs."""
 
 import sys
 

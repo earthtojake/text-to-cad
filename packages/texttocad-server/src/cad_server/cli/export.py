@@ -1,4 +1,4 @@
-"""``cadgen export SRC DST ...``: an ``.xbf`` or a ``.step`` written to each destination, its
+"""``cad export SRC DST ...``: an ``.xbf`` or a ``.step`` written to each destination, its
 kind by its suffix (``cad_server.engine.cli``).
 
 The parser and the run are the engine's (``cad_server.engine.cli.parser_for``, ``run``), the same
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cadgen export"
+DEFAULT_PROG = "cad export"
 ENGINE_VERB = "export"
 
 

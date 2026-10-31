@@ -10,9 +10,9 @@ export default {
 
   "app.start.notAnswering": "CAD 뷰어가 응답하지 않습니다",
   "app.engine.notRunning": "엔진이 실행 중이 아닙니다. 다시 실행되면 페이지가 다시 연결됩니다.",
-  "app.engine.startIt": "cadgen run <script>.py 또는 cadgen viewer를 실행해 시작하세요.",
+  "app.engine.startIt": "cad run <script>.py 또는 cad viewer를 실행해 시작하세요.",
   "app.engine.linkReplaced": "이 페이지의 링크가 바뀌었습니다. 새 링크를 열면 페이지가 다시 연결됩니다.",
-  "app.engine.openNewLink": "cadgen viewer를 실행하고 출력된 링크를 여세요.",
+  "app.engine.openNewLink": "cad viewer를 실행하고 출력된 링크를 여세요.",
 
   "file.opening": "여는 중…",
   "file.missing": "파일이 없습니다",
@@ -509,9 +509,9 @@ export default {
   "alert.drawingStillShown": "{message} 기존 도면은 계속 표시됩니다.",
   "alert.captureDrawingFailed": "도면을 캡처할 수 없습니다",
   "alert.schema.summary": "버전 불일치",
-  "alert.schema.title": "이 앱과 cadgen의 도면 형식이 일치하지 않습니다",
+  "alert.schema.title": "이 앱과 서버의 도면 형식이 일치하지 않습니다",
   "alert.schema.message": "뷰어가 받은 도면 데이터는 schemaVersion {received}이지만 이 앱 빌드는 버전 {version}을 읽습니다.",
-  "alert.schema.recovery": "cadgen과 앱을 함께 업데이트한 다음 새로 고치세요. 바로 이 이유로 둘은 같은 릴리스로 배포됩니다.",
+  "alert.schema.recovery": "서버와 앱을 함께 업데이트한 다음 새로 고치세요. 바로 이 이유로 둘은 같은 릴리스로 배포됩니다.",
   "alert.srdf.summary": "URDF를 찾을 수 없음",
   "alert.srdf.title": "이 SRDF 옆에 URDF가 없습니다",
   "alert.srdf.message": "SRDF는 로봇의 모양이 아니라 계획 방식을 설명하므로 뷰어는 SRDF가 속한 URDF를 그립니다. “{folder}”에서 같은 <robot name>을 가진 .urdf 파일을 정확히 하나 찾았지만 없거나 둘 이상이었습니다. {detail}",

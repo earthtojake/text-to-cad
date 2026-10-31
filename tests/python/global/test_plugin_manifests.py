@@ -254,9 +254,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertNotIn("--offline", args)
         self.assertGreaterEqual(server.get("startup_timeout_sec", 0), 300)
         self.assertIn("--no-config", args)
-        self.assertEqual(args[-2:], ["cadgen", "mcp"])
+        self.assertEqual(args[-1], "cad-mcp")
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
+        self.assertEqual(args[args.index("--from") + 1], f"texttocad-mcp=={version}")
 
     def test_claude_starts_the_cad_server_pinned_to_this_release(self) -> None:
         # Every plugin ships the skills with CAD's server, even where the host can only take its
@@ -270,9 +270,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(servers["cad"]["command"], "uvx")
         args = servers["cad"]["args"]
         self.assertIn("--no-config", args)
-        self.assertEqual(args[-2:], ["cadgen", "mcp"])
+        self.assertEqual(args[-1], "cad-mcp")
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
+        self.assertEqual(args[args.index("--from") + 1], f"texttocad-mcp=={version}")
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
@@ -322,17 +322,18 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
     def test_every_server_runs_the_one_launch_command(self) -> None:
-        # The plugins' servers and the skills run cadgen as one command (cad_server._internal.launch),
-        # so they share one installation and one warm daemon: no config may spell it differently.
+        # The plugins' servers start the shim by one command (cad_server._internal.launch's mcp_command), as
+        # the skills run the server by one: no config may spell it differently.
         import sys
 
         from tests.python.support.paths import add_sources
 
         add_sources()
-        from cad_server._internal.launch import LAUNCHER
+        from cad_server._internal.launch import LAUNCHER, mcp_command
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
+        expected = mcp_command(version)[1:]
+        self.assertEqual(expected, [*LAUNCHER[1:], f"texttocad-mcp=={version}", "cad-mcp"])
         for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
@@ -343,10 +344,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_every_plugin_on_main_names_its_own_channel(self) -> None:
         # Each plugin's startup config names where its installs come from, in its server's
-        # environment, and CADGEN_AUTO_UPDATED=1 where a store keeps the copy up to date: the Cursor
+        # environment, and CAD_AUTO_UPDATED=1 where a store keeps the copy up to date: the Cursor
         # Marketplace, which reads main. Gemini updates its extension only when asked. Environment, not
-        # flags: main pins the last release, and a cadgen ignores a variable it does not know but
-        # refuses a flag. Nothing is worked out at runtime (cadgen's _internal/channel.py); the plugin
+        # flags: main pins the last release, and a release ignores a variable it does not know but
+        # refuses a flag. Nothing is worked out at runtime (the server's _internal/channel.py); the plugin
         # branch and the OpenAI ZIP stamp their own.
         import sys
 
@@ -358,18 +359,18 @@ class PluginManifestPolicyTest(unittest.TestCase):
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
                 for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
         page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
-        said["docs/install.md"] = json.loads(re.search(r'"env": (\{"CADGEN_INSTALL_CHANNEL"[^}]*\})', page).group(1))
+        said["docs/install.md"] = json.loads(re.search(r'"env": (\{"CAD_INSTALL_CHANNEL"[^}]*\})', page).group(1))
         self.assertEqual(said, {
-            "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
-            "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
-            "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-marketplace", "CADGEN_AUTO_UPDATED": "1"},
-            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
-            "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github"},
-            "docs/install.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
+            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
+            "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
+            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-marketplace", "CAD_AUTO_UPDATED": "1"},
+            "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
+            "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
+            "docs/install.md": {"CAD_INSTALL_CHANNEL": "claude-desktop"},
         })
         # Every channel any package names is one the analytics receiver takes.
         receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
-        named = {env["CADGEN_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
+        named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
                                                                            "openai-directory", "dev"}
         for channel in sorted(named):
             with self.subTest(channel=channel):

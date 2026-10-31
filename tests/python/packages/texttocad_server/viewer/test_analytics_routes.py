@@ -60,8 +60,8 @@ class ViewerAnalyticsTest(unittest.TestCase):
         (self.root / "parts" / "a.stl").write_bytes(STL)
         # A plugin's install outside CI, where the default holds (a checkout is a development install, which sends
         # nothing by default).
-        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
-                                                   "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
+        environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
+                                                   "CAD_INSTALL_CHANNEL": "claude-github", "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
@@ -191,8 +191,8 @@ class ViewerAnalyticsTest(unittest.TestCase):
         (self.tmp / "state").mkdir(exist_ok=True)
         (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
                                                           encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "", "CADGEN_AUTO_UPDATED": "", "CI": "",
-                                          "CADGEN_UPDATE_CHECK": ""}), \
+        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "", "CAD_AUTO_UPDATED": "", "CI": "",
+                                          "CAD_UPDATE_CHECK": ""}), \
                 mock.patch("cad_server._internal.channel._source_tree", return_value=False):
             status, answer = self.request("GET", "/__cad/version")
             self.assertEqual((status, answer["notice"], answer["release"]),

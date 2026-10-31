@@ -1,4 +1,4 @@
-"""`cadgen snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
+"""`cad snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
 reported, and what an engine document's view does not offer refused by name before anything
 renders, with OUT untouched; the document's own mesh exports drawn by OCCT too, read by their
 readers (`engine/formats`, and `test_formats.py` for every kind), in this process and through the
@@ -66,15 +66,15 @@ class SnapshotTest(unittest.TestCase):
         cls.document = cls.folder / "XBF/stand.xbf"
         cls.single = cls.folder / "XBF/peg.xbf"
         # One part at a time on this process's thread: the test asks for no pool.
-        cls.mesh = os.environ.get("CADGEN_ENGINE_MESH")
-        os.environ["CADGEN_ENGINE_MESH"] = "inline"
+        cls.mesh = os.environ.get("CAD_ENGINE_MESH")
+        os.environ["CAD_ENGINE_MESH"] = "inline"
 
     @classmethod
     def tearDownClass(cls) -> None:
         if cls.mesh is None:
-            os.environ.pop("CADGEN_ENGINE_MESH", None)
+            os.environ.pop("CAD_ENGINE_MESH", None)
         else:
-            os.environ["CADGEN_ENGINE_MESH"] = cls.mesh
+            os.environ["CAD_ENGINE_MESH"] = cls.mesh
         shutil.rmtree(cls.folder, ignore_errors=True)
 
     def test_a_document_is_drawn_into_a_png_with_its_timings(self) -> None:
@@ -104,7 +104,7 @@ class SnapshotTest(unittest.TestCase):
     def test_the_cli_prints_what_it_drew_and_its_timings(self) -> None:
         gl()
         out = self.folder / "wire.png"
-        env = {**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_MESH": "inline"}
+        env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_MESH": "inline"}
         done = subprocess.run([sys.executable, "-m", "cad_server.engine", "snapshot", str(self.document), str(out),
                                "--display", "wireframe", "--grid", "--width", "200", "--height", "160",
                                "--json"], env=env, capture_output=True, text=True, timeout=300)
@@ -378,7 +378,7 @@ class SnapshotTest(unittest.TestCase):
         path = folder / "stand-1.snapshot.json"
         path.write_text(json.dumps(packet), encoding="utf-8")
         done = subprocess.run([sys.executable, "-m", "cad_server.engine", "snapshot", "--job", str(path)],
-                              env={**os.environ, "PYTHONPATH": str(SRC), "CADGEN_ENGINE_MESH": "inline"},
+                              env={**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_MESH": "inline"},
                               capture_output=True, text=True, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
         [top] = (folder / "tops").iterdir()

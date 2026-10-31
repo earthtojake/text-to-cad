@@ -109,7 +109,7 @@ class UpdateHandshakeTest(unittest.TestCase):
     def test_the_handshake_between_releases_is_the_golden_one(self) -> None:
         golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
         found = surface()
-        # A release's command is bin/cadgen, and Scripts/cadgen.exe on Windows: both are frozen.
+        # A release's command is bin/cad, and Scripts/cad.exe on Windows: both are frozen.
         command = golden["files"].pop("release_command")
         found["files"]["release_command"] = {"posix": found["files"]["release_command"], "nt": command["nt"]} \
             if os.name != "nt" else {"posix": command["posix"], "nt": found["files"]["release_command"]}

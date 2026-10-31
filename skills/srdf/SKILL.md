@@ -16,13 +16,13 @@ SRDF correctness is a **planning semantics** problem. The common failure is not 
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
+Run the server through the `cad` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+- `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.8.4 run`
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
+For first-time setup or an update, a missing `cad` command, a release it says is not
 installed, an engine that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 
@@ -39,7 +39,7 @@ Do not place geometry, inertials, joint origins, link poses, mesh references, ph
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cadgen snapshot`.
+own work; review with `cad snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.
@@ -55,7 +55,7 @@ own work; review with `cadgen snapshot`.
   run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cadgen viewer --json FILE [FILE ...]
+  cad viewer --json FILE [FILE ...]
   ```
 
   The command ensures this installation's engine, registers each file and prints
@@ -81,20 +81,20 @@ correctness.
 8. **Define end effectors after group membership is known.** Avoid overlap between an end-effector group and its parent group. Record the actual target/TCP link.
 9. **Define group states in URDF-native units.** Revolute and continuous values are radians; prismatic values are meters. Do not store degrees in SRDF. Values must lie within URDF limits and must not set fixed or mimic joints.
 10. **Generate disabled collisions from evidence.** Use adjacency derived from the URDF joint table, MoveIt Setup Assistant sampling, or explicit user-provided collision matrices. Do not invent broad disable lists. See `references/disabled-collisions.md`.
-11. **Validate every created or modified `.srdf`** with `cadgen srdf validate`; it cross-validates all names, chains, states, and pairs against the paired URDF. Fix findings and re-validate until clean.
+11. **Validate every created or modified `.srdf`** with `cad srdf validate`; it cross-validates all names, chains, states, and pairs against the paired URDF. Fix findings and re-validate until clean.
 12. **Run MoveIt smoke tests when available.** Use MoveIt Setup Assistant or a project MoveIt launch directly.
 13. **Report assumptions and skipped checks.** Include incomplete validation, missing MoveIt environment, manually reasoned collision disables, and inferred target links.
 
 ## Commands
 
-Run `cadgen` as Setup defines it. `cadgen doctor` reports the installation in use and the engine's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cadgen <verb> --help` for the complete current interface.
+Run `cad` as Setup defines it. `cad doctor` reports the installation in use and the engine's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cad <verb> --help` for the complete current interface.
 
 The validator shape is:
 
 ```bash
-cadgen srdf validate path/to/robot.srdf
-cadgen srdf validate path/to/robot.srdf --strict
-cadgen srdf validate path/to/robot.srdf --json
+cad srdf validate path/to/robot.srdf
+cad srdf validate path/to/robot.srdf --strict
+cad srdf validate path/to/robot.srdf --json
 ```
 
 The validator parses the SRDF, resolves the paired URDF (the same-folder `.urdf` whose robot name matches; none, several, or an invalid one is an error), and cross-validates: group/joint/link/subgroup name existence, chain path resolvability, subgroup cycles, virtual/passive joints, end-effector topology, group-state membership/limits/completeness, disabled-collision pairs (including Adjacent-reason truthfulness), and misspelled elements. Each phase collects all its findings in one pass (severity, code, XML path), but a structural error stops the cross-file phase — re-run after every fix. One run validates ONE file: `--strict` treats warnings as failures and `--json` prints one line of `{"ok", "path", "issues": [{"severity", "code", "message", "element", "hint"}], "summary"}`, where `element` is the XML path. It exits nonzero if the target fails. Relative targets resolve from the current working directory.
@@ -110,17 +110,17 @@ The validator parses the SRDF, resolves the paired URDF (the same-folder `.urdf`
 
 ## Snapshot Tool
 
-`cadgen snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
+`cad snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
 rendered by OCCT:
 
 ```bash
-cadgen snapshot path/to/robot.srdf review.png
-cadgen snapshot path/to/robot.srdf review.png --pose arm/ready
-cadgen snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
+cad snapshot path/to/robot.srdf review.png
+cad snapshot path/to/robot.srdf review.png --pose arm/ready
+cad snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
 ```
 
 Hand it the `.srdf`: it draws the paired URDF's geometry, the same-folder `.urdf`
-whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match,
+whose `<robot name>` matches, exactly as `cad srdf validate` pairs them. No match,
 or more than one, is refused before anything renders, naming the robot name it
 looked for and the `.urdf` files it found.
 
@@ -155,7 +155,7 @@ unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
 OUT is written exactly as given and must be a `.png`; check the exit status before
-reading it. Use `cadgen snapshot --help` for the complete current interface.
+reading it. Use `cad snapshot --help` for the complete current interface.
 
 ## References
 

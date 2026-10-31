@@ -128,7 +128,7 @@ class ShimEndpointTest(unittest.TestCase):
         self.assertEqual([method for method, _token in second.seen][:2], ["tools/list", "initialize"])
 
     def test_an_engine_gone_with_its_port_squatted_is_sent_nothing(self) -> None:
-        # `cadgen stop`, or a crash: the door answers no more and another process binds the port.
+        # `cad stop`, or a crash: the door answers no more and another process binds the port.
         # The token it would carry is the user's, valid at the engine's next start.
         old = self.first.port
         self.first.close()
@@ -140,7 +140,7 @@ class ShimEndpointTest(unittest.TestCase):
         self.assertEqual(squatter.seen, [])
 
     def test_a_host_closing_after_the_engine_stopped_starts_none(self) -> None:
-        self.first.close()  # `cadgen stop`: nothing listens, and the socket names no engine
+        self.first.close()  # `cad stop`: nothing listens, and the socket names no engine
         self.names, self.starts = None, []
         self.proxy.close()
         self.assertEqual(self.starts, [False], "the session's end is told to an engine, never one started to hear it")
@@ -190,7 +190,7 @@ class HolderTest(unittest.TestCase):
             taking.set()
             self.assertTrue(holder.tried.wait(10))
             # The request was served by the hold it waited for: none is left wanting another, which
-            # the engine's going (cadgen stop) would take as a request and start an engine for.
+            # the engine's going (cad stop) would take as a request and start an engine for.
             self.assertFalse(holder.wanted.is_set())
             gone.set()
         self.assertEqual(len(calls), 1)

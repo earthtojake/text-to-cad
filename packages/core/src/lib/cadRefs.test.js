@@ -94,7 +94,7 @@ test("an .xbf's refs parse as cad.engine.refs parses them, case for case", () =>
   }
 });
 
-test("an .xbf's occurrences and elements are spelled as cadgen inspect answers them", () => {
+test("an .xbf's occurrences and elements are spelled as cad inspect answers them", () => {
   assert.ok(FIXTURE.spellingCases.length);
   for (const { structure, occurrences, elements, why } of FIXTURE.spellingCases) {
     const spell = spellEngineRefs(structure.tree);

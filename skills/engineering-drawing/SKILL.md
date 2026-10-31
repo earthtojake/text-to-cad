@@ -24,13 +24,13 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
+Run the server through the `cad` command its installation writes, so this skill's commands
 share one installation, and its engine server, with the CAD app's:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+- `cad` below means `cad +0.8.4` (`~/.local/bin/cad +0.8.4` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.8.4 run`
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
+For first-time setup or an update, a missing `cad` command, a release it says is not
 installed, an engine that is not running, or an installation or kernel load error, read
 [Setup and troubleshooting](references/setup.md).
 

@@ -2,7 +2,7 @@
 
 A build's worker says what its tree holds (``facts``): its part occurrences, its world bounds --
 each part's box in its own frame, kept by the part's geometry key, so a part a build hands back
-unchanged is not measured again, placed where each occurrence stands, as ``cadgen inspect``
+unchanged is not measured again, placed where each occurrence stands, as ``cad inspect``
 places its exact boxes -- and its mechanism's joints, configuration sequences and warnings.
 
 The bounds are measured where they decide the model's, to within each part's mesh tolerance, and

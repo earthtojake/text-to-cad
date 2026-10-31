@@ -53,7 +53,7 @@ class MemoCase(unittest.TestCase):
         patch = mock.patch.dict(os.environ)
         patch.start()
         self.addCleanup(patch.stop)
-        os.environ.pop("CADGEN_ENGINE_MEMO", None)
+        os.environ.pop("CAD_ENGINE_MEMO", None)
 
 
 class HitTest(MemoCase):
@@ -86,7 +86,7 @@ class HitTest(MemoCase):
 
     def test_with_hits_off_every_call_runs(self) -> None:
         (box, _cut, _rounded), _, _ = _run(self._model)
-        os.environ["CADGEN_ENGINE_MEMO"] = "0"
+        os.environ["CAD_ENGINE_MEMO"] = "0"
         (box2, _cut2, _rounded2), hot, _ = _run(self._model)
         self.assertEqual(hot["hits"], 0)
         self.assertIsNot(box2, box)
