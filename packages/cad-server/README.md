@@ -53,6 +53,8 @@ src/cad_server/
   language.py            # the language the person chose for the CAD views
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
+  auto_updates.py        # automatic updates: the person's setting (on by default), the idle and
+                         #   retry rules the engine's own update keeps
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
                          #   cad[build123d], made by uv on first need; extras: the one a
@@ -109,7 +111,9 @@ exact requirement a Python of a program's own installs this release's cad by
 up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
 made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
-`cad setup`, as the update button does; `cad uninstall` takes text-to-cad out; `cad plugin` writes
+`cad setup`, as the update button does, and `cad update auto on|off` turns automatic updates on or off
+(on by default: the engine installs a newer release in the background and switches to it once idle);
+`cad uninstall` takes text-to-cad out; `cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
 
@@ -122,7 +126,8 @@ the release left current after every switch of the engine (`cad plugin --refresh
 the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
 place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
 skills copied by the Skills CLI for the agents without a plugin. An update writes the folder for the
-new release and brings the copies along; nothing updates by itself. A model builds by running its script: `cad run model.py`, through
+new release and brings the copies along, a person's or an automatic one; no agent app updates the
+plugin itself. A model builds by running its script: `cad run model.py`, through
 the `cad` command, which runs the current installation, else the one registered last
 (`_internal/proxy.py`). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
