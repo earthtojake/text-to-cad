@@ -223,6 +223,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("skills/dfm/scripts/mold_tool.py")["skills_tests"], [f"{SKILLS}/dfm"])
         # gcode's suite is light, so it already runs on every change.
         self.assertEqual(jobs_for("skills/gcode/scripts/orca_presets.py"), {"skills"})
+        # The work-instructions template is run by the cadgen test of the module it drives.
+        self.assertEqual(tests_for("skills/work-instructions/references/instruction-api.md")["cadgen_tests"],
+                         [f"{CADGEN}/test_work_instruction.py"])
 
     def test_a_test_file_runs_itself(self):
         self.assertEqual(tests_for(f"{CADGEN}/test_settings.py")["cadgen_tests"], [f"{CADGEN}/test_settings.py"])

@@ -30,6 +30,7 @@ cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
 | `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |
 | `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`apps/docs/scripts/sync-hero-glb.mjs` exports it) |
+| `planetary_gear_assembly/planetary_gear_assembly_wi.py` | none: a `@work_instruction` | The work instruction for building that gear train, at the default `production` rigor, citing no spec and so stating no process value: writes `PDF/planetary_gear_assembly/planetary_gear_assembly_wi.pdf` |
 | `planetary_gear_stage/planetary_gear_stage.py` | `planetary_gear_stage` | Simplified planetary gear stage (`lib/gear_teeth.py`) |
 | `research_humanoid/research_humanoid.py` | `research_humanoid` | Adult-scale humanoid: 28 body joints, and 15 per hand from `lib.build_hand(side)` |
 | `robotic_hand_end_effector/robotic_hand_end_effector.py` | `robotic_hand_end_effector` | Cybernetic robotic hand end-effector |

@@ -75,10 +75,13 @@ __all__ = ["SnapshotRefused", "Still", "add_parser", "authored", "build_parser",
            "parse_pose", "picture_path", "run", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated", "tint"})
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
+# ``display.tint``: parts drawn in one colour of the request's, which no viewer setting makes (a
+# picture's own emphasis, as a work instruction fills the parts its step installs).
+TINT_KEYS = frozenset({"parts", "color"})
 APPEARANCES = ("light", "dark")
 EXPLODED_KEYS = frozenset({"enabled", "amount"})
 # Explode's amount when a request names none: the viewer's own default.
@@ -203,6 +206,7 @@ def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false")
     _visibility(display)
+    _tint(display)
     if grid:
         display["grid"] = True
     return display
@@ -213,6 +217,21 @@ def _visibility(display: dict[str, Any]) -> None:
         if field in display and (not isinstance(display[field], list)
                                  or not all(isinstance(ref, str) and ref.strip() for ref in display[field])):
             raise SnapshotRefused(f"display.{field} is a list of part refs (an occurrence's path: hand/finger.2)")
+
+
+def _tint(display: dict[str, Any]) -> None:
+    if "tint" not in display:
+        return
+    tint = display["tint"]
+    if not isinstance(tint, dict) or set(tint) != TINT_KEYS:
+        raise SnapshotRefused("display.tint is {parts, color}: the parts drawn in one colour, and that colour")
+    if not isinstance(tint["parts"], list) or not tint["parts"] or \
+            not all(isinstance(ref, str) and ref.strip() for ref in tint["parts"]):
+        raise SnapshotRefused("display.tint.parts is a list of part refs (an occurrence's path: hand/finger.2)")
+    if not _color(tint["color"]):
+        raise SnapshotRefused("display.tint.color is #rrggbb")
+    if display.get("mode") == "wireframe":
+        raise SnapshotRefused("display.tint fills the parts' faces; wireframe draws none. Use hidden-line.")
 
 
 def packet_visibility(value: Any) -> dict[str, list[str]]:
@@ -228,15 +247,11 @@ def packet_visibility(value: Any) -> dict[str, list[str]]:
     return taken
 
 
-def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: str) -> frozenset[int]:
-    """The instances a picture leaves out: those ``display.hidden``'s refs name, and, where
-    ``display.isolated`` is given, every one its refs do not. A ref is a part or an assembly
-    (every part below it), in the refs grammar, or -- a robot's -- the viewer's id of a visual
-    (``link:v1``, every object it draws, or ``link:v1/object/0``, one), as a robot's view names what
-    it hid; one that names nothing, or an element, is refused by name, and so is a choice that
-    leaves nothing to draw."""
-    if not display.get("hidden") and display.get("isolated") is None:
-        return frozenset()
+def _named(structure: dict[str, Any], refs_given: Any, field: str) -> set[int]:
+    """The instances a display field's refs name: a part or an assembly (every part below it), in
+    the refs grammar, or -- a robot's -- the viewer's id of a visual (``link:v1``, every object it
+    draws, or ``link:v1/object/0``, one), as a robot's view names what it hid; one that names
+    nothing, or an element, is refused by name."""
     from cadgen.engine import refs
 
     visuals: dict[str, set[int]] = {}
@@ -245,29 +260,41 @@ def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: s
             visuals.setdefault(instance["visual"], set()).add(index)
             if instance.get("object") is not None:
                 visuals.setdefault(f"{instance['visual']}/object/{instance['object']}", set()).add(index)
+    found: set[int] = set()
+    for ref in refs_given or ():
+        if ref in visuals:
+            found.update(visuals[ref])
+            continue
+        try:
+            hits = refs.resolve_structure(structure, ref)
+        except refs.RefError as error:
+            raise SnapshotRefused(f"display.{field}: {error}") from None
+        for hit in hits:
+            if hit.kind is not None:
+                raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
+                                      "it takes parts and assemblies")
+            found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
+    return found
 
-    def named(field: str) -> set[int]:
-        found: set[int] = set()
-        for ref in display.get(field) or ():
-            if ref in visuals:
-                found.update(visuals[ref])
-                continue
-            try:
-                hits = refs.resolve_structure(structure, ref)
-            except refs.RefError as error:
-                raise SnapshotRefused(f"display.{field}: {error}") from None
-            for hit in hits:
-                if hit.kind is not None:
-                    raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
-                                          "it takes parts and assemblies")
-                found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
-        return found
 
+def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: str) -> frozenset[int]:
+    """The instances a picture leaves out: those ``display.hidden``'s refs name (``_named``), and,
+    where ``display.isolated`` is given, every one its refs do not; a choice that leaves nothing to
+    draw is refused by name."""
+    if not display.get("hidden") and display.get("isolated") is None:
+        return frozenset()
     every = set(range(len(structure.get("instances") or [])))
-    drawn = (named("isolated") if display.get("isolated") is not None else set(every)) - named("hidden")
+    drawn = (_named(structure, display["isolated"], "isolated") if display.get("isolated") is not None
+             else set(every)) - _named(structure, display.get("hidden"), "hidden")
     if not drawn:
         raise SnapshotRefused(f"display.hidden and display.isolated leave nothing of {name} to draw")
     return frozenset(every - drawn)
+
+
+def tinted_instances(structure: dict[str, Any], display: dict[str, Any]) -> frozenset[int]:
+    """The instances ``display.tint`` draws in its colour: those its ``parts`` refs name (``_named``)."""
+    tint = display.get("tint")
+    return frozenset(_named(structure, tint["parts"], "tint.parts")) if tint else frozenset()
 
 
 def parse_camera(value: str | None) -> Any:

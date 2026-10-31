@@ -1290,7 +1290,11 @@ unless given; `hidden` and `isolated`: lists of part refs, an occurrence's path 
 grammar, which every look -- Preview, X-ray, Explode, Clip -- leaves out or alone draws, as the
 viewer's hide and isolate do, and which a Quick Edit packet given to `--annotation` carries; a
 robot's parts are named by the viewer's visual ids too, `link:v1` (`link:v1/object/0` one object of
-it); a ref that names nothing is refused by name); `--json` reports what was drawn
+it); a ref that names nothing is refused by name; `tint`: `{"parts": [refs], "color": "#rrggbb"}`, the
+parts' faces drawn in that colour over their own and every paint of them -- in hidden-line flat, as
+the backdrop's faces are, so the colour in the picture is exactly the one given -- a picture's own
+emphasis, which no viewer setting makes, and refused with `wireframe`, which draws no faces);
+`--json` reports what was drawn
 and each stage's milliseconds (`serveMs`, `meshMs`, `sceneMs` when a scene is made, `presentMs`,
 `frameMs`, `drawMs`, `renderMs`, `totalMs`; a file no document: `readMs` its reader, `openMs` its
 render process opening it). `parts` and `exploded` for a document that places one
