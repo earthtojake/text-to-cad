@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { UPDATE_POLL_MS, UpdateButton, pageHasUnsaved, reloadWhenClean, useUpdate, type UpdateCall, type UpdateReply } from './index.js';
@@ -6,10 +7,10 @@ const NOTICE = { latest: '0.9.1', version: '0.9.0' };
 const reply = (update: UpdateReply['update'], notice = NOTICE): UpdateReply => ({ notice, release: '0.9.0', update });
 const working = (done: number) => reply({ state: 'working', target: '0.9.1', progress: { stage: 'install', done, total: 4 }, error: null });
 
-function Host({ read, start, initial = NOTICE, onFailed }: {
-  read: UpdateCall; start: UpdateCall; initial?: typeof NOTICE | null; onFailed?: (error: string) => void;
+function Host({ read, start, initial = NOTICE, onFailed, followed }: {
+  read: UpdateCall; start: UpdateCall; initial?: typeof NOTICE | null; onFailed?: (error: string) => void; followed?: boolean;
 }) {
-  const { notice, phase, update } = useUpdate({ read, start }, initial, { onFailed });
+  const { notice, phase, update } = useUpdate({ read, start }, initial, { onFailed, followed });
   return notice || phase.phase !== 'idle' ? <UpdateButton notice={notice} phase={phase} onUpdate={update} /> : <p>No notice</p>;
 }
 
@@ -53,6 +54,21 @@ it('a failed update says its one line once and offers itself again', async () =>
   expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
   await act(async () => { fireEvent.focus(window); });
   expect(onFailed).toHaveBeenCalledOnce();  // the engine still says it failed: said once
+});
+
+it('a page reloaded into the engine its update restarted says the switch failed, once, and offers itself again', async () => {
+  // The engine the failed switch started again says so (`update.Update.recall`); the page that followed the
+  // update loads anew into it (the host keeps that it followed: `followed`), in React's strict mode as the viewer is.
+  const onFailed = vi.fn();
+  const error = "text-to-cad 0.9.1's engine did not start";
+  const read = vi.fn<UpdateCall>(async () => reply({ state: 'failed', target: '0.9.1', error }));
+  render(<StrictMode><Host read={read} start={read} onFailed={onFailed} followed /></StrictMode>);
+  await act(async () => {});
+  expect(read).toHaveBeenCalledOnce();
+  expect(onFailed).toHaveBeenCalledWith(error);
+  expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
+  await act(async () => { fireEvent.focus(window); });
+  expect(onFailed).toHaveBeenCalledOnce();
 });
 
 it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {

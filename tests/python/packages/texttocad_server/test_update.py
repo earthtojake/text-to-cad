@@ -84,13 +84,23 @@ class SwitchTest(Fixture):
             self.release(version)
         installations.point("1.1.0")
         tried, started = self.started({"1.1.0"})
-        with started, mock.patch.object(client, "wait_gone", return_value=True), \
+        kept: list = []  # update.json as each release's engine is started: the one before reads the failure
+        with started as stood_in, mock.patch.object(client, "wait_gone", return_value=True), \
                 mock.patch.object(client, "request", return_value=None) as asked:
+            then = stood_in.side_effect
+
+            def start(version, port, told):
+                kept.append(switch.last())
+                return then(version, port, told)
+
+            stood_in.side_effect = start
             done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
         self.assertFalse(done["ok"])
         self.assertTrue(done["restored"])
         self.assertEqual(done["error"], "text-to-cad 1.2.0's engine did not start")
         self.assertEqual((tried, installations.current_version()), (["1.2.0", "1.1.0"], "1.1.0"))
+        self.assertEqual((kept[1]["ok"], kept[1]["to"], kept[1]["error"]), (False, "1.2.0", done["error"]),
+                         "the failure is kept before the release before's engine starts again")
         asked.assert_any_call({"op": "stop"}, start=False)  # whatever of the new release answered, stopped first
         self.assertEqual(len(releases.listing()), 2, "nothing is removed when the switch fails")
         self.assertFalse(switch.last()["ok"])
@@ -299,6 +309,26 @@ class UpdateJobTest(Fixture):
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(releases, "make", side_effect=refused):
             job.start(server)
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))
+
+    def test_the_engine_a_failed_switch_starts_again_says_the_update_failed(self) -> None:
+        # The release before's engine, started again by the switch that failed, reads that failure as it
+        # starts serving: the page that followed the update through the restart reads it failed, and why.
+        error = "text-to-cad 1.2.0's engine did not start: it exited with code 3"
+        switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": False, "error": error})
+        job = update.Update()
+        job.recall()
+        self.assertEqual(job.snapshot(), {"state": "failed", "target": "1.2.0", "progress": None, "error": error})
+        # One that failed long before, or a switch that held, is no news to an engine started later.
+        result = Path(os.environ["CAD_STATE_DIR"]) / switch.RESULT
+        before = time.time() - update.RECALL_SECONDS - 60
+        os.utime(result, (before, before))
+        job = update.Update()
+        job.recall()
+        self.assertEqual(job.snapshot()["state"], "idle")
+        switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": True, "error": None})
+        job = update.Update()
+        job.recall()
+        self.assertEqual(job.snapshot()["state"], "idle")
 
 
 if __name__ == "__main__":

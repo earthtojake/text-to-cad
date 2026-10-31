@@ -49,11 +49,14 @@ const STAGES = 4;
  * host's to follow: the engine goes and comes back with the new release, and the page reloads into
  * it. A failed update the page followed is said once -- its one line, as the viewer's toast (an
  * export's: `sonner`), or to `onFailed` -- and the button is offered again; the engine keeps saying it
- * failed until the next click, and a page that comes back to it later says nothing. A read that fails
+ * failed until the next click, and a page that comes back to it later says nothing. A page reloaded into
+ * the engine its update restarted (`followed`: the host keeps that across the reload) follows it still:
+ * it reads where the update ended once, and says a switch that failed and went back. A read that fails
  * changes nothing; one while the engine restarts is the restart.
  */
 export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall },
-  initial: UpdateNotice | null, { onFailed }: { onFailed?: (error: string) => void } = {}) {
+  initial: UpdateNotice | null,
+  { onFailed, followed = false }: { onFailed?: (error: string) => void; followed?: boolean } = {}) {
   const [notice, setNotice] = useState<UpdateNotice | null>(initial);
   const [phase, setPhase] = useState<UpdatePhase>({ phase: "idle" });
   const polling = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,6 +109,14 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
       if (apply(reply) === "working" && polling.current === null) follow();
     }, () => {});
   }, [read, apply, follow]);
+  // Where the update this page followed before its reload ended: read once, as the page loads.
+  const resumed = useRef(followed);
+  useEffect(() => {
+    if (!resumed.current) return;
+    resumed.current = false;
+    following.current = true;
+    refresh();
+  }, [refresh]);
   useEffect(() => {
     alive.current = true;
     window.addEventListener("focus", refresh);

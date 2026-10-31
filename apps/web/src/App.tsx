@@ -7,6 +7,7 @@ import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
 import { cadApiUrl, createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
+import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
 import { UpdateButton, reloadWhenClean, useUpdate, type UpdateNotice } from '@text-to-cad/ui/update';
@@ -134,9 +135,14 @@ export default function App({ client, server, tabStore, notice = null, language:
   // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
   // in the navbar while this install is behind, from the notice read with the server's description
   // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back
-  // often and says nothing of its going, and reloads into the new release once it answers.
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice);
+  // often and says nothing of its going, and reloads into the new release once it answers -- or into the
+  // release before, should the switch fail and go back, which the page reloaded there says: the tab notes
+  // that its page followed the update through the restart (`followedUpdate`).
+  const [followed] = useState(() => followedUpdate());
+  useEffect(() => { forgetFollowedUpdate(); }, []);
+  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
   const restarting = updater.phase.phase === 'restarting';
+  useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {

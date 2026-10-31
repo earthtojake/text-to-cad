@@ -20,7 +20,8 @@ own: no fetch and no switch without that click, ``cad update`` or the install co
 Where it is goes as progress frames of kind ``update`` (``cad.engine.progress``): ``install`` while
 the release's folder is made, ``build123d`` while its base is, ``apps`` while the apps' plugins are
 updated, ``restart`` once the engine drains. A step that fails ends it, said in one line, and the
-engine stays as it was.
+engine stays as it was. A switch that fails brings the release before back, whose engine, starting to
+serve, says the update failed (``Update.recall``) to the page that followed it through the restart.
 """
 
 from __future__ import annotations
@@ -36,6 +37,10 @@ __all__ = ["UPDATE", "Update"]
 
 # The stages of an update, in order, as its progress frames count them (``cad.engine.progress``).
 STAGES = ("install", "build123d", "apps", "restart")
+# How recent a failed switch is that an engine starting to serve says as its own update's failure
+# (``Update.recall``): the release before's engine, which the failed switch starts again, serves within a
+# minute or two of it; an older one is no news to an engine started later.
+RECALL_SECONDS = 600.0
 
 
 class Update:
@@ -86,6 +91,21 @@ class Update:
     def _failed(self, error: str) -> None:
         with self.lock:
             self.state = {**self.state, "state": "failed", "error": error}
+
+    def recall(self) -> None:
+        """As the engine starts serving: a switch that failed moments ago (``switch.failed_lately``) is this
+        engine's update, failed -- the release before's engine, started again by that switch, is this one --
+        so a page that followed the update through the restart reads ``failed``, its target and why, until
+        the next click, as it would for a failure in the engine's own process."""
+        from cad_server._internal import switch
+
+        found = switch.failed_lately(RECALL_SECONDS)
+        if found is None:
+            return
+        with self.lock:
+            if self.state["state"] == "idle":
+                self.state = {"state": "failed", "target": found.get("to"), "progress": None,
+                              "error": str(found["error"])}
 
     def _run(self, target: str, server: Any) -> None:
         from cad_server._internal import base, installations, releases, switch

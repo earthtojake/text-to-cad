@@ -14,11 +14,18 @@ import os
 
 
 def http_factory(server, host, port):
+    from cad_server._internal.update import UPDATE
     from cad_server.viewer.engine_app import EngineApp
     from cad_server.viewer.handler import CadHTTPServer, make_handler_class
 
     from cad_server.mcp.http import Sessions
 
+    # An update whose switch failed moments ago started this release's engine again: said as failed to the
+    # page that followed it through the restart (``cad_server._internal.update.Update.recall``).
+    try:
+        UPDATE.recall()
+    except Exception:  # noqa: BLE001 - a note for the page, never a reason the engine does not serve
+        pass
     app = EngineApp(server, host, session_factory=Sessions)
     server.clients_active = app.active
     server.clients_working = app.working

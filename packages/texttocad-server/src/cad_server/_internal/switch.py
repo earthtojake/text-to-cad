@@ -24,7 +24,9 @@ follows the release left current (``follow``: its own ``cad plugin --refresh``, 
 again and, should that change it -- a switch that went back --, the copies the apps keep of it).
 
 What a switch did is the state folder's ``update.json`` -- the releases, whether it held, why not,
-and how long no engine served (``gapMs``) --, and the helper's lines go to ``update.log`` beside it.
+and how long no engine served (``gapMs``) --, and the helper's lines go to ``update.log`` beside it. A
+switch that failed is kept there before the release before's engine starts again, which reads it and says
+the update failed to the pages that watched it go (``failed_lately``, ``cad_server._internal.update``).
 """
 
 from __future__ import annotations
@@ -37,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["LOG", "RESULT", "follow", "handover", "helper", "spawn", "switch"]
+__all__ = ["LOG", "RESULT", "failed_lately", "follow", "handover", "helper", "last", "spawn", "switch"]
 
 LOG = "update.log"
 RESULT = "update.json"
@@ -106,6 +108,20 @@ def last() -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return found if isinstance(found, dict) else None
+
+
+def failed_lately(within: float) -> dict[str, Any] | None:
+    """The last switch when it failed and ``update.json`` was written in the last ``within`` seconds, else
+    None: the release before's engine, started again by that switch, reads it as it starts serving
+    (``update.Update.recall``), the failure kept before it starts (``switch``)."""
+    try:
+        age = time.time() - (_state() / RESULT).stat().st_mtime
+    except OSError:
+        return None
+    found = last()
+    if found is None or found.get("ok") is not False or not found.get("error") or not 0 <= age <= within:
+        return None
+    return found
 
 
 def _point(version: str, told: Callable[[str], None]) -> bool:
@@ -198,6 +214,9 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
     result["error"] = why
     told(f"text-to-cad {target} did not take over: {why}")
     if previous and installations.current_version() == target:
+        # Kept first: the release before's engine, which starts again next, reads it as it starts serving and
+        # says the update failed to the pages that watched it go (``update.Update.recall``).
+        _record(result)
         client.request({"op": "stop"}, start=False)
         client.wait_gone(timeout=START_SECONDS)
         if _point(previous, told):

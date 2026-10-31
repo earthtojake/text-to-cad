@@ -379,7 +379,8 @@ An update writes the plugin folder again for the new release
 ([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
 read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
 the skills alone) get it again. Should the new release's server not start, the release
-before comes back, and its plugin and Claude Desktop's server with it.
+before comes back, and its plugin and Claude Desktop's server with it; the CAD Viewer page
+you clicked in says the update failed, and offers it again.
 
 Your computer runs one CAD server, the current release's, whatever release each
 app's plugin names: an app whose plugin is behind or ahead uses that server all the
