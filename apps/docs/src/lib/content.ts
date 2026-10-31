@@ -112,7 +112,7 @@ export const skillGroups = [
     name: "Engineering Drawing",
     path: "skills/engineering-drawing",
     summary:
-      "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
+      "Dimensioned engineering drawings from a part or an assembly, as a PDF: views and sections, dimensions, hole callouts read off the model, title block, and for an assembly balloons, a parts list and a sheet per part.",
   },
   {
     name: "DXF",

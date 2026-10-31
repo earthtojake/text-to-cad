@@ -1,12 +1,13 @@
 """Engineering drawings: ``@eng_drawing``, :class:`Sheet` and :class:`View`.
 
-An engineering drawing is a DOCUMENT derived from a part: orthographic views
-projected from the part's geometry, dimensions that reference points ON that
-geometry, centre marks found on it, a sheet frame and a title block. Because
-every view and every dimension is computed from the shape at run time, the
-drawing follows the part: change the model, rerun the drawing script, and the
-views, hidden lines and measured values move with it. Nothing on the sheet is
-drawn by hand.
+An engineering drawing is a DOCUMENT derived from a part: orthographic and
+section views projected from the part's geometry, dimensions that reference
+points ON that geometry, hole callouts whose sizes, depths and counts are read
+off its faces, centre lines on its turned features, and an ISO sheet with a
+zoned frame and a title block. Because every view and every value is computed
+from the shape at run time, the drawing follows the part: change the model,
+rerun the drawing script, and the views, hidden lines and measured values move
+with it. Nothing on the sheet is drawn by hand.
 
 The output is one PDF. A shop receives a PDF, every operating system opens and
 marks one up, and nothing here pairs the document with a second file. ezdxf is
@@ -26,21 +27,24 @@ Usage::
     def bracket_drawing():
         part = read_xbf(Path(__file__).parent / "XBF/bracket.xbf")
         sheet = Sheet("A3", title="BRACKET", part_number="BRK-001", revision="A")
-        top = sheet.view(part, "top", at=(110, 190))
-        front = sheet.view(part, "front", at=(110, 90))
+        top, front, right, iso = sheet.three_views(part, iso=True)
+        front.section("A")                               # the front view, cut
         top.overall()                                    # width and height
         top.dim((-35, 25, 0), (35, 25, 0))               # model coordinates
-        top.hole((35, 25, 15), 3, depth=8, count=4)
+        top.holes()                                      # sizes read off the part
         return sheet                                     # or [sheet1, sheet2]
 
     if __name__ == "__main__":
         bracket_drawing()
 
-Running the script writes one PDF at ``out`` with a page per sheet. There is no
-default location: ``out`` is the path the caller passes. The part is the engine's
-document of it, read in this process (``cadgen.read_xbf`` of a model's xbf, or
-``cadgen.read_step`` of a vendor STEP); a live build123d shape works in its place: the
-part is whatever geometry the function has.
+Running the script writes one PDF at ``out`` with a page per sheet, and prints
+what the sheet noticed (crowded views, a leader that crosses a dimension line)
+and what the drawing leaves unstated (a hole not called out, a size not
+dimensioned). There is no default location: ``out`` is the path the caller
+passes. The part is the engine's document of it, read in this process (a model's
+``.shape``, ``cadgen.read_xbf`` of an xbf, or ``cadgen.read_step`` of a vendor STEP);
+a live build123d shape works in its place: the part is whatever geometry the
+function has.
 
 Bytes are a function of the content: the PDF carries no creation date, so an
 unchanged drawing rebuilds to an identical file.
@@ -55,92 +59,91 @@ from __future__ import annotations
 
 import functools
 import math
-import re
+import sys
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, NamedTuple, Sequence
 
-__all__ = ["eng_drawing", "Sheet", "View", "SHEET_SIZES"]
-
-#: ISO 216 sheet sizes, landscape, in millimetres.
-SHEET_SIZES = {
-    "A4": (297.0, 210.0),
-    "A3": (420.0, 297.0),
-    "A2": (594.0, 420.0),
-    "A1": (841.0, 594.0),
-    "A0": (1189.0, 841.0),
-}
-
-#: Standard view names -> (view direction: where the viewer STANDS relative to the
-#: part, up vector). Third-angle projection places each view on the side it looks
-#: from; the sheet does not enforce placement, the author picks ``at=``.
-VIEW_DIRECTIONS = {
-    "top": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
-    # Looking up from below, the sheet's up is the model's -Y: the bottom view is the
-    # top view mirrored about the horizontal, which is what third angle draws. With
-    # up=+Y it comes out rotated 180 degrees (+X to the left), so it would not line up
-    # with the front view above it.
-    "bottom": ((0.0, 0.0, -1.0), (0.0, -1.0, 0.0)),
-    "front": ((0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
-    "back": ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
-    "right": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
-    "left": ((-1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
-    "iso": ((1.0, -1.0, 1.0), (0.0, 0.0, 1.0)),
-}
-
-#: Layers a sheet writes, with ACI colour and linetype. ``ink="mono"`` collapses
-#: the colours to the default ink; the linetypes are the drawing's meaning and stay.
-#: Every linetype here must be one ``ezdxf.new(setup=True)` defines, or ezdxf draws
-#: the layer continuous and its audit reports the substitution: there is no HIDDEN
-#: in that table, DASHED is the ISO 128 dashed line it does define.
-_LAYERS = {
-    "SHEET": (7, "CONTINUOUS", 0.35),
-    "TITLE": (7, "CONTINUOUS", 0.25),
-    "VISIBLE": (7, "CONTINUOUS", 0.5),
-    "HIDDEN": (8, "DASHED", 0.25),
-    "CENTER": (4, "CENTER", 0.18),
-    "DIM": (1, "CONTINUOUS", 0.18),
-    "NOTES": (3, "CONTINUOUS", 0.25),
-}
-
-#: Projection conventions the title block may name. The two differ only in WHERE a
-#: view is placed: third angle puts the view from above above the front view and the
-#: view from the right to its right; first angle puts each on the opposite side. The
-#: pictures are the same, so only :meth:`Sheet.three_views` reads this.
-PROJECTIONS = ("THIRD ANGLE", "FIRST ANGLE")
-
-_MARGIN = 10.0
-_TITLE_W, _TITLE_H = 180.0, 40.0
-#: Text height the notes block is drawn at, and the left inset of its first glyph.
-#: The guard that refuses an over-wide note measures at these, because a guard
-#: that measures a different string at a different height than the draw either
-#: refuses a note that fits or passes one that does not.
-_NOTE_HEIGHT = 2.5
-_NOTE_INSET = 3.0
-#: One row of dimensions: the line's distance from the last, with room for its text.
-_DIM_ROW = 12.0
-#: The smallest text a print stays legible at. Below it, text is cut, not shrunk.
-_MIN_TEXT_MM = 1.6
-#: Drawing scales a shop expects to read, largest first. An over-size part is
-#: refused with the first of these that fits rather than an arbitrary ratio.
-_STANDARD_SCALES = (1.0, 1 / 2, 1 / 2.5, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100, 1 / 200, 1 / 500, 1 / 1000)
+from cadgen._internal.drawing_annotation import _Dim, _fit, _looks_into, _thread
+from cadgen._internal.drawing_assembly import (
+    _GA_LIST_SHARE, JOINTS, Item, _PartOf, PartsList, _arrange_assembly, _continuations, _item_shown, _joint_note,
+    parts_list,
+    _refuse_balloons_on,
+)
+from cadgen._internal.drawing_base import (
+    _BAND_H, _DETAIL_SIZE, _MARGIN, _NOTE_HEIGHT, _NOTE_INSET, PROJECTIONS, _SAME_PLACE, _SECTION_LETTERS,
+    SHEET_SIZES, _STANDARD_SCALES, _TITLE_H, _TITLE_W, UNITS, VIEW_DIRECTIONS, _cross, _dirs, _dot, _fmt, _look, _p3,
+    _places, _scale_label, _text_width, _view_axes, _where,
+)
+from cadgen._internal.drawing_gdt import Frame, frame_size
+from cadgen._internal.drawing_profile import (
+    GENERIC, Profile, STAGES, _check_general_tolerance, _general_tolerance_note, _STAGE_LABELS,
+    _standard_note,
+)
+from cadgen._internal.drawing_render import _render_sheet
+from cadgen._internal.drawing_report import (
+    _Facts, geometry_notes, _interfaces, _redundant, _requirements, _unstated,
+)
+from cadgen._internal.drawing_sheet import (
+    _BAND_CELLS, _LIST_ROW, _TITLE_CELLS, _VIEW_NAMES, _Arrangement, _arrange_three_views, _choose_size_and_scale,
+    _default_rooms, _list_room, _require_settled, _settle,
+)
+from cadgen._internal.drawing_views import _flat_face, _view_extent
 
 
-@dataclass
-class _Dim:
-    kind: str
-    p1: tuple[float, float, float]
-    p2: tuple[float, float, float] | None
-    #: Sheet millimetres from the dimensioned points, or None for the next free row.
-    offset: float | None
-    text: str | None
-    orientation: str | None
-    radius: float = 0.0
-    angle: float = 45.0
-    tol: Any = None
-    fit: str | None = None
-    hole: dict | None = None
+#: Note 1 of a sheet with a general profile; its frame is drawn after the words.
+_GENERAL_PROFILE = "UNLESS OTHERWISE SPECIFIED, ALL SURFACES"
+#: The room a flag note's flag takes where another note's number is printed.
+_FLAG_ROOM = " " * 7
+
+__all__ = ["eng_drawing", "Sheet", "View", "Frame", "Profile", "GENERIC", "STAGES", "JOINTS",
+           "SHEET_SIZES", "parts_list", "PartsList", "Item", "assembly_sheets", "AssemblySheets", "geometry_notes", "part_sheet"]
+
+
+class _Detail(NamedTuple):
+    """What makes a view a detail of another (:meth:`Sheet.detail`)."""
+
+    parent: "View"
+    centre: tuple[float, float, float]
+    radius: float
+    letter: str
+    placed_by_sheet: bool
+    scale_chosen: bool
+
+
+class _Aux(NamedTuple):
+    """What makes a view an auxiliary view of another (:meth:`Sheet.auxiliary`);
+    ``outline`` is the face's, for a partial view, else None."""
+
+    parent: "View"
+    point: tuple[float, float, float]
+    letter: str
+    placed_by_sheet: bool
+    outline: list | None
+
+
+class _Break(NamedTuple):
+    """The stretch :meth:`View.broken` leaves out: from ``low`` to ``high`` along a model axis (0-2)."""
+
+    axis: int
+    low: float
+    high: float
+
+
+class _TableSpec(NamedTuple):
+    """A hole table's origin (a model point, or None for the view's corner) and its
+    top-left corner on the sheet (or None for the sheet to place it)."""
+
+    origin: tuple[float, float, float] | None
+    corner: tuple[float, float] | None
+
+
+class _ListRun(NamedTuple):
+    """The run of a parts list a sheet draws: items ``first`` to ``last``."""
+
+    parts: PartsList
+    first: int
+    last: int
 
 
 @dataclass
@@ -163,71 +166,271 @@ class View:
     #: often drawn smaller so it fits the free corner.
     scale: float | None = None
     _dims: list[_Dim] = field(default_factory=list)
-    _overall: bool = False
-    #: ``(bounding-box size, gap, iso)`` when :meth:`Sheet.three_views` placed this
-    #: view, so the off-frame guard can lay the same arrangement out again at a
-    #: candidate scale. None for a hand-placed ``at=``, which does not move.
-    _arranged: tuple | None = None
+    #: Which overall sizes ``overall()`` asked for: {"width", "height"}, or empty;
+    #: and whether they are reference dimensions.
+    _overall: frozenset = frozenset()
+    _overall_reference: bool = False
+    #: ``(letter, model point or None)`` when :meth:`section` made this a section;
+    #: and the parts list whose items it hatches each by material, if any.
+    _section: tuple | None = None
+    _section_parts: Any = None
+    _section_materials: bool = False
+    #: ``(label, scale)`` the sheet gave an isometric or an auxiliary view, so the
+    #: render knows whether the author has since set their own and leaves it alone.
+    _auto_label: tuple | None = None
+    #: Set when :meth:`Sheet.detail` made this a detail view.
+    _detail: _Detail | None = None
+    #: The arrangement :meth:`Sheet.three_views` placed this view in, shared by its
+    #: views: the render lays them out again from it, and the off-frame guard does
+    #: at each candidate scale. None for a hand-placed ``at=``, which does not move.
+    _arranged: _Arrangement | None = None
+    #: The parts lists :meth:`balloons` keys this view to.
+    _balloons: list = field(default_factory=list)
+    #: Set when :meth:`hole_table` tabulates this view's holes.
+    _table: _TableSpec | None = None
+    #: ``(where the viewer stands, up)`` for a view whose direction is its own
+    #: rather than its name's: an auxiliary view.
+    _direction: tuple | None = None
+    #: Set when :meth:`broken` takes a stretch of the part out of the view.
+    _break: _Break | None = None
+    #: Set when :meth:`Sheet.auxiliary` made this an auxiliary view.
+    _aux: _Aux | None = None
+    #: The datum features :meth:`datum` defines on this view: (letter, model
+    #: point, stem offset or None).
+    _datums: list = field(default_factory=list)
+    #: On a part's sheet of an assembly drawing that draws its part turned (a long
+    #: turned part lies down), the turn. The points given to the view are in the
+    #: part's own frame, and turned with it.
+    _turn: Any = None
+    #: The view's centre lines the part is stated symmetric about: "h", "v".
+    _symmetric: set = field(default_factory=set)
+
+    def _at(self, p) -> tuple[float, float, float]:
+        """A model point given to the view, in the frame the view draws."""
+        point = _p3(p)
+        if self._turn is None:
+            return point
+        from build123d import Pos
+
+        moved = (self._turn * Pos(*point)).position
+        return moved.X, moved.Y, moved.Z
 
     def dim(self, p1, p2, *, offset: float | None = None, text: str | None = None, orientation: str | None = None,
-            tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
+            tol: float | tuple[float, float] | None = None, fit: str | None = None,
+            limits: tuple[float, float] | None = None, basic: bool = False, reference: bool = False,
+            frame: Frame | None = None, datum: str | None = None, key: bool = False) -> "View":
         """A linear dimension between two model points. ``orientation`` is ``"h"``,
-        ``"v"`` or None (whichever the projected pair spans more); ``offset`` is
-        the dimension line's distance from the farther point, in sheet mm, and its
-        sign picks the side. Left unset, the dimension takes the next free row on
+        ``"v"`` or None (whichever the projected pair spans more), or
+        ``"aligned"``: along the line between the points, the true length of an
+        inclined edge the view sees edge-on. ``offset`` is the dimension line's
+        distance from the farther point, in sheet mm, and its sign picks the side
+        (an aligned one's: positive to the left going from ``p1`` to ``p2``; left
+        unset, it stands off the view's middle). Left unset, the dimension takes the next free row on
         its side, so defaults never stack on each other or on :meth:`overall`.
         ``tol=0.1`` states ±0.1; ``tol=(0.05, 0.02)`` states +0.05/-0.02
-        deviations; ``fit="H7"`` appends an ISO fit class."""
-        if orientation not in (None, "h", "v"):
-            raise ValueError(f"orientation must be 'h', 'v' or None, got {orientation!r}")
-        self._dims.append(_Dim("linear", _p3(p1), _p3(p2), _offset(offset), text, orientation,
-                               tol=_tol(tol), fit=fit))
+        deviations; ``fit="H7"`` appends an ISO 286 tolerance class (``"g6"`` a
+        shaft's, ``"H7/g6"`` a fit) and is the size's whole tolerance, so it takes
+        no ``tol`` or ``limits``; ``limits=(39.98, 40.02)`` prints the two limits
+        the part must lie between, and is checked against the part.
+
+        ``basic=True`` makes it a basic dimension: the exact value, in a box, that
+        a GD&T frame bounds. ``reference=True`` makes it a reference dimension:
+        information only, in parentheses, never inspected and stating no
+        requirement; an assembly's overall size is one. Neither takes a
+        tolerance. ``frame`` is a :class:`Frame` drawn beyond the value, on a row
+        of its own, and ``datum`` makes the dimensioned feature a datum.
+        ``key=True`` marks a key characteristic: the profile's boxed letters
+        ("KC") after the value."""
+        if orientation not in (None, "h", "v", "aligned"):
+            raise ValueError(f"orientation must be 'h', 'v', 'aligned' or None, got {orientation!r}")
+        if orientation == "aligned" and (frame is not None or datum is not None or key):
+            raise ValueError("an aligned dimension takes no frame, datum or key mark; state those on a "
+                             "dimension along the view's axes")
+        fit = _fit(fit)
+        limits = _dimension_kind(tol=tol, fit=fit, limits=limits, basic=basic, reference=reference)
+        self._dims.append(_Dim("linear", self._at(p1), self._at(p2), _offset(offset), text, orientation,
+                               tol=_tol(tol), fit=fit, basic=basic, reference=reference, limits=limits,
+                               frame=_frame(frame), datum=_new_datum(self.sheet, datum),
+                               key=_key(key, reference)))
         return self
 
-    def hole(self, center, diameter: float, *, depth: float | None = None, thru: bool = False,
+    def hole(self, center, diameter: float | None = None, *, depth: float | None = None, thru: bool | None = None,
              cbore: tuple[float, float] | None = None, csk: tuple[float, float] | None = None,
              thread: str | None = None, count: int | None = None, angle: float = 45.0,
              tol: float | tuple[float, float] | None = None, fit: str | None = None,
-             label: str | None = None) -> "View":
-        """A hole callout in the standard symbols: ``4× ⌀6.6 ↧12``, ``THRU``, a
-        counterbore ``⌴ ⌀11 ↧6.5``, a countersink ``⌵ ⌀12 × 90°``, or a thread
-        such as ``M6x1 - 6H`` in place of the diameter. ``tol``/``fit`` qualify the
-        diameter the way :meth:`dim` does; ``label`` is appended (``"WHEEL"``).
-        ``angle`` is where the leader leaves the circle, degrees from horizontal."""
-        spec = {"diameter": _positive("diameter", diameter), "depth": _positive("depth", depth, allow_none=True),
-                "thru": bool(thru), "cbore": _pair("cbore", cbore), "csk": _pair("csk", csk),
-                "thread": None if thread is None else str(thread),
-                "count": None if count is None else _positive("count", count, integer=True),
-                "label": None if label is None else str(label)}
+             label: str | None = None, frame: Frame | None = None, datum: str | None = None,
+             key: bool = False) -> "View":
+        """A hole callout in the standard symbols -- ``4× ⌀6.6 THRU ⌴ ⌀11 ↧6.5`` --
+        read off the part. ``center`` is any model point on the hole's axis (its
+        mouth is the natural one), in a view that looks down that axis.
+
+        The diameter, THRU or depth, counterbore, countersink and the ``4×``
+        count all come from the geometry. Anything given here is checked against
+        it and a disagreement is refused: a callout that says ⌀6 over a ⌀6.6
+        bore is the one error a shop machines faithfully. ``tol`` or ``fit``
+        (a hole's class, ``"H7"``, or a fit, ``"H7/g6"``) qualifies the diameter
+        the way :meth:`dim` does, one or the other; ``label`` is appended
+        (``"WHEEL"``).
+
+        ``thread`` states a tapped hole, which the B-rep cannot carry: a metric
+        thread of ISO 261's sizes and pitches, with an optional ISO 965-1 class
+        (``"M6"``, ``"M6x0.75 - 6H"``; with no pitch, the coarse one), or a
+        unified inch thread of ASME B1.1's sizes and series (``"1/4-20 UNC-2B"``,
+        ``"#10-32 UNF"``); a pitch the size does not have is refused. The bore
+        must be its tap drill (from the basic minor diameter to about d - P: ⌀5
+        for M6x1) or the thread's own size (⌀6), and a tap drill is stated with
+        the thread after it (``⌀5 ↧12   M6x1 - 6H ↧10``). It takes no ``diameter``, ``tol`` or
+        ``fit``. What the part cannot say is asked, never assumed: ``count``
+        is how many of the identical bores are tapped (all of them, or this one
+        alone), and ``depth`` how deep the thread runs, which a blind tap drill
+        needs and a through one may have. ``angle`` is where the leader
+        leaves the circle, degrees from horizontal. ``frame`` is the
+        :class:`Frame` drawn under the callout (its position, say), and ``datum``
+        makes the hole a datum feature, its symbol on the callout. ``key=True``
+        marks a key characteristic, as :meth:`dim` does."""
+        _refuse_iso(self, "hole()")
+        given = {"diameter": _positive("diameter", diameter, allow_none=True),
+                 "depth": _positive("depth", depth, allow_none=True),
+                 "thru": None if thru is None else bool(thru), "cbore": _pair("cbore", cbore),
+                 "csk": _pair("csk", csk),
+                 "count": None if count is None else _positive("count", count, integer=True)}
         if thru and depth is not None:
             raise ValueError("a hole is either THRU or has a depth, not both")
-        self._dims.append(_Dim("hole", _p3(center), None, 0.0, None, None, radius=spec["diameter"] / 2,
-                               angle=float(angle), tol=_tol(tol), fit=fit, hole=spec))
+        parsed = None
+        if thread is not None:
+            parsed = _thread(thread)
+            stated = [name for name, value in (("diameter", diameter), ("tol", tol), ("fit", fit)) if value is not None]
+            if stated:
+                raise ValueError(f"hole(thread={thread!r}) takes no {', '.join(stated)}: the thread and its class "
+                                 "are the tapped hole's size, and the bore under it is read off the part")
+        if fit is not None and tol is not None:
+            raise ValueError(f"hole() takes fit={fit!r} or tol=, not both: a tolerance class is the diameter's "
+                             "tolerance, so the two would print two")
+        spec = {"given": given, "thread": parsed, "label": None if label is None else str(label)}
+        self._dims.append(_Dim("hole", self._at(center), None, 0.0, None, None, radius=0.0,
+                               angle=float(angle), tol=_tol(tol), fit=_fit(fit, hole=True), hole=spec,
+                               frame=_frame(frame), datum=_new_datum(self.sheet, datum), key=_key(key)))
         return self
 
-    def diameter(self, center, radius: float, *, angle: float = 45.0, text: str | None = None) -> "View":
-        """A diameter dimension on a circular feature at a model centre point."""
-        self._dims.append(_Dim("diameter", _p3(center), None, 0.0, text, None,
-                               radius=_positive("radius", radius), angle=float(angle)))
+    def slot(self, center, *, width: float | None = None, length: float | None = None, thru: bool | None = None,
+             depth: float | None = None, count: int | None = None, angle: float = 45.0,
+             label: str | None = None, frame: Frame | None = None, datum: str | None = None,
+             key: bool = False) -> "View":
+        """A slot callout -- ``2× 8 × 30 SLOT THRU`` -- read off the part, in a view
+        that looks down the slot. ``center`` is the slot's centre or the centre of
+        either rounded end. Width, length (end to end), THRU or depth and the count
+        come from the geometry; any given here is checked and a contradiction is
+        refused. ``label`` is appended; ``frame``, ``datum`` and ``key`` are as
+        :meth:`hole` takes them."""
+        _refuse_iso(self, "slot()")
+        given = {"width": _positive("width", width, allow_none=True),
+                 "length": _positive("length", length, allow_none=True),
+                 "thru": None if thru is None else bool(thru), "depth": _positive("depth", depth, allow_none=True),
+                 "count": None if count is None else _positive("count", count, integer=True)}
+        if thru and depth is not None:
+            raise ValueError("a slot is either THRU or has a depth, not both")
+        self._dims.append(_Dim("slot", self._at(center), None, 0.0, None, None, angle=float(angle),
+                               hole={"given": given, "label": None if label is None else str(label)},
+                               frame=_frame(frame), datum=_new_datum(self.sheet, datum), key=_key(key)))
         return self
 
-    def radius(self, center, radius: float, *, angle: float = 45.0, text: str | None = None) -> "View":
-        self._dims.append(_Dim("radius", _p3(center), None, 0.0, text, None,
-                               radius=_positive("radius", radius), angle=float(angle)))
+    def holes(self, *, angle: float = 45.0) -> "View":
+        """Call out every hole and slot this view looks down, one callout per kind
+        (``4× ⌀5.5 THRU``, ``⌀28 THRU``, ``8 × 30 SLOT THRU``), each read off the
+        part and placed on the one nearest the edge of the view so its leader is
+        short. Holes on a bolt circle say so (``EQ SP ON ⌀60``). A blind hole that
+        opens on the far side belongs to the opposite view."""
+        _refuse_iso(self, "holes()")
+        self._dims.append(_Dim("holes", (0.0, 0.0, 0.0), None, 0.0, None, None, angle=float(angle)))
         return self
 
-    def angle(self, vertex, p1, p2, *, offset: float = 14.0) -> "View":
+    def hole_table(self, origin=None, *, at=None) -> "View":
+        """Tabulate the holes and slots this view looks down, as a part with many
+        holes is drawn: each tagged on the view (A1, A2 ... for one kind, B1 ...
+        for the next), and a table of TAG, X, Y and SIZE in free paper beside it.
+        Positions are measured from ``origin`` (a model point; the lower-left
+        corner of the view's extent by default), which the view marks with its
+        X and Y arrows; sizes are read off the part, as a callout reads them.
+        ``at`` puts the table's top-left corner at that sheet point instead.
+        A view tabulates its holes or calls them out, not both, but for a
+        ``hole(thread=...)``: nothing in the part says a bore is tapped, so
+        that call gives the tapped holes' rows their thread, under a letter of
+        their own."""
+        if self.name == "iso":
+            raise ValueError("hole_table() tabulates an orthographic view's holes; an isometric has no X and Y")
+        corner = None
+        if at is not None:
+            corner = _pair("at", at)
+        self._table = _TableSpec(None if origin is None else self._at(origin), corner)
+        return self
+
+    def diameter(self, center, *, size: float | None = None, angle: float = 45.0,
+                 text: str | None = None, basic: bool = False, reference: bool = False,
+                 frame: Frame | None = None, datum: str | None = None, key: bool = False) -> "View":
+        """A diameter callout on the circle centred at ``center``, measured off the
+        view. ``size`` picks one of several concentric circles (a chamfered
+        shaft end shows two) and is checked against the geometry. ``basic``,
+        ``reference``, ``frame``, ``datum`` and ``key`` as :meth:`dim` takes them."""
+        _dimension_kind(basic=basic, reference=reference)
+        self._dims.append(_Dim("diameter", self._at(center), None, 0.0, text, None,
+                               radius=0.0 if size is None else _positive("size", size) / 2, angle=float(angle),
+                               basic=basic, reference=reference, frame=_frame(frame),
+                               datum=_new_datum(self.sheet, datum), key=_key(key, reference)))
+        return self
+
+    def radius(self, center, *, size: float | None = None, angle: float = 45.0,
+               text: str | None = None, basic: bool = False, reference: bool = False) -> "View":
+        """A radius callout on the arc centred at ``center``, measured off the view;
+        ``size`` (the radius) picks one of several and is checked like ``diameter``'s,
+        and ``basic`` and ``reference`` are as :meth:`dim` takes them."""
+        _dimension_kind(basic=basic, reference=reference)
+        self._dims.append(_Dim("radius", self._at(center), None, 0.0, text, None,
+                               radius=0.0 if size is None else _positive("size", size), angle=float(angle),
+                               basic=basic, reference=reference))
+        return self
+
+    def angle(self, vertex, p1, p2, *, offset: float = 14.0, basic: bool = False,
+              reference: bool = False) -> "View":
         """The angle at ``vertex`` between the legs toward ``p1`` and ``p2`` (model
-        points); ``offset`` is the arc's distance from the vertex, in sheet mm."""
+        points); ``offset`` is the arc's distance from the vertex, in sheet mm.
+        ``basic`` and ``reference`` as :meth:`dim` takes them."""
+        _dimension_kind(basic=basic, reference=reference)
         # angle() was the one verb whose arguments went unchecked: offset=nan
         # reached the PDF, and two legs along one line printed "0 degrees" as
         # though that were a measurement.
-        vertex, a, b = _p3(vertex), _p3(p1), _p3(p2)
+        vertex, a, b = self._at(vertex), self._at(p1), self._at(p2)
         distance = _offset(offset)
         if distance is None or distance == 0.0:
             raise ValueError(f"angle offset must be a non-zero number of sheet millimetres, got {offset!r}")
         _assert_legs_measure_an_angle(vertex, a, b)
-        self._dims.append(_Dim("angle", vertex, a, distance, None, None, radius=0.0, angle=0.0, hole={"p2": b}))
+        self._dims.append(_Dim("angle", vertex, a, distance, None, None, radius=0.0, angle=0.0, hole={"p2": b},
+                               basic=basic, reference=reference))
+        return self
+
+    def symmetric(self, direction: str) -> "View":
+        """State that the part is symmetric about this view's centre line, ``"h"``
+        (the horizontal one) or ``"v"`` (the vertical one), and draw it with the
+        ISO 129 symmetry symbol. A feature centred on that line is then located
+        across it; without the statement, a centred feature still needs a
+        dimension, as the report says. A centre is the designer's to state, not
+        the drawing's to assume. A part that is not its own mirror image about that
+        line is refused: the statement would place features that are not there."""
+        from cadgen._internal.drawing_features import mirror_symmetric
+
+        if direction not in ("h", "v"):
+            raise ValueError(f"symmetric() takes 'h' or 'v', the view's horizontal or vertical centre line; got "
+                             f"{direction!r}")
+        if self.name == "iso" or self._direction is not None or self._detail is not None:
+            raise ValueError("symmetric() states a centre line of a principal view; an isometric, auxiliary or "
+                             "detail view has none to state")
+        width_axis, height_axis = _view_axes(self.name)
+        across = width_axis if direction == "v" else height_axis
+        if not mirror_symmetric(self.shape, across):
+            raise ValueError(f"{self.name}.symmetric({direction!r}): the part is not symmetric about the "
+                             f"{self.name} view's {'vertical' if direction == 'v' else 'horizontal'} centre line "
+                             f"(it differs from its mirror across {'XYZ'[across]}). Dimension each side's features "
+                             "instead.")
+        self._symmetric.add(direction)
         return self
 
     def note(self, text: str, at, *, offset: tuple[float, float] = (10.0, 10.0)) -> "View":
@@ -239,18 +442,202 @@ class View:
             raise TypeError(f"note offset must be an (x, y) pair of sheet millimetres, got {offset!r}") from exc
         if not (math.isfinite(dx) and math.isfinite(dy)):
             raise ValueError(f"note offset must be finite, got {offset!r}")
-        self._dims.append(_Dim("note", _p3(at), None, 0.0, str(text), None, radius=dx, angle=dy))
+        self._dims.append(_Dim("note", self._at(at), None, 0.0, str(text), None, radius=dx, angle=dy))
         return self
 
-    def overall(self) -> "View":
-        """Overall width (above) and height (left) of the view's projected extent."""
-        self._overall = True
+    def flag(self, text: str, *, at=None, item: int | str | None = None, joint: str | None = None,
+             offset: tuple[float, float] | None = None) -> "View":
+        """A flag note: what an assembly requires where it applies (a torque, a
+        threadlocker, a bond, work done at assembly). A numbered flag with a leader
+        from ``at`` (a model point) or from ``item`` (a part this view balloons,
+        by number or name), and the note under that number in the notes block.
+        ``joint`` (one of ``JOINTS``) says how the parts there are held, and its
+        word begins the note: ``joint="bond"`` reads ``BOND: <text>``. The same
+        note flagged twice keeps one number. ``offset`` places the flag as
+        :meth:`note` places its text; left unset, the flag takes the nearest
+        place clear of the view and its annotation, its leader crossing none."""
+        if (at is None) == (item is None):
+            raise ValueError("flag() points from one of at= or item=: a model point, or a part this view balloons")
+        if not isinstance(text, str):
+            raise TypeError(f"flag() takes its note as a string, got {text!r}")
+        words = _joint_note(text, joint)
+        if not words:
+            raise ValueError("flag() needs its note's words, or a joint= that is one")
+        dx, dy = (10.0, 10.0) if offset is None else _sheet_offset("flag", offset)
+        if words not in self.sheet._flags:
+            self.sheet._flags.append(words)
+            if self.sheet.size is not None:
+                self.sheet._check_notes(self.sheet.size)
+        self._dims.append(_Dim("flag", None if at is None else self._at(at), None, None if offset is None else 0.0, words,
+                               None, radius=dx, angle=dy, item=item))
+        return self
+
+    def frame(self, at, frame: Frame, *, offset: tuple[float, float] = (10.0, 10.0)) -> "View":
+        """A feature control frame with a leader to a surface at ``at`` (a model point
+        on it): ``Frame("flatness", 0.05)`` on a face, say. ``offset`` places the
+        frame as :meth:`note` places its text."""
+        dx, dy = _sheet_offset("frame", offset)
+        self._dims.append(_Dim("frame", self._at(at), None, 0.0, None, None, radius=dx, angle=dy, frame=_frame(frame)))
+        return self
+
+    def datum(self, letter: str, at, *, offset: tuple[float, float] | None = None) -> "View":
+        """Make the surface at ``at`` (a model point on it, as the view shows it)
+        datum feature ``letter``: a filled triangle on it, a stem, and the letter
+        in a square, which frames name. A letter names one feature per sheet.
+        ``offset`` (sheet mm) points the stem; left unset, it leads straight out
+        of the view's nearest side."""
+        letter = _new_datum(self.sheet, letter)
+        self._datums.append((letter, self._at(at), None if offset is None else _sheet_offset("datum", offset)))
+        return self
+
+    def section(self, letter: str = "A", *, through=None, parts: PartsList | None = None,
+                materials: bool = False) -> "View":
+        """Draw this view as a full section, the way a drawing shows what hidden
+        lines cannot: the part cut by the plane through ``through`` (a model
+        point; the middle of the part by default) square to the line of sight,
+        the half nearer the viewer taken away, the cut faces hatched at 45
+        degrees, and no hidden lines. The cutting plane is drawn, with ``letter``
+        at both ends and arrows in the viewing direction, on a view of the same
+        part that sees it edge-on, and this view is labelled ``SECTION A-A``.
+        Dimensions and callouts are given in model coordinates as on any view.
+
+        ``parts`` cuts an assembly part by part, on a view of ``parts.assembly``,
+        as an assembly section is drawn: every part in the one general-purpose
+        hatch, parts that touch told apart by its angle and then its spacing, a
+        part too thin to hatch at the drawing's scale filled solid, and where
+        solids overlap the earlier item takes the region. A solid turned part the
+        plane cuts along its axis (a shaft, a rod, a pin, a bolt) is drawn uncut,
+        as ISO 128-50 has it. ``balloons(parts)`` keys the parts it cuts. What each
+        part is made of is the parts list's to say; ``materials=True`` hatches
+        each as its material family (``parts.set(n, family=...)``) instead and
+        adds a material key, for a layered part where the materials are the
+        point."""
+        if self.name == "iso":
+            raise ValueError("section() cuts an orthographic view; an isometric is drawn whole")
+        if parts is not None:
+            if not isinstance(parts, PartsList):
+                raise TypeError(f"section(parts=) takes the PartsList that parts_list() returns, got {parts!r}")
+            if self.shape is not parts.assembly:
+                raise ValueError("section(parts=) cuts each item of parts.assembly, and this view draws another "
+                                 "shape; section the view of parts.assembly")
+        if self._direction is not None:
+            raise ValueError("section() cuts a principal view; an auxiliary view is drawn whole")
+        if self._detail is not None:
+            raise ValueError("a detail shows its parent as the parent is drawn; cut the parent view, and its "
+                             "details show the section")
+        if self._break is not None:
+            raise ValueError("section() cuts a whole view, and this one is broken; cut a view that is not")
+        letter = str(letter).upper()
+        if len(letter) != 1 or letter not in _SECTION_LETTERS:
+            raise ValueError(f"section letter must be one of {_SECTION_LETTERS} (ISO 128-40 leaves out I, O "
+                             f"and Q), got {letter!r}")
+        _refuse_used_letter(self.sheet, letter, self)
+        self._section = (letter, None if through is None else self._at(through))
+        self._section_parts = parts
+        self._section_materials = bool(materials)
+        self.hidden = False
+        if self.label is None:
+            self.label = f"SECTION {letter}-{letter}"
+        return self
+
+    def overall(self, *, width: bool = True, height: bool = True, reference: bool = False) -> "View":
+        """Overall width (above) and height (left) of the view's projected extent,
+        each on the outermost row of its side. Turn one off where another
+        dimension already states it -- a turned part's height is its diameter,
+        and a drawing states a size once. ``reference=True`` prints them as
+        reference dimensions: an assembly's envelope, which nobody inspects."""
+        self._overall = frozenset(name for name, on in (("width", width), ("height", height)) if on)
+        self._overall_reference = bool(reference)
+        return self
+
+    def broken(self, start, end) -> "View":
+        """Draw the view with the stretch between two model points taken out, the
+        way a long part of constant section is drawn: the two ends at the sheet's
+        scale, close together, a break line across each cut. ``start`` and
+        ``end`` lie along one of the model's axes, in the plane of the view. A
+        dimension across the break states its true length. The other views of
+        the same arrangement that show that length are broken alike, so the
+        views stay in line; the isometric is drawn whole. A break where the
+        part changes (a shoulder, a hole) is refused, since the shortened view
+        would hide it, and so is a dimension to a point inside the break."""
+        if self.name == "iso" or self._detail is not None or self._aux is not None or self._section is not None:
+            raise ValueError("broken() shortens a whole principal view, not an isometric, a detail, an auxiliary "
+                             "view or a section")
+        try:
+            a, b = self._at(start), self._at(end)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"broken() takes two model points like (x, y, z), the ends of the stretch it takes "
+                            f"out; got {start!r} and {end!r}") from exc
+        axis = max(range(3), key=lambda k: abs(b[k] - a[k]))
+        if abs(b[axis] - a[axis]) < 1e-6:
+            raise ValueError("broken() takes two different points along the part's length")
+        across = [k for k in range(3) if k != axis and abs(b[k] - a[k]) > _SAME_PLACE]
+        if across:
+            raise ValueError(f"broken({_where(a)}, {_where(b)}): the points differ along {'XYZ'[axis]} and "
+                             f"{'XYZ'[across[0]]}; a break runs along one axis, so give two points on a line along it")
+        if abs(_look(self)[axis]) > 1e-9:
+            raise ValueError(f"the {self.name} view looks along {'XYZ'[axis]}, so it shows no length to break; "
+                             f"break a view that shows {'XYZ'[axis]} across the sheet")
+        brk = _Break(axis, min(a[axis], b[axis]), max(a[axis], b[axis]))
+        box = self.shape.bounding_box()
+        ends = ((box.min.X, box.max.X), (box.min.Y, box.max.Y), (box.min.Z, box.max.Z))[axis]
+        if brk.low <= ends[0] + _SAME_PLACE or brk.high >= ends[1] - _SAME_PLACE:
+            raise ValueError(f"broken({_where(a)}, {_where(b)}): the part runs from {'XYZ'[axis]} = {_fmt(ends[0])} "
+                             f"to {_fmt(ends[1])}, so a break takes out a stretch inside that and leaves both ends")
+        views = [self]
+        if self._arranged is not None:
+            views = [v for v in self.sheet.views if v._arranged is self._arranged and v.name != "iso"
+                     and abs(_look(v)[axis]) < 1e-9]
+        sectioned = [view.name for view in views if view._section is not None]
+        if sectioned:
+            raise ValueError(f"broken() would break the {sectioned[0]} view too, which is a section; a section is "
+                             "drawn whole, so break the arrangement before cutting a short view of it")
+        for view in views:
+            view._break = brk
+        return self
+
+    def balloons(self, parts: PartsList) -> "View":
+        """Balloon every item of ``parts`` this view shows: its item number in a
+        circle, with a leader ending in a dot on a point of the part the view
+        sees. The balloons stand in a column beside a tall view (a row above and
+        below a wide one), in the order of the points they key, so no two
+        leaders cross. An item already ballooned in an earlier view of the sheet
+        is not ballooned again, so ``balloons()`` on each view in turn keys each
+        part once, where it is first seen; an item no view shows unhidden is
+        reported. The view must draw ``parts.assembly``."""
+        if not isinstance(parts, PartsList):
+            raise TypeError(f"balloons() takes the PartsList that parts_list() returns, got {type(parts).__name__}")
+        if self.shape is not parts.assembly:
+            raise ValueError(
+                "balloons() keys a view of the assembly the parts list was read from: draw parts.assembly "
+                "(sheet.view(parts.assembly, ...)) and balloon that view."
+            )
+        _refuse_balloons_on(self)
+        parts._frozen = True
+        if parts not in self._balloons:
+            self._balloons.append(parts)
         return self
 
 
-def _fmt(value: float) -> str:
-    text = f"{value:.2f}".rstrip("0").rstrip(".")
-    return text or "0"
+def _refuse_used_letter(sheet: "Sheet", letter: str, view=None) -> None:
+    """A letter names one section or one detail per sheet: two DETAIL Bs, or a
+    DETAIL A beside SECTION A-A, send a reader to the wrong view."""
+    for other in sheet.views:
+        if other is view:
+            continue
+        if other._detail is not None and other._detail.letter == letter:
+            raise ValueError(f"letter {letter} already names DETAIL {letter} on this sheet; pick another letter")
+        if other._detail is None and other._section is not None and other._section[0] == letter:
+            raise ValueError(f"letter {letter} already names SECTION {letter}-{letter} on this sheet; pick another letter")
+        if other._aux is not None and other._aux.letter == letter:
+            raise ValueError(f"letter {letter} already names VIEW {letter} on this sheet; pick another letter")
+
+
+def _refuse_iso(view: View, call: str) -> None:
+    """A callout reads a hole the view looks down, and an isometric looks down none."""
+    if view.name == "iso":
+        raise ValueError(f"{call} calls out what a view looks down, and an isometric looks down no hole; "
+                         "call it out on an orthographic view")
 
 
 def _tol(value):
@@ -260,12 +647,14 @@ def _tol(value):
     if isinstance(value, bool):
         raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}")
     if isinstance(value, (int, float)):
-        return (abs(float(value)), abs(float(value)))
-    try:
-        plus, minus = value
-        return (abs(float(plus)), abs(float(minus)))
-    except (TypeError, ValueError) as exc:
-        raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}") from exc
+        plus = minus = abs(float(value))
+    else:
+        try:
+            plus, minus = (abs(float(v)) for v in value)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}") from exc
+    _places(plus, minus)
+    return plus, minus
 
 
 def _assert_legs_measure_an_angle(vertex, a, b, *, tol_deg: float = 0.05) -> None:
@@ -318,6 +707,74 @@ def _positive(name: str, value, *, allow_none: bool = False, integer: bool = Fal
     return int(round(number)) if integer else number
 
 
+def _frame(frame) -> Frame | None:
+    if frame is not None and not isinstance(frame, Frame):
+        raise TypeError(f"frame= takes a Frame, e.g. Frame(\"position\", 0.1, (\"A\", \"B\")), got {frame!r}")
+    return frame
+
+
+def _key(key, reference: bool = False) -> bool:
+    if not isinstance(key, bool):
+        raise TypeError(f"key= is True or False, got {key!r}")
+    if key and reference:
+        raise ValueError("a reference dimension is never inspected, so it is no key characteristic; mark the "
+                         "toleranced dimension or the frame's feature instead")
+    return key
+
+
+def _new_datum(sheet: "Sheet", letter: str | None) -> str | None:
+    """A datum letter not yet used on the sheet, or None."""
+    if letter is None:
+        return None
+    letter = str(letter).upper()
+    if len(letter) != 1 or letter not in _SECTION_LETTERS:
+        raise ValueError(f"a datum letter is one of {_SECTION_LETTERS} (Y14.5 leaves out I, O and Q), "
+                         f"got {letter!r}")
+    used = {d[0] for view in sheet.views for d in view._datums} | {
+        dim.datum for view in sheet.views for dim in view._dims if dim.datum}
+    if letter in used:
+        raise ValueError(f"datum {letter} is already a feature on this sheet; a letter names one feature")
+    return letter
+
+
+def _sheet_offset(call: str, offset) -> tuple[float, float]:
+    try:
+        dx, dy = (float(offset[0]), float(offset[1]))
+    except (TypeError, ValueError, IndexError) as exc:
+        raise TypeError(f"{call} offset must be an (x, y) pair of sheet millimetres, got {offset!r}") from exc
+    if not (math.isfinite(dx) and math.isfinite(dy)) or (dx, dy) == (0.0, 0.0):
+        raise ValueError(f"{call} offset must be a finite, non-zero (x, y) pair, got {offset!r}")
+    return dx, dy
+
+
+def _dimension_kind(*, tol=None, fit=None, limits=None, basic: bool = False,
+                    reference: bool = False) -> tuple[float, float] | None:
+    """Check that a dimension's kind and its tolerance agree, and return its limits
+    as numbers. A basic dimension is exact, its tolerance the GD&T frame's that
+    uses it; a reference dimension is information only; limits are the tolerance
+    themselves."""
+    if basic and reference:
+        raise ValueError("a dimension is basic (exact, boxed) or reference (information, in parentheses), not both")
+    for kind, on in (("basic", basic), ("reference", reference)):
+        if on and (tol is not None or fit is not None or limits is not None):
+            raise ValueError(f"a {kind} dimension takes no tol=, fit= or limits=: "
+                             + ("its tolerance is the GD&T frame's that uses it" if kind == "basic"
+                                else "it states no requirement to tolerance"))
+    if fit is not None and (tol is not None or limits is not None):
+        raise ValueError(f"fit={fit!r} is the size's tolerance, as an ISO 286 class; give it or "
+                         f"{'tol=' if tol is not None else 'limits='}, not both, which would print two")
+    if limits is None:
+        return None
+    if tol is not None:
+        raise ValueError("limits= are the tolerance, as the two limits the part lies between; give them or tol=, "
+                         "not both")
+    low, high = _pair("limits", limits)
+    if not low < high:
+        raise ValueError(f"limits=(low, high) with low below high, got {limits!r}")
+    _places(low, high)
+    return low, high
+
+
 def _pair(name: str, value) -> tuple[float, float] | None:
     """A (diameter, depth) or (diameter, angle) pair, both positive."""
     if value is None:
@@ -330,77 +787,91 @@ def _pair(name: str, value) -> tuple[float, float] | None:
     return (_positive(f"{name}[0]", values[0]), _positive(f"{name}[1]", values[1]))
 
 
-def _tol_suffix(tol) -> str:
-    if not tol:
-        return ""
-    plus, minus = tol
-    if abs(plus - minus) < 1e-9:
-        return f" ±{_fmt(plus)}"
-    return f" +{_fmt(plus)}/-{_fmt(minus)}"
-
-
-def hole_callout_text(spec: dict, *, tol=None, fit: str | None = None) -> str:
-    """The text of a hole callout, in the ISO/ASME symbols a shop reads."""
-    parts = []
-    lead = f"{spec['count']}× " if spec.get("count") else ""
-    size = spec["thread"] if spec.get("thread") else f"%%c{_fmt(spec['diameter'])}"
-    size += _tol_suffix(tol) + (f" {fit}" if fit else "")
-    if spec.get("thru"):
-        size += " THRU"
-    elif spec.get("depth") is not None:
-        size += f" \u21a7{_fmt(spec['depth'])}"
-    parts.append(lead + size)
-    if spec.get("cbore"):
-        d, depth = spec["cbore"]
-        parts.append(f"\u2334 %%c{_fmt(d)} \u21a7{_fmt(depth)}")
-    if spec.get("csk"):
-        d, ang = spec["csk"]
-        parts.append(f"\u2335 %%c{_fmt(d)} × {_fmt(ang)}°")
-    if spec.get("label"):
-        parts.append(str(spec["label"]))
-    return "   ".join(parts)
-
-
-def _p3(p) -> tuple[float, float, float]:
-    values = tuple(float(v) for v in p)
-    if len(values) == 2:
-        values = (values[0], values[1], 0.0)
-    if len(values) != 3:
-        raise ValueError(f"expected a 2D or 3D point, got {p!r}")
-    return values  # type: ignore[return-value]
-
-
 @dataclass
 class Sheet:
     """One sheet of a drawing: a frame, a title block and the views placed on it.
 
     ``at`` positions on views are the sheet's own millimetres with the origin at
     the sheet's bottom-left corner; ``scale`` is drawing scale (1 = 1:1, 0.5 = 1:2).
+
+    ``size=None`` and ``scale=None`` let the sheet choose: :meth:`three_views`
+    picks the smallest sheet and the largest standard scale its views and their
+    annotation fit at, and a scale the sheet chose steps down when it renders,
+    should the annotation added afterwards need more paper.
     """
 
-    size: str = "A3"
-    scale: float = 1.0
+    size: str | None = "A3"
+    scale: float | None = 1.0
     title: str = "UNTITLED"
     part_number: str = ""
     material: str = ""
+    #: The material's specification ("AMS 4027"): MATERIAL reads "AL 6061-T6 PER
+    #: AMS 4027".
+    spec: str = ""
     revision: str = "A"
     author: str = ""
+    #: Surface finish or treatment, as the requirement states it ("ANODISE CLEAR").
+    finish: str = ""
+    #: The drawing's date, as the author writes it. Never stamped from the clock:
+    #: the PDF's bytes are a function of its content.
+    date: str = ""
     units: str = "mm"
     projection: str = "THIRD ANGLE"
     notes: Sequence[str] = ()
     ink: str = "mono"
     text_height: float = 3.5
-    #: A general tolerance standard, e.g. "ISO 2768-m": written as the first note.
+    #: A general tolerance standard, e.g. "ISO 2768-m": written as a note, after
+    #: any general profile.
     general_tolerance: str = ""
+    #: A surface profile every surface meets unless otherwise specified, to its
+    #: datums: note 1, "UNLESS OTHERWISE SPECIFIED, ALL SURFACES" and the frame.
+    general_profile: Frame | None = None
     #: Revision history rows (rev, date, description), drawn as a table top-right.
     revisions: Sequence[tuple[str, str, str]] = ()
+    #: A second line under the title: on a part's sheet of an assembly drawing,
+    #: which item it details and of what ("ITEM 4 OF SHOCK ABSORBER").
+    subtitle: str = ""
+    #: How far along the part is, one of STAGES: it prints in the title block and
+    #: sets what the completeness report asks the sheet to define. None leaves it
+    #: unsaid and unchecked.
+    stage: str | None = None
+    #: Whose conventions the drawing follows (GENERIC or a company's own
+    #: Profile): its tolerancing standard, title cells and key mark.
+    profile: Profile | None = None
+    #: One of the profile's own category names, in place of a stage.
+    category: str = ""
+    #: The design activity, printed in the title block's COMPANY cell.
+    company: str = ""
+    #: Values for the profile's extra title cells, by name.
+    fields: Mapping[str, str] = field(default_factory=dict)
     views: list[View] = field(default_factory=list)
+    #: Set when :meth:`parts_list` draws a parts list on the sheet.
+    _parts: _ListRun | None = field(default=None, init=False, repr=False)
+    #: The size and scale the sheet chose, where the author left ``size`` or
+    #: ``scale`` None; a value the author sets is theirs and these go unread.
+    _chosen_size: str | None = field(default=None, init=False, repr=False)
+    _chosen_scale: float | None = field(default=None, init=False, repr=False)
+    #: For a part's sheet of an assembly drawing, the item it details: its title,
+    #: subtitle and material follow the item when it renders.
+    _item: Any = field(default=None, init=False, repr=False)
+    #: The flag notes its views flag, in the order first flagged: they follow the
+    #: notes, each numbered in its flag.
+    _flags: list[str] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.size not in SHEET_SIZES:
-            raise ValueError(f"unknown sheet size {self.size!r}; one of {sorted(SHEET_SIZES)}")
-        if not (self.scale > 0):
-            raise ValueError("scale must be positive")
+        if self.size is not None and self.size not in SHEET_SIZES:
+            raise ValueError(f"unknown sheet size {self.size!r}; one of {sorted(SHEET_SIZES)}, or None to let "
+                             "three_views() choose")
+        if self.scale is not None and (isinstance(self.scale, bool) or not isinstance(self.scale, (int, float))
+                                       or not (self.scale > 0)):
+            raise ValueError(f"scale must be a positive number, or None to let three_views() choose; got "
+                             f"{self.scale!r}")
+        if self.units not in UNITS:
+            raise ValueError(
+                f"units={self.units!r}: a sheet prints millimetres, the unit every value on it is measured "
+                "in. An inch drawing would need every measured value converted, and nothing here does that "
+                "yet; labelling millimetre values IN would make each one wrong by 25.4."
+            )
         # The title block prints this label and `three_views` lays the views out to
         # match it. Accepting any string would print "FIRST ANGLE" over a third-angle
         # arrangement, which is the one mislabel a shop cannot recover from.
@@ -427,61 +898,353 @@ class Sheet:
         for row in self.revisions:
             if isinstance(row, (str, bytes)) or len(row) != 3:
                 raise ValueError(f"each revision must be a (rev, date, description) triple, got {row!r}")
-        # A note wider than the sheet runs off the paper, and the sheet is the one
-        # thing here that cannot be made bigger after the fact. Measure the line
-        # the sheet DRAWS -- numbered, prefixed, general tolerance expanded -- at
-        # the height it draws it, against the room it has.
-        room = self.width - 2 * (_MARGIN + _NOTE_INSET)
-        for line, note in zip(self.note_lines(), self.drawn_notes()):
-            if _text_width(line, _NOTE_HEIGHT) > room:
+        self._check_stage()
+        if self.spec and not self.material:
+            raise ValueError(f"spec={self.spec!r} specifies a material; give material= too, which MATERIAL reads "
+                             "before it")
+        _check_general_tolerance(self.profile, self.general_tolerance)
+        if self.general_profile is not None and (not isinstance(self.general_profile, Frame)
+                                                 or self.general_profile.characteristic != "surface_profile"):
+            raise ValueError("general_profile takes a Frame of surface_profile, e.g. Frame(\"surface_profile\", 0.2, "
+                             f"(\"A\", \"B\", \"C\")); got {self.general_profile!r}")
+        if self.size is not None:
+            self._check_notes(self.size)
+
+    def _check_stage(self) -> None:
+        """The stage, category, profile and its cells agree, from closed lists."""
+        if self.stage is not None and self.stage not in STAGES:
+            raise ValueError(f"unknown stage {self.stage!r}; one of {', '.join(STAGES)}")
+        if self.profile is not None and not isinstance(self.profile, Profile):
+            raise TypeError(f"profile takes a Profile (GENERIC or your own), got {self.profile!r}")
+        if self.category:
+            if self.profile is None:
+                raise ValueError(f"category={self.category!r} is a profile's name for a stage; give the profile "
+                                 "that names it, or stage=")
+            if self.category not in self.profile.categories:
+                raise ValueError(f"the {self.profile.name} profile has no category {self.category!r}; one of "
+                                 f"{', '.join(self.profile.categories) or 'none (it names no categories)'}")
+            if self.stage is not None and self.stage != self.profile.categories[self.category]:
+                raise ValueError(f"category {self.category!r} is the {self.profile.categories[self.category]} "
+                                 f"stage, and stage={self.stage!r} says otherwise; give one of them")
+        self.fields = dict(self.fields)
+        cells = self.profile.fields if self.profile is not None else ()
+        for name in self.fields:
+            if name not in cells:
+                raise ValueError(f"fields names {name!r}, a cell the "
+                                 f"{self.profile.name + ' profile' if self.profile else 'sheet with no profile'} "
+                                 f"does not have; its cells are {', '.join(cells) or 'none'}")
+        if self.profile is not None:
+            taken = [name for name in cells if name in _TITLE_CELLS or name in _BAND_CELLS]
+            if taken:
+                raise ValueError(f"the {self.profile.name} profile's cell {taken[0]!r} is one the title block "
+                                 "already has")
+
+    def _stage(self) -> str | None:
+        """The stage the sheet is checked as: its own, or its category's."""
+        return self.profile.categories[self.category] if self.category and self.profile else self.stage
+
+    def _stage_label(self) -> str:
+        """What the STAGE cell reads: the category's name, else the stage's."""
+        return self.category or (_STAGE_LABELS[self.stage] if self.stage else "")
+
+    def _banded(self) -> bool:
+        """Whether the title block carries its top band, COMPANY and STAGE: only
+        on a sheet that states a stage, a profile or a company."""
+        return bool(self.stage or self.category or self.profile is not None or self.company)
+
+    def _title_height(self) -> float:
+        return _TITLE_H + (_BAND_H if self._banded() else 0.0)
+
+    def _material_label(self) -> str:
+        return f"{self.material} PER {self.spec}" if self.spec and self.material else self.material
+
+    def _check_notes(self, paper: str) -> None:
+        """A note wraps at its words, but a word wider than the sheet runs off the
+        paper, and the sheet is the one thing here that cannot be made bigger after
+        the fact. Measure the rows the sheet DRAWS -- numbered, prefixed, general
+        tolerance expanded -- at the height it draws them, against the room
+        ``paper`` gives them."""
+        room = SHEET_SIZES[paper][0] - 2 * (_MARGIN + _NOTE_INSET)
+        rows = self._wrapped_notes(room)
+        notes = self.drawn_notes()
+        for row in rows:
+            if self._row_width(row, rows) > room:
                 raise ValueError(
-                    f"note {note!r} is wider than the {self.size} sheet's note row "
-                    f"({round(room)} mm). Shorten it, or split it across two notes."
+                    f"note {notes[row[2]]!r} is wider than the {paper} sheet's note row "
+                    f"({round(room)} mm), even wrapped at its words. Shorten its longest word."
                 )
 
+    def _note_layout(self, paper: str | None = None) -> tuple[float, list[tuple[float, str, int, bool]]]:
+        """Where the notes stand and how they wrap: their base above the frame's
+        foot, and each printed row as (its x from the notes' left edge, its text,
+        which note, whether it is that note's first row). They stand on the
+        frame's foot beside the title block, each wrapped at its words to the room
+        there, so no empty strip is left under them; above the title block, on the
+        whole width, only where a word is too long to stand beside it."""
+        width = SHEET_SIZES[paper or self._size()][0]
+        beside = width - _MARGIN - _TITLE_W - 4.0 - (_MARGIN + _NOTE_INSET)
+        rows = self._wrapped_notes(beside)
+        if all(self._row_width(row, rows) <= beside for row in rows):
+            return 0.0, rows
+        return self._title_height(), self._wrapped_notes(width - 2 * (_MARGIN + _NOTE_INSET))
+
+    def _note_rows(self, paper: str | None = None) -> list[tuple[float, str, int, bool]]:
+        return self._note_layout(paper)[1]
+
+    def _wrapped_notes(self, room: float) -> list[tuple[float, str, int, bool]]:
+        """The drawn notes as rows no wider than ``room`` where their words allow:
+        a note's first row carries its prefix and number, the rest stand under its
+        words."""
+        notes = self.drawn_notes()
+        flagged = len(notes) - len(self._flags)
+        rows: list[tuple[float, str, int, bool]] = []
+        for k, note in enumerate(notes):
+            head = f"{'NOTES:  ' if k == 0 else '        '}{_FLAG_ROOM if k >= flagged else f'{k + 1}. '}"
+            indent = _text_width(head, _NOTE_HEIGHT)
+            lines: list[list[str]] = [[]]
+            for word in note.split():
+                if lines[-1] and indent + _text_width(" ".join([*lines[-1], word]), _NOTE_HEIGHT) > room:
+                    lines.append([])
+                lines[-1].append(word)
+            for j, words in enumerate(lines):
+                rows.append((0.0, head + " ".join(words), k, True) if j == 0 else (indent, " ".join(words), k, False))
+        return rows
+
+    def _row_width(self, row: tuple[float, str, int, bool], rows: list) -> float:
+        """A row's width from the notes' left edge: a general profile's frame
+        follows the last row of its note."""
+        dx, text, k, _first = row
+        width = dx + _text_width(text, _NOTE_HEIGHT)
+        last = max(r for r, other in enumerate(rows) if other[2] == k)
+        if (self.drawn_notes()[k] == _GENERAL_PROFILE and self.general_profile is not None
+                and rows[last] is row):
+            width += _NOTE_HEIGHT + frame_size(self.general_profile, _NOTE_HEIGHT)[0]
+        return width
+
     def drawn_notes(self) -> list[str]:
-        """The note strings as they reach the paper: the general tolerance, spelled
-        out, is note 1 when it is given."""
-        general = [f"TOLERANCES PER {self.general_tolerance} UNLESS OTHERWISE SPECIFIED."]
-        return (general if self.general_tolerance else []) + list(self.notes)
+        """The note strings as they reach the paper: a general profile is note 1
+        (its frame drawn after the words), then the standard a profile's drawing
+        is read by, the general tolerance spelled out, and the author's notes."""
+        profile = [_GENERAL_PROFILE] if self.general_profile is not None else []
+        general = [_general_tolerance_note(self.profile, self.general_tolerance)] if self.general_tolerance else []
+        return profile + _standard_note(self.profile) + general + list(self.notes) + list(self._flags)
 
     def note_lines(self) -> list[str]:
-        """Each drawn note with the prefix and number the sheet prints before it."""
+        """Each drawn note with the prefix and number the sheet prints before it; a
+        flag note leaves its number's place to the flag drawn there."""
         notes = self.drawn_notes()
-        return [f"{'NOTES:  ' if row == 0 else '        '}{row + 1}. {note}"
+        flagged = len(notes) - len(self._flags)
+        return [f"{'NOTES:  ' if row == 0 else '        '}{_FLAG_ROOM if row >= flagged else f'{row + 1}. '}{note}"
                 for row, note in enumerate(notes)]
 
     @property
     def width(self) -> float:
-        return SHEET_SIZES[self.size][0]
+        return SHEET_SIZES[self._size()][0]
 
     @property
     def height(self) -> float:
-        return SHEET_SIZES[self.size][1]
+        return SHEET_SIZES[self._size()][1]
+
+    def _size(self) -> str:
+        """The paper the sheet is drawn on: the author's, else the one it chose."""
+        size = self.size or self._chosen_size
+        if size is None:
+            raise ValueError(
+                "Sheet(size=None) chooses its size when three_views() places the part, and nothing has been "
+                "placed yet. Call three_views() first, or give size= for views placed by hand."
+            )
+        return size
+
+    def _scale(self) -> float:
+        """The scale the sheet is drawn at: the author's, else the one it chose."""
+        scale = self.scale if self.scale is not None else self._chosen_scale
+        if scale is None:
+            raise ValueError(
+                "Sheet(scale=None) chooses its scale when three_views() places the part, and nothing has been "
+                "placed yet. Call three_views() first, or give scale= for views placed by hand."
+            )
+        return scale
+
+    def _chooses(self) -> bool:
+        """Whether the sheet settles its own size or scale."""
+        return self.size is None or self.scale is None
 
     def three_views(self, shape, *, gap: float | None = None, hidden: bool = True, centre_marks: bool = True,
-                    iso: bool = False) -> tuple[View, View, View] | tuple[View, View, View, View]:
-        """Top, front and right views in third-angle arrangement, placed from the
-        part's own extents: front centred low on the sheet, top above it, right
-        beside it. ``gap`` is the clear space between views; by default it is
-        sized for two rows of dimensions (offsets 12 and 24 plus their text) so
-        annotation never runs into the neighbouring view. ``iso=True`` adds an
-        isometric view in the free top-right slot and returns it fourth."""
+                    iso: bool = False, views: Sequence[str] = _VIEW_NAMES) -> tuple[View, ...]:
+        """Top, front and right views in the arrangement ``projection`` names, placed
+        from the part's own extents. ``iso=True`` adds an isometric in the free
+        corner, at a standard scale, and returns it last.
+
+        ``views`` names the principal views to draw, returned in the order top,
+        front, right. A turned or symmetric part shows the same picture from two
+        sides; drawing both says nothing twice, so name the ones that differ
+        (``views=("front", "right")`` for a shaft along X). The render says when
+        two views drawn are the same picture.
+
+        The positions returned are provisional: when the sheet renders, the views
+        are laid out again with each gap sized to the dimensions and callouts the
+        facing views actually carry, so annotation added after this call gets
+        room. ``gap`` fixes the clear space between views instead.
+
+        On a sheet made with ``size=None`` or ``scale=None``, the first call
+        chooses them for this part (see :class:`Sheet`)."""
+        names = tuple(views)
+        if not names or len(set(names)) != len(names) or any(n not in _VIEW_NAMES for n in names):
+            raise ValueError(f"three_views(views={views!r}): name each of {_VIEW_NAMES} at most once, at least one "
+                             "of them; the isometric comes from iso=True")
+        names = tuple(n for n in _VIEW_NAMES if n in names)
         size = shape.bounding_box().size
-        if gap is None:
-            gap = 24.0 + 2 * self.text_height + 16.0  # second dimension row + its text + air
-        slots = _arrange_three_views(self, shape, size, gap, self.scale, iso)
+        arranged = _Arrangement(size, gap, _view_extent(shape, "iso", 1.0) if iso else False, names)
+        if self._chooses():
+            _settle(self, _choose_size_and_scale(self, size, arranged.iso, _default_rooms(), gap, names=names))
+        slots, _over = _arrange_three_views(self, size, gap, self._scale(), arranged.iso, names=names)
         views = tuple(
             self.view(shape, name, at=at, hidden=hidden if name != "iso" else False,
                       centre_marks=centre_marks if name != "iso" else False,
                       label=label, scale=view_scale)
             for name, at, view_scale, label in slots
         )
-        # What the arrangement was, so the off-frame guard can lay it out again at a
-        # candidate scale instead of guessing how much a smaller one would buy.
+        # One arrangement, shared by its views, so the render lays them out again
+        # together from what each carries.
         for view in views:
-            view._arranged = (size, gap, iso)
+            view._arranged = arranged
+            if view.name == "iso":
+                view._auto_label = (view.label, view.scale)
         return views
+
+    def detail(self, view: "View", center, radius: float, *, letter: str = "B", scale: float | None = None,
+               at=None) -> "View":
+        """A detail view: the part of ``view`` inside a circle of ``radius`` (model
+        mm) round ``center`` (a model point), drawn larger and labelled
+        ``DETAIL B (5:1)``. The parent view gets the circle and the letter.
+
+        ``scale`` defaults to the largest standard scale, at least twice the
+        parent's, that draws the circle no more than 60 mm across, stepping down
+        if the paper has no room for that. ``at`` places it by hand; left unset,
+        the render puts it in the nearest free paper. A
+        detail of a section keeps the section's cut and hatching. Dimensions and
+        callouts are given in model coordinates as on any view, and ``holes()``
+        calls out only what the circle holds."""
+        if view not in self.views:
+            raise ValueError("detail() takes a view of this sheet")
+        if view.name == "iso" or view._detail is not None:
+            raise ValueError("detail() enlarges an orthographic view or a section, not an isometric or a detail")
+        letter = str(letter).upper()
+        if len(letter) != 1 or letter not in _SECTION_LETTERS:
+            raise ValueError(f"detail letter must be one of {_SECTION_LETTERS} (ISO 128-40 leaves out I, O and Q), "
+                             f"got {letter!r}")
+        _refuse_used_letter(self, letter)
+        r = _positive("radius", radius)
+        parent_scale = view.scale or self._scale()
+        chosen = scale is None
+        if scale is None:
+            fits = [c for c in _STANDARD_SCALES if c >= 2 * parent_scale - 1e-9 and 2 * r * c <= _DETAIL_SIZE]
+            larger = [c for c in _STANDARD_SCALES if c > parent_scale + 1e-9]
+            scale = max(fits) if fits else (min(larger) if larger else 2 * parent_scale)
+        elif not (scale > 0):
+            raise ValueError("a detail's scale must be positive")
+        if at is not None:
+            try:
+                at = (float(at[0]), float(at[1]))
+            except (TypeError, ValueError, IndexError) as exc:
+                raise TypeError(f"detail at= must be an (x, y) pair of sheet millimetres, got {at!r}") from exc
+            if not (math.isfinite(at[0]) and math.isfinite(at[1])):
+                raise ValueError(f"detail at= must be finite sheet millimetres, got {at!r}")
+        detail = View(self, view.shape, view.name, at or (0.0, 0.0), f"DETAIL {letter} ({_scale_label(scale)})",
+                      view.hidden, view.centre_marks, scale)
+        detail._detail = _Detail(view, view._at(center), r, letter, at is None, chosen)
+        detail._direction = view._direction
+        self.views.append(detail)
+        return detail
+
+    def auxiliary(self, view: "View", point, *, letter: str = "C", scale: float | None = None, at=None,
+                  partial: bool = True) -> "View":
+        """An auxiliary view: the part seen square to the flat face through
+        ``point`` (a model point on it), so an inclined face shows its true shape
+        and its holes as circles. Labelled ``VIEW C``; ``view``, the view it is
+        projected from, gets an arrow pointing the way it looks, and the letter.
+
+        It is drawn with the face's slope running up the sheet, at ``view``'s
+        scale unless ``scale`` is given, and placed in the free paper nearest
+        ``view`` unless ``at`` places it. It shows that face and what lies within
+        its outline, as a partial view does, since the rest of the part is
+        foreshortened there; ``partial=False`` draws the whole part. Give it
+        dimensions and callouts like any view; ``holes()`` on it calls out the
+        holes in that face."""
+        if view not in self.views:
+            raise ValueError("auxiliary() takes a view of this sheet")
+        if view.name == "iso" or view._detail is not None or view._aux is not None:
+            raise ValueError("auxiliary() projects from a principal view, not an isometric, a detail or another "
+                             "auxiliary view")
+        letter = str(letter).upper()
+        if len(letter) != 1 or letter not in _SECTION_LETTERS:
+            raise ValueError(f"auxiliary view letter must be one of {_SECTION_LETTERS} (ISO 128-40 leaves out I, O "
+                             f"and Q), got {letter!r}")
+        _refuse_used_letter(self, letter)
+        if scale is not None and not (scale > 0):
+            raise ValueError("an auxiliary view's scale must be positive")
+        corner = None if at is None else _pair("at", at)
+        n, outline = _flat_face(view.shape, view._at(point))
+        for name, (direction, _up) in VIEW_DIRECTIONS.items():
+            if name != "iso" and _dot(n, direction) > 1 - 1e-6:
+                raise ValueError(f"the face at {_where(point)} faces the {name} view square on; draw that view "
+                                 "rather than an auxiliary one")
+        look = _look(view)
+        if abs(_dot(n, look)) > 1e-6:
+            raise ValueError(
+                f"the face at {_where(point)} is not seen edge-on in the {view.name} view: an auxiliary view is "
+                "projected from the view that shows its face as a line. A face inclined to every principal view "
+                "needs a secondary auxiliary view, which is not drawn."
+            )
+        # Up is the parent's up laid onto the face, so the face's slope runs up the sheet.
+        parent_up = _dirs(view)[1]
+        up = tuple(u - _dot(parent_up, n) * c for u, c in zip(parent_up, n))
+        if math.sqrt(_dot(up, up)) < 1e-6:
+            up = tuple(u - _dot(look, n) * c for u, c in zip(look, n))
+        length = math.sqrt(_dot(up, up))
+        up = tuple(c / length for c in up)
+        own = scale if scale is not None else view.scale
+        # The label is settled when the sheet renders, its scale being known then.
+        aux = View(self, view.shape, "auxiliary", corner or (0.0, 0.0), None, view.hidden, view.centre_marks, own)
+        aux._direction = (n, up)
+        aux._aux = _Aux(view, view._at(point), letter, corner is None, outline if partial else None)
+        self.views.append(aux)
+        return aux
+
+    def parts_list(self, parts: PartsList, *, first: int = 1, last: int | None = None) -> "Sheet":
+        """Draw ``parts`` as the parts list, directly above the title block and as
+        wide as it, the way ISO 7573 and ASME Y14.34 place one: ITEM, QTY,
+        DESCRIPTION, PART NO. and MATERIAL, the header against the title block
+        and item 1 above it, so the list reads upward. A blank PART NO. or
+        MATERIAL is one the drawing does not state.
+
+        ``first`` and ``last`` draw a run of the items, for a list too long for
+        one sheet; the rest goes on a further sheet's ``parts_list``, and each
+        run says on which sheet the list continues."""
+        if not isinstance(parts, PartsList):
+            raise TypeError("Sheet.parts_list() takes the PartsList that cadgen.eng_drawing.parts_list() returns, "
+                            f"got {type(parts).__name__}")
+        if self._parts is not None:
+            raise ValueError("a sheet carries one parts list; draw the rest of a long one on a further sheet")
+        last = len(parts) if last is None else last
+        if (isinstance(first, bool) or isinstance(last, bool) or not isinstance(first, int)
+                or not isinstance(last, int) or not 1 <= first <= last <= len(parts)):
+            raise ValueError(f"parts_list(first={first!r}, last={last!r}): the items run 1 to {len(parts)}")
+        parts._frozen = True
+        room = _list_room(self)
+        if (last - first + 2) * _LIST_ROW > room:
+            fits = int(room // _LIST_ROW) - 1
+            if fits < 1:
+                raise ValueError(f"the {self._size()} sheet has no room above its title block for a parts list "
+                                 "(its revision table takes it); draw the list on a larger sheet")
+            raise ValueError(
+                f"a parts list of {last - first + 1} items needs {(last - first + 2) * _LIST_ROW:.0f} mm above the "
+                f"title block, and {self._size()} has {room:.0f}. Draw items {first} to {first + fits - 1} here "
+                f"(parts_list(parts, last={first + fits - 1})) and the rest on a further sheet "
+                f"(parts_list(parts, first={first + fits}))."
+            )
+        self._parts = _ListRun(parts, first, last)
+        return self
 
     def view(self, shape, name: str, *, at, label: str | None = None, hidden: bool = True, centre_marks: bool = True,
              scale: float | None = None) -> View:
@@ -489,6 +1252,7 @@ class Sheet:
             raise ValueError(f"unknown view {name!r}; one of {sorted(VIEW_DIRECTIONS)}")
         if scale is not None and not (scale > 0):
             raise ValueError("a view's scale must be positive")
+        _require_settled(self)  # a view placed by hand is placed on a sheet of known size and scale
         # A non-finite at= compares False against every frame edge, so the off-frame
         # guard passed it and the sheet rendered blank at exit 0 -- the one outcome
         # the guard exists to prevent.
@@ -503,907 +1267,613 @@ class Sheet:
         return view
 
 
-# --- projection ---------------------------------------------------------------------
+class AssemblySheets(list):
+    """The sheets :func:`assembly_sheets` makes, in order: the general arrangement,
+    any sheets its parts list continues onto, then one sheet per item.
+    ``part(key)`` is an item's sheet, by item number or part name; ``parts`` is
+    the parts list they key."""
 
-def _project_to_viewport(shape, origin, up, look_at):
-    """Hidden-line projection, with tangent transitions left out of the hidden half.
+    def __init__(self, sheets: Sequence[Sheet], parts: PartsList, by_item: dict[int, Sheet]) -> None:
+        super().__init__(sheets)
+        self.parts = parts
+        self._by_item = by_item
 
-    ``Shape.project_to_viewport`` bundles three OCCT compounds into each half.
-    For the hidden half those are sharp edges (``HCompound``), silhouettes
-    (``OutLineHCompound``) and SMOOTH edges (``Rg1LineHCompound``) -- the
-    tangent transition where a fillet runs into a face, or a cylinder into the
-    plane it touches. A drawing does not draw those: ISO 128 has no tangent
-    transition line, and one that is behind material marks nothing a shop could
-    look at. Drawn anyway they print as extra dashed lines running the length of
-    the feature they belong to, which reads as a hidden edge that is not there.
-    On the examples' circular flange the right view drew two, the full width of
-    the part.
-
-    The visible half keeps all three: a tangent line you can see is the
-    conventional runout, and the sheets already read correctly with them.
-    """
-    from build123d import Edge, ShapeList, Vector
-    from build123d.topology import downcast
-    from OCP.BRepLib import BRepLib
-    from OCP.gp import gp_Ax1, gp_Ax2
-    from OCP.HLRAlgo import HLRAlgo_Projector
-    from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
-    from OCP.TopAbs import TopAbs_ShapeEnum
-    from OCP.TopExp import TopExp_Explorer
-
-    hlr = HLRBRep_Algo()
-    hlr.Add(shape.wrapped)
-    camera = gp_Ax2()
-    camera.SetAxis(gp_Ax1(Vector(origin).to_pnt(), (Vector(origin) - Vector(look_at)).normalized().to_dir()))
-    camera.SetYDirection(Vector(up).normalized().to_dir())
-    hlr.Projector(HLRAlgo_Projector(camera))
-    hlr.Update()
-    hlr.Hide()
-    shapes = HLRBRep_HLRToShape(hlr)
-
-    def edges(compound) -> list:
-        found = []
-        if compound is None or compound.IsNull():
-            return found
-        explorer = TopExp_Explorer(downcast(compound), TopAbs_ShapeEnum.TopAbs_EDGE)
-        while explorer.More():
-            edge = downcast(explorer.Current())
-            # Without this the curve is 2D only and later reads segfault.
-            BRepLib.BuildCurves3d_s(edge, 1e-9)
-            found.append(Edge(edge))
-            explorer.Next()
-        return found
-
-    # Same compounds in the same order as build123d, so the entity order on the
-    # sheet -- and the PDF bytes -- do not move; the hidden half drops Rg1Line.
-    visible = (edges(shapes.VCompound()) + edges(shapes.Rg1LineVCompound())
-               + edges(shapes.OutLineVCompound()))
-    hidden = edges(shapes.HCompound()) + edges(shapes.OutLineHCompound())
-    return ShapeList(visible), ShapeList(hidden)
+    def part(self, key: int | str) -> Sheet:
+        item = self.parts[key]
+        if item.number not in self._by_item:
+            raise KeyError(f"item {item.number} ({item.description}) is not in the model, so it has no sheet; "
+                           "the parts list carries it")
+        return self._by_item[item.number]
 
 
-class _Projection:
-    """The affine map a build123d viewport applies, recovered from the viewport
-    itself, so dimension points land exactly where the geometry did."""
-
-    def __init__(self, shape, name: str) -> None:
-        from build123d import Axis, Edge, Vector
-
-        direction, up = VIEW_DIRECTIONS[name]
-        bbox = shape.bounding_box()
-        centre = bbox.center()
-        radius = max(bbox.size.length, 1.0)
-        d = Vector(*direction).normalized()
-        origin = centre + d * (radius * 10.0)
-        self.origin, self.up, self.look_at = origin, up, centre
-        self.visible, self.hidden = _project_to_viewport(shape, origin, up, centre)
-        # Recover the map from three unit lines along the model axes.
-        probes = []
-        for axis in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
-            line = Edge.make_line(Vector(0, 0, 0), Vector(*axis))
-            vis, hid = line.project_to_viewport(viewport_origin=origin, viewport_up=up, look_at=centre)
-            edges = list(vis) + list(hid)
-            if not edges:
-                probes.append(((0.0, 0.0), (0.0, 0.0)))
-                continue
-            e = edges[0]
-            a, b = e.position_at(0), e.position_at(1)
-            probes.append(((a.X, a.Y), (b.X, b.Y)))
-        # Each probe's start is the projected origin; its end minus start is the axis image.
-        # Anchor on the first probe that projected to a line: the X probe is parallel
-        # to the right and left views and comes back empty, and anchoring on its
-        # zero placeholder put the projected centre in the wrong place, so the
-        # fix-up below chose the wrong end of the Z probe and mirrored those views'
-        # annotations vertically.
-        o = next((p[0] for p in probes if p[0] != p[1]), (0.0, 0.0))
-        self.c = o
-        self.m = [(p[1][0] - p[0][0], p[1][1] - p[0][1]) for p in probes]
-        # A probe whose line is parallel to the view direction projects to a point;
-        # its axis image is zero, which is correct. A projected edge can come back
-        # with its ends swapped, so the map is settled by probes anchored at the
-        # model centre, whose projected start is unambiguous.
-        self._m_fixup(shape, centre)
-
-    def _m_fixup(self, shape, centre) -> None:
-        from build123d import Edge, Vector
-
-        # Probe with a line from the centre to the centre + axis, whose START is
-        # unambiguous: its projected start must equal the projected centre.
-        for index, axis in enumerate(((1, 0, 0), (0, 1, 0), (0, 0, 1))):
-            line = Edge.make_line(centre, centre + Vector(*axis) * 7.0)
-            vis, hid = line.project_to_viewport(viewport_origin=self.origin, viewport_up=self.up, look_at=self.look_at)
-            edges = list(vis) + list(hid)
-            if not edges:
-                continue
-            e = edges[0]
-            a, b = e.position_at(0), e.position_at(1)
-            # Whichever end is closer to the projected centre is the start.
-            pc = self._raw_point(tuple(centre))
-            da = math.hypot(a.X - pc[0], a.Y - pc[1])
-            db = math.hypot(b.X - pc[0], b.Y - pc[1])
-            start, end = (a, b) if da <= db else (b, a)
-            self.m[index] = ((end.X - start.X) / 7.0, (end.Y - start.Y) / 7.0)
-            self.c = (pc[0] - (self.m[0][0] * centre.X + self.m[1][0] * centre.Y + self.m[2][0] * centre.Z),
-                      pc[1] - (self.m[0][1] * centre.X + self.m[1][1] * centre.Y + self.m[2][1] * centre.Z))
-
-    def _raw_point(self, p) -> tuple[float, float]:
-        x = self.c[0] + self.m[0][0] * p[0] + self.m[1][0] * p[1] + self.m[2][0] * p[2]
-        y = self.c[1] + self.m[0][1] * p[0] + self.m[1][1] * p[1] + self.m[2][1] * p[2]
-        return (x, y)
-
-    def point(self, p) -> tuple[float, float]:
-        return self._raw_point(p)
-
-
-def _edges_bounds(edges) -> tuple[float, float, float, float] | None:
-    """Exact (x0, x1, y0, y1) of projected edges, from the kernel's own bounding boxes,
-    so a circle's extent is its diameter and not the chord of a few samples."""
-    x0 = y0 = math.inf
-    x1 = y1 = -math.inf
-    for edge in edges:
-        bb = edge.bounding_box()
-        x0, x1 = min(x0, bb.min.X), max(x1, bb.max.X)
-        y0, y1 = min(y0, bb.min.Y), max(y1, bb.max.Y)
-    if not math.isfinite(x0):
-        return None
-    return (x0, x1, y0, y1)
-
-
-def _view_extent(shape, name: str, scale: float) -> tuple[float, float]:
-    """The projected (width, height) of a view in sheet millimetres, for placement."""
-    proj = _Projection(shape, name)
-    bounds = _edges_bounds(list(proj.visible) + list(proj.hidden))
-    if not bounds:
-        return (0.0, 0.0)
-    return ((bounds[1] - bounds[0]) * scale, (bounds[3] - bounds[2]) * scale)
-
-
-def _edge_polyline(edge, samples: int = 24) -> list[tuple[float, float]]:
+def _first_pass(sheet: Sheet, shape) -> None:
+    """A part's first-pass views and dimensions on ``sheet``: three views and an
+    isometric at the largest standard scale that fits (a turned part's two alike
+    side views drawn once, a long one lying down), its overall sizes, and every
+    hole and slot its views look down called out and located; a part turned whole
+    has its diameters, tapers, grooves and every step placed from one end. The
+    sheet's views take the author's points in ``shape``'s own frame."""
     from build123d import GeomType
 
-    n = 2 if edge.geom_type == GeomType.LINE else samples
-    return [(float(v.X), float(v.Y)) for v in (edge.position_at(i / (n - 1)) for i in range(n))]
-
-
-def _circles(edges) -> list[tuple[tuple[float, float], float]]:
-    """Full circles among projected edges: (centre, radius) in viewport coordinates."""
-    from build123d import GeomType
-
-    found: list[tuple[tuple[float, float], float]] = []
-    for edge in edges:
-        if edge.geom_type != GeomType.CIRCLE or not edge.is_closed:
-            continue
-        c = edge.arc_center
-        key = ((round(c.X, 3), round(c.Y, 3)), round(edge.radius, 3))
-        if key not in found:
-            found.append(key)
-    return found
-
-
-def _centres(circles: Sequence[tuple[tuple[float, float], float]]) -> list[tuple[tuple[float, float], float]]:
-    """One entry per circle centre, carrying the largest radius found on it."""
-    largest: dict[tuple[float, float], float] = {}
-    for centre, radius in circles:
-        if radius > largest.get(centre, -1.0):
-            largest[centre] = radius
-    return list(largest.items())
-
-
-# --- writing ------------------------------------------------------------------------
-
-def _dimstyle(doc, text_height: float):
-    style = doc.dimstyles.get("Standard")
-    style.dxf.dimtxt = text_height
-    style.dxf.dimasz = text_height * 0.85
-    style.dxf.dimexo = 1.5
-    style.dxf.dimexe = 2.0
-    style.dxf.dimgap = 1.0
-    style.dxf.dimtad = 1
-    style.dxf.dimdec = 2
-    style.dxf.dimzin = 8
-    style.dxf.dimdsep = ord(".")
-    style.dxf.dimtdec = 2
-    style.dxf.dimblk = "_CLOSEDFILLED"
-    return "Standard"
-
-
-def _arrange_three_views(sheet: "Sheet", shape, size, gap: float, s: float,
-                         iso: bool) -> list[tuple[str, tuple[float, float], float | None, str | None]]:
-    """Where the three (or four) views of a standard arrangement go at scale ``s``.
-
-    Separate from :meth:`Sheet.three_views` so the off-frame guard can ask the
-    same question of a candidate scale: half the block shrinks with the scale
-    and half of it -- the gap between views, the frame, the title block -- does
-    not, so what a smaller scale buys can be laid out but not divided out.
-    """
-    L, W, H = size.X * s, size.Y * s, size.Z * s
-    m = _MARGIN
-    # Annotation also reaches outside the block: left of the front view (heights),
-    # below it (the label), above the top view (widths); keep that clear too.
-    reach = 12.0 + 2 * sheet.text_height + 8.0
-    usable_w = sheet.width - 2 * m - 2 * reach
-    # Notes stack upward from the title block; the block starts above them and
-    # above the label that hangs under the front view.
-    note_rows = len(sheet.notes) + (1 if sheet.general_tolerance else 0)
-    notes_h = (note_rows * 5.0 + 8.0) if note_rows else 0.0
-    usable_h = sheet.height - 2 * m - _TITLE_H - notes_h - reach - 12.0
-    block_w = L + gap + W
-    block_h = H + gap + W
-    left = m + reach + max(0.0, (usable_w - block_w) / 2)
-    bottom = m + _TITLE_H + notes_h + 12.0 + max(0.0, (usable_h - block_h) / 2)
-    if sheet.projection == "FIRST ANGLE":
-        # First angle places each view on the side opposite the one it looks from:
-        # the plan below the front, the view from the right to its left. The
-        # pictures are the third-angle pictures; only the slots swap.
-        front_at = (left + W + gap + L / 2, bottom + W + gap + H / 2)
-        top_at = (front_at[0], bottom + W / 2)
-        right_at = (left + W / 2, front_at[1])
-    else:
-        front_at = (left + L / 2, bottom + H / 2)
-        top_at = (front_at[0], bottom + H + gap + W / 2)
-        right_at = (left + L + gap + W / 2, front_at[1])
-    slots: list[tuple[str, tuple[float, float], float | None, str | None]] = [
-        ("top", top_at, None, None), ("front", front_at, None, None), ("right", right_at, None, None)]
-    if not iso:
-        return slots
-    # The free slot is above the right view. The isometric is taller and wider
-    # than that view, so it is placed from its own projected extent: bottom edge
-    # level with the top view's, centred over the right view, kept inside the frame.
-    # The free corner is right of the top view and above the right view, less the
-    # room the top view's own callouts need. A pictorial that does not fit is drawn
-    # at a smaller scale and says so in its label.
-    iso_w, iso_h = _view_extent(shape, "iso", 1.0)
-    # The upper row is the top view in third angle and the front view in first;
-    # either way the free corner starts at that row's bottom edge and right of
-    # the widest view in it.
-    upper_at = top_at if sheet.projection == "THIRD ANGLE" else front_at
-    upper_h = W if sheet.projection == "THIRD ANGLE" else H
-    upper_bottom = upper_at[1] - upper_h / 2
-    # A hole callout beside that view needs its knee (a dimension row plus 10)
-    # and its text (about 13 characters); keep that much clear of the iso.
-    avail_w = sheet.width - m - 6 - (upper_at[0] + L / 2 + 30.0 + 8.0 + 13 * sheet.text_height * 0.7 + 8.0)
-    # The revision table, when there is one, owns the top-right corner.
-    table_h = (len(sheet.revisions) + 1) * 6.0 + 6.0 if sheet.revisions else 0.0
-    avail_h = sheet.height - m - 6 - table_h - upper_bottom
-    iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
-    iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
-    iso_x = sheet.width - m - 6 - iso_w / 2
-    iso_y = min(upper_bottom + iso_h / 2, sheet.height - m - 6 - table_h - iso_h / 2)
-    # The label states the scale the pictorial was DRAWN at, not its ratio to the
-    # sheet: at 2:1 a half-size iso is 1:1, and calling it "1:2" claimed a
-    # reduction from full size that never happened.
-    label = "ISOMETRIC" if abs(iso_scale / s - 1) < 1e-6 else f"ISOMETRIC {_scale_label(iso_scale, '.3g')}"
-    slots.append(("iso", (iso_x, iso_y), None if abs(iso_scale / s - 1) < 1e-6 else iso_scale, label))
-    return slots
-
-
-def _assert_views_fit(sheet: Sheet, placed: Sequence[tuple], *, index: int) -> None:
-    """Refuse a sheet whose views run off the frame, naming the scale that fits.
-
-    A part far larger than the paper still writes valid geometry -- out at
-    x = 4284 on a 420 mm sheet -- and the render then crops to a near-empty page.
-    Nothing downstream can tell that from a drawing of a small feature, so the
-    script stops here, at the one place that knows both extents.
-    """
-    m = _MARGIN
-    frame = (m, sheet.width - m, m, sheet.height - m)
-    over = []
-    for view, _proj, _bounds, _cx, _cy, box in placed:
-        if box[0] < frame[0] or box[1] > frame[1] or box[2] < frame[2] or box[3] > frame[3]:
-            over.append((view, box))
-    if not over:
-        return
-    # Lay the sheet out again at each smaller standard scale and name the first that
-    # actually fits. Dividing the overflow out instead -- usable width over the union
-    # width -- treats the whole arrangement as if it scaled, and the 47 mm between
-    # views and the 27 mm of annotation reach do not: three of four ordinary part
-    # sizes then needed two refusals before a scale rendered, each naming another
-    # that did not fit either.
-    fits = next((candidate for candidate in _STANDARD_SCALES
-                 if candidate < sheet.scale and _fits_at(sheet, placed, candidate, frame)), None)
-    names = ", ".join(sorted({view.name for view, _ in over}))
-    remedy = (f"Use Sheet(scale={fits:g}) ({_scale_label(fits)}), a larger sheet size, or place the "
-              "views closer." if fits is not None else
-              f"No standard scale down to {_scale_label(_STANDARD_SCALES[-1])} fits this part on "
-              f"{sheet.size}; use a larger sheet size, or fewer views.")
-    raise ValueError(
-        f"sheet {index} ({sheet.size}, scale {_scale_label(sheet.scale)}): the {names} view"
-        f"{'s run' if len(over) > 1 else ' runs'} off the frame. {remedy}"
+    from cadgen._internal.drawing_features import (
+        grooves, hexes, holes as find_holes, revolved, slots as find_slots, tapers, turned_surfaces,
     )
+    from cadgen._internal.drawing_report import _owned
 
+    turn = None
+    turned = revolved(shape, bores=True)
+    if turned is not None and turned.axis != 0:
+        size = shape.bounding_box().size
+        if (size.X, size.Y, size.Z)[turned.axis] > turned.diameter:
+            # A long turned part is drawn lying down, as it sits in a lathe: its
+            # axis across the sheet, where the paper is widest.
+            from build123d import Rot
 
-def _fits_at(sheet: Sheet, placed: Sequence[tuple], candidate: float, frame) -> bool:
-    """Would every view sit inside the frame if the sheet were drawn at `candidate`?
+            turn = Rot(0, 90, 0) if turned.axis == 2 else Rot(0, 0, -90)
+            shape = turn * shape
+            turned = revolved(shape, bores=True)
+    features = [*find_holes(shape), *find_slots(shape)]
+    if turned is None:
+        # The view showing most is drawn as the front, as drafters choose it: a
+        # part whose holes are seen from above or the side is turned to face it.
+        # Then it is spun about the front's line of sight so the holes the front
+        # does not see open toward a view a first pass draws, not the bottom,
+        # the back or the left: level first (half a turn), on end only to show more.
+        from build123d import Location, Rot
 
-    A standard arrangement is laid out again, because the views move when they
-    shrink. A hand-placed view keeps its ``at=``, which is what would happen,
-    and only its box shrinks about that point.
-    """
-    ratio = candidate / sheet.scale if sheet.scale else 1.0
-    moved: dict[str, tuple[float, float]] = {}
-    for view, _proj, _bounds, _cx, _cy, _box in placed:
-        arranged = getattr(view, "_arranged", None)
-        if arranged is None:
+        main = _main_view(features)
+        face = Rot(90, 0, 0) if main == "top" else Rot(0, 0, -90) if main == "right" else Location()
+        candidates = [Rot(0, spin, 0) * face for spin in (0, 180, 90, 270)]
+        seen = [_seen_turned(features, c) for c in candidates]
+        best = max(range(len(candidates)), key=lambda i: (seen[i], -i))
+        if main != "front" or best:
+            turn = candidates[best]
+            shape = turn * shape
+            features = [*find_holes(shape), *find_slots(shape)]
+    names = list(_VIEW_NAMES) if turned is not None else _earned_views(shape, features)
+    if turned is not None:
+        # Turned whole: the two views square to its axis draw the same picture,
+        # so the first of them in front, top, right order is drawn, unless only
+        # the other looks down a hole drilled across it.
+        beside = [n for n in ("front", "top", "right") if not VIEW_DIRECTIONS[n][0][turned.axis]]
+        sees = [any(_looks_into(f, VIEW_DIRECTIONS[n][0]) for f in features) for n in beside]
+        names.remove(beside[0] if sees[1] and not sees[0] else beside[1])
+    views = sheet.three_views(shape, iso=True, views=names)[:-1]
+    stated: set[int] = set()  # the model axes whose overall size is stated
+    if turned is not None:
+        # Its diameters, across the profile in the view that sees the axis
+        # side-on; the largest states the part's size across the axis both ways.
+        side = next(v for v in views if not VIEW_DIRECTIONS[v.name][0][turned.axis])
+        unit = tuple(float(k == turned.axis) for k in range(3))
+        across = _cross(unit, _look(side))
+        steps = [(s.diameter, s.middle) for s in turned_surfaces(shape)
+                 if abs(abs(s.axis[turned.axis]) - 1) < 1e-9]
+        if all(abs(d - turned.diameter) > 0.01 for d, _m in steps):
+            steps.append((turned.diameter, turned.at))
+        k = turned.axis
+
+        def on_profile(z: float, r: float, side_of: float = 1.0) -> tuple[float, ...]:
+            return tuple((z if j == k else turned.at[j]) + side_of * r * across[j] for j in range(3))
+
+        # Along the axis, every step from one end: each shoulder, each end of a
+        # taper and the middle of each groove. The far end is the overall
+        # size's; a dimension to it as well would close a loop. A counterbore's
+        # floor or a blind bore's bottom is its callout's depth, not a step.
+        ends = shape.bounding_box()
+        near, far = tuple(ends.min)[k], tuple(ends.max)[k]
+        stations: dict[float, float] = {}
+        for face in shape.faces():
+            normal = tuple(face.normal_at()) if face.geom_type == GeomType.PLANE else (0.0, 0.0, 0.0)
+            if abs(abs(normal[k]) - 1) < 1e-9 and not _owned(face, features):
+                reach = max(math.dist(tuple(v), on_profile(tuple(v)[k], 0.0)) for v in face.vertices())
+                z = round(tuple(face.center())[k], 3)
+                stations[z] = max(stations.get(z, 0.0), reach)
+        for taper in tapers(shape):
+            for end, diameter in zip(taper.ends, (taper.small, taper.large)):
+                z = round(end[k], 3)
+                stations[z] = max(stations.get(z, 0.0), diameter / 2)
+                if all(abs(d - diameter) > 0.01 for d, _m in steps):
+                    steps.append((diameter, end))
+        for groove in grooves(shape):
+            z = round(groove.middle[k], 3)
+            stations[z] = max(stations.get(z, 0.0), groove.ring)
+            side.radius(on_profile(z, groove.ring), size=groove.radius)
+        for diameter, middle in steps:
+            side.dim(on_profile(middle[k], diameter / 2), on_profile(middle[k], diameter / 2, -1.0), text="%%c<>")
+        lengthwise = "h" if _view_axes(side.name)[0] == k else "v"
+        start = on_profile(near, stations.get(round(near, 3), turned.diameter / 2))
+        for z, r in sorted(stations.items()):
+            if abs(z - near) > 0.01 and abs(z - far) > 0.01:
+                side.dim(start, on_profile(z, r), orientation=lengthwise)
+        placed = set(stations)
+        stated = {j for j in range(3) if j != k}
+    hexagons = [] if turned is not None else hexes(shape)
+    box = shape.bounding_box()
+    for hexagon in hexagons:
+        # Across its flats, in the view looking down its axis: HEX 19 A/F says the
+        # six sides and their angles at once. Spanning the part, it is that way's
+        # overall size too.
+        view = next((v for v in views if hexagon.axis not in _view_axes(v.name)), None)
+        if view is None:
             continue
-        size, gap, iso = arranged
-        moved = {name: at for name, at, _s, _l in
-                 _arrange_three_views(sheet, view.shape, size, gap, candidate, iso)}
-        break
-    for view, _proj, bounds, _cx, _cy, box in placed:
-        at = moved.get(view.name, view.at) if getattr(view, "_arranged", None) else view.at
-        half_w = (box[1] - box[0]) / 2 * ratio
-        half_h = (box[3] - box[2]) / 2 * ratio
-        if (at[0] - half_w < frame[0] or at[0] + half_w > frame[1]
-                or at[1] - half_h < frame[2] or at[1] + half_h > frame[3]):
-            return False
+        ends = [list(hexagon.centre) for _ in range(2)]
+        ends[0][hexagon.flat] -= hexagon.across / 2
+        ends[1][hexagon.flat] += hexagon.across / 2
+        view.dim(tuple(ends[0]), tuple(ends[1]), text="HEX <> A/F",
+                 orientation="h" if _view_axes(view.name)[0] == hexagon.flat else "v")
+        if abs(hexagon.across - tuple(box.size)[hexagon.flat]) < 1e-3:
+            stated.add(hexagon.flat)
+    bosses = [] if turned is not None else _bosses(shape)
+    for boss in bosses:
+        # A boss or a shank, across its profile in a view that sees its axis
+        # side-on (seen as a circle it may be hidden under what it carries).
+        k = _axis_of(boss.axis)
+        side = next((v for v in views if not VIEW_DIRECTIONS[v.name][0][k]), None)
+        if side is None:
+            continue
+        across = _cross(boss.axis, _look(side))
+        side.dim(*(tuple(m + s * boss.diameter / 2 * c for m, c in zip(boss.middle, across)) for s in (1, -1)),
+                 text="%%c<>")
+        stated |= {j for j in range(3) if j != k and abs(tuple(box.size)[j] - boss.diameter) < 1e-3}
+    # The front first: it is the view showing most, and the sizes it can show
+    # are stated on it, not on a thin view beside or above it.
+    first = views if turned is not None else sorted(views, key=lambda v: v.name != "front")
+    for view in first:
+        width_axis, height_axis = _view_axes(view.name)
+        if width_axis not in stated or height_axis not in stated:
+            view.overall(width=width_axis not in stated, height=height_axis not in stated)
+        stated |= {width_axis, height_axis}
+    low = shape.bounding_box().min
+    if turned is None:
+        placed: Any = {}
+        for hexagon in hexagons:
+            # Its centre from the part's edges, along each way it does not span
+            # the part (spanning it, its centre is half way across).
+            view = next((v for v in views if hexagon.axis not in _view_axes(v.name)), None)
+            ways = tuple(j for j in (hexagon.flat, hexagon.corner)
+                         if tuple(box.size)[j] - _hex_width(hexagon, j) > 1e-3)
+            if view is not None and ways:
+                _locate(view, shape, [(hexagon.centre, ways)], placed)
+        for boss in bosses:
+            k = _axis_of(boss.axis)
+            view = next((v for v in views if k not in _view_axes(v.name)), None)
+            ways = tuple(j for j in range(3) if j != k and tuple(box.size)[j] - boss.diameter > 1e-3)
+            if view is not None and ways:
+                _locate(view, shape, [(boss.middle, ways)], placed)
+    for view in views:
+        look = _look(view)
+        seen = [f for f in features if _looks_into(f, look)]
+        if not seen:
+            continue
+        if turned is None:
+            # A hole on a hexagon's axis is located by it: a nut's bore.
+            loose = [f for f in seen if not any(_on_hex(f, h) for h in hexagons)]
+            if len(seen) > _FEW_HOLES or (loose and not _locate(view, shape, [(f.mouth, (0, 1, 2)) for f in loose],
+                                                                 placed)):
+                view.hole_table()  # each hole's X and Y from one corner: called out and located
+            else:
+                view.holes()
+            continue
+        view.holes()
+        # A turned part's axis locates what lies on it; a hole off it is placed
+        # along the axis from the part's end.
+        k = turned.axis
+        for feature in seen:
+            if all(abs(feature.mouth[j] - turned.at[j]) <= 0.01 for j in range(3) if j != k):
+                continue
+            if round(feature.mouth[k], 3) in placed:
+                continue
+            placed.add(round(feature.mouth[k], 3))
+            end = tuple((low.X, low.Y, low.Z)[j] if j == k else feature.mouth[j] for j in range(3))
+            view.dim(end, feature.mouth)
+    if turned is None:
+        _place_faces(first, shape, features, placed, hexagons)
+        _state_edges(sheet, shape)
+    for view in sheet.views:
+        # The author's points are in the part's own frame, as the shape given is.
+        view._turn = turn
+
+
+#: Up to this many holes and slots in a view are called out on it and located by
+#: dimensions; more go in a hole table, which lists each position instead.
+_FEW_HOLES = 6
+#: The most faces a first pass places along one axis, the largest first: past
+#: these a ladder of dimensions shrinks the part on the sheet more than it helps,
+#: and the report names the rest.
+_FEW_STEPS = 6
+
+
+#: The principal views in the order a tie goes: the front, then the view beside it
+#: (a sheet is landscape: a thin view beside the front costs less paper than one
+#: above it), then the one above.
+_PREFERRED = ("front", "right", "top")
+
+
+def _seen_turned(features, turn) -> int:
+    """How many holes and slots a first pass's principal views would look down
+    with the part turned by ``turn``: each view's line of sight taken back into
+    the part's own frame."""
+    from OCP.gp import gp_Dir
+
+    back = turn.inverse().wrapped.Transformation()
+    looks = []
+    for name in _PREFERRED:
+        d = gp_Dir(*VIEW_DIRECTIONS[name][0]).Transformed(back)
+        looks.append((d.X(), d.Y(), d.Z()))
+    return sum(any(_looks_into(f, look) for look in looks) for f in features)
+
+
+def _axis_of(direction) -> int | None:
+    """The model axis a direction runs along, or None."""
+    return next((k for k in range(3) if abs(abs(direction[k]) - 1) < 1e-9), None)
+
+
+def _bosses(shape) -> list:
+    """A part's round bosses and shanks -- its turned outside surfaces on a model
+    axis -- one per diameter and axis line."""
+    from cadgen._internal.drawing_features import turned_surfaces
+
+    return [s for s in turned_surfaces(shape) if _axis_of(s.axis) is not None]
+
+
+def _hex_width(hexagon, axis: int) -> float:
+    """A hexagon's width along a model axis: across its flats, or its corners."""
+    return hexagon.across if axis == hexagon.flat else hexagon.across * 2 / math.sqrt(3)
+
+
+def _on_hex(feature, hexagon) -> bool:
+    """Whether a hole or slot runs down a hexagon's axis, centred on it."""
+    return (abs(abs(feature.axis[hexagon.axis]) - 1) < 1e-9
+            and all(abs(feature.mouth[j] - hexagon.centre[j]) < 1e-3 for j in (hexagon.flat, hexagon.corner)))
+
+
+#: A slope whose angle comes within this many degrees of a whole or half degree is
+#: stated by that angle and one end: the designer drew it at an angle. Any other is
+#: stated by both its ends, as a gusset is given by its legs.
+_ROUND_ANGLE = 1e-3
+
+
+def _decimals(value: float) -> int:
+    """How many decimal places ``value`` needs, to three: 0 for 30, 1 for 12.5."""
+    return next((n for n in range(3) if abs(value - round(value, n)) < 1e-3), 3)
+
+
+def _slope_angle(view: "View", face, shape) -> tuple | None:
+    """How a first pass states a slope ``view`` sees edge-on by its angle: the end
+    it places, the other end, and a point along the model axis its angle is
+    measured from, for ``View.angle``; or None where its angle is no whole or half
+    degree. Of each end and each of the view's two axes, measured toward the
+    slope's other end: first one whose reference line runs through air (along an
+    edge the slope cut away, not across the part), then the rounder angle, then
+    the end whose places from the part's edges are the rounder, then the smaller
+    angle."""
+    from build123d import Vector
+
+    axes = _view_axes(view.name)
+    look = _look(view)
+    run = _cross(tuple(face.normal_at()), look)
+    points = sorted({tuple(round(c, 6) for c in tuple(v)) for v in face.vertices()},
+                    key=lambda q: sum(a * b for a, b in zip(q, run)))
+    ends = (points[0], points[-1])
+    depth = tuple(face.center())
+    edges = [_edge_face(shape, j) for j in axes]
+    starts = [tuple(e.center())[j] if e is not None else 0.0 for e, j in zip(edges, axes)]
+    chosen = []
+    for k in axes:
+        degrees = math.degrees(math.acos(min(1.0, abs(run[k]) / math.sqrt(sum(c * c for c in run)))))
+        if abs(degrees * 2 - round(degrees * 2)) * 0.5 >= _ROUND_ANGLE:
+            continue
+        for at, vertex in enumerate(ends):
+            other = ends[1 - at]
+            along = [0.0, 0.0, 0.0]
+            along[k] = other[k] - vertex[k]
+            # Half way along the reference line, at the slope's own depth in the view.
+            middle = [vertex[j] + along[j] / 2 if j != _look_axis(view) else depth[j] for j in range(3)]
+            inside = shape.is_inside(Vector(*middle))
+            places = sum(_decimals(abs(vertex[j] - s)) for j, s in zip(axes, starts))
+            key = (inside, _decimals(round(degrees * 2) / 2), places, round(degrees, 3))
+            chosen.append((key, vertex, other, tuple(v + a for v, a in zip(vertex, along))))
+    if not chosen:
+        return None
+    _key, vertex, other, along = min(chosen, key=lambda c: c[0])
+    return vertex, other, along
+
+
+def _look_axis(view: "View") -> int:
+    """The model axis a principal view looks along."""
+    return next(k for k in range(3) if k not in _view_axes(view.name))
+
+
+def _main_view(features) -> str:
+    """The principal view looking down the most holes and slots, the front on a tie."""
+    return max(_PREFERRED, key=lambda n: (sum(_looks_into(f, VIEW_DIRECTIONS[n][0]) for f in features),
+                                          -_PREFERRED.index(n)))
+
+
+def _earned_views(shape, features) -> list[str]:
+    """The principal views a part's first pass draws: each earns its place by
+    showing what the others chosen do not. First the view looking down the most
+    holes and slots (``_main_view``), then, ties going in ``_PREFERRED`` order, a
+    view for each hole none chosen looks down, for each slope none sees edge-on,
+    and for each model axis none shows across or up the sheet; on a tie, one as
+    wide and tall as a view chosen (the same picture, most likely) goes last. A plate's two edge views show one thing,
+    its thickness: one is drawn. A chamfer is no slope: its note states it."""
+    from build123d import GeomType
+
+    slopes = []
+    bevel = _bevels(shape)
+    for face in shape.faces():
+        if face.geom_type == GeomType.PLANE and not bevel(face):
+            normal = tuple(face.normal_at())
+            if not any(abs(abs(c) - 1) < 1e-9 for c in normal) and sum(abs(c) < 1e-9 for c in normal) == 1:
+                slopes.append(normal)
+
+    def shows(name: str) -> set:
+        look = VIEW_DIRECTIONS[name][0]
+        return ({("axis", k) for k in _view_axes(name)}
+                | {("feature", at) for at, f in enumerate(features) if _looks_into(f, look)}
+                | {("slope", at) for at, n in enumerate(slopes) if abs(_dot(n, look)) < 1e-9})
+
+    shown = {name: shows(name) for name in _VIEW_NAMES}
+    box = tuple(shape.bounding_box().size)
+
+    def extents(name: str) -> tuple[float, float]:
+        across, up = _view_axes(name)
+        return round(box[across], 3), round(box[up], 3)
+
+    chosen = [_main_view(features)]
+    wanted = set().union(*shown.values())
+    while True:
+        left = wanted - set().union(*(shown[n] for n in chosen))
+        # A view as wide and tall as one chosen is most likely the same picture (a
+        # symmetric part's next view round): on a tie it goes last.
+        name = max((n for n in _PREFERRED if n not in chosen),
+                   key=lambda n: (len(shown[n] & left), extents(n) not in {extents(c) for c in chosen},
+                                  -_PREFERRED.index(n)), default=None)
+        if not left or name is None or not shown[name] & left:
+            return [n for n in _VIEW_NAMES if n in chosen]
+        chosen.append(name)
+
+
+def _bevels(shape) -> Callable[[Any], bool]:
+    """Whether a flat face is one of the part's chamfers (its note states it): the
+    chamfers found once, each face then tested against them."""
+    from build123d import Vector
+
+    from cadgen._internal.drawing_features import chamfers
+
+    points = [Vector(*c.point) for c in chamfers(shape)]
+    return lambda face: any(face.distance_to(point) < 1e-6 for point in points)
+
+
+def _edge_face(shape, axis: int):
+    """The flat face at a part's least extent along ``axis``, square to it (the
+    largest where several share that place): the edge a first pass dimensions
+    from, or None where the part ends there in a curve or a point."""
+    from build123d import GeomType
+
+    low = tuple(shape.bounding_box().min)[axis]
+    ends = [f for f in shape.faces() if f.geom_type == GeomType.PLANE
+            and abs(abs(tuple(f.normal_at())[axis]) - 1) < 1e-9 and abs(tuple(f.center())[axis] - low) < 1e-6]
+    return max(ends, key=lambda f: f.area, default=None)
+
+
+def _locate(view: "View", shape, points, placed: dict, *, most: dict | None = None) -> bool:
+    """Each of ``points`` located in ``view`` from the part's edge faces: a point
+    with the model axes it states (a hole's mouth, both; a face, the one it is
+    square to), a dimension from the edge along each the view shows, to each
+    place not stated yet (``placed``, by axis; places shared are stated once), at
+    most ``most[axis]`` new places an axis where given (counted down as they are
+    placed), the first given first. False, and nothing
+    added, where the part has no flat edge to measure from along an axis a point
+    states that the view shows."""
+    axes = _view_axes(view.name)
+    edges = [_edge_face(shape, k) for k in axes]
+    if any(edge is None and any(k in stated for _q, stated in points) for edge, k in zip(edges, axes)):
+        return False
+    high = tuple(shape.bounding_box().max)
+    for k, edge, orientation in zip(axes, edges, ("h", "v")):
+        if edge is None:
+            continue
+        start = tuple(edge.center())
+        chosen: dict[float, tuple] = {}
+        for point in (q for q, stated in points if k in stated):
+            place = round(point[k], 3)
+            if (place in placed.setdefault(k, set()) or place in chosen or abs(point[k] - start[k]) < 1e-6
+                    or abs(point[k] - high[k]) < 1e-6):
+                continue
+            if most is not None and len(chosen) >= most.get(k, 0):
+                break
+            chosen[place] = point
+        for place, point in sorted(chosen.items()):
+            placed[k].add(place)
+            view.dim(start, tuple(point), orientation=orientation)
+        if most is not None:
+            most[k] = most.get(k, 0) - len(chosen)
     return True
 
 
-def _spans(a, b) -> str:
-    """Whether a projected point pair reads as a horizontal or a vertical dimension."""
-    return "h" if abs(b[0] - a[0]) >= abs(b[1] - a[1]) else "v"
+def _place_faces(views, shape, features, placed: dict, hexagons=()) -> None:
+    """The flat faces of a part not turned, square to a model axis, placed from
+    the part's edge along that axis, in the first view that shows the axis; and
+    each slope (a flat face leaning in one model plane) stated in the view that
+    sees it edge-on: by its angle and one end where its angle is a whole or half
+    degree (``_slope_angle``), else by both its ends. The largest faces first, at
+    most ``_FEW_STEPS`` places an axis. Faces a hole or slot owns are its
+    callout's, a hexagon's its HEX callout's, chamfers their note's; the far end
+    along an axis is the overall size's."""
+    from build123d import GeomType
+
+    from cadgen._internal.drawing_report import _owned
+
+    bevel = _bevels(shape)
+    flats = [face for face in shape.faces()
+             if face.geom_type == GeomType.PLANE and not _owned(face, features) and not bevel(face)
+             and not any(h.holds(face) for h in hexagons)]
+    angled: set[int] = set()
+    most = dict.fromkeys(range(3), _FEW_STEPS)
+    for view in views:
+        points = []
+        for at, face in enumerate(flats):
+            normal = tuple(face.normal_at())
+            square = next((k for k in range(3) if abs(abs(normal[k]) - 1) < 1e-9), None)
+            if square is not None:
+                points.append((face.area, tuple(face.center()), (square,)))
+            elif sum(abs(c) < 1e-9 for c in normal) == 1 and abs(_dot(normal, _look(view))) < 1e-9:
+                leans = tuple(k for k in range(3) if abs(normal[k]) >= 1e-9)
+                stated = _slope_angle(view, face, shape) if at not in angled else None
+                if stated is None:
+                    points.extend((face.area, tuple(v), leans) for v in face.vertices())
+                    continue
+                angled.add(at)
+                vertex, other, along = stated
+                view.angle(vertex, other, along)
+                points.append((face.area, vertex, leans))
+        shown = set(_view_axes(view.name))
+        points = [(q, stated) for _area, q, stated in sorted(points, key=lambda p: -p[0])
+                  if any(k in shown and round(q[k], 3) not in placed.get(k, set()) for k in stated)]
+        if points:
+            _locate(view, shape, points, placed, most=most)
 
 
-def _scale_label(scale: float, digits: str = "g") -> str:
-    """"1:2", "2:1", "1:1". ``digits`` rounds a scale nobody chose, such as the
-    one an isometric fitted itself to, to something a reader can take in."""
-    if abs(scale - 1) < 1e-9:
-        return "1:1"
-    return f"1:{1 / scale:{digits}}" if scale < 1 else f"{scale:{digits}}:1"
+def _state_edges(sheet: Sheet, shape) -> None:
+    """A part's fillets, rounds and chamfers stated in its notes: the general
+    note its edges make true (``geometry_notes``), then a note for each size it
+    leaves, with how many edges are that size."""
+    from cadgen._internal.drawing_features import blends, chamfers
 
-
-#: Fallback width per character, as a multiple of cap height, for when the font
-#: the renderer uses cannot be measured. Set at the wide end of what was
-#: measured (0.70 for "+0.10", 0.89 for "ELECTRONICS ENCLOSURE BASE") so the
-#: fallback overruns nothing.
-_CHAR_WIDTH = 0.9
-#: MTEXT's own control codes: a backslash, a letter, and everything to the ";".
-_MTEXT_CODE = re.compile(r"\\([A-Za-z])([^;]*);")
-
-
-@lru_cache(maxsize=8)
-def _font(height: float):
-    """The renderer's own font at a cap height, or None if it cannot be had.
-
-    A constant width per character is wrong for every proportional font: the
-    same ratio that fits "ELECTRONICS ENCLOSURE BASE" runs "+0.10" 25% over.
-    ezdxf measures the glyphs it is about to draw, so ask it.
-    """
-    try:
-        from ezdxf.fonts import fonts
-
-        return fonts.make_font("txt.shx", height)
-    except Exception:  # noqa: BLE001 - no font manager, no cache; fall back to a ratio
-        return None
-
-
-def _text_width(value: str, height: float) -> float:
-    """How wide `value` prints at this cap height, in millimetres."""
-    if not value:
-        return 0.0
-    font = _font(round(float(height), 4))
-    if font is None:
-        return len(value) * height * _CHAR_WIDTH
-    try:
-        return float(font.text_width(value))
-    except Exception:  # noqa: BLE001 - an unmappable glyph is not worth a failed drawing
-        return len(value) * height * _CHAR_WIDTH
-
-
-def _mtext_extent(raw: str, height: float) -> tuple[float, float]:
-    """The width and height of rendered MTEXT, from the glyphs it actually draws.
-
-    A dimension's value lives as MTEXT markup, and the markup is not the text:
-    a toleranced ``30`` is ``\\A0;30{\\H0.70x;±0.10}``, 15 characters of which 7
-    draw nothing and 5 draw at 0.7 of the height. Counted raw at full height
-    that estimated 37.8 mm of ink where 14 mm exists, and every chain-dimensioned
-    toleranced row -- the commonest idiom in drafting -- reported an overlap.
-    """
-    lines: list[float] = []
-    width = 0.0
-    tallest = height
-    factor = 1.0
-    run: list[str] = []
-
-    def flush() -> None:
-        nonlocal width
-        if run:
-            width += _text_width("".join(run), height * factor)
-            run.clear()
-
-    index = 0
-    while index < len(raw):
-        char = raw[index]
-        if char in "{}":
-            index += 1
-        elif char == "\\" and raw[index + 1:index + 2] in ("\\", "{", "}"):
-            run.append(raw[index + 1])
-            index += 2
-        elif char == "\\" and raw[index + 1:index + 2] in ("P", "p"):
-            flush()
-            lines.append(width)
-            width, tallest = 0.0, tallest + height * factor
-            index += 2
-        elif char == "\\" and (match := _MTEXT_CODE.match(raw, index)):
-            code, body = match.group(1), match.group(2)
-            flush()
-            if code in "Hh":
-                # \H0.70x; is relative to the current height, \H2.5; absolute.
-                try:
-                    value = float(body.rstrip("xX"))
-                except ValueError:
-                    value = 1.0
-                factor = value if body[-1:].lower() == "x" else (value / height if height else 1.0)
-            elif code in "Ss":
-                # A stacked tolerance prints its halves one above the other, so
-                # it is as wide as the wider half, not as wide as both.
-                upper, _, lower = body.partition("^")
-                # Charged at the height in force, not smaller again: the halves
-                # draw at some fraction of it that varies by renderer, and a box
-                # that errs wide misses no overlap.
-                stacked = height * factor
-                width += max(_text_width(upper.strip("^ "), stacked),
-                             _text_width(lower.strip("^ "), stacked))
-                tallest = max(tallest, 2 * stacked)
-            index = match.end()
-        elif raw.startswith("%%", index) and raw[index + 2:index + 3]:
-            run.append("Ø")  # %%c, %%d and %%p each draw exactly one glyph
-            index += 3
+    notes = [*sheet.notes, *(n for n in geometry_notes(shape) if n not in sheet.notes)]
+    said = " ".join(notes).upper()
+    sizes: dict[tuple, int] = {}
+    for blend in blends(shape):
+        key = ("FILLET" if blend.concave else "ROUND", round(blend.radius, 3))
+        sizes[key] = sizes.get(key, 0) + 1
+    for chamfer in chamfers(shape):
+        key = ("CHAMFER", *sorted((round(chamfer.legs[0], 3), round(chamfer.legs[1], 3))))
+        sizes[key] = sizes.get(key, 0) + 1
+    for key, count in sorted(sizes.items()):
+        if key[0] == "CHAMFER":
+            a, b = key[1:]
+            size = f"{_fmt(a)} × 45°" if abs(a - b) < 1e-3 else f"{_fmt(a)} × {_fmt(b)}"
+            if size.upper() in said:
+                continue
+            notes.append(f"{count}× CHAMFER {size}." if count > 1 else f"CHAMFER {size}.")
         else:
-            run.append(char)
-            index += 1
-    flush()
-    lines.append(width)
-    return max(lines), tallest
+            word, radius = key
+            if f"R{_fmt(radius)} " in said + " " and (word in said or "RADII" in said):
+                continue
+            notes.append(f"{count}× {word}S R{_fmt(radius)}." if count > 1 else f"{word} R{_fmt(radius)}.")
+    sheet.notes = notes
 
 
-def _text_box(value: str, x: float, y: float, height: float, align) -> tuple[float, float, float, float]:
-    """The rectangle a TEXT entity occupies, from its anchor and alignment."""
-    width = _text_width(value, height)
-    name = getattr(align, "name", str(align)).upper()
-    if "CENTER" in name and "LEFT" not in name and "RIGHT" not in name:
-        x0 = x - width / 2
-    elif "RIGHT" in name:
-        x0 = x - width
-    else:
-        x0 = x
-    if "TOP" in name:
-        y0 = y - height
-    elif "MIDDLE" in name:
-        y0 = y - height / 2
-    else:
-        y0 = y
-    return (x0, y0, x0 + width, y0 + height)
+def part_sheet(part, **fields: Any) -> Sheet:
+    """A first-pass drawing of one part, a sheet the script refines before
+    returning it: ``part_sheet(read_step(path), title="BRACKET")``. ``fields`` are
+    :class:`Sheet`'s own (``title``, ``part_number``, ``material`` ...); the sheet
+    chooses its size and scale unless they are given.
+
+    The views are the ones that earn their place: the view looking down most of
+    the part's holes, drawn as the front (the part turned to face it, as drafters
+    choose a front, and spun about the front's line of sight so the holes it
+    does not see open toward a view a first pass draws; points given its views
+    stay in the part's own frame), and
+    each further principal view that shows a hole, a slope seen edge-on or a
+    model axis no view chosen shows, the one beside the front before the one
+    above (a plate's two edge views show one thing, its thickness, and one is
+    drawn), with an isometric. On them:
+    the overall sizes; up to six holes and slots in a view called out and
+    located from the part's edge faces (more in a hole table; one down a
+    hexagon's axis is located by it); each hexagon across its flats (``HEX 19
+    A/F``) and each round boss or shank by its diameter, their centres located;
+    every flat face square to a model axis placed from the same edges, at most
+    six an axis, in the front first; each
+    slope by its angle and one end where the angle is a whole or half degree,
+    else by both ends; and the fillets, rounds and chamfers stated in notes. A part turned
+    whole is drawn as :func:`assembly_sheets` draws one: its diameters, tapers and
+    grooves, every step placed from one end, a long one lying down.
+
+    It states geometry, never a requirement: every size is nominal until the
+    script gives it a tolerance, and the run's report names what is still
+    unstated. Dimensions it adds are ordinary ones; add or replace any."""
+    fields = {"size": None, "scale": None, **fields}
+    sheet = Sheet(**fields)
+    _first_pass(sheet, part)
+    return sheet
 
 
-def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: list | None = None):
-    """Build the ezdxf document for one sheet. Returns the document.
+def assembly_sheets(parts: PartsList, *, title: str, part_number: str = "", revision: str = "A",
+                    size: str = "A3", author: str = "", date: str = "", projection: str = "THIRD ANGLE",
+                    ink: str = "mono", notes: Sequence[str] = (), general_tolerance: str = "",
+                    revisions: Sequence[tuple[str, str, str]] = (), stage: str | None = None,
+                    profile: Profile | None = None, category: str = "", company: str = "",
+                    fields: Mapping[str, str] | None = None) -> AssemblySheets:
+    """An assembly drawing: a general arrangement sheet and a sheet for each part.
 
-    ``warnings`` collects anything the sheet renders but a reader should look
-    at -- a dimension whose points miss the geometry, say. The render never
-    stops for one: it is the PDF that answers whether the sheet is right.
+    The general arrangement draws the assembly whole and without hidden lines: the
+    front view, whichever of the top and right views shows more of it, and an
+    isometric, at the largest standard scale that fits beside the parts list.
+    Overall sizes are stated, every part is ballooned in the first view that
+    shows it, and the parts list stands on the title block, continued on further
+    sheets when it is too long for one. Each part then has a sheet of its own,
+    drawn in its own frame: three views and an isometric at the largest standard
+    scale that fits, its overall sizes, every hole and slot called out in a view
+    that looks down it, and ``ITEM n OF <title>`` under its name. ``size`` is the
+    general arrangement's; each part's sheet chooses its own (``Sheet(size=None)``),
+    so a small part goes on A4.
+
+    It is a first pass. The completeness report names what each sheet still
+    leaves unstated, and every sheet is an ordinary :class:`Sheet` the script can
+    add to before returning them: ``sheets.part("coil_spring")`` is that part's.
+    The title block on every sheet carries the assembly's drawing number,
+    revision, author and date, the set being one drawing; ``notes`` and
+    ``revisions`` go on the general arrangement, ``general_tolerance`` on the part
+    sheets, whose sizes it governs. ``stage``, ``profile``, ``category``,
+    ``company`` and ``fields`` go on every sheet, as :class:`Sheet` takes them.
+    Materials and part numbers come from ``parts.set(...)`` and are blank
+    otherwise. The general arrangement's overall sizes are reference
+    dimensions: an assembly's envelope is information, never inspected; what
+    it requires once assembled goes in flag notes (:meth:`View.flag`).
     """
-    import ezdxf
-    from ezdxf.enums import TextEntityAlignment
+    if not isinstance(parts, PartsList):
+        raise TypeError(f"assembly_sheets() takes the PartsList that parts_list() returns, got {type(parts).__name__}")
+    common = dict(size=size, part_number=part_number, revision=revision, author=author, date=date,
+                  projection=projection, ink=ink, stage=stage, profile=profile, category=category, company=company,
+                  fields=dict(fields or {}))
+    ga = Sheet(title=title, notes=notes, revisions=revisions, **common)
+    frame = ga.height - 2 * _MARGIN
+    on_ga = min(len(parts), max(1, int(_GA_LIST_SHARE * frame // _LIST_ROW) - 1))
+    ga.parts_list(parts, last=on_ga)
+    more = []
+    first = on_ga + 1
+    while first <= len(parts):
+        sheet = Sheet(title=title, **common)
+        last = min(len(parts), first + int(_list_room(sheet) // _LIST_ROW) - 2)
+        sheet.parts_list(parts, first=first, last=last)
+        more.append(sheet)
+        first = last + 1
+    shape = parts.assembly
+    box = shape.bounding_box().size
+    second = "top" if box.X * box.Y > box.Y * box.Z else "right"
+    ga.scale, slots = _arrange_assembly(ga, shape, second)
+    views = {name: ga.view(shape, name, at=at, label=label, hidden=False, centre_marks=name != "iso", scale=own)
+             for name, at, own, label in slots}
+    views["front"].overall(reference=True)
+    views[second].overall(width=second == "right", height=second == "top", reference=True)
+    for name in ("front", second, "iso"):
+        if name in views:
+            views[name].balloons(parts)
 
-    doc = ezdxf.new("R2010", setup=True)
-    doc.units = ezdxf.units.MM
-    msp = doc.modelspace()
-    for name, (color, linetype, weight) in _LAYERS.items():
-        aci = 7 if sheet.ink == "mono" and name != "HIDDEN" else color
-        doc.layers.add(name, color=aci, linetype=linetype, lineweight=int(round(weight * 100)))
-    dimstyle = _dimstyle(doc, sheet.text_height)
-    W, H = sheet.width, sheet.height
-
-    def text(value, x, y, height, align, layer="TITLE", fit: float | None = None):
-        # ``fit`` is the width the text may occupy; longer text is set smaller
-        # rather than run through a cell divider or off the sheet. Below the
-        # smallest legible height the text is cut instead, with an ellipsis, so a
-        # long title ends inside its cell rather than running over the next one.
-        if fit is not None and value:
-            width = _text_width(value, height)
-            if width > fit:
-                # 0.999 so the shrink lands inside the cell rather than exactly on
-                # its edge, where the re-measure rounds over and cuts text that fits.
-                height = max(_MIN_TEXT_MM, height * fit / width * 0.999)
-                if _text_width(value, height) > fit:
-                    # Below the smallest legible height, cut rather than overrun:
-                    # a title that runs into the SCALE cell is worse than a short one.
-                    while len(value) > 1 and _text_width(value[:-1] + "…", height) > fit:
-                        value = value[:-1]
-                    value = (value[:-1] + "…") if len(value) > 1 else value[:1]
-        entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
-        entity.set_placement((x, y), align=align)
-        if layer in ("DIM", "NOTES") and value:
-            claim(value, _text_box(value, x, y, height, align))
-        return entity
-
-    # Annotation already on the paper, as (what it says, its box). A sheet lays
-    # each view out knowing only where the views are, so two views' callouts can
-    # still land on each other -- the overall width of one view against the label
-    # of the view above it, say. Nothing here moves them, because which of the two
-    # should give way is the author's call; it says so instead of leaving it to be
-    # noticed on the print.
-    claimed: list[tuple[str, tuple[float, float, float, float]]] = []
-
-    def claim_rendered(dimension) -> None:
-        """A dimension's VALUE lives as MTEXT inside its rendered block, not as
-        TEXT on the sheet, so it is registered from there once it is drawn."""
-        try:
-            block = doc.blocks.get(dimension.dxf.geometry)
-        except Exception:  # noqa: BLE001 - a dimension with no block draws nothing to collide with
-            return
-        for entity in block:
-            if entity.dxftype() != "MTEXT":
-                continue
-            value = str(entity.text or "")
-            height = float(entity.dxf.char_height or sheet.text_height)
-            width, tall = _mtext_extent(value, height)
-            insert = entity.dxf.insert
-            claim(value, (insert.x - width / 2, insert.y - tall / 2,
-                          insert.x + width / 2, insert.y + tall / 2))
-
-    def claim(value: str, box: tuple[float, float, float, float]) -> None:
-        for other, taken in claimed:
-            if (box[0] < taken[2] and box[2] > taken[0] and box[1] < taken[3] and box[3] > taken[1]):
-                if warnings is not None:
-                    warnings.append(
-                        f"annotation overlaps: {value.strip()!r} is printed over {other.strip()!r} "
-                        f"around ({box[0]:.0f}, {box[1]:.0f}). Give the view more room "
-                        "(three_views(gap=...)), or place one of them with offset=."
-                    )
-                break
-        claimed.append((value, box))
-
-    # Frame and title block.
-    m = _MARGIN
-    msp.add_lwpolyline([(m, m), (W - m, m), (W - m, H - m), (m, H - m)], close=True, dxfattribs={"layer": "SHEET"})
-    tw, th = min(_TITLE_W, W - 2 * m), _TITLE_H
-    x0, y0 = W - m - tw, m
-    msp.add_lwpolyline([(x0, y0), (x0 + tw, y0), (x0 + tw, y0 + th), (x0, y0 + th)], close=True, dxfattribs={"layer": "TITLE"})
-    msp.add_line((x0, y0 + th / 2), (x0 + tw, y0 + th / 2), dxfattribs={"layer": "TITLE"})
-    msp.add_line((x0 + tw * 0.6, y0), (x0 + tw * 0.6, y0 + th), dxfattribs={"layer": "TITLE"})
-    left_w, right_w = tw * 0.6 - 6, tw * 0.4 - 6
-    text(sheet.title, x0 + 3, y0 + th * 0.75, 5.0, TextEntityAlignment.MIDDLE_LEFT, fit=left_w)
-    sub = " · ".join(v for v in (sheet.part_number, sheet.material, sheet.author) if v)
-    if sub:
-        text(sub, x0 + 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_LEFT, fit=left_w)
-    text(f"SCALE {_scale_label(sheet.scale)}   {sheet.units.upper()}   {sheet.projection}",
-         x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
-    text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
-    lines = sheet.note_lines()
-    for row, line in enumerate(lines):
-        text(line, m + _NOTE_INSET, y0 + th + 4 + (len(lines) - 1 - row) * 5, _NOTE_HEIGHT,
-             TextEntityAlignment.BOTTOM_LEFT, "NOTES")
-    if sheet.revisions:
-        # Revision table, top-right inside the frame: REV | DATE | DESCRIPTION.
-        cols = (14.0, 26.0, 70.0)
-        rw = sum(cols)
-        rh = 6.0
-        rx, ry = W - m - rw, H - m - rh
-        rows = [("REV", "DATE", "DESCRIPTION")] + [tuple(str(v) for v in row) for row in sheet.revisions]
-        for r, row in enumerate(rows):
-            y = ry - r * rh
-            msp.add_lwpolyline([(rx, y), (rx + rw, y), (rx + rw, y + rh), (rx, y + rh)], close=True, dxfattribs={"layer": "TITLE"})
-            x = rx
-            for c, (width, value) in enumerate(zip(cols, row)):
-                if c:
-                    msp.add_line((x, y), (x, y + rh), dxfattribs={"layer": "TITLE"})
-                text(value, x + 2, y + rh / 2, 2.5, TextEntityAlignment.MIDDLE_LEFT, fit=width - 4)
-                x += width
-
-    # Views. Every view's box is known before any annotation is drawn, so a callout
-    # can avoid landing on a neighbour.
-    s = sheet.scale
-    placed = []
-    for view in sheet.views:
-        proj = _Projection(view.shape, view.name)
-        bounds = _edges_bounds(list(proj.visible) + (list(proj.hidden) if view.hidden else []))
-        if not bounds:
-            continue
-        bx0, bx1, by0, by1 = bounds
-        cx = (bx0 + bx1) / 2
-        cy = (by0 + by1) / 2
-        sv = view.scale or s
-        half_w = (bx1 - bx0) * sv / 2
-        half_h = (by1 - by0) * sv / 2
-        placed.append((view, proj, bounds, cx, cy, (view.at[0] - half_w, view.at[0] + half_w, view.at[1] - half_h, view.at[1] + half_h)))
-    boxes = [box for (_, _, _, _, _, box) in placed]
-    _assert_views_fit(sheet, placed, index=index)
-
-    def blocked(x0, x1, y0, y1, own_box):
-        """Whether a landing area [x0,x1]x[y0,y1] runs off the frame or into another view."""
-        if min(x0, x1) < m + 2 or max(x0, x1) > W - m - 2:
-            return True
-        for box in boxes:
-            if box is own_box:
-                continue
-            if max(x0, x1) >= box[0] - 4 and min(x0, x1) <= box[1] + 4 and y1 >= box[2] - 4 and y0 <= box[3] + 4:
-                return True
-        return False
-
-    for view, proj, bounds, cx, cy, own_box in placed:
-        sv = view.scale or s
-        # Centre the projected geometry on `at`.
-
-        def to_sheet(p2):
-            return (view.at[0] + (p2[0] - cx) * sv, view.at[1] + (p2[1] - cy) * sv)
-
-        def model_to_sheet(p3):
-            return to_sheet(proj.point(p3))
-
-        # One set for the whole view, not one per pass. HLR returns an edge from
-        # every face that bounds it, so an edge on the silhouette comes back
-        # visible AND hidden: a per-pass set caught the repeats within each pass
-        # and none across them, and since HIDDEN is written second it drew over
-        # every visible line on the sheet. A 600 dpi crop of one view in colour
-        # was 34,842 grey pixels against 2,635 black -- the outline printing
-        # grey-dashed, the whole visible/hidden distinction gone. In mono it is
-        # black over black, which is why it went unnoticed.
-        seen: set = set()
-
-        def once(key) -> bool:
-            if key in seen:
-                return False
-            seen.add(key)
-            return True
-
-        def q(value: float) -> float:
-            return round(value, 6)
-
-        def put(edges, layer):
-            """Write projected edges once each.
-
-            The hidden-line pass returns an edge per face that hides it, so a slot
-            behind two faces comes back twice and the same polyline lands on HIDDEN
-            twice over. Written that way the dashes double-strike and
-            ``validate_drawing_document`` reports every pair, so an edge is keyed by
-            its drawn geometry -- rounded to a micron, and for a line or polyline
-            read the same in either direction -- and a repeat is dropped.
-            """
-            from build123d import GeomType
-
-            for edge in edges:
-                # A circular edge stays a CIRCLE or ARC: exact on the sheet, so a hole
-                # reads as a hole and a fillet as a radius rather than as a polyline.
-                if edge.geom_type == GeomType.CIRCLE:
-                    c = to_sheet((edge.arc_center.X, edge.arc_center.Y))
-                    r = edge.radius * sv
-                    if edge.is_closed:
-                        if once(("circle", q(c[0]), q(c[1]), q(r))):
-                            msp.add_circle(c, r, dxfattribs={"layer": layer})
-                        continue
-                    a, b = edge.position_at(0), edge.position_at(1)
-                    mid = edge.position_at(0.5)
-                    ang = lambda p: math.degrees(math.atan2(p.Y - edge.arc_center.Y, p.X - edge.arc_center.X)) % 360
-                    a0, a1, am = ang(a), ang(b), ang(mid)
-                    # ezdxf arcs run counter-clockwise from start to end; pick the
-                    # order whose sweep passes through the edge's midpoint.
-                    if (am - a0) % 360 > (a1 - a0) % 360:
-                        a0, a1 = a1, a0
-                    if once(("arc", q(c[0]), q(c[1]), q(r), q(a0), q(a1))):
-                        msp.add_arc(c, r, a0, a1, dxfattribs={"layer": layer})
-                    continue
-                poly = [to_sheet(p) for p in _edge_polyline(edge)]
-                points = tuple((q(x), q(y)) for x, y in poly)
-                # The same edge can come back with its ends swapped; one drawn line is
-                # one key whichever way it was walked.
-                key = ("poly", min(points, points[::-1]))
-                if not once(key):
-                    continue
-                if len(poly) == 2:
-                    msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer})
-                else:
-                    msp.add_lwpolyline(poly, dxfattribs={"layer": layer})
-
-        put(proj.visible, "VISIBLE")
-        if view.hidden:
-            put(proj.hidden, "HIDDEN")
-        if view.centre_marks:
-            # One cross per CENTRE, sized to the largest circle on it. A counterbore
-            # is two concentric circles, and two crosses drawn over each other fill
-            # the CENTER linetype's gaps in: the centre line printed solid, which is
-            # the one thing its dashes are there to say it is not.
-            for centre, radius in _centres(_circles(proj.visible)):
-                c = to_sheet(centre)
-                arm = radius * sv + 2.0
-                msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"})
-                msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"})
-        vx0, vx1, vy0, vy1 = own_box
-
-        # How far annotation already reaches past each side of the view, so a later
-        # callout lands outside the dimensions that came before it. Callouts on one
-        # side share a knee and stack upward instead of pushing each other outward.
-        reach = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
-        landings = {"left": [], "right": []}
-
-        def free_landing_y(side, y):
-            step = sheet.text_height * 2.2
-            while any(abs(y - used) < sheet.text_height * 1.6 for used in landings[side]):
-                y += step
-            landings[side].append(y)
-            return y
-
-        # Rows already taken on each side, so a dimension left to place itself
-        # lands past the ones before it instead of on top of them. `overall()`
-        # claims the first row above and the first row to the left.
-        rows: dict[str, int] = {"left": 0, "right": 0, "top": 0, "bottom": 0}
-
-        def claim_row(side: str) -> float:
-            rows[side] += 1
-            return _DIM_ROW * rows[side]
-
-        def linear(a, b, offset, override, orientation, tol=None, fit=None):
-            horizontal = (orientation or _spans(a, b)) == "h"
-            if offset is None:
-                # Unplaced dimensions go above a horizontal pair and right of a
-                # vertical one, which are the sides `overall()` does not use twice.
-                # The row is measured from the VIEW's edge, not from the dimensioned
-                # points, so two dimensions on different features still land on
-                # different lines -- which is the whole point of not placing them.
-                if horizontal:
-                    offset = (vy1 + claim_row("top")) - max(a[1], b[1])
-                else:
-                    offset = (vx1 + claim_row("right")) - max(a[0], b[0])
-            else:
-                side = ("top" if offset >= 0 else "bottom") if horizontal else ("right" if offset >= 0 else "left")
-                rows[side] = max(rows[side], int(abs(offset) // _DIM_ROW))
-            label = (override or "<>") + (f" {fit}" if fit else "")
-            # The value is measured in SHEET millimetres, which are the model's only
-            # at 1:1. dimlfac scales what the dimension prints back to true size, per
-            # view, so a view drawn at its own scale still reads the part.
-            style_override = {"dimlfac": 1.0 / sv}
-            if tol:
-                # The deviations are the author's, in true size, and ezdxf prints them
-                # as given -- dimlfac scales the measurement, not the tolerance.
-                style_override |= {"dimtol": 1, "dimtp": tol[0], "dimtm": tol[1],
-                                   "dimtdec": 2, "dimtfac": 0.7}
-            if horizontal:
-                base = (a[0], (max(a[1], b[1]) if offset >= 0 else min(a[1], b[1])) + offset)
-                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=0, dimstyle=dimstyle, text=label,
-                                       override=style_override, dxfattribs={"layer": "DIM"})
-                side = "top" if offset >= 0 else "bottom"
-                edge = vy1 if offset >= 0 else vy0
-                reach[side] = max(reach[side], abs(base[1] - edge) + sheet.text_height * 1.5)
-            else:
-                base = ((max(a[0], b[0]) if offset >= 0 else min(a[0], b[0])) + offset, a[1])
-                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=90, dimstyle=dimstyle, text=label,
-                                       override=style_override, dxfattribs={"layer": "DIM"})
-                side = "right" if offset >= 0 else "left"
-                edge = vx1 if offset >= 0 else vx0
-                reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
-            d.render()
-            claim_rendered(d.dimension)
-
-        # The overall pair is the OUTERMOST row on its side: a drawing reads from the
-        # view outward, smallest feature first. Its rows are reserved here so the
-        # feature dimensions and the hole callouts keep clear of them, and drawn
-        # after them so the rows in between stay free.
-        def rows_used(want_h: bool, want_positive: bool) -> int:
-            """How many rows the author's own dimensions can take on one side.
-
-            An unplaced dimension takes the next free row; a placed one takes the
-            row its offset names, which is why counting only the unplaced ones put
-            overall() on top of an explicitly-placed dimension as soon as a sheet
-            mixed the two. The sum is the worst case, and outermost is where
-            overall() belongs whether or not it is reached.
-            """
-            unplaced = placed_rows = 0
-            for d in view._dims:
-                if d.kind != "linear":
-                    continue
-                horizontal = (d.orientation or _spans(model_to_sheet(d.p1), model_to_sheet(d.p2))) == "h"
-                if horizontal != want_h:
-                    continue
-                if d.offset is None:
-                    # Unplaced dimensions go above a horizontal pair and right of a
-                    # vertical one; they never take the sides overall() uses.
-                    unplaced += 1 if want_positive else 0
-                elif (d.offset >= 0) == want_positive:
-                    placed_rows = max(placed_rows, int(abs(d.offset) // _DIM_ROW))
-            return unplaced + placed_rows
-
-        overall_top = _DIM_ROW * (rows_used(True, True) + 1)
-        overall_left = _DIM_ROW * (rows_used(False, False) + 1)
-        if view._overall:
-            reach["top"] = max(reach["top"], overall_top + sheet.text_height * 1.5)
-            reach["left"] = max(reach["left"], overall_left + sheet.text_height * 1.5)
-        def on_view(point, margin: float = 1.0) -> bool:
-            """Does a projected point land on the view's own drawn extent?"""
-            return (vx0 - margin <= point[0] <= vx1 + margin
-                    and vy0 - margin <= point[1] <= vy1 + margin)
-
-        def check(kind: str, index: int, *points) -> None:
-            # A dimension between two points in SPACE draws perfectly and measures
-            # nothing: move the holes in the model, leave the constants alone, and
-            # the sheet prints a clean dimension over blank paper. The commonest
-            # cause is model coordinates assumed to be centred when the part was
-            # built from a corner.
-            off = [p for p in points if not on_view(p)]
-            if off and warnings is not None:
-                where = ", ".join(f"({p[0]:.1f}, {p[1]:.1f})" for p in off)
-                warnings.append(
-                    f"{view.name} {kind} {index}: {len(off)} of {len(points)} point(s) fall outside the "
-                    f"view's geometry at sheet {where}. The dimension is drawn, but it measures blank "
-                    "paper -- check the model coordinates it was given."
-                )
-
-        for index, dim in enumerate(view._dims):
-            if dim.kind == "linear":
-                a, b = model_to_sheet(dim.p1), model_to_sheet(dim.p2)
-                check("dim", index, a, b)
-                linear(a, b, dim.offset, dim.text, dim.orientation, dim.tol, dim.fit)
-            elif dim.kind in ("diameter", "radius", "hole"):
-                # A hole callout: a leader from the circle's edge to a horizontal landing
-                # outside the view, past whatever dimensions already stand on that side,
-                # with the text reading along the landing. Nothing is drawn across the
-                # part, and stacked callouts on one side land at their own hole's height.
-                centre = model_to_sheet(dim.p1)
-                check(dim.kind, index, centre)
-                r = dim.radius * sv
-                if dim.kind == "hole":
-                    value = hole_callout_text(dim.hole, tol=dim.tol, fit=dim.fit)
-                else:
-                    prefix = "%%c" if dim.kind == "diameter" else "R"
-                    value = dim.text if dim.text else f"{prefix}{_fmt(2 * dim.radius if dim.kind == 'diameter' else dim.radius)}"
-                text_w = 8.0 + len(value) * sheet.text_height * 0.7
-                # Exit on the hole's own side of the view (the short way out), unless the
-                # landing there would run into another view or off the frame; then the
-                # other side. A leader across the whole part is the last resort.
-                prefer_right = centre[0] >= (vx0 + vx1) / 2
-                choice = None
-                for go_right in (prefer_right, not prefer_right):
-                    clear_try = reach["right" if go_right else "left"] + 10.0
-                    knee_try = (vx1 + clear_try) if go_right else (vx0 - clear_try)
-                    land_x0, land_x1 = (knee_try, knee_try + text_w) if go_right else (knee_try - text_w, knee_try)
-                    if not blocked(land_x0, land_x1, centre[1] - sheet.text_height, centre[1] + r + 6.0 + sheet.text_height, own_box):
-                        choice = go_right
-                        break
-                go_right = prefer_right if choice is None else choice
-                side = "right" if go_right else "left"
-                clear = reach[side] + 10.0
-                knee_x = (vx1 + clear) if go_right else (vx0 - clear)
-                exit_angle = math.radians(dim.angle if dim.angle is not None else 45.0)
-                land_y = free_landing_y(side, centre[1] + r * math.sin(exit_angle) + 6.0)
-                # Leave the circle at 45 degrees toward the exit so the arrow reads as a
-                # pointer, then run level to the landing.
-                sign = 1.0 if go_right else -1.0
-                start = (centre[0] + sign * r * abs(math.cos(exit_angle)), centre[1] + r * math.sin(exit_angle))
-                knee = (knee_x, land_y)
-                landing = (knee[0] + sign * 6.0, knee[1])
-                msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
-                               override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"})
-                align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
-                text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM")
-            elif dim.kind == "angle":
-                v = model_to_sheet(dim.p1)
-                a = model_to_sheet(dim.p2)
-                b = model_to_sheet(dim.hole["p2"])
-                check("angle", index, v, a, b)
-                ua = math.atan2(a[1] - v[1], a[0] - v[0])
-                ub = math.atan2(b[1] - v[1], b[0] - v[0])
-                mid = ua + ((ub - ua + math.pi) % (2 * math.pi) - math.pi) / 2
-                base = (v[0] + dim.offset * math.cos(mid), v[1] + dim.offset * math.sin(mid))
-                d = msp.add_angular_dim_3p(base=base, center=v, p1=a, p2=b, dimstyle=dimstyle, dxfattribs={"layer": "DIM"})
-                d.render()
-                claim_rendered(d.dimension)
-            elif dim.kind == "note":
-                p = model_to_sheet(dim.p1)
-                check("note", index, p)
-                q = (p[0] + dim.radius, p[1] + dim.angle)
-                msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"})
-                align = TextEntityAlignment.BOTTOM_LEFT if dim.radius >= 0 else TextEntityAlignment.BOTTOM_RIGHT
-                text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES")
-
-        if view._overall:
-            linear((vx0, vy1), (vx1, vy1), overall_top, None, "h")
-            linear((vx0, vy0), (vx0, vy1), -overall_left, None, "v")
-
-        # The view label goes under everything that hangs below the view, so a
-        # dimension on the bottom side never sits on it.
-        text((view.label or view.name).upper(), view.at[0], vy0 - reach["bottom"] - 6, 3.5,
-             TextEntityAlignment.TOP_CENTER, "NOTES")
-    return doc
+    by_item: dict[int, Sheet] = {}
+    for item in parts:
+        if item.shape is None:
+            continue  # listed, not modelled: an adhesive has no sheet of its own
+        shown = _item_shown(item, title)
+        sheet = Sheet(title=shown[0], material=shown[1], spec=shown[2], subtitle=shown[3],
+                      general_tolerance=general_tolerance, **(common | {"size": None, "scale": None}))
+        sheet._item = _PartOf(item, title, shown)
+        _first_pass(sheet, item.shape)
+        by_item[item.number] = sheet
+    return AssemblySheets([ga, *more, *by_item.values()], parts, by_item)
 
 
 def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
@@ -1463,6 +1933,23 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
         partial.replace(path)
     finally:
         partial.unlink(missing_ok=True)
+
+
+def _say(line: str) -> None:
+    """Print one line the drawing has to say, on any console.
+
+    A drawing's notices quote its callouts, and a Windows console on a legacy
+    code page cannot encode ⌀, ↧, ⌴ or ⌵: under strict error handling the
+    print raised after the drawing was made, from the message rather than the
+    work. A line that will not encode goes out with backslash escapes instead,
+    as cadgen's CLI does. Only this write degrades; the stream's settings belong
+    to the process that embedded us.
+    """
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(line.encode(encoding, "backslashreplace").decode(encoding))
 
 
 def _counted(run: Callable[..., list[Path]]) -> Callable[..., list[Path]]:
@@ -1527,9 +2014,11 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
             target = target_spec if target_spec.is_absolute() else (script.parent / target_spec).resolve()
             docs = []
             notices: list[str] = []
+            facts = _Facts()
+            continued = _continuations(sheets)
             for index, sheet in enumerate(sheets, start=1):
                 doc = _render_sheet(sheet, index=index, count=len(sheets), label=fn.__name__,
-                                    warnings=notices)
+                                    warnings=notices, facts=facts, continued=continued.get(index))
                 # The same checks every DXF export runs, against the document the
                 # page is rendered from: duplicate geometry, unset units, an empty
                 # sheet. A drawing skipping them is how the duplicates went unseen.
@@ -1540,12 +2029,22 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
                 raise_on_error_findings(findings, label=f"{fn.__name__} sheet {index}")
                 for finding in findings:
                     if finding.severity == "warning":
-                        print(f"{fn.__name__} sheet {index} {finding.render()}")
+                        _say(f"{fn.__name__} sheet {index} {finding.render()}")
                 docs.append(doc)
+            # What the drawing does not state, across every sheet of it: printed, not
+            # raised, because a sheet of views is a drawing before it is a finished one.
+            notices.extend(_unstated(facts))
+            # And what it states twice: a size the other dimensions already fix.
+            notices.extend(_redundant(facts))
+            # And, apart from what is drawn, what is required: the sizes each sheet
+            # tolerances and the interfaces it leaves nominal, and where the parts
+            # of an assembly meet.
+            notices.extend(_requirements(facts))
+            notices.extend(_interfaces(facts))
             for notice in notices:
-                print(f"{fn.__name__}: {notice}")
+                _say(f"{fn.__name__}: {notice}")
             _write_pdf(docs, sheets, target)
-            print(f"wrote {target} ({len(sheets)} page{'s' if len(sheets) != 1 else ''})")
+            _say(f"wrote {target} ({len(sheets)} page{'s' if len(sheets) != 1 else ''})")
             return [target]
 
         run.__cadgen_eng_drawing__ = True  # type: ignore[attr-defined]
