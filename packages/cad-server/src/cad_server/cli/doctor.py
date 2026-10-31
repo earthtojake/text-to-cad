@@ -55,7 +55,7 @@ import sys
 from pathlib import Path
 
 
-def _server(start: bool = True) -> str:
+def _server(start: bool = True, answered: list | None = None) -> str:
     """The device's engine server (``cad_server.engine.daemon``): where its door is, and whether one is
     running, from which installation -- started when none is and ``start``, through the client's own
     start (the current installation's), which in a sandbox that cannot start one says so."""
@@ -76,6 +76,8 @@ def _server(start: bool = True) -> str:
         return f"unknown ({type(error).__name__}: {error})"
     if not isinstance(answer, dict):
         return f"not running ({where}); a build starts it outside a sandbox; inside one, run `cad server` outside first"
+    if answered is not None:
+        answered.append(answer)  # what the engine said, for the lines after this one (``_automatic``)
     from cad_server.engine.cli import workers_text
 
     # The version the engine runs as, and its environment; the workers as `cad status` counts them:
@@ -204,6 +206,19 @@ def _sharing() -> str | None:
         from cad_server.cli.telemetry import describe
 
         return describe()
+    except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return None
+
+
+def _automatic(status: dict | None = None) -> str | None:
+    """Automatic updates, on or off and why, the feed's last read and next, and what the engine running
+    is getting ready (its ``status``, as the server line asked it: ``cad_server.auto_updates.describe``), or
+    ``None`` if it cannot tell."""
+    try:
+        from cad_server import auto_updates
+
+        engine = status.get("update") if isinstance(status, dict) else None
+        return auto_updates.describe(engine if isinstance(engine, dict) else None)
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return None
 
@@ -534,7 +549,12 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
         for hint in kernel_load_hint(detail) or ():
             sys.stderr.write(f"           {hint}\n")
     # One per installation: the same door means the same warm daemon. Started here when none runs.
-    sys.stdout.write(f"  server   {_server(start=not args.no_server)}\n")
+    answered: list = []
+    sys.stdout.write(f"  server   {_server(start=not args.no_server, answered=answered)}\n")
+    automatic = _automatic(answered[0] if answered else None)
+    if automatic:
+        # Whether the engine updates by itself, as `cad update auto` says it.
+        sys.stdout.write(f"  updates  automatic {automatic}\n")
     sharing = _sharing()
     if sharing:
         # Whether CAD's apps send usage stats, as `cad telemetry` says it.

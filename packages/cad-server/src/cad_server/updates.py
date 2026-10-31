@@ -7,9 +7,10 @@ At most once an hour, cadgen reads the version feed (``GET /versions``, ``cad_se
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
 set) or for a copy that is not told. The feed as last read is kept in the state directory
-(``versions.json``), where every process of the person's reads it. It only says a release is out:
-nothing is fetched and nothing switches until the person asks -- the update button in the CAD Viewer
-and the CAD app (``cad_server._internal.update``), ``cad update``, or the install command run again.
+(``versions.json``), where every process of the person's reads it. It says a release is out; the
+update moves to it when the person asks -- the update button in the CAD Viewer and the CAD app
+(``cad_server._internal.update``), ``cad update``, or the install command run again -- or, with
+automatic updates on (``cad_server/auto_updates.py``), once the device's engine is idle.
 
 A release is also known with no network at all: an agent app whose plugin moved ahead runs the newer
 release's CAD server, which says its release as it connects (``see``), and that proves the release

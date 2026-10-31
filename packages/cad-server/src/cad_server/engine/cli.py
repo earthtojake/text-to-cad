@@ -543,11 +543,25 @@ def _status(args: argparse.Namespace, _prog: str) -> int:
     if answer is None:
         print("null" if args.json else "no engine server is running")
         return 0
+    updates = _updates(answer.get("update"))
     if args.json:
-        print(json.dumps(answer, indent=2))
+        print(json.dumps({**answer, **({"automaticUpdates": updates} if updates else {})}, indent=2))
     else:
         print(status_text(answer))
+        if updates:
+            print(f"updates automatic {updates['line']}")
     return 0
+
+
+def _updates(engine: Any) -> dict[str, Any] | None:
+    """Automatic updates as ``cad status`` says them (``cad_server.auto_updates``): on or off and why, the
+    feed's last read and next, and what the engine is getting ready (its ``status``'s ``update``)."""
+    try:
+        from cad_server import auto_updates
+
+        return {**auto_updates.read(), "line": auto_updates.describe(engine if isinstance(engine, dict) else None)}
+    except Exception:  # noqa: BLE001 - a status line, never a reason status fails
+        return None
 
 
 def _told_swept(swept: dict[str, list[str]]) -> None:

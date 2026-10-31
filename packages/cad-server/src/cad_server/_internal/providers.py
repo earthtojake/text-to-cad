@@ -29,8 +29,9 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 - **Grok Build**: ``grok plugin``, from the repository's ``latest``, where Claude Code does not feed it.
 - **Gemini CLI**: its extension, the folder linked (``gemini extensions link``): it reads it in place.
 
-Nothing installed this way updates by itself: an update is the person's (``cad update``, the install
-command, the update button), and the folder and the copies follow the release it makes current.
+No app updates what is installed this way itself: an update is the person's (``cad update``, the install
+command, the update button) or the engine's own, once idle (``cad_server/auto_updates.py``), and the
+folder and the copies follow the release it makes current.
 The copies an earlier release's installer made from the repository's ``latest`` branch on GitHub (the
 ``earthtojake`` catalog, a Cursor clone, a Gemini extension installed from it) are second copies now:
 taken out, the catalog with them.

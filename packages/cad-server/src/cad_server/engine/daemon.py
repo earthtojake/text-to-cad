@@ -114,6 +114,21 @@ def _making() -> Any:
     return making()
 
 
+def _automatic(daemon: Any) -> None:
+    """The automatic update asked for as the daemon tends itself (``cad_server._internal.engine_host.automatic``):
+    nothing but a look at the settings and the feed as last read, its work in the background."""
+    from cad_server._internal.engine_host import automatic
+
+    automatic(daemon)
+
+
+def _update() -> dict[str, Any] | None:
+    """Where the engine's update is, for ``status`` (``cad_server._internal.engine_host.update``)."""
+    from cad_server._internal.engine_host import update
+
+    return update()
+
+
 def _halt() -> None:
     """The uv commands the engine runs now stopped (``cad_server._internal.engine_host.halt``)."""
     from cad_server._internal.engine_host import halt
@@ -663,6 +678,9 @@ class Daemon:
         self.last = time.monotonic()
         self.busy = 0
         self.busy_lock = threading.Lock()
+        # When the last build, draw, export or request that serves ended (monotonic): an automatic update
+        # switches only once nothing has run for a while (``cad_server._internal.update.Update._wait``).
+        self.worked = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
         # runs): while one is open, no other engine asks it to stop for its port (``bind``).
@@ -1085,6 +1103,7 @@ class Daemon:
         finally:
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
@@ -1101,6 +1120,7 @@ class Daemon:
         finally:
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def _handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
@@ -1297,6 +1317,7 @@ class Daemon:
             finally:
                 with self.busy_lock:
                     self.busy -= 1
+                    self.worked = time.monotonic()
                 self.touch()
         elif op == "serve":
             server = self.serve(request)
@@ -1395,6 +1416,7 @@ class Daemon:
             said.close()
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def status(self) -> dict[str, Any]:
@@ -1441,6 +1463,7 @@ class Daemon:
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
+                "update": _update(),
                 "sessions": (self.server.http.app.sessions() if self.server is not None
                              and hasattr(self.server.http, "app") else [])}
 
@@ -1468,6 +1491,7 @@ class Daemon:
             self.door.sweep()
         self.supervisor.shed(self.pressure.under())
         self.models.prune()
+        _automatic(self)
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a

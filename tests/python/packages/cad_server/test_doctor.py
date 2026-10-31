@@ -208,6 +208,7 @@ class DoctorTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             _, out, _ = _run([])
         self.assertIn("sharing  off: not until a cad command says so", out)
+        self.assertIn("updates  automatic on (by default); feed not read yet: the engine reads it within the hour\n", out)
         # Told, and nothing chosen: on by default, from the day it was said.
         (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:

@@ -203,6 +203,20 @@ class ViewerAnalyticsTest(unittest.TestCase):
             self.assertEqual(self.request("POST", "/__cad/update", {})[0], 409)
             self.assertEqual(self.request("GET", "/__cad/update")[0], 405)
 
+    def test_automatic_updates_are_the_person_s_setting_for_every_cad_app(self) -> None:
+        # The app menu's Automatic updates (`cad_server/auto_updates.py`): on by default, an answer kept in
+        # the settings every CAD app reads, a POST guarded as every change is, and an environment's off fixed.
+        with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}):
+            self.assertEqual(self.request("GET", "/__cad/updates"), (200, {"automatic": True, "reason": "default"}))
+            self.assertEqual(self.request("POST", "/__cad/updates", {"automatic": False}),
+                             (200, {"automatic": False, "reason": "choice"}))
+            self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["updates"], {"automatic": False})
+            self.assertNotEqual(self.request("POST", "/__cad/updates", {"automatic": True}, guard=False)[0], 200)
+            self.assertEqual(self.request("POST", "/__cad/updates", {"automatic": "yes"})[0], 400)
+            self.assertEqual(self.request("GET", "/__cad/updates")[1], {"automatic": False, "reason": "choice"})
+        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
+            self.assertEqual(self.request("GET", "/__cad/updates")[1], {"automatic": False, "reason": "environment"})
+
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.
         port = self.serve(create_cad_app(host="127.0.0.1", port=0))
