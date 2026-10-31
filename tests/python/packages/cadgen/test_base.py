@@ -184,6 +184,45 @@ class SpawnTest(unittest.TestCase):
             (home / "python.exe").unlink()
             self.assertIsNone(serve._venv_interpreter(str(launcher)), "a home with no interpreter")
 
+    @unittest.skipIf(os.name == "nt", "Windows starts real processes: test_environments.py measures through the pool")
+    def test_a_pool_process_on_windows_is_the_real_interpreter_told_its_environment(self) -> None:
+        """Windows' process start, with Windows' modules stood in: the real interpreter, its command line,
+        and ``__PYVENV_LAUNCHER__`` naming the environment's own Python, as CPython starts its own's."""
+        import sys
+        import types
+
+        created: list[tuple] = []
+        winapi = types.SimpleNamespace(CreatePipe=lambda _attributes, _size: (11, 12),
+                                       CreateProcess=lambda *args: created.append(args) or (21, 22, 4321, 23),
+                                       CloseHandle=lambda _handle: None)
+        scratch = tempfile.TemporaryDirectory(prefix="cadgen-spawn-")
+        self.addCleanup(scratch.cleanup)
+        sent = os.open(os.path.join(scratch.name, "to-child"), os.O_WRONLY | os.O_CREAT)  # the pipe to the child
+        msvcrt = types.SimpleNamespace(open_osfhandle=lambda _handle, _flags: sent)
+        win32 = types.ModuleType("multiprocessing.popen_spawn_win32")
+        win32.Popen = type("Popen", (), {})  # type: ignore[attr-defined]
+        win32._close_handles = lambda *_handles: None  # type: ignore[attr-defined]
+        venv, real = r"C:\base\Scripts\python.exe", r"C:\python\python.exe"
+        stood_in = {"_winapi": winapi, "msvcrt": msvcrt, "multiprocessing.popen_spawn_win32": win32}
+        with mock.patch.dict(sys.modules, stood_in), \
+                mock.patch.object(subprocess, "STARTUPINFO", lambda **flags: flags, create=True), \
+                mock.patch.object(subprocess, "STARTF_FORCEOFFFEEDBACK", 0x80, create=True):
+            sys.modules.pop("cadgen.engine.windows_spawn", None)
+            from cadgen.engine import windows_spawn
+
+            try:
+                context = windows_spawn.context(venv, real)
+                # The process object goes to the child pickled: its class is one the child imports.
+                started = context.Process._Popen(context.Process(target=print))
+            finally:
+                sys.modules.pop("cadgen.engine.windows_spawn", None)
+        [(executable, line, _process, _thread, inherit, _flags, env, _folder, _startup)] = created
+        self.assertEqual((executable, inherit, env["__PYVENV_LAUNCHER__"]), (real, False, venv))
+        self.assertTrue(line.startswith(f'"{real}" '), line)
+        self.assertIn("--multiprocessing-fork", line)
+        self.assertEqual((started.pid, started.sentinel), (4321, 21))
+        self.assertEqual(context.get_start_method(), "spawn")
+
 
 if __name__ == "__main__":
     unittest.main()
