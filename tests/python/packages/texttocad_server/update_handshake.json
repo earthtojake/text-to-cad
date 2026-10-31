@@ -84,6 +84,18 @@
    "-h"
   ]
  },
+ "plugin": {
+  "arguments": [
+   "plugin",
+   "--refresh"
+  ],
+  "flags": [
+   "--help",
+   "--json",
+   "--refresh",
+   "-h"
+  ]
+ },
  "update": {
   "command": "update",
   "flags": [

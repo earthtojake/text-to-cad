@@ -5,6 +5,7 @@ uv, a local feed and a local index is test_update_end_to_end.py's."""
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
@@ -120,6 +121,31 @@ class SwitchTest(Fixture):
             self.assertIsNone(switch.handover("1.2.0", told=lambda _line: None))
         switched.assert_not_called()
         self.assertEqual(installations.current_version(), "1.2.0")
+
+    def test_the_helper_has_the_release_it_leaves_current_write_its_plugin_folder(self) -> None:
+        # Held or gone back, the release then current runs its own `cad plugin --refresh`: the folder
+        # follows it, and so do the apps' copies when that changed it.
+        for version in ("1.1.0", "1.2.0"):
+            self.release(version)
+        installations.point("1.1.0")
+        ran = subprocess.CompletedProcess([], 0, "", "Codex: update text-to-cad@texttocad\n")
+        for held, current in ((True, "1.2.0"), (False, "1.1.0")):
+            with self.subTest(held=held), \
+                    mock.patch.object(switch, "switch", side_effect=lambda *a, **k: (installations.point(current),
+                                                                                     {"ok": held})[1]), \
+                    mock.patch.object(subprocess, "run", return_value=ran) as run, \
+                    mock.patch.object(sys, "stderr", io.StringIO()) as log, \
+                    mock.patch.dict(os.environ, {"PYTHONPATH": "/checkout/src"}):
+                self.assertEqual(switch.helper("1.2.0", port=4567, previous="1.1.0"), 0 if held else 1)
+            self.assertIn("cad update: Codex: update text-to-cad@texttocad", log.getvalue(), "its lines go to the log")
+            (call,) = run.call_args_list
+            self.assertEqual(call.args[0], [installations.current()["cadgen"], "plugin", "--refresh"])
+            self.assertNotIn("PYTHONPATH", call.kwargs["env"], "the release runs its own code")
+        # With no installation current there is nothing to write it from.
+        installations.state().remove(installations.CURRENT)
+        with mock.patch.object(subprocess, "run") as run:
+            self.assertFalse(switch.follow(told=lambda _line: None))
+        run.assert_not_called()
 
     def test_the_helper_starts_detached_from_the_engine_it_replaces(self) -> None:
         with mock.patch.object(subprocess, "Popen") as popen:

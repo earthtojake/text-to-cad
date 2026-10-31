@@ -19,7 +19,9 @@ as it drains for the button (``spawn``); ``cad setup`` -- ``cad update`` from a 
 install command run again -- asks the engine to drain and is that process itself (``handover``). With
 no engine running there is nothing to hand over: ``current`` is pointed at the release under the
 engine's lock, and the next client starts its engine. After a switch the release folders but this
-one and the one before go, once nothing runs from them (``releases.collect``).
+one and the one before go, once nothing runs from them (``releases.collect``), and the plugin folder
+follows the release left current (``follow``: its own ``cad plugin --refresh``, which writes the folder
+again and, should that change it -- a switch that went back --, the copies the apps keep of it).
 
 What a switch did is the state folder's ``update.json`` -- the releases, whether it held, why not,
 and how long no engine served (``gapMs``) --, and the helper's lines go to ``update.log`` beside it.
@@ -35,7 +37,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["LOG", "RESULT", "handover", "helper", "spawn", "switch"]
+__all__ = ["LOG", "RESULT", "follow", "handover", "helper", "spawn", "switch"]
 
 LOG = "update.log"
 RESULT = "update.json"
@@ -44,6 +46,9 @@ RESULT = "update.json"
 DRAIN_SECONDS = 3600.0
 # How long a release's engine has to answer at its door once started.
 START_SECONDS = 60.0
+# How long the release now current has to write its plugin folder and bring the apps' copies to it
+# (an `npx skills add` among them).
+FOLLOW_SECONDS = 600.0
 # On Windows: the helper outlives the engine that started it, in a process group of its own, with no
 # console of its own (``subprocess``'s names, by number, as Windows alone has them).
 DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
@@ -238,8 +243,44 @@ def handover(target: str, *, told: Callable[[str], None] | None = None) -> dict[
     return switch(target, port=port, previous=previous, told=told)
 
 
+def follow(told: Callable[[str], None] | None = None) -> bool:
+    """The plugin folder follows the release now current (``cad_server._internal.plugin``): that
+    installation's own ``cad plugin --refresh`` writes it again -- nothing changes when that release's
+    setup already did -- and, should that change it (a switch that went back), brings the copies apps
+    keep of it to it. Run once no lock of the installer's is held. Whether it ran and succeeded; a
+    release before 0.9 has no such command, and its plugin no folder."""
+    from cad_server._internal import installations
+
+    told = _said(told)
+    record = installations.current()
+    if record is None:
+        return False
+    environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
+    named = installations.named(record)
+    if named:
+        environment[installations.NAME_ENV] = named
+    else:
+        environment.pop(installations.NAME_ENV, None)
+    try:
+        done = subprocess.run([record["cadgen"], "plugin", "--refresh"], env=environment, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=FOLLOW_SECONDS)
+    except (OSError, subprocess.SubprocessError) as error:
+        told(f"the plugin folder was not written again: {type(error).__name__}: {error}")
+        return False
+    for line in (done.stderr or "").splitlines():
+        if line.strip():
+            told(line.rstrip())
+    if done.returncode != 0:
+        told(f"text-to-cad {record['version']}'s `cad plugin --refresh` exited {done.returncode}")
+    return done.returncode == 0
+
+
 def helper(target: str, *, port: int | None, previous: str | None) -> int:
-    """``cad update --switch <target>``: the switch, from a process of its own; 0 when it held."""
+    """``cad update --switch <target>``: the switch, from a process of its own, then the plugin folder
+    following the release it left current (``follow``); 0 when the switch held."""
     told = _said(None)
     told(f"waiting for the engine to drain, to switch to text-to-cad {target}")
-    return 0 if switch(target, port=port, previous=previous, told=told)["ok"] else 1
+    held = switch(target, port=port, previous=previous, told=told)["ok"]
+    follow(told)
+    return 0 if held else 1

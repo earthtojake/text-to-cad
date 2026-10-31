@@ -14,7 +14,9 @@ developer's own apps.
 from __future__ import annotations
 
 import io
+import json
 import os
+import re
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -326,15 +328,8 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("kernel   not made — the current installation's (text-to-cad 1.1.0): its `cad doctor` checks it", out)
         self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
 
-    def test_the_report_names_each_app_s_plugin(self) -> None:
-        from cad_server._internal import providers
-
-        class Copy:
-            def __init__(self, version: str) -> None:
-                self.version = version
-
-            def words(self, _machine) -> str:
-                return f"text-to-cad {self.version}"
+    def test_the_report_names_each_app_s_plugin_and_where_it_comes_from(self) -> None:
+        from cad_server._internal import plugin, providers
 
         class App:
             def __init__(self, label: str, ours, stores=(), present: bool = True) -> None:
@@ -346,16 +341,46 @@ class DoctorTests(unittest.TestCase):
             def stores(self):
                 return self._stores
 
-        found = {"claude": App("Claude Code", Copy("1.1.0")), "codex": App("Codex", Copy("1.2.0")),
-                 "claude-desktop": App("Claude Desktop", Copy("1.1.0")), "cursor": App("Cursor", None, [Copy("1.0.0")]),
-                 "gemini": App("Gemini CLI", None, present=False)}
-        with mock.patch.object(providers.Machine, "here"), mock.patch.object(providers, "detect", return_value=found):
+        folder = str(plugin.folder())
+        found = {
+            "claude": App("Claude Code", providers.Copy("claude", "plugin", providers.PLUGIN_ID, version="1.1.0", ours=True,
+                                                        source=folder, via="in place")),
+            "claude-desktop": App("Claude Desktop", providers.Copy("claude-desktop", "server", "cad", version="1.1.0",
+                                                                   ours=True)),
+            "codex": App("Codex", providers.Copy("codex", "plugin", providers.PLUGIN_ID, version="1.2.0", ours=True,
+                                                 source=folder, via="copied", when="2026-10-31 02:41")),
+            "cursor": App("Cursor", None, [providers.Copy("cursor", "store", "/c/text-to-cad", store=True,
+                                                          detail="the Cursor Marketplace's")]),
+            "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
+                                                       source=folder, via="linked")),
+            "grok": App("Grok Build", None, present=False)}
+        (self.state / "install-receipt.json").write_text(json.dumps({"schema": 1, "skills": {"windsurf": {
+            "release": "1.1.0", "folder": "/h/.codeium/windsurf/skills", "skills": ["cad"], "at": "2026-10-31T02:40:00Z"}}}),
+            encoding="utf-8")
+        with mock.patch.object(providers.Machine, "here"), \
+                mock.patch.object(providers, "detect", return_value=found) as detect:
             lines = self.apps()
-        self.assertEqual(lines, ["app      Claude Code: text-to-cad 1.1.0", "app      Codex: text-to-cad 1.2.0",
-                                 "app      Claude Desktop: text-to-cad 1.1.0",
-                                 "app      Cursor: text-to-cad 1.0.0, which its store updates"])
+        self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
+        self.assertEqual(lines, [
+            f"app      Claude Code: text-to-cad@texttocad 1.1.0, reads {folder} in place",
+            "app      Claude Desktop: text-to-cad 1.1.0",
+            f"app      Codex: text-to-cad@texttocad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
+            "app      Cursor: /c/text-to-cad (the Cursor Marketplace's), which its store updates",
+            f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
+            "app      Windsurf: the skills of text-to-cad 1.1.0, copied into /h/.codeium/windsurf/skills by the Skills CLI "
+            "(2026-10-31 02:40)"])
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
             self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
+
+    def test_the_report_says_where_the_plugin_folder_is_and_its_release(self) -> None:
+        from cad_server._internal import plugin
+
+        self.assertEqual(doctor._plugin(), [f"plugin   {plugin.folder()}: not written; `cad setup` writes it, and points "
+                                            "the apps at it"])
+        (plugin.folder() / ".claude-plugin").mkdir(parents=True)
+        (plugin.folder() / plugin.MANIFEST).write_text('{"name": "text-to-cad", "version": "1.1.0"}', encoding="utf-8")
+        (line,) = doctor._plugin()
+        self.assertRegex(line, rf"^plugin   {re.escape(str(plugin.folder()))}: text-to-cad 1\.1\.0, written \d{{4}}-\d\d-\d\d \d\d:\d\d$")
 
 
 class PrivateFolders(unittest.TestCase):

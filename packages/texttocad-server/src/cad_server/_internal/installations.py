@@ -537,7 +537,25 @@ def setup(version: str, *, make_current: bool = False) -> tuple[tuple[str, str, 
         except (OSError, ValueError):
             where = version
         registered = (where, MISSING, f"{type(failure).__name__}: {getattr(failure, 'strerror', None) or failure}")
+    else:
+        write_plugin()
     return registered, write_proxy()
+
+
+def write_plugin() -> bool:
+    """The plugin folder written from this installation (``cad_server._internal.plugin``) when it is the
+    current one and a release's -- a development install (named, ``NAME_ENV``) or a source tree writes it
+    only when asked, by ``cad plugin``: whether it was written. Silent, and never a failure of the
+    registration it rides on: ``cad doctor`` says how the folder is."""
+    if os.environ.get(NAME_ENV) or editable() or not mine(current()):
+        return False
+    try:
+        from cad_server._internal import plugin
+
+        plugin.write()
+    except Exception:  # noqa: BLE001 - a registration never fails on the folder
+        return False
+    return True
 
 
 def startup() -> None:

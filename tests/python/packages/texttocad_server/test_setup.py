@@ -4,10 +4,11 @@ uninstall`` (``cad_server.cli.uninstall``), and the one-line installer's scripts
 
 The verb runs against a temporary home: its state, cache and ``cad`` command folders inside it,
 fake app commands on a PATH of their own, Claude Desktop's config file named by
-``CLAUDE_DESKTOP_CONFIG``. The engine is never asked: what serves the port, an earlier release's
-``cad stop``, this one's and the switch are stood in for, as is the telemetry choice, so nothing
-here reaches the network or the developer's own engine and settings. Every run is at a terminal that
-would answer no, and asks it nothing.
+``CLAUDE_DESKTOP_CONFIG``, and a plugin of the test's own that the plugin folder is written from
+(``cad_server._internal.plugin``). The engine is never asked: what serves the port, an earlier release's
+``cad stop``, this one's, the switch and the plugin folder following it are stood in for, as is the
+telemetry choice, so nothing here reaches the network or the developer's own engine, settings and
+apps. Every run is at a terminal that would answer no, and asks it nothing.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ add_repo_path("packages/texttocad/src")
 import cad_server  # noqa: E402
 from cad_server import analytics  # noqa: E402
 from cad_server import cli, updates  # noqa: E402
-from cad_server._internal import installations, providers, releases, switch  # noqa: E402
+from cad_server._internal import installations, plugin, providers, releases, switch  # noqa: E402
 from cad_server._internal.launch import LAUNCHER  # noqa: E402
 from cad_server.cli import setup, stop, telemetry, uninstall  # noqa: E402
 
@@ -73,6 +74,34 @@ else:
     sys.exit(9)
 """
 
+# Claude Code with nothing installed, whose every other command succeeds: the plugin folder it is
+# pointed at must be there by then, written.
+CLAUDE_EMPTY = """
+import os
+if args in (["plugin", "list", "--json"], ["plugin", "marketplace", "list", "--json"]):
+    print("[]")
+elif args[:3] == ["plugin", "marketplace", "add"]:
+    sys.exit(0 if os.path.isfile(os.path.join(args[3], ".claude-plugin", "marketplace.json")) else 7)
+"""
+
+
+def plugin_source(root: Path) -> Path:
+    """A plugin of the test's own, laid out as the server's wheel carries it: every file the folder is
+    written from, and a skill."""
+    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "texttocad-mcp==0.0.1", "cad-mcp"],
+                                     "env": {"CAD_INSTALL_CHANNEL": "x"}}}}
+    files = {name: b"bytes" for name in plugin.FILES}
+    files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.1"}).encode() for name in plugin.MANIFESTS})
+    files.update({name: json.dumps(server).encode() for name in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json",
+                                                                 "mcp.json")})
+    files["gemini-extension.json"] = json.dumps({"name": "text-to-cad", "version": "0.0.1", **server}).encode()
+    files[plugin.CATALOG] = json.dumps({"name": "earthtojake", "plugins": [{"name": "text-to-cad", "source": "./"}]}).encode()
+    files["skills/cad/SKILL.md"] = b"---\nname: cad\n---\nMaintained at earthtojake/text-to-cad.\n"
+    for name, data in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(data)
+    return root
+
 
 # The Skills CLI, for Windsurf: `add` copies every skill into its folder and prints the CLI's JSON,
 # `remove` takes the named ones out.
@@ -80,8 +109,10 @@ NPX = f"SKILLS = {providers.SKILLS!r}\n" + """
 import os, shutil
 from pathlib import Path
 folder = Path(os.environ["HOME"]) / ".codeium" / "windsurf" / "skills"
-assert args[:2] == ["-y", "skills@latest"] and args[args.index("-a") + 1] == "windsurf", args
+assert args[:3] == ["--prefer-offline", "-y", "skills@latest"] and args[args.index("-a") + 1] == "windsurf", args
+args = args[1:]
 if args[2] == "add":
+    assert os.path.isfile(os.path.join(args[3], "cad", "SKILL.md")), "the skills come from the plugin folder"
     for name in SKILLS:
         (folder / name).mkdir(parents=True, exist_ok=True)
         (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
@@ -112,10 +143,11 @@ class Fixture(unittest.TestCase):
         self.launchers = self.home / "launchers"
         self.desktop = self.home / "Claude" / "claude_desktop_config.json"
         self.uvx = command(self.bin, "uvx", "")
+        self.plugin_source = plugin_source(self.root / "plugin-source")
         environ = {key: value for key, value in os.environ.items()
                    if not key.endswith("_CLI") and key not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "APPDATA",
                                                                "UV_INSTALL_DIR", "XDG_BIN_HOME", "XDG_CONFIG_HOME",
-                                                               "HERMES_HOME", "FLATPAK_XDG_CONFIG_HOME")}
+                                                               "HERMES_HOME", "FLATPAK_XDG_CONFIG_HOME", "GEMINI_CLI_HOME")}
         environ.update({"PATH": str(self.bin), "HOME": str(self.home), "USERPROFILE": str(self.home),
                         "CLAUDE_DESKTOP_CONFIG": str(self.desktop)})
         self.machine = providers.Machine(self.home, environ, bundled={})
@@ -131,6 +163,9 @@ class Fixture(unittest.TestCase):
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
                       mock.patch.object(setup, "stop_installation", return_value=(True, "stopped")),
                       mock.patch.object(switch, "handover", return_value=None),
+                      # The release now current's own `cad plugin --refresh`, a process of its own.
+                      mock.patch.object(switch, "follow", return_value=True),
+                      mock.patch.object(plugin, "source", return_value=self.plugin_source),
                       mock.patch.object(analytics, "notify", return_value=False),
                       mock.patch.object(telemetry, "describe", return_value="off: your choice"),
                       mock.patch.object(stop, "main", return_value=0)):
@@ -230,12 +265,14 @@ class TheCommand(Fixture):
         rows = [re.split(r"\s{2,}", line.strip()) for line in lines[1:] if line.startswith("  ") and not line.startswith("    ")]
         self.assertIn(["Claude Code", "remove duplicate", "text-to-cad@earthtojake-dev 0.0.1-dev.1 (a development install)"],
                       rows)
-        self.assertIn(["Claude Code", "install", "text-to-cad@earthtojake from earthtojake/text-to-cad at latest"], rows)
+        folder = providers.shown(plugin.folder(), self.machine)
+        self.assertIn(["Claude Code", "install", f"text-to-cad@texttocad, which reads {folder} in place"], rows)
         where = providers.shown(self.desktop, self.machine)
         self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
+        self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
         self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
-        self.assertIn("$ claude plugin install text-to-cad@earthtojake", out)
+        self.assertIn("$ claude plugin install text-to-cad@texttocad", out)
         self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -250,14 +287,14 @@ class TheCommand(Fixture):
         self.assertEqual(set(document), {"schema", "plan", "actions", "stopped", "verified", "restart"})
         self.assertEqual((document["schema"], document["actions"], document["verified"]), (1, [], None))
         self.assertEqual([(row["app"], row["action"]) for row in document["plan"]],
-                         [("claude-desktop", "install"), ("engine", "leave")])
+                         [("claude-desktop", "install"), ("plugin", "write"), ("engine", "leave")])
         self.assertEqual(document["plan"][0]["edit"]["set"], {"cad": self.entry()})
         self.assertIn("Dry run", err)
         code, out, _err = self.run_setup("--json")
         self.assertEqual(code, 0)
         document = json.loads(out)
         self.assertEqual([(action["app"], action["kind"], action["ok"]) for action in document["actions"]],
-                         [("claude-desktop", "edit", True)])
+                         [("plugin", "plugin", True), ("claude-desktop", "edit", True)])
         self.assertEqual(document["verified"]["apps"]["claude-desktop"], {"verdict": "ok", "release": RELEASE})
         self.assertEqual(document["verified"]["telemetry"], "off: your choice")
         self.assertEqual(document["restart"], [providers.RESTART["claude-desktop"]])
@@ -285,7 +322,7 @@ class InstallUpdateAndUninstall(Fixture):
         receipt = self.receipt()
         self.assertEqual((receipt["schema"], receipt["release"]), (1, RELEASE))
         self.assertEqual([(action["app"], action["action"], action["kind"]) for action in receipt["actions"]],
-                         [("claude-desktop", "install", "edit")])
+                         [("plugin", "write", "plugin"), ("claude-desktop", "install", "edit")])
         self.assertEqual([(found["release"], found["pid"]) for found in receipt["stopped"]], [("0.0.1", 4242)])
         self.assertEqual(receipt["launcher"]["path"], str(proxy))
         self.assertIn("verify   Claude Desktop: text-to-cad " + RELEASE, out)
@@ -375,11 +412,14 @@ class InstallUpdateAndUninstall(Fixture):
             self.assertIn(f"engine   text-to-cad {RELEASE} is the current installation (412 ms without an engine)", out)
             self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
                             "the apps first, then the switch")
+            switch.follow.assert_not_called()
             switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": False, "error": "no hello",
                                             "restored": True}
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
         self.assertIn(f"engine   the switch to text-to-cad {RELEASE} failed: no hello; the release before runs again", out)
+        # The release before's plugin folder, and the apps' copies of it, come back with it.
+        switch.follow.assert_called_once_with(told=mock.ANY)
 
     def test_a_release_sets_itself_up_from_its_own_folder(self) -> None:
         """Run from uvx's environment (the install command), a release makes its folder in the state
@@ -405,7 +445,7 @@ class InstallUpdateAndUninstall(Fixture):
             execv.assert_called_once_with(made["cadgen"], run)
 
     def test_the_engine_s_own_run_says_its_stages_on_stdout_and_switches_nothing(self) -> None:
-        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'install'] else 0)\n")
+        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             code, out, err = self.run_setup("--engine-update")
         self.assertEqual(code, 0, err + out)  # an app's failure is said, and the engine still moves on
@@ -443,7 +483,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertRegex(again[1], r"CAD kernel\s+leave\s+texttocad\[kernel\] ")
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
-        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'install'] else 0)\n")
+        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
         self.desktop_with({})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
@@ -452,7 +492,43 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn(f"run the install command again: {updates.command()}", out)
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
-                         [("claude-desktop", True), ("gemini", False)])
+                         [("plugin", True), ("claude-desktop", True), ("gemini", False)])
+
+    def test_the_plugin_folder_is_written_before_an_app_is_pointed_at_it_and_goes_with_an_uninstall(self) -> None:
+        command(self.bin, "claude", CLAUDE_EMPTY)
+        folder = plugin.folder()
+        code, out, _err = self.run_setup("--only", "claude")
+        self.assertEqual(code, 0, out)
+        self.assertLess(out.index(f"plugin   wrote {providers.shown(folder, self.machine)}: text-to-cad {RELEASE}"),
+                        out.index("Claude Code: install"))
+        manifest = json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], RELEASE, "this release's, whatever the plugin it was written from says")
+        self.assertEqual((folder / "skills" / "cad" / "SKILL.md").read_bytes(),
+                         (self.plugin_source / "skills" / "cad" / "SKILL.md").read_bytes())
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertIn(["claude", "plugin", "marketplace", "add", str(folder)], calls)
+        self.assertIn(["claude", "plugin", "install", "text-to-cad@texttocad"], calls)
+        # Run again: the folder already this release's, nothing written.
+        before = (folder / plugin.MANIFEST).stat().st_mtime_ns
+        self.assertEqual(self.run_setup("--only", "claude")[0], 0)
+        self.assertEqual((folder / plugin.MANIFEST).stat().st_mtime_ns, before)
+        code, out, _err = self.run_uninstall()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"plugin   removed {providers.shown(folder, self.machine)}", out)
+        self.assertFalse(folder.exists())
+
+    def test_a_folder_that_cannot_be_written_points_no_app_at_it(self) -> None:
+        command(self.bin, "claude", CLAUDE_EMPTY)
+        self.desktop_with({})
+        with mock.patch.object(plugin, "source", side_effect=plugin.Missing("no plugin in this installation")):
+            code, out, _err = self.run_setup()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not be written: no plugin in this installation", out)
+        self.assertIn("Claude Code: install text-to-cad@texttocad", out)
+        self.assertIn("not done, with no plugin folder", out)
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertFalse([call for call in calls if call[1:3] == ["plugin", "marketplace"] and call[3] == "add"])
+        self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"], "Claude Desktop needs none")
 
     def test_uninstall_takes_back_what_the_receipt_says_and_purge_removes_the_folders(self) -> None:
         original = self.desktop_with({"other": {"command": "node"}})
@@ -508,7 +584,7 @@ class InstallUpdateAndUninstall(Fixture):
         code, out, _err = self.run_uninstall()
         self.assertEqual(code, 0, out)
         last = json.loads((self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual(last, ["npx", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
+        self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
                                 *sorted(providers.SKILLS), "-y"])
         self.assertEqual(providers.ours_in(folder), [])
 
@@ -520,7 +596,7 @@ class InstallUpdateAndUninstall(Fixture):
         code, out, _err = self.run_setup("--dry-run", "--only", "windsurf")
         self.assertEqual(code, 0, out)
         rows = [line.split()[0] for line in out.splitlines() if line.startswith("  ") and not line.startswith("    ")]
-        self.assertEqual(rows, ["Windsurf", "engine"])
+        self.assertEqual(rows, ["Windsurf", "plugin", "engine"])
         star = "*" if os.name == "nt" else "'*'"  # command_text spells it for cmd, else for the shell
         self.assertIn(f"-a windsurf -s {star} -y --copy --json", out)
 
@@ -530,6 +606,47 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(code, 0, out)
         chosen.assert_called_once_with(False, by="cli", forget=analytics.request_deletion)
         self.assertIn("telemetry off: your choice", out)
+
+
+class ThePluginCommand(Fixture):
+    """``cad plugin``: the folder written from the current installation, its path printed; ``--refresh``,
+    which a switch runs, brings the apps' copies of it along when that changed it."""
+
+    def test_it_writes_the_folder_from_the_current_installation_and_prints_its_path(self) -> None:
+        from cad_server.cli import plugin as plugin_cli
+
+        folder = plugin.folder()
+        code, out, err = self._run(plugin_cli.main, ())  # no installation current: this one writes it
+        self.assertEqual((code, out), (0, f"{folder}\n"), err)
+        self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], RELEASE)
+        with mock.patch.object(installations, "current", return_value={"version": "9.9.9", "prefix": "/elsewhere"}), \
+                mock.patch.object(installations, "mine", return_value=False), mock.patch.object(plugin, "write") as write:
+            code, out, err = self._run(plugin_cli.main, ())
+        self.assertEqual((code, out), (0, f"{folder}\n"))
+        write.assert_not_called()
+        self.assertIn("text-to-cad 9.9.9 is the current installation: its `cad plugin` writes the folder", err)
+
+    def test_refresh_adds_codex_s_copy_again_only_when_the_folder_changed(self) -> None:
+        from cad_server.cli import plugin as plugin_cli
+
+        folder = plugin.folder()
+        command(self.bin, "codex", "print('codex-cli 0.153.4') if args == ['--version'] else None\n")
+        codex = self.home / ".codex"
+        (codex / "plugins" / "cache" / "texttocad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
+        (codex / "config.toml").write_text(f'[marketplaces.texttocad]\nsource_type = "local"\nsource = {json.dumps(str(folder))}\n'
+                                           '[plugins."text-to-cad@texttocad"]\nenabled = true\n', encoding="utf-8")
+        code, out, err = self._run(plugin_cli.main, ("--refresh",))
+        self.assertEqual(code, 0, err)
+        self.assertIn("Codex: update text-to-cad@texttocad 0.0.1 -> " + RELEASE, err)
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertIn(["codex", "plugin", "add", "text-to-cad@texttocad"], calls)
+        self.assertEqual([action["app"] for action in self.receipt()["actions"]], ["codex"])
+        count = len(calls)
+        code, out, err = self._run(plugin_cli.main, ("--refresh", "--json"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)["refreshed"], None, "the folder did not change: nothing to bring along")
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([call for call in calls[count:] if call != ["codex", "--version"]], [])
 
 
 class TheOlderInstallationsOwnStop(unittest.TestCase):

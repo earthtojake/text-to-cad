@@ -2,31 +2,46 @@
 
 ``cad setup`` (``cad_server.cli.setup``) asks this module what is on the machine and what to do
 about it, and a checkout's development installer loads this same file by its path: both installers
-find every app, every copy of the plugin and every app's own commands the same way. Six apps:
+find every app, every copy of the plugin and every app's own commands the same way. Every app with a
+plugin gets it from the plugin folder the server writes, ``<state>/plugin``
+(``cad_server._internal.plugin``: the repository root's plugin layout, its catalog a local one,
+``texttocad``), each the way that app keeps a local plugin. Six apps:
 
-- **Claude Code**: the plugin ``text-to-cad@earthtojake``, from the repository's catalog on its
-  ``latest`` branch, through ``claude plugin``. Cursor and Grok Build load the plugins Claude Code
-  installed as well as their own (``FED_BY``), so where Claude Code has the plugin they need none
-  of their own, and a copy of theirs is a second copy.
+- **Claude Code**: the folder added as a local-directory marketplace and its plugin installed,
+  ``text-to-cad@texttocad``, through ``claude plugin``. Its sessions read the folder in place, so a
+  folder written again is what the next session reads, with no command; its cached copy, which
+  ``claude plugin list`` reports and Cursor and Grok Build may read, is brought along by ``claude
+  plugin update``. Cursor and Grok Build load the plugins Claude Code installed as well as their own
+  (``FED_BY``), so where Claude Code has the plugin they need none of their own, and a copy of
+  theirs is a second copy.
 - **Claude Desktop** (its chat): CAD's server alone, ``mcpServers.cad`` in its config file, run by
   ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH.
-- **Codex**: the same catalog through its own ``plugin`` command; the app bundles a CLI of its own.
-- **Cursor**: a clone of the ``latest`` branch in its local plugins folder.
-- **Grok Build**: ``grok plugin``, from the repository's ``latest``.
-- **Gemini CLI**: its extension, installed from the repository at ``latest``, never auto-updated:
-  an update is the person's (``cad update``, the install command, the update button).
+- **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
+  its own). Codex copies a local marketplace's plugin when it is added and never again by itself, so
+  every update adds it again; a running session keeps the copy it started with.
+- **Cursor**: a copy of the folder, real files, in its local plugins folder
+  (``~/.cursor/plugins/local/text-to-cad``), copied again at every update; never where Claude Code
+  feeds it.
+- **Grok Build**: ``grok plugin``, from the repository's ``latest``, where Claude Code does not feed it.
+- **Gemini CLI**: its extension, the folder linked (``gemini extensions link``): it reads it in place.
+
+Nothing installed this way updates by itself: an update is the person's (``cad update``, the install
+command, the update button), and the folder and the copies follow the release it makes current.
+The copies an earlier release's installer made from the repository's ``latest`` branch on GitHub (the
+``earthtojake`` catalog, a Cursor clone, a Gemini extension installed from it) are second copies now:
+taken out, the catalog with them.
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
-alone, copied into that agent's own skills folder by one ``npx skills add`` for all of them
-(``SKILLS_AGENTS``: each one's folder and how it is detected, as that CLI reads them). The CLI keeps
-no versions, so the receipt says which agents got which skills (those its ``--json`` says it
-installed) from which release; a later run adds them again for an agent when that release is not
-this one or one of those skills is missing from its folder.
+alone, copied from the folder's ``skills/`` into that agent's own skills folder by one ``npx skills
+add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that CLI reads
+them). The CLI keeps no versions, so the receipt says which agents got which skills (those its
+``--json`` says it installed) from which release; a later run adds them again for an agent when that
+release is not this one or one of those skills is missing from its folder.
 An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
-install), this repository's skills installed loose, a server someone added by hand that runs
-cadgen. The plan removes it, the loose skills moved aside rather than deleted. A loose skill is
+install, the GitHub catalog), this repository's skills installed loose, a server someone added by hand
+that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted. A loose skill is
 ours when its ``SKILL.md`` names one of this repository's skills (``SKILLS``) and says where it is
 maintained (``PROVENANCE``). The one folder two kinds of agent share, ``~/.agents/skills`` (Codex and
 Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI agent's while one that uses it is
@@ -34,9 +49,10 @@ here: Codex and Gemini CLI then list those skills beside their plugin's, which t
 (claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is the store's
 to update and to remove: it is reported, never touched, and no copy of ours is added beside it.
 
-Nothing here imports cadgen, and the file parses on any Python 3 the development installer may run
-on. Every path comes from a :class:`Machine` -- its home, its environment, its platform and how it
-runs a command -- so a test reads a temporary home with fake commands on a temporary PATH.
+Nothing here imports the packages, and the file parses on any Python 3 the development installer may
+run on. Every path comes from a :class:`Machine` -- its home, its environment, its platform and how it
+runs a command -- and the plugin folder is passed in, so a test reads a temporary home with fake
+commands on a temporary PATH.
 """
 
 from __future__ import annotations
@@ -57,11 +73,18 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 PLUGIN = "text-to-cad"
 REPOSITORY = "earthtojake/text-to-cad"
 REPOSITORY_URL = f"https://github.com/{REPOSITORY}"
-# The branch every install follows: the plugin alone, one commit per release, never ahead of PyPI.
+# The branch installs by hand follow: the plugin alone, one commit per release, never ahead of PyPI.
 BRANCH = "latest"
-# The repository's catalog, as Claude Code and Codex name it, and the plugin's id in it.
-MARKETPLACE = "earthtojake"
+# The plugin folder's catalog, as Claude Code and Codex name it, and the plugin's id in it
+# (``cad_server._internal.plugin.MARKETPLACE``: a test holds the two equal).
+MARKETPLACE = "texttocad"
 PLUGIN_ID = f"{PLUGIN}@{MARKETPLACE}"
+# The repository's catalog on GitHub, which an earlier release's installer added: a copy from it is a
+# second copy now.
+GITHUB_MARKETPLACE = "earthtojake"
+# The file the installer marks its copy of the folder in Cursor's local plugins folder with: where it was
+# copied from, its version and when.
+COPY_MARK = ".text-to-cad-copy"
 # Every SKILL.md of this repository's says where it is maintained; a loose skill saying so, under
 # one of this repository's skill names (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
@@ -81,6 +104,8 @@ CODEX_STORE_PREFIX = "openai-"
 CURSOR_STORE = "the Cursor Marketplace"
 
 APPS = ("claude", "claude-desktop", "codex", "cursor", "grok", "gemini")
+# The apps pointed at the plugin folder (each reads it in place, links it or keeps a copy of it).
+POINTED = ("claude", "codex", "cursor", "gemini")
 LABELS = {"claude": "Claude Code", "claude-desktop": "Claude Desktop", "codex": "Codex", "cursor": "Cursor",
           "grok": "Grok Build", "gemini": "Gemini CLI"}
 # Cursor and Grok Build load the plugins Claude Code installed, beside their own.
@@ -91,7 +116,7 @@ INVENTORIED = frozenset({"claude", "claude-desktop", "codex", "cursor", "gemini"
 RESTART = {
     "claude": "Claude Code: start a new session (a running one keeps the plugin it started with)",
     "claude-desktop": "Claude Desktop: quit and reopen it",
-    "codex": "Codex: restart the app, and any terminal or IDE session",
+    "codex": "Codex: restart the app, and any terminal or IDE session (a running one keeps the copy it started with)",
     "cursor": "Cursor: reload the window",
     "grok": "Grok Build: start a new session",
     "gemini": "Gemini CLI: start a new session",
@@ -269,7 +294,7 @@ def skill_folders(host: str, machine: Optional[Machine] = None) -> List[Path]:
         "codex": [codex_home(machine) / "skills", shared_skills(machine)],
         "cursor": [home / ".cursor" / "skills"],
         "grok": [home / ".grok" / "skills", claude / "skills"],
-        "gemini": [home / ".gemini" / "skills", shared_skills(machine)],
+        "gemini": [gemini_dir(machine) / "skills", shared_skills(machine)],
     }[host]
 
 
@@ -283,15 +308,21 @@ def shared_skills(machine: Optional[Machine] = None) -> Path:
 def _own_skill_folders(host: str, machine: Machine) -> List[Path]:
     return {"claude": [claude_dir(machine) / "skills"], "codex": [codex_home(machine) / "skills", shared_skills(machine)],
             "cursor": [machine.home / ".cursor" / "skills"], "grok": [machine.home / ".grok" / "skills"],
-            "gemini": [machine.home / ".gemini" / "skills", shared_skills(machine)]}.get(host, [])
+            "gemini": [gemini_dir(machine) / "skills", shared_skills(machine)]}.get(host, [])
 
 
 # --- the agents without a plugin: the skills through the Skills CLI ----------------------------
 
-# The command, and what it adds: the plugin's branch, every skill in it.
-SKILLS_CLI = ("npx", "-y", "skills@latest")
-SKILLS_SOURCE = f"{REPOSITORY}#{BRANCH}"
+# The command, which npx takes from its cache where it has it (no network for an update), and what it
+# adds: the plugin folder's skills, every one (``skills_source``). Never ``--all``, which is every
+# agent too, the apps with a plugin among them: every skill twice there.
+SKILLS_CLI = ("npx", "--prefer-offline", "-y", "skills@latest")
 NEED_NODE = "the skills need Node (npx): install Node, then run this again"
+
+
+def skills_source(folder: Any) -> str:
+    """What ``npx skills add`` copies the skills from: the plugin folder's ``skills/``."""
+    return str(Path(folder) / "skills")
 
 
 def _config_home(machine: Machine) -> Path:
@@ -607,16 +638,35 @@ class Copy:
     version: Optional[str] = None
     path: Optional[str] = None
     detail: str = ""
-    ours: bool = False  # the copy the release installs: the catalog on `latest`
+    ours: bool = False  # the copy the release installs: from the plugin folder (Grok Build: the catalog on `latest`)
     store: bool = False  # a store's: reported, never touched
     removable: bool = True  # False: another scope's (a project's), reported and left
     entry: Optional[Dict[str, Any]] = None  # a server's entry, as its config holds it
+    # Ours, from the plugin folder: the folder it reads or was copied from, how the app keeps it ("in
+    # place", "linked" or "copied"), when a copy was made, and the release the app recorded at its
+    # install where it reads the folder itself (Claude Code's cached copy).
+    source: Optional[str] = None
+    via: str = ""
+    when: Optional[str] = None
+    recorded: Optional[str] = None
 
     def words(self, machine: Optional[Machine] = None) -> str:
         what = {"server": f"the server {self.name}", "skills": f"loose skill {shown(self.name, machine)}",
                 "folder": shown(self.name, machine), "store": shown(self.name, machine)}.get(self.kind, self.name)
         version = f" {self.version}" if self.version and self.kind not in ("skills", "folder", "store") else ""
         return f"{what}{version}" + (f" ({self.detail})" if self.detail else "")
+
+    def origin(self, machine: Optional[Machine] = None) -> str:
+        """Where an app's copy of ours comes from, as a person reads it: ``reads ~/x/plugin in place``,
+        ``linked to ~/x/plugin``, ``a copy of ~/x/plugin, made 2026-10-31 02:41``."""
+        where = shown(self.source, machine) if self.source else "the plugin folder"
+        if self.via == "in place":
+            return f"reads {where} in place"
+        if self.via == "linked":
+            return f"linked to {where}"
+        if self.via == "copied":
+            return f"a copy of {where}" + (f", made {self.when}" if self.when else "")
+        return ""
 
 
 @dataclass
@@ -687,13 +737,43 @@ def _servers(app: App, entries: Any, path: Path, ours: Optional[str] = None) -> 
                                    ours=key == ours, entry=entry, detail="" if key == ours else f"in {shown(path)}"))
 
 
-def _detect_claude(machine: Machine) -> App:
+def same_path(one: Any, other: Any) -> bool:
+    """Whether two paths name one place (symlinks resolved, case folded where the platform folds it)."""
+    if not one or not other:
+        return False
+    return os.path.normcase(os.path.realpath(str(one))) == os.path.normcase(os.path.realpath(str(other)))
+
+
+def _points(market: Optional[Dict[str, Any]], folder: Any) -> bool:
+    """Whether a catalog the app knows is the plugin folder (a local one at its path)."""
+    return bool(market) and folder is not None and same_path(market.get("path"), folder)
+
+
+def _catalog_detail(market: str, markets: Mapping[str, Dict[str, Any]]) -> str:
+    """How a person tells a catalog that is not the plugin folder's."""
+    if market == DEV_MARKETPLACE:
+        return "a development install"
+    found = markets.get(market) or {}
+    if _same_repository(found.get("repo")):
+        return f"from {REPOSITORY} on GitHub" + (f" at {found['ref']}" if found.get("ref") else "")
+    return f"the {market} catalog"
+
+
+def _stamp(path: Path) -> Optional[str]:
+    """When ``path`` was last written, as a person reads it, or None."""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
+    except OSError:
+        return None
+
+
+def _detect_claude(machine: Machine, folder: Optional[Path] = None) -> App:
     app = App("claude", command=find_cli("claude", machine))
-    folder = claude_dir(machine)
+    config = claude_dir(machine)
     if app.command:
         app.seen.append("the claude command")
-    if folder.is_dir():
-        app.seen.append(shown(folder, machine))
+    if config.is_dir():
+        app.seen.append(shown(config, machine))
     app.present = bool(app.seen)
     if not app.present:
         return app
@@ -704,20 +784,24 @@ def _detect_claude(machine: Machine) -> App:
             markets = json.loads(machine.listing([app.command, "plugin", "marketplace", "list", "--json"]) or "[]")
             for market in markets if isinstance(markets, list) else []:
                 if isinstance(market, dict) and isinstance(market.get("name"), str):
-                    app.marketplaces[market["name"]] = {"repo": market.get("repo"), "ref": market.get("ref")}
+                    local = market.get("source") == "directory"
+                    app.marketplaces[market["name"]] = {
+                        "repo": market.get("repo"), "ref": market.get("ref"),
+                        "path": (market.get("path") or market.get("installLocation")) if local else None}
         except (CommandFailed, ValueError) as error:
             app.notes.append(f"could not list its plugins: {_failure(error)}")
             plugins = None
     if plugins is None:  # no command: the records Claude Code keeps
-        recorded, _problem = _json(folder / "plugins" / "installed_plugins.json")
+        recorded, _problem = _json(config / "plugins" / "installed_plugins.json")
         table = recorded.get("plugins") if isinstance(recorded, dict) else None
         plugins = [{"id": key, **entry} for key, entries in (table.items() if isinstance(table, dict) else ())
                    for entry in (entries if isinstance(entries, list) else []) if isinstance(entry, dict)]
-        known, _problem = _json(folder / "plugins" / "known_marketplaces.json")
+        known, _problem = _json(config / "plugins" / "known_marketplaces.json")
         for name, entry in (known.items() if isinstance(known, dict) else ()):
             source = entry.get("source") if isinstance(entry, dict) else None
             if isinstance(source, dict):
-                app.marketplaces[name] = {"repo": source.get("repo"), "ref": source.get("ref")}
+                app.marketplaces[name] = {"repo": source.get("repo"), "ref": source.get("ref"),
+                                          "path": source.get("path") if source.get("source") == "directory" else None}
     for plugin in plugins if isinstance(plugins, list) else []:
         identifier = str(plugin.get("id", "")) if isinstance(plugin, dict) else ""
         if identifier.split("@")[0] != PLUGIN:
@@ -725,11 +809,19 @@ def _detect_claude(machine: Machine) -> App:
         market = identifier.split("@", 1)[1] if "@" in identifier else ""
         scope = plugin.get("scope") or "user"
         store = market in CLAUDE_STORES or scope in CLAUDE_STORE_SCOPES
-        detail = ("a development install" if market == DEV_MARKETPLACE else "claude.ai's" if store
-                  else f"{scope} scope" if scope != "user" else f"the {market} catalog" if market != MARKETPLACE else "")
+        ours = market == MARKETPLACE and scope == "user"
+        detail = ("claude.ai's" if store else f"{scope} scope" if scope != "user"
+                  else "" if ours else _catalog_detail(market, app.marketplaces))
+        if ours:
+            # It reads the folder in place: the folder's version is the one its sessions load, and the one
+            # it recorded at install is its cached copy's (`claude plugin update` brings that along).
+            read = plugin.get("readFromFolder") or (app.marketplaces.get(MARKETPLACE) or {}).get("path")
+            app.copies.append(Copy("claude", "plugin", identifier, version=plugin.get("folderVersion") or plugin.get("version"),
+                                   path=read or plugin.get("installPath"), ours=True, source=read,
+                                   via="in place" if read else "", recorded=plugin.get("version")))
+            continue
         app.copies.append(Copy("claude", "plugin", identifier, version=plugin.get("version"),
-                               path=plugin.get("installPath"), detail=detail, store=store,
-                               ours=market == MARKETPLACE and scope == "user", removable=scope == "user"))
+                               path=plugin.get("installPath"), detail=detail, store=store, removable=scope == "user"))
     servers, _problem = _json(claude_json(machine))
     if isinstance(servers, dict):
         _servers(app, servers.get("mcpServers"), claude_json(machine))
@@ -737,13 +829,14 @@ def _detect_claude(machine: Machine) -> App:
     return app
 
 
-def _codex_version(home: Path, market: str) -> Optional[str]:
+def _codex_cache(home: Path, market: str) -> Optional[Path]:
+    """Codex's copy of a catalog's plugin: its newest version's folder in the plugin cache."""
     cache = home / "plugins" / "cache" / market / PLUGIN
-    versions = [path.name for path in cache.iterdir() if path.is_dir()] if cache.is_dir() else []
-    return max(versions, key=version_key) if versions else None
+    versions = [path for path in cache.iterdir() if path.is_dir()] if cache.is_dir() else []
+    return max(versions, key=lambda path: version_key(path.name)) if versions else None
 
 
-def _detect_codex(machine: Machine) -> App:
+def _detect_codex(machine: Machine, folder: Optional[Path] = None) -> App:
     app = App("codex", command=codex_cli(machine))
     home = codex_home(machine)
     if app.command:
@@ -760,19 +853,24 @@ def _detect_codex(machine: Machine) -> App:
     data = data or {}
     for name, entry in (data.get("marketplaces") or {}).items():
         if isinstance(entry, dict):
-            app.marketplaces[name] = {"repo": entry.get("source"), "ref": entry.get("ref")}
+            local = entry.get("source_type") == "local"
+            app.marketplaces[name] = {"repo": None if local else entry.get("source"), "ref": entry.get("ref"),
+                                      "path": entry.get("source") if local else None}
     for identifier, entry in (data.get("plugins") or {}).items():
         if identifier.split("@")[0] != PLUGIN or "@" not in identifier:
             continue
         market = identifier.split("@", 1)[1]
         store = market.startswith(CODEX_STORE_PREFIX)
+        ours = market == MARKETPLACE
         enabled = not isinstance(entry, dict) or entry.get("enabled", True) is not False
-        detail = ("a development install" if market == DEV_MARKETPLACE else "its app directory's" if store
-                  else f"the {market} catalog" if market != MARKETPLACE else "")
+        detail = "its app directory's" if store else "" if ours else _catalog_detail(market, app.marketplaces)
         if not enabled:
             detail = ", ".join(word for word in (detail, "disabled") if word)
-        app.copies.append(Copy("codex", "plugin", identifier, version=_codex_version(home, market), detail=detail,
-                               store=store, ours=market == MARKETPLACE))
+        cache = _codex_cache(home, market)
+        app.copies.append(Copy("codex", "plugin", identifier, version=cache.name if cache else None, detail=detail,
+                               store=store, ours=ours, path=str(cache) if cache else None,
+                               source=(app.marketplaces.get(MARKETPLACE) or {}).get("path") if ours else None,
+                               via="copied" if ours else "", when=_stamp(cache) if ours and cache else None))
     _servers(app, data.get("mcp_servers"), config)
     _loose(app, machine)
     return app
@@ -790,32 +888,42 @@ def _git_head(folder: Path) -> Tuple[Optional[str], Optional[str]]:
     return (found.group(1) if found else None), branch
 
 
-def _detect_cursor(machine: Machine) -> App:
+def copy_mark(path: Path) -> Dict[str, Any]:
+    """The installer's mark in a copy of the plugin folder (``COPY_MARK``): ``{from, version, copied}``,
+    or an empty dict for a folder it did not copy."""
+    data, _problem = _json(Path(path) / COPY_MARK)
+    return data if isinstance(data, dict) else {}
+
+
+def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
     app = App("cursor")
-    folder = machine.home / ".cursor"
-    if folder.is_dir():
-        app.seen.append(shown(folder, machine))
+    home = machine.home / ".cursor"
+    if home.is_dir():
+        app.seen.append(shown(home, machine))
     if machine.which("cursor-agent"):
         app.seen.append("the cursor-agent command")
     app.present = bool(app.seen)
     if not app.present:
         return app
-    app.command = machine.which("git")
     for path in cursor_installed(machine):
+        mark = copy_mark(path)
         origin, branch = _git_head(path)
-        ours = _same_repository(origin) and branch == BRANCH
+        ours = bool(mark) and folder is not None and same_path(mark.get("from"), folder)
         detail = ("a development install" if (path / DEV_MARK).is_file() else "" if ours
+                  else f"a copy of {shown(mark['from'], machine)}" if isinstance(mark.get("from"), str)
                   else f"a clone of {origin}" + (f" at {branch}" if branch else "") if origin else "copied by hand")
         app.copies.append(Copy("cursor", "folder", str(path), path=str(path), ours=ours, detail=detail,
-                               version=_manifest_version(path, ".cursor-plugin/plugin.json", "plugin.json")))
-    cache = folder / "plugins" / "cache"
+                               version=_manifest_version(path, ".cursor-plugin/plugin.json", "plugin.json"),
+                               source=str(folder) if ours else None, via="copied" if ours else "",
+                               when=mark.get("copied") if ours else None))
+    cache = home / "plugins" / "cache"
     for path in sorted(cache.glob(f"*/{PLUGIN}")) if cache.is_dir() else []:
         app.copies.append(Copy("cursor", "store", str(path), path=str(path), store=True, detail=CURSOR_STORE + "'s"))
-    servers, problem = _json(folder / "mcp.json")
+    servers, problem = _json(home / "mcp.json")
     if problem:
-        app.notes.append(f"{shown(folder / 'mcp.json', machine)} {problem}")
+        app.notes.append(f"{shown(home / 'mcp.json', machine)} {problem}")
     elif isinstance(servers, dict):
-        _servers(app, servers.get("mcpServers"), folder / "mcp.json")
+        _servers(app, servers.get("mcpServers"), home / "mcp.json")
     _loose(app, machine)
     return app
 
@@ -831,7 +939,9 @@ def _grok_refs(folder: Path) -> Dict[str, str]:
     return refs
 
 
-def _detect_grok(machine: Machine) -> App:
+def _detect_grok(machine: Machine, folder: Optional[Path] = None) -> App:
+    """Grok Build's copies: ours is still the repository's ``latest`` (it is not pointed at the plugin
+    folder), where Claude Code does not feed it."""
     app = App("grok", command=find_cli("grok", machine))
     folder = machine.home / ".grok"
     if app.command:
@@ -861,40 +971,47 @@ def _detect_grok(machine: Machine) -> App:
     return app
 
 
-def _detect_gemini(machine: Machine) -> App:
+def gemini_dir(machine: Optional[Machine] = None) -> Path:
+    """Gemini CLI's folder: ``.gemini`` in ``GEMINI_CLI_HOME``, which it reads, else in the home folder."""
+    machine = _machine(machine)
+    return Path(machine.environ.get("GEMINI_CLI_HOME") or machine.home) / ".gemini"
+
+
+def _detect_gemini(machine: Machine, folder: Optional[Path] = None) -> App:
     app = App("gemini", command=find_cli("gemini", machine))
-    folder = machine.home / ".gemini"
+    home = gemini_dir(machine)
     if app.command:
         app.seen.append("the gemini command")
-    if folder.is_dir():
-        app.seen.append(shown(folder, machine))
+    if home.is_dir():
+        app.seen.append(shown(home, machine))
     app.present = bool(app.seen)
     if not app.present:
         return app
-    extensions = folder / "extensions"
+    extensions = home / "extensions"
     for path in sorted(extensions.iterdir()) if extensions.is_dir() else []:
         install, _problem = _json(path / ".gemini-extension-install.json")
         install = install if isinstance(install, dict) else {}
-        root = Path(install["source"]) if install.get("type") == "link" and isinstance(install.get("source"), str) else path
-        manifest, _problem = _json(root / "gemini-extension.json")
+        source = install.get("source") if isinstance(install.get("source"), str) else None
+        linked = install.get("type") == "link" and source is not None
+        manifest, _problem = _json((Path(source) if linked else path) / "gemini-extension.json")
         if not isinstance(manifest, dict) or manifest.get("name") != PLUGIN:
             continue
-        ours = install.get("type") == "git" and _same_repository(install.get("source")) and install.get("ref") == BRANCH
-        source = install.get("source")
-        detail = ("" if ours else "a linked folder" if install.get("type") == "link"
+        ours = linked and folder is not None and same_path(source, folder)
+        detail = ("" if ours else f"linked to {shown(source, machine)}" if linked
                   else f"from {source}" + (f" at {install.get('ref')}" if install.get("ref") else "") if source else "")
         app.copies.append(Copy("gemini", "extension", PLUGIN, version=manifest.get("version"), path=str(path),
-                               detail=detail, ours=ours))
-    settings, problem = _json(folder / "settings.json")
+                               detail=detail, ours=ours, source=source if ours else None,
+                               via="linked" if ours else ""))
+    settings, problem = _json(home / "settings.json")
     if problem:
-        app.notes.append(f"{shown(folder / 'settings.json', machine)} {problem}")
+        app.notes.append(f"{shown(home / 'settings.json', machine)} {problem}")
     elif isinstance(settings, dict):
-        _servers(app, settings.get("mcpServers"), folder / "settings.json")
+        _servers(app, settings.get("mcpServers"), home / "settings.json")
     _loose(app, machine)
     return app
 
 
-def _detect_desktop(machine: Machine) -> App:
+def _detect_desktop(machine: Machine, folder: Optional[Path] = None) -> App:
     app = App("claude-desktop")
     path = desktop_config(machine)
     app.config = str(path)
@@ -921,20 +1038,24 @@ def _detect_desktop(machine: Machine) -> App:
     return app
 
 
-DETECTORS: Dict[str, Callable[[Machine], App]] = {
+DETECTORS: Dict[str, Callable[..., App]] = {
     "claude": _detect_claude, "claude-desktop": _detect_desktop, "codex": _detect_codex, "cursor": _detect_cursor,
     "grok": _detect_grok, "gemini": _detect_gemini,
 }
 
 
-def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS) -> Dict[str, App]:
-    """Every app in ``apps``: whether it is here, and every copy of the plugin it loads. An app whose
-    folders cannot be read is here, and left alone (``unreadable``)."""
+def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, folder: Any = None) -> Dict[str, App]:
+    """Every app in ``apps``: whether it is here, and every copy of the plugin it loads. Ours is the one
+    from the plugin ``folder`` (``cad_server._internal.plugin``): Claude Code's and Codex's plugin from its
+    catalog (``MARKETPLACE``, wherever that points: the plan points it at ``folder``), Gemini CLI's
+    extension linked to it, Cursor's copy of it; Claude Desktop's server; Grok Build's install of
+    ``latest``. An app whose folders cannot be read is here, and left alone (``unreadable``)."""
     machine = _machine(machine)
+    folder = Path(folder) if folder is not None else None
     found = {}
     for name in apps:
         try:
-            found[name] = DETECTORS[name](machine)
+            found[name] = DETECTORS[name](machine, folder)
         except OSError as error:
             found[name] = App(name, present=True, unreadable=f"its files could not be read ({type(error).__name__}: "
                                                              f"{error.strerror or error})")
@@ -949,11 +1070,6 @@ def _failure(error: BaseException) -> str:
 
 
 # --- the plan -----------------------------------------------------------------------------------
-
-
-def _follows(market: Optional[Dict[str, Any]]) -> bool:
-    """Whether a catalog the app knows is this repository's on ``latest``."""
-    return bool(market) and _same_repository(market.get("repo")) and market.get("ref") == BRANCH
 
 
 def _status(copy: Copy, release: str) -> str:
@@ -988,7 +1104,32 @@ def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove dupli
     }.get((app.id, copy.kind))
     if not commands or not cli:
         return _leave(app, f"{words}: no {app.id} command here to remove it with; remove it in {app.label}")
-    return Step(app.id, action, words, commands=[[cli, *argv] for argv in commands])
+    argv = [[cli, *arguments] for arguments in commands]
+    market = copy.name.split("@", 1)[1] if copy.kind == "plugin" and "@" in copy.name else ""
+    if app.id in ("claude", "codex") and market in app.marketplaces and _our_catalog(app, market):
+        # Its catalog goes with it: the plugin folder's, or this repository's on GitHub, which an earlier
+        # release's installer added and Codex would fetch again at every start.
+        argv.append([cli, "plugin", "marketplace", "remove", market])
+    return Step(app.id, action, words, commands=argv)
+
+
+def _our_catalog(app: App, market: str) -> bool:
+    """Whether a catalog the app knows is one of ours: the plugin folder's (``MARKETPLACE``), or this
+    repository's on GitHub (``GITHUB_MARKETPLACE``)."""
+    if market == MARKETPLACE:
+        return True
+    return market == GITHUB_MARKETPLACE and _same_repository((app.marketplaces.get(market) or {}).get("repo"))
+
+
+def _github_catalog(app: App) -> List[Step]:
+    """This repository's catalog on GitHub with no plugin of it left to take it out with: replaced by
+    the plugin folder's (Codex fetches a Git catalog at every start)."""
+    if not app.command or not _our_catalog(app, GITHUB_MARKETPLACE) or GITHUB_MARKETPLACE not in app.marketplaces:
+        return []
+    if any(copy.kind == "plugin" and copy.name == f"{PLUGIN}@{GITHUB_MARKETPLACE}" for copy in app.copies):
+        return []  # its plugin's removal takes it, or, another scope's, it stays with it
+    return [Step(app.id, "remove duplicate", f"the {GITHUB_MARKETPLACE} catalog ({REPOSITORY} on GitHub)",
+                 [[app.command, "plugin", "marketplace", "remove", GITHUB_MARKETPLACE]])]
 
 
 def _duplicates(app: App, machine: Machine, *, everything: bool = False) -> List[Step]:
@@ -1011,58 +1152,70 @@ def _stores(app: App, machine: Machine) -> List[Step]:
             for copy in app.stores()]
 
 
-def _catalog(app: App, cli: str, flavour: str) -> Tuple[List[List[str]], bool]:
-    """The commands that make the app's catalog this repository's on ``latest``, and whether one is
-    added: refreshed when it follows ``latest``, else removed (which takes its plugins with it) and
-    added again, since neither app re-points a catalog in place."""
-    market = app.marketplaces.get(MARKETPLACE)
-    if _follows(market):
-        return [[cli, "plugin", "marketplace", "update" if flavour == "claude" else "upgrade", MARKETPLACE]], False
-    added = ([cli, "plugin", "marketplace", "add", f"{REPOSITORY}#{BRANCH}"] if flavour == "claude"
-             else [cli, "plugin", "marketplace", "add", REPOSITORY, "--ref", BRANCH])
-    return ([[cli, "plugin", "marketplace", "remove", MARKETPLACE]] if market else []) + [added], True
+def _point(cli: str, market: Optional[Dict[str, Any]], folder: Path) -> List[List[str]]:
+    """The commands that make the app's ``MARKETPLACE`` catalog the plugin folder: none when it is; else
+    the one pointing elsewhere removed (its plugin with it: neither app re-points a catalog in place),
+    and the folder added."""
+    if _points(market, folder):
+        return []
+    return ([[cli, "plugin", "marketplace", "remove", MARKETPLACE]] if market else []) \
+        + [[cli, "plugin", "marketplace", "add", str(folder)]]
 
 
-def _plan_catalog(app: App, release: str, machine: Machine, flavour: str) -> List[Step]:
-    """Claude Code and Codex: the catalog and its plugin, ``text-to-cad@earthtojake``."""
+def _against_stores(app: App, machine: Machine) -> Tuple[List[Step], bool]:
+    """A store's copies reported, and second copies removed: ``(steps, whether a store's copy is here)``,
+    in which case ours goes too and nothing of ours is added beside it."""
     steps = _stores(app, machine) + _duplicates(app, machine)
-    ours = app.ours()
     if app.stores():
-        if ours:
-            steps.append(_removal(app, ours, machine))
+        ours = app.ours()
+        return steps + ([_removal(app, ours, machine)] if ours else []), True
+    return steps, False
+
+
+def _plan_claude(app: App, release: str, machine: Machine, folder: Optional[Path] = None, **_: Any) -> List[Step]:
+    """Claude Code: the plugin folder a local-directory catalog (``MARKETPLACE``) and its plugin installed.
+    Its sessions read the folder in place; its cached copy, which ``claude plugin list`` reports and the
+    apps it feeds may read, is brought to this release by ``claude plugin update``."""
+    steps, stored = _against_stores(app, machine)
+    if stored or folder is None:
         return steps
+    steps += _github_catalog(app)
+    here, ours = shown(folder, machine), app.ours()
     if not app.command:
-        steps.append(_leave(app, f"no {flavour} command on this PATH: "
-                                 + ("update" if ours else "install") + f" {PLUGIN} from {app.label} itself"))
-        return steps
+        return steps + [_leave(app, f"no claude command on this PATH to add {here} to Claude Code with")]
     cli, market = app.command, app.marketplaces.get(MARKETPLACE)
-    add = [cli, "plugin", "install" if flavour == "claude" else "add", PLUGIN_ID]
-    if ours is not None and _follows(market):
-        status = _status(ours, release)
-        if status == "current":
-            return steps + [_leave(app, f"{PLUGIN_ID} {ours.version}: up to date")]
-        if status == "newer":
-            return steps + [_leave(app, f"{PLUGIN_ID} {ours.version}: newer than {release}, left alone")]
-        refresh = [cli, "plugin", "update", PLUGIN_ID] if flavour == "claude" else add
-        commands, _added = _catalog(app, cli, flavour)
-        steps.append(Step(app.id, "update", f"{PLUGIN_ID} {ours.version or '?'} -> {release}", commands + [refresh]))
+    if ours is not None and _points(market, folder):
+        if ours.recorded and ours.recorded != release:
+            return steps + [Step(app.id, "update", f"{PLUGIN_ID}: its cached copy {ours.recorded} -> {release} "
+                                                   f"(it reads {here} in place)", [[cli, "plugin", "update", PLUGIN_ID]])]
+        return steps + [_leave(app, f"{PLUGIN_ID} {ours.version or '?'} reads {here} in place")]
+    commands = _point(cli, market, folder) + [[cli, "plugin", "install", PLUGIN_ID]]
+    if ours is not None:
+        return steps + [Step(app.id, "update", f"{PLUGIN_ID}, pointed at {here}, which it reads in place", commands)]
+    return steps + [Step(app.id, "install", f"{PLUGIN_ID}, which reads {here} in place", commands)]
+
+
+def _plan_codex(app: App, release: str, machine: Machine, folder: Optional[Path] = None, **_: Any) -> List[Step]:
+    """Codex: the plugin folder a local catalog (``MARKETPLACE``) and its plugin added, which Codex copies;
+    added again for every release, since Codex never copies it again by itself."""
+    steps, stored = _against_stores(app, machine)
+    if stored or folder is None:
         return steps
-    commands, _added = _catalog(app, cli, flavour)
-    where = f"from {REPOSITORY} at {BRANCH}"
-    if ours is not None:  # installed from the catalog on another branch: re-pointed at latest
-        steps.append(Step(app.id, "update", f"{PLUGIN_ID} {ours.version or '?'} -> {release}, {where}",
-                          commands + [add]))
-    else:
-        steps.append(Step(app.id, "install", f"{PLUGIN_ID} {where}", commands + [add]))
-    return steps
-
-
-def _plan_claude(app: App, release: str, machine: Machine, **_: Any) -> List[Step]:
-    return _plan_catalog(app, release, machine, "claude")
-
-
-def _plan_codex(app: App, release: str, machine: Machine, **_: Any) -> List[Step]:
-    return _plan_catalog(app, release, machine, "codex")
+    steps += _github_catalog(app)
+    here, ours = shown(folder, machine), app.ours()
+    if not app.command:
+        return steps + [_leave(app, f"no codex command on this PATH to add {here} to Codex with")]
+    cli, market = app.command, app.marketplaces.get(MARKETPLACE)
+    add = [cli, "plugin", "add", PLUGIN_ID]
+    if ours is not None and _points(market, folder):
+        if ours.version == release:
+            return steps + [_leave(app, f"{PLUGIN_ID} {ours.version}, {ours.origin(machine)}")]
+        return steps + [Step(app.id, "update", f"{PLUGIN_ID} {ours.version or '?'} -> {release}, copied again from "
+                                               f"{here}", [add])]
+    commands = _point(cli, market, folder) + [add]
+    if ours is not None:
+        return steps + [Step(app.id, "update", f"{PLUGIN_ID}, a copy of {here}", commands)]
+    return steps + [Step(app.id, "install", f"{PLUGIN_ID}, a copy of {here}", commands)]
 
 
 def _served(app: App, machine: Machine) -> List[Step]:
@@ -1079,32 +1232,28 @@ def _served(app: App, machine: Machine) -> List[Step]:
     return steps
 
 
-def _plan_cursor(app: App, release: str, machine: Machine, fed: bool = False, **_: Any) -> List[Step]:
+def _plan_cursor(app: App, release: str, machine: Machine, folder: Optional[Path] = None, fed: bool = False,
+                 **_: Any) -> List[Step]:
+    """Cursor, where Claude Code does not feed it: the plugin folder copied, real files, into its local
+    plugins folder, and copied again for every release."""
     if fed:
         return _served(app, machine)
-    steps = _stores(app, machine) + _duplicates(app, machine)
-    ours = app.ours()
-    if app.stores():
-        if ours:
-            steps.append(_removal(app, ours, machine))
+    steps, stored = _against_stores(app, machine)
+    if stored or folder is None:
         return steps
-    target = cursor_plugins(machine) / PLUGIN
+    here, ours = shown(folder, machine), app.ours()
     if ours is not None:
-        status = _status(ours, release)
-        if status != "older":
-            return steps + [_leave(app, f"{shown(ours.name, machine)} {ours.version}: "
-                                        + ("up to date" if status == "current" else f"newer than {release}, left alone"))]
-        if not app.command:
-            return steps + [_leave(app, "no git command on this PATH to update it with")]
-        return steps + [Step(app.id, "update", f"{shown(ours.name, machine)} {ours.version or '?'} -> {release}",
-                             [[app.command, "-C", ours.name, "pull", "--ff-only"]])]
+        if ours.version == release:
+            return steps + [_leave(app, f"{shown(ours.name, machine)} {ours.version}, {ours.origin(machine)}")]
+        return steps + [Step(app.id, "update", f"{shown(ours.name, machine)} {ours.version or '?'} -> {release}, "
+                                               f"copied again from {here}",
+                             edit={"op": "copy", "from": str(folder), "path": ours.name})]
+    target = cursor_plugins(machine) / PLUGIN
     occupied = target.exists() and not any(copy.path == str(target) for copy in app.copies)
     if occupied:
         return steps + [_leave(app, f"{shown(target, machine)} holds something else: move it away, then run this again")]
-    if not app.command:
-        return steps + [_leave(app, "no git command on this PATH to clone the plugin with")]
-    return steps + [Step(app.id, "install", f"{shown(target, machine)}, a clone of {REPOSITORY} at {BRANCH}",
-                         [[app.command, "clone", "--depth", "1", "--branch", BRANCH, REPOSITORY_URL, str(target)]])]
+    return steps + [Step(app.id, "install", f"{shown(target, machine)}, a copy of {here}",
+                         edit={"op": "copy", "from": str(folder), "path": str(target)})]
 
 
 def _plan_grok(app: App, release: str, machine: Machine, fed: bool = False, **_: Any) -> List[Step]:
@@ -1126,21 +1275,19 @@ def _plan_grok(app: App, release: str, machine: Machine, fed: bool = False, **_:
                           [app.command, "plugin", "enable", PLUGIN]])]
 
 
-def _plan_gemini(app: App, release: str, machine: Machine, **_: Any) -> List[Step]:
+def _plan_gemini(app: App, release: str, machine: Machine, folder: Optional[Path] = None, **_: Any) -> List[Step]:
+    """Gemini CLI: the plugin folder linked as its extension, which it reads in place: nothing to do at
+    an update. Another copy of the extension goes first (their names would collide)."""
     steps = _duplicates(app, machine)
+    if folder is None:
+        return steps
+    here, ours = shown(folder, machine), app.ours()
     if not app.command:
-        return steps + [_leave(app, f"no gemini command on this PATH: install {PLUGIN} with Gemini CLI")]
-    ours = app.ours()
+        return steps + [_leave(app, f"no gemini command on this PATH to link {here} with")]
     if ours is not None:
-        status = _status(ours, release)
-        if status != "older":
-            return steps + [_leave(app, f"the {PLUGIN} extension {ours.version}: "
-                                        + ("up to date" if status == "current" else f"newer than {release}, left alone"))]
-        return steps + [Step(app.id, "update", f"the {PLUGIN} extension {ours.version or '?'} -> {release}",
-                             [[app.command, "extensions", "update", PLUGIN]])]
-    # Never auto-updated: no update arrives but the one the person asks for (``cad update``).
-    return steps + [Step(app.id, "install", f"the {PLUGIN} extension from {REPOSITORY_URL} at {BRANCH}",
-                         [[app.command, "extensions", "install", REPOSITORY_URL, "--ref", BRANCH, "--consent"]])]
+        return steps + [_leave(app, f"the {PLUGIN} extension {ours.version or '?'}, {ours.origin(machine)}")]
+    return steps + [Step(app.id, "install", f"the {PLUGIN} extension, linked to {here}",
+                         [[app.command, "extensions", "link", str(folder), "--consent"]])]
 
 
 def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:
@@ -1213,11 +1360,11 @@ def _once(steps: List[Step]) -> List[Step]:
     return kept
 
 
-def _plan_skills(release: str, machine: Machine, agents: Sequence[str],
-                 record: Optional[Mapping[str, Any]]) -> List[Step]:
-    """The Skills CLI agents here among ``agents``: one ``npx skills add`` for every one whose folder
-    lacks a skill of ours or got them from another release (``record``, the receipt's), the rest
-    up to date."""
+def _plan_skills(release: str, machine: Machine, agents: Sequence[str], record: Optional[Mapping[str, Any]],
+                 source: Optional[Path] = None) -> List[Step]:
+    """The Skills CLI agents here among ``agents``: one ``npx skills add`` of the plugin folder's skills
+    (``source``) for every one whose folder lacks a skill of ours or got them from another release
+    (``record``, the receipt's), the rest up to date."""
     found, npx, record = skills_agents(machine), machine.which("npx"), record or {}
     steps: List[Step] = []
     due: List[Step] = []
@@ -1236,6 +1383,8 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str],
             steps.append(Step(agent, "leave", f"the skills in {where}, from text-to-cad {release}: up to date"))
         elif not npx:
             steps.append(Step(agent, "leave", NEED_NODE))
+        elif source is None:
+            continue
         elif had or have:
             why = (f"{', '.join(missing[:3])}{f' +{len(missing) - 3}' if len(missing) > 3 else ''} missing"
                    if before == release else f"from text-to-cad {before or '?'} -> {release}")
@@ -1244,8 +1393,8 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str],
         else:
             due.append(Step(agent, "install", f"the skills, copied into {where} by the Skills CLI"))
             steps.append(due[-1])
-    if due:
-        argv = [npx, *SKILLS_CLI[1:], "add", SKILLS_SOURCE, "-g"]
+    if due and source is not None:
+        argv = [npx, *SKILLS_CLI[1:], "add", skills_source(source), "-g"]
         for step in due:
             argv += ["-a", step.app]
         due[0].commands = [argv + ["-s", "*", "-y", "--copy", "--json"]]
@@ -1272,13 +1421,15 @@ def _shared_note(apps: Mapping[str, App], steps: List[Step], machine: Machine) -
     return notes
 
 
-def plan(apps: Mapping[str, App], *, release: str, desktop_entry: Optional[Dict[str, Any]] = None,
+def plan(apps: Mapping[str, App], *, release: str, folder: Any = None, desktop_entry: Optional[Dict[str, Any]] = None,
          only: Optional[Sequence[str]] = None, machine: Optional[Machine] = None,
          skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
-    """What to do for every selected app that is here, in ``APPS`` order: each app's duplicates
-    taken out before its copy is installed or updated, so two copies never load at once; then the
-    skills for the Skills CLI agents here (``skills``: the receipt's record of them)."""
+    """What to do for every selected app that is here, in ``APPS`` order, to give it this release's
+    plugin from the plugin ``folder``: each app's duplicates taken out before its copy is installed or
+    updated, so two copies never load at once; then the skills for the Skills CLI agents here
+    (``skills``: the receipt's record of them)."""
     machine = _machine(machine)
+    folder = Path(folder) if folder is not None else None
     selected = [name for name in APPS if not only or name in only]
     fed = feeds(apps, selected)
     steps: List[Step] = []
@@ -1289,9 +1440,33 @@ def plan(apps: Mapping[str, App], *, release: str, desktop_entry: Optional[Dict[
         if app.unreadable:
             steps.append(_leave(app, f"{app.unreadable}: nothing is changed there"))
             continue
-        steps += PLANNERS[name](app, release, machine, fed=fed and name in FED_BY, desktop_entry=desktop_entry)
-    steps += _plan_skills(release, machine, [agent for agent in SKILLS_AGENTS if not only or agent in only], skills)
+        steps += PLANNERS[name](app, release, machine, folder=folder, fed=fed and name in FED_BY,
+                                desktop_entry=desktop_entry)
+    steps += _plan_skills(release, machine, [agent for agent in SKILLS_AGENTS if not only or agent in only], skills,
+                          folder)
     return _once(steps) + _shared_note(apps, steps, machine)
+
+
+def refresh_plan(apps: Mapping[str, App], *, release: str, folder: Any, machine: Optional[Machine] = None,
+                 skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
+    """After the plugin ``folder`` was written again for ``release``: the copies apps keep of it brought to
+    it, and nothing installed anew or taken out -- Codex's (added again), Cursor's (copied again), Claude
+    Code's cached copy (``claude plugin update``) and the skills the Skills CLI copied for the agents
+    the receipt names (``skills``). Claude Code and Gemini CLI read the folder itself."""
+    machine = _machine(machine)
+    folder = Path(folder)
+    steps: List[Step] = []
+    for name in ("claude", "codex", "cursor"):
+        app = apps.get(name)
+        ours = app.ours() if app is not None and app.present and not app.unreadable else None
+        if ours is None or app.stores():
+            continue
+        if name != "cursor" and not _points(app.marketplaces.get(MARKETPLACE), folder):
+            continue  # pointed elsewhere: `cad setup` points it here
+        steps += [step for step in PLANNERS[name](app, release, machine, folder=folder) if step.action == "update"]
+    agents = [agent for agent in (skills or {}) if agent in SKILLS_AGENTS]
+    steps += [step for step in _plan_skills(release, machine, agents, skills, folder) if step.changes]
+    return steps
 
 
 # --- taking it out ------------------------------------------------------------------------------
@@ -1299,9 +1474,9 @@ def plan(apps: Mapping[str, App], *, release: str, desktop_entry: Optional[Dict[
 
 def touched(receipt: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """What a receipt says the installer did to each app, in the order it first did it: ``installed``
-    (it installed or updated our copy), ``added`` (it added the catalog), ``clone`` (Cursor's folder),
-    and ``edit`` (Claude Desktop's config: the first edit's ``.bak``, or that it made the file, and
-    the last edit's hash and server entry)."""
+    (it installed or updated our copy), ``added`` (it added a catalog), ``copy`` (Cursor's copy of the
+    plugin folder; ``clone``, an earlier release's clone), and ``edit`` (Claude Desktop's config: the
+    first edit's ``.bak``, or that it made the file, and the last edit's hash and server entry)."""
     found: Dict[str, Dict[str, Any]] = {}
     for action in (receipt or {}).get("actions") or []:
         if not isinstance(action, dict) or not action.get("ok") or action.get("app") not in APPS:
@@ -1324,6 +1499,8 @@ def touched(receipt: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
             entry["added"] = True
         if action.get("kind") == "command" and len(argv) > 2 and argv[1] == "clone":
             entry["clone"] = argv[-1]
+        if action.get("kind") == "copy" and action.get("path"):
+            entry["copy"] = action["path"]
     return found
 
 
@@ -1352,10 +1529,14 @@ def _unskill(agents: Sequence[str], machine: Machine, npx: Optional[str]) -> Lis
 
 
 def uninstall_plan(apps: Mapping[str, App], receipt: Optional[Mapping[str, Any]] = None,
-                   only: Optional[Sequence[str]] = None, machine: Optional[Machine] = None) -> List[Step]:
-    """The removals: with a receipt, what it says the installer did, in reverse; without one, every
-    copy found but a store's."""
+                   only: Optional[Sequence[str]] = None, machine: Optional[Machine] = None,
+                   folder: Any = None) -> List[Step]:
+    """The removals: with a receipt, what it says the installer did, in reverse -- each app's copy from
+    the plugin ``folder`` taken out the way it was put in (Claude Code's and Codex's plugin and the
+    folder's catalog, Gemini CLI's linked extension, Cursor's copy), and an earlier release's from the
+    repository on GitHub; without one, every copy found but a store's."""
     machine = _machine(machine)
+    folder = Path(folder) if folder is not None else None
     steps: List[Step] = []
     if receipt is None:
         for name in APPS:
@@ -1378,11 +1559,19 @@ def uninstall_plan(apps: Mapping[str, App], receipt: Optional[Mapping[str, Any]]
             continue
         ours = app.ours()
         if name in ("claude", "codex"):
-            commands = []
-            if ours is not None and app.command:
-                commands.append([app.command, "plugin", "uninstall" if name == "claude" else "remove", PLUGIN_ID])
-            if record.get("added") and MARKETPLACE in app.marketplaces and app.command:
-                commands.append([app.command, "plugin", "marketplace", "remove", MARKETPLACE])
+            cli, verb, commands = app.command, "uninstall" if name == "claude" else "remove", []
+            if ours is not None and cli:
+                commands.append([cli, "plugin", verb, PLUGIN_ID])
+            local = app.marketplaces.get(MARKETPLACE)
+            if cli and local is not None and (record.get("added") or _points(local, folder)):
+                commands.append([cli, "plugin", "marketplace", "remove", MARKETPLACE])
+            # An earlier release's installer added the repository's catalog on GitHub, and its plugin.
+            if cli and record.get("added") and GITHUB_MARKETPLACE in app.marketplaces \
+                    and _our_catalog(app, GITHUB_MARKETPLACE):
+                github = f"{PLUGIN}@{GITHUB_MARKETPLACE}"
+                if any(copy.name == github and copy.removable for copy in app.copies):
+                    commands.append([cli, "plugin", verb, github])
+                commands.append([cli, "plugin", "marketplace", "remove", GITHUB_MARKETPLACE])
             if commands:
                 steps.append(Step(name, "remove", PLUGIN_ID, commands))
         elif name in ("gemini", "grok"):
@@ -1390,9 +1579,10 @@ def uninstall_plan(apps: Mapping[str, App], receipt: Optional[Mapping[str, Any]]
                 argv = ["extensions", "uninstall", PLUGIN] if name == "gemini" else ["plugin", "uninstall", PLUGIN]
                 steps.append(Step(name, "remove", ours.words(machine), [[app.command, *argv]]))
         elif name == "cursor":
-            clone = record.get("clone")
-            if clone and any(copy.ours and copy.path == clone for copy in app.copies):
-                steps.append(Step(name, "remove", shown(clone, machine), edit={"op": "remove", "path": clone}))
+            # The installer's copy of the folder (or an earlier release's clone of `latest`), where it put it.
+            for path in [record[key] for key in ("copy", "clone") if record.get(key)]:
+                if any(copy.path == path and (copy.ours or _git_head(Path(path))[1] == BRANCH) for copy in app.copies):
+                    steps.append(Step(name, "remove", shown(path, machine), edit={"op": "remove", "path": path}))
         elif name == "claude-desktop" and record.get("installed") and record.get("edit"):
             edit = record["edit"]
             steps.append(Step(name, "remove", f"mcpServers.{DESKTOP_KEY} from {shown(edit['path'], machine)}",
@@ -1503,6 +1693,66 @@ def remove_path(path: Any) -> None:
         shutil.rmtree(path)
 
 
+def _same_file(path: Path, data: bytes, mode: int) -> bool:
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != len(data):
+            return False
+        return (os.name == "nt" or path.stat().st_mode & 0o777 == mode) and path.read_bytes() == data
+    except OSError:
+        return False
+
+
+def copy_plugin(source: Any, target: Any) -> Dict[str, Any]:
+    """The plugin folder ``source`` copied into ``target`` -- real files, each that differs written whole
+    beside it and renamed over it, what ``source`` does not hold taken out -- and the copy marked
+    (``COPY_MARK``: where from, its version, when). The mark."""
+    source, target = Path(source), Path(target)
+    wanted: Dict[str, Tuple[bytes, int]] = {}
+    for directory, folders, files in os.walk(source):
+        folders[:] = sorted(folders)
+        for name in sorted(files):
+            path = Path(directory) / name
+            wanted[path.relative_to(source).as_posix()] = (path.read_bytes(),
+                                                           0o755 if os.stat(path).st_mode & 0o111 else 0o644)
+    if not wanted:
+        raise ValueError(f"{source} holds no plugin to copy")
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        target.unlink()
+    target.mkdir(parents=True, exist_ok=True)
+    for directory, folders, files in os.walk(target, topdown=False):
+        for name in files + folders:
+            path = Path(directory) / name
+            relative = path.relative_to(target).as_posix()
+            if path.is_symlink() or (path.is_file() and relative not in wanted and relative != COPY_MARK):
+                path.unlink()
+            elif path.is_dir() and not any(path.iterdir()):
+                path.rmdir()
+    for relative, (data, mode) in sorted(wanted.items()):
+        path = target / relative
+        if _same_file(path, data, mode):
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+        try:
+            with os.fdopen(handle, "wb") as out:
+                out.write(data)
+            os.chmod(temporary, mode)
+            _replace(temporary, path)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+    manifest, _problem = _json(source / ".cursor-plugin" / "plugin.json")
+    mark = {"from": str(source), "version": manifest.get("version") if isinstance(manifest, dict) else None,
+            "copied": time.strftime("%Y-%m-%d %H:%M")}
+    write_json(target / COPY_MARK, mark)
+    return mark
+
+
 def move_aside(path: Any, folder: Any) -> Path:
     """``path`` moved into ``folder`` (a new name when one is taken): a loose skill kept, not deleted."""
     path, folder = Path(path), Path(folder)
@@ -1539,7 +1789,7 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
             say(f"failed: exit status {ran.code}")
             records.append(record)
             return False, records
-        if step.agents and argv[3:4] == ["add"]:  # the skills the Skills CLI says it installed
+        if step.agents and argv[len(SKILLS_CLI):len(SKILLS_CLI) + 1] == ["add"]:  # the skills it says it installed
             record["skills"] = skills_installed(ran.out)
         records.append(record)
     if step.edit is None:
@@ -1563,6 +1813,10 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
             say(f"remove {shown(edit['path'], machine)}")
             remove_path(edit["path"])
             record.update({"kind": "remove", "path": edit["path"]})
+        elif edit["op"] == "copy":
+            say(f"copy {shown(edit['from'], machine)} to {shown(edit['path'], machine)}")
+            mark = copy_plugin(edit["from"], edit["path"])
+            record.update({"kind": "copy", "path": edit["path"], "from": edit["from"], "version": mark.get("version")})
         elif edit["op"] == "move":
             folder = Path(aside or tempfile.gettempdir()) / step.app
             target = move_aside(edit["path"], folder)

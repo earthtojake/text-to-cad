@@ -33,20 +33,25 @@ current installation's
    ``texttocad[kernel]`` at this release (``cad_server._internal.base``), made now when it is not, so the
    first build after an install or an update waits on nothing: its line said while uv works, and a step
    that fails when it cannot be made. An installation that carries the kernel itself makes none.
-6. **Apps.** Each app's own command installs or updates the plugin, which refreshes its skills and
-   moves its server's pin; Claude Desktop's config gets CAD's server, this release's, written
-   atomically with a ``.bak`` beside it; every second copy goes. The agents with no plugin that the
-   Skills CLI knows get the skills, copied into their own skills folders by one ``npx skills add``
+6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
+   (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
+   a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
+   keeps a copy of it, which gets it again for this release; Claude Desktop's config gets CAD's server,
+   this release's, written atomically with a ``.bak`` beside it; every second copy goes, an earlier
+   release's from the repository on GitHub among them. The agents with no plugin that the Skills CLI
+   knows get the skills, copied from the folder into their own skills folders by one ``npx skills add``
    (Node needed); an app with a plugin never does. A command that fails is said with its output, and
-   the other apps go on; the exit status is then 1.
+   the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
+   would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take
    back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
    which release (``skills``), since that CLI keeps no versions: the next run adds them again for an
    agent that got them from another release or has lost one of them.
 8. **The switch.** The device's engine moves to this release (``cad_server._internal.switch.handover``):
    one running drains -- nothing in flight -- and this release's takes its place on the same port, with
-   the same token, or the release before's comes back should it fail; with none running, ``current``
-   points at this release and the next client starts its engine.
+   the same token, or the release before's comes back should it fail, and with it its plugin folder and
+   the apps' copies of it (its own ``cad plugin --refresh``); with none running, ``current`` points at
+   this release and the next client starts its engine.
 9. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cad telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
@@ -56,12 +61,14 @@ current installation's
 steps 2 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
 each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
 
-``cad uninstall`` takes back what the receipt says was done, newest first -- with no receipt, every
-copy of text-to-cad found but a store's -- removes the ``cad`` command when it is text-to-cad's own,
-stops the engine (``cad stop``) and removes the release folders; with ``--purge`` it then removes
-the state and cache folders. ``--only`` limits either to some apps (and then leaves the command, the
-engine and the releases alone). Neither asks: the plan is printed and done, and ``--dry-run`` prints it
-alone.
+``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
+plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
+Cursor's copy deleted, the skills removed by ``npx skills remove``; with no receipt, every copy of
+text-to-cad found but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the
+engine (``cad stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
+removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
+command, the engine, the releases and the plugin folder alone). Neither asks: the plan is printed and
+done, and ``--dry-run`` prints it alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
 command that is not text-to-cad's, editing a config that is not plain JSON, touching a store's copy.
@@ -230,13 +237,15 @@ class Installer:
     def __init__(self, args: argparse.Namespace, only: list[str], port: int, source: str,
                  argv: list[str] | None = None) -> None:
         from cad_server import __version__
-        from cad_server._internal import providers
+        from cad_server._internal import plugin, providers
 
         self.args, self.only, self.port, self.source = args, only, port, source
         self.argv = list(argv or [])
         self.providers = providers
         self.machine = providers.Machine.here()
         self.release = __version__
+        # The plugin folder every app is pointed at (``cad_server._internal.plugin``).
+        self.folder = plugin.folder()
         # The engine's own run (``--engine-update``): progress frames on stdout, words on stderr.
         self.engine_update = bool(getattr(args, "engine_update", False))
         # Under --json the result is the one thing on stdout: what is said goes to stderr.
@@ -334,6 +343,9 @@ class Installer:
                          + (" that the command leaves" if step.commands or step.note else ""))
             elif edit.get("op") == "remove":
                 self.say(f"{indent}removes {shown(edit['path'], self.machine)}")
+            elif edit.get("op") == "copy":
+                self.say(f"{indent}copies {shown(edit['from'], self.machine)} to {shown(edit['path'], self.machine)}, "
+                         "real files")
             elif edit.get("op") == "restore":
                 self.say(f"{indent}restores its .bak if nothing else changed since, else removes only that entry")
         absent = [app.label for app in apps.values() if not app.present and (not self.only or app.id in self.only)]
@@ -561,7 +573,7 @@ class Installer:
         """Each selected app's copy as the apps say it now, read again, and the engine on the port."""
         providers = self.providers
         try:
-            apps = providers.detect(self.machine)
+            apps = providers.detect(self.machine, folder=self.folder)
         except Exception as error:  # noqa: BLE001 - a report line, never a failure of the setup
             self.say(f"verify   unknown ({type(error).__name__}: {error})")
             return {"apps": {}, "engine": None}
@@ -573,6 +585,8 @@ class Installer:
             if ours is not None:
                 found = {"verdict": "ok", "release": ours.version}
                 said = f"text-to-cad {ours.version or '?'}" if name == "claude-desktop" else ours.words(self.machine)
+                origin = ours.origin(self.machine)
+                said += f", {origin}" if origin else ""
             elif stores:
                 found = {"verdict": "store"}
                 said = f"{stores[0].words(self.machine)}, which its store updates"
@@ -637,6 +651,95 @@ class Installer:
         """The engine's plan row as the plan shows it: without the installation record it acts by."""
         return {key: value for key, value in engine.items() if key != "record"}
 
+    # --- the plugin folder ----------------------------------------------------------------------
+
+    def _plugin_row(self) -> dict[str, Any]:
+        """The plugin folder's plan row: written from this release, or already its (``plugin.pending``)."""
+        from cad_server._internal import plugin
+
+        row: dict[str, Any] = {"app": "plugin", "label": "plugin folder", "action": "leave"}
+        where = self.providers.shown(str(self.folder), self.machine)
+        try:
+            found = plugin.pending(self.folder)
+        except (plugin.Missing, OSError, ValueError) as error:
+            return {**row, "subject": f"{where} cannot be written: {error}"}
+        if found["created"]:
+            return {**row, "action": "write", "subject": f"{where}: text-to-cad {self.release}, which the apps read"}
+        count = len(found["changed"]) + len(found["removed"])
+        if count:
+            return {**row, "action": "write",
+                    "subject": f"{where}: text-to-cad {self.release} ({count} file{'s' if count != 1 else ''})"}
+        return {**row, "subject": f"{where}: text-to-cad {self.release}, up to date"}
+
+    def _write_plugin(self) -> dict[str, Any] | None:
+        """The plugin folder written from this release, before the apps are pointed at it; said when that
+        changed it. None, said, when it cannot be."""
+        from cad_server._internal import plugin
+
+        shown = self.providers.shown
+        try:
+            done = plugin.write(self.folder)
+        except (plugin.Missing, OSError, ValueError) as error:
+            self.say(f"plugin   {shown(str(self.folder), self.machine)} could not be written: {error}")
+            return None
+        if done["created"] or done["changed"] or done["removed"]:
+            plugin.say_written(done, lambda line: self.say(f"plugin   {line}"), lambda path: shown(path, self.machine))
+            self.actions.append({"app": "plugin", "action": "write", "kind": "plugin", "path": done["path"],
+                                 "version": done["version"], "ok": True, "at": self.providers.stamp()})
+        return done
+
+    def _needs_folder(self, step: Any) -> bool:
+        """Whether a step points an app at the plugin folder, or copies from it (its app's removals with it:
+        an app is never left with its duplicate gone and nothing in its place)."""
+        return step.app in self.providers.POINTED or step.app in self.providers.SKILLS_AGENTS
+
+    def _record_skills(self, receipt: dict[str, Any], step: Any, steps: list[Any], records: list[dict[str, Any]],
+                       changed: set[str]) -> None:
+        """The Skills CLI keeps no versions: the receipt says which release each agent ``step`` added the
+        skills for now has, and which skills (those the CLI said it installed)."""
+        providers = self.providers
+        actions = {other.app: other.action for other in steps}
+        changed.update(agent for agent in step.agents if actions.get(agent) in ("install", "update"))
+        said = next((record["skills"] for record in records if record.get("skills") is not None), None)
+        got = dict(receipt.get("skills") or {})
+        for agent in step.agents:
+            folder = providers.skills_folder(agent, self.machine)
+            # The skills it said it installed; when it said nothing readable, what is there now.
+            names = said if said is not None else [path.name for path in providers.ours_in(folder)]
+            got[agent] = {"release": self.release, "folder": str(folder), "skills": names, "at": providers.stamp()}
+        receipt["skills"] = got
+
+    def refresh(self, told: Any) -> tuple[bool, list[dict[str, Any]]]:
+        """After the plugin folder was written again (``cad plugin --refresh``, which a switch runs): the
+        copies the apps keep of it brought to it (``providers.refresh_plan``), under the installer's lock,
+        the receipt kept. ``(ok, the steps run)``."""
+        from cad_server._internal.file_lock import exclusive
+
+        providers = self.providers
+        state = self._state()
+        state.mkdir(parents=True, exist_ok=True)
+        failed, changed = False, set()
+        with exclusive(state / LOCK, waiting=lambda: told("waiting for another cad setup or uninstall to finish")):
+            receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
+            apps = providers.detect(self.machine, folder=self.folder)
+            steps = providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
+                                           skills=receipt.get("skills"))
+            for step in steps:
+                told(f"{step.label}: {step.action} {step.subject}")
+                ok, records = providers.apply(step, self.machine, say=lambda line: told(f"  {line}"))
+                self.actions += records
+                failed = failed or not ok
+                if ok and step.agents:
+                    self._record_skills(receipt, step, steps, records, changed)
+            if self.actions:
+                receipt.update({"release": self.release, "updated": providers.stamp()})
+                receipt["actions"] = list(receipt.get("actions") or []) + self.actions
+                self._keep(receipt)
+        if steps:
+            told("Restart to load it: " + "; ".join(providers.RESTART[step.app] for step in steps
+                                                     if step.app in providers.RESTART))
+        return not failed, [step.data() for step in steps]
+
     def install(self) -> int:
         providers = self.providers
         where = f"engine port {self.port}" if self.port else "engine on any free port"
@@ -646,15 +749,15 @@ class Installer:
             if relocated is not None:
                 return relocated
         if self.args.dry_run:
-            apps = providers.detect(self.machine)
-            steps = providers.plan(apps, release=self.release, desktop_entry=self._desktop_entry(), only=self.only,
-                                   machine=self.machine, skills=(self._receipt() or {}).get("skills"))
+            apps = providers.detect(self.machine, folder=self.folder)
+            steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
+                                   only=self.only, machine=self.machine, skills=(self._receipt() or {}).get("skills"))
             kernel = self._kernel()
             home = self._home()
             release = ([{"app": "release", "label": "release", "action": "make",
                          "subject": f"text-to-cad {self.release} in {providers.shown(str(home), self.machine)}, once"}]
                        if home is not None and not os.path.isdir(home) else [])
-            extra = [*release, self._public(self._engine()), *([kernel] if kernel else [])]
+            extra = [*release, self._plugin_row(), self._public(self._engine()), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -669,14 +772,14 @@ class Installer:
         state.mkdir(parents=True, exist_ok=True)
         with exclusive(state / LOCK, waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
-            apps = providers.detect(self.machine)
-            steps = providers.plan(apps, release=self.release, desktop_entry=self._desktop_entry(), only=self.only,
-                                   machine=self.machine, skills=receipt.get("skills"))
+            apps = providers.detect(self.machine, folder=self.folder)
+            steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
+                                   only=self.only, machine=self.machine, skills=receipt.get("skills"))
             self.fed = providers.feeds(apps, self.only or providers.APPS)
             engine = self._engine() if not self.engine_update else {"app": "engine", "label": "engine",
                                                                      "action": "leave", "subject": "this engine's own update"}
             kernel = self._kernel()
-            extra = [self._public(engine), *([kernel] if kernel else [])]
+            extra = [self._plugin_row(), self._public(engine), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             work = [step for step in steps if step.changes]
             if engine["action"] == "stop":
@@ -691,6 +794,13 @@ class Installer:
                 kernel_failed = not self._make_kernel()
             failed = kernel_failed
             self.stage("apps")
+            # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
+            # written changes no app that would point at it.
+            if self._write_plugin() is None:
+                failed = True
+                for step in [step for step in work if self._needs_folder(step)]:
+                    self.say(f"{step.label}: {step.action} {step.subject}: not done, with no plugin folder")
+                    work.remove(step)
             # A config's first .bak is the one an uninstall restores: a later run keeps it.
             backed_up = {action["path"] for action in receipt.get("actions") or []
                          if action.get("kind") == "edit" and action.get("ok")
@@ -707,17 +817,7 @@ class Installer:
                 if ok and records and step.action in ("install", "update") and step.app in providers.APPS:
                     changed.add(step.app)
                 if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
-                    actions = {other.app: other.action for other in steps}
-                    changed.update(agent for agent in step.agents if actions.get(agent) in ("install", "update"))
-                    said = next((record["skills"] for record in records if record.get("skills") is not None), None)
-                    got = dict(receipt.get("skills") or {})
-                    for agent in step.agents:
-                        folder = providers.skills_folder(agent, self.machine)
-                        # The skills it said it installed; when it said nothing readable, what is there now.
-                        names = said if said is not None else [path.name for path in providers.ours_in(folder)]
-                        got[agent] = {"release": self.release, "folder": str(folder), "skills": names,
-                                      "at": providers.stamp()}
-                    receipt["skills"] = got
+                    self._record_skills(receipt, step, steps, records, changed)
             launcher = registered["launcher"]
             if self.actions or self.stopped or registered["record_written"] or launcher["written"]:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
@@ -734,6 +834,12 @@ class Installer:
             if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or made
                     or switched):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
+        if switched is not None and switched.get("restored"):
+            # The release before runs again: its plugin folder, and the apps' copies of it, come back with
+            # it -- its own `cad plugin --refresh`, once this run's lock is let go.
+            from cad_server._internal import switch
+
+            switch.follow(told=lambda line: self.say(f"plugin   {line}"))
         if self.engine_update:
             return 1 if kernel_failed else 0
         verified = self._verify()
@@ -760,8 +866,8 @@ class Installer:
         from cad.engine.places import cache_dir
 
         receipt = self._receipt()
-        apps = providers.detect(self.machine)
-        steps = providers.uninstall_plan(apps, receipt, self.only or None, self.machine)
+        apps = providers.detect(self.machine, folder=self.folder)
+        steps = providers.uninstall_plan(apps, receipt, self.only or None, self.machine, folder=self.folder)
         extra: list[dict[str, Any]] = []
         proxy = installations.proxy_path()
         status = installations.proxy_status(proxy)
@@ -784,6 +890,9 @@ class Installer:
             if releases.listing():
                 extra.append({"app": "releases", "label": "releases", "action": "remove",
                               "subject": providers.shown(str(releases.root()), self.machine)})
+            if os.path.lexists(self.folder):
+                extra.append({"app": "plugin", "label": "plugin folder", "action": "remove",
+                              "subject": providers.shown(str(self.folder), self.machine)})
         state, cache = self._state(), Path(cache_dir())
         if self.args.purge:
             extra.append({"app": "folders", "label": "folders", "action": "remove",
@@ -821,6 +930,7 @@ class Installer:
             if whole:
                 failed = self._stop() or failed
                 failed = self._remove_releases() or failed
+                failed = self._remove_plugin() or failed
             if receipt is not None:
                 if whole:
                     self._folder().remove(RECEIPT)
@@ -835,6 +945,21 @@ class Installer:
             self._purge(state, cache)
         restart = self._restart(apps, changed)
         return self._result(steps, extra, None, restart, 1 if failed else 0)
+
+    def _remove_plugin(self) -> bool:
+        """The plugin folder removed, after every app's copy of it: True when it could not be removed whole."""
+        from cad_server._internal import plugin
+
+        shown = self.providers.shown(str(self.folder), self.machine)
+        if not plugin.remove(self.folder):
+            return False
+        if os.path.lexists(self.folder):
+            self.say(f"plugin   {shown} could not be removed whole")
+            return True
+        self.say(f"plugin   removed {shown}")
+        self.actions.append({"app": "plugin", "action": "remove", "kind": "remove", "path": str(self.folder),
+                             "ok": True, "at": self.providers.stamp()})
+        return False
 
     def _remove_releases(self) -> bool:
         """The release folders removed, with their installations' records and ``current`` when it named
@@ -883,6 +1008,13 @@ class Installer:
             shutil.rmtree(folder, ignore_errors=True)
             self.say(f"folders  removed {shown(folder, self.machine)}" if not folder.exists()
                      else f"folders  {shown(folder, self.machine)} could not be removed whole")
+
+
+def refresh_copies(told: Any) -> tuple[bool, list[dict[str, Any]]]:
+    """The copies the apps keep of the plugin folder brought to it, after ``cad plugin --refresh`` wrote it
+    again (``Installer.refresh``): ``(ok, the steps run)``, each line said to ``told``."""
+    args = argparse.Namespace(dry_run=False, json=False, only=None, no_telemetry=False)
+    return Installer(args, [], 0, "default").refresh(told)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,14 @@
 """The agent apps ``cad setup`` reads and changes (``cad_server._internal.providers``).
 
-Every test builds a temporary home, and puts on a temporary PATH fake ``claude``, ``codex``,
-``gemini``, ``grok``, ``git`` and ``npx`` commands: one small emulator (``EMULATOR``) that records each call
-and keeps each app's state the way the app does -- Claude Code's and Grok Build's behind their
-``--json`` listings, Codex's in ``config.toml`` and its cache, Gemini CLI's and Cursor's in their
-folders -- so a plan is applied, read back and taken out again. Nothing here runs a real app or
-touches the developer's home.
+Every test builds a temporary home, a plugin folder in it (the one the server writes,
+``cad_server._internal.plugin``: here its manifests and one skill), and puts on a temporary PATH fake
+``claude``, ``codex``, ``gemini``, ``grok`` and ``npx`` commands: one small emulator (``EMULATOR``) that
+records each call and keeps each app's state the way the app does -- Claude Code's and Grok Build's
+behind their ``--json`` listings (Claude Code reading a local catalog's folder in place), Codex's in
+``config.toml`` and its cache (a copy of a local catalog's plugin), Gemini CLI's link and Cursor's copy
+in their folders -- so a plan is applied, read back and taken out again. Codex's and Cursor's commands
+are checked this way, in dry run; Claude Code and Gemini CLI themselves read a real folder in
+``tests/python/global/test_plugin_folder.py``. Nothing here runs a real app or touches the developer's home.
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ add_repo_path("packages/texttocad/src")
 from cad_server._internal import providers  # noqa: E402
 
 RELEASE = "1.2.3"
+ID = providers.PLUGIN_ID
+NPX = ["--prefer-offline", "-y", "skills@latest"]
 
 # One program behind every fake command: `python EMULATOR <tool> ARGS...`. Its world is a JSON file
 # (FAKE_WORLD): the release the `latest` branch holds, the commands told to fail, and the state the
@@ -57,6 +62,24 @@ def refuse(why):
     sys.exit(1)
 
 
+def read(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def catalog(source):
+    """A catalog to add: a local folder (its own catalog's name), or this repository on GitHub."""
+    if os.path.isdir(source):
+        name = read(Path(source) / ".claude-plugin" / "marketplace.json").get("name")
+        if not name:
+            refuse("no marketplace.json in " + source)
+        return {"name": name, "source": "directory", "path": source}
+    repo, _, ref = source.partition("#")
+    return {"name": "earthtojake", "source": "github", "repo": repo, **({"ref": ref} if ref else {})}
+
+
 def toml(state):
     lines = []
     for table in ("marketplaces", "plugins", "mcp_servers"):
@@ -67,46 +90,40 @@ def toml(state):
     (home / ".codex" / "config.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def plugin_folder(path, version, branch):
-    (path / ".cursor-plugin").mkdir(parents=True, exist_ok=True)
-    (path / ".cursor-plugin" / "plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": version}),
-                                                         encoding="utf-8")
-    (path / ".git").mkdir(exist_ok=True)
-    (path / ".git" / "HEAD").write_text("ref: refs/heads/%s\n" % branch, encoding="utf-8")
-    (path / ".git" / "config").write_text('[remote "origin"]\n\turl = https://github.com/earthtojake/text-to-cad\n',
-                                          encoding="utf-8")
-
-
 if tool == "claude":
     state = world.setdefault("claude", {"plugins": [], "marketplaces": []})
     plugins, markets = state["plugins"], state["marketplaces"]
+    known = {market["name"]: market for market in markets}
     if args == ["plugin", "list", "--json"]:
+        for plugin in plugins:  # a local catalog's plugin is read in place: its folder's version, now
+            market = known.get(plugin["id"].split("@")[1], {})
+            if market.get("source") == "directory":
+                plugin.update({"readFromFolder": market["path"],
+                               "folderVersion": read(Path(market["path"]) / ".claude-plugin" / "plugin.json").get("version")})
         print(json.dumps(plugins))
         sys.exit(0)
     if args == ["plugin", "marketplace", "list", "--json"]:
         print(json.dumps(markets))
         sys.exit(0)
     if args[:3] == ["plugin", "marketplace", "add"]:
-        repo, _, ref = args[3].partition("#")
-        if any(market["name"] == "earthtojake" for market in markets):
+        market = catalog(args[3])
+        if market["name"] in known and known[market["name"]] != market:
             refuse("its source doesn't match its extraKnownMarketplaces entry")
-        markets.append({"name": "earthtojake", "source": "github", "repo": repo, **({"ref": ref} if ref else {})})
+        if market["name"] not in known:
+            markets.append(market)
         done()
     if args[:3] == ["plugin", "marketplace", "remove"]:
         state["marketplaces"] = [market for market in markets if market["name"] != args[3]]
         state["plugins"] = [plugin for plugin in plugins if not plugin["id"].endswith("@" + args[3])]
         done()
-    if args[:3] == ["plugin", "marketplace", "update"]:
-        done()
-    if args[:2] == ["plugin", "install"]:
-        if not any(args[2].endswith("@" + market["name"]) for market in markets):
+    if args[:2] in (["plugin", "install"], ["plugin", "update"]):
+        market = known.get(args[2].split("@")[1])
+        if market is None:
             refuse("no such marketplace")
-        plugins.append({"id": args[2], "version": release, "scope": "user", "enabled": True})
-        done()
-    if args[:2] == ["plugin", "update"]:
-        for plugin in plugins:
-            if plugin["id"] == args[2]:
-                plugin["version"] = release
+        version = (read(Path(market["path"]) / ".claude-plugin" / "plugin.json").get("version")
+                   if market["source"] == "directory" else release)
+        state["plugins"] = [plugin for plugin in plugins if plugin["id"] != args[2]] + [
+            {"id": args[2], "version": version, "scope": "user", "enabled": True}]
         done()
     if args[:2] == ["plugin", "uninstall"]:
         if not any(plugin["id"] == args[2] for plugin in plugins):
@@ -127,20 +144,30 @@ elif tool == "codex":
     markets, plugins = state.setdefault("marketplaces", {}), state.setdefault("plugins", {})
     cache = home / ".codex" / "plugins" / "cache"
     if args[:3] == ["plugin", "marketplace", "add"]:
-        if "earthtojake" in markets:
-            refuse("a marketplace named earthtojake exists")
-        markets["earthtojake"] = {"source_type": "git", "source": "https://github.com/%s.git" % args[3]}
-        if "--ref" in args:
-            markets["earthtojake"]["ref"] = args[args.index("--ref") + 1]
+        if os.path.isdir(args[3]):
+            name = catalog(args[3])["name"]
+            entry = {"source_type": "local", "source": args[3]}
+        else:
+            name, entry = "earthtojake", {"source_type": "git", "source": "https://github.com/%s.git" % args[3]}
+            if "--ref" in args:
+                entry["ref"] = args[args.index("--ref") + 1]
+        if name in markets and markets[name] != entry:
+            refuse("a marketplace named %s exists" % name)
+        markets[name] = entry
     elif args[:3] == ["plugin", "marketplace", "upgrade"]:
         pass
     elif args[:3] == ["plugin", "marketplace", "remove"]:
         markets.pop(args[3], None)
     elif args[:2] == ["plugin", "add"]:
+        market = markets.get(args[2].split("@")[1])
+        if market is None:
+            refuse("no such marketplace")
+        version = (read(Path(market["source"]) / ".codex-plugin" / "plugin.json").get("version")
+                   if market["source_type"] == "local" else release)
         plugins[args[2]] = {"enabled": True}
         folder = cache / args[2].split("@")[1] / "text-to-cad"
         shutil.rmtree(folder, ignore_errors=True)
-        (folder / release).mkdir(parents=True)
+        (folder / version).mkdir(parents=True)
     elif args[:2] == ["plugin", "remove"]:
         plugins.pop(args[2], None)
         shutil.rmtree(cache / args[2].split("@")[1], ignore_errors=True)
@@ -152,20 +179,12 @@ elif tool == "codex":
     done()
 elif tool == "gemini":
     folder = home / ".gemini" / "extensions" / "text-to-cad"
-    if args[:2] == ["extensions", "install"]:
+    if args[:2] == ["extensions", "link"]:
         if folder.exists():
             refuse("already installed")
         folder.mkdir(parents=True)
-        (folder / "gemini-extension.json").write_text(json.dumps({"name": "text-to-cad", "version": release}),
-                                                      encoding="utf-8")
-        (folder / ".gemini-extension-install.json").write_text(json.dumps(
-            {"source": args[2], "type": "git", "ref": args[args.index("--ref") + 1], "autoUpdate": True}),
-            encoding="utf-8")
-        done()
-    if args == ["extensions", "update", "text-to-cad"]:
-        manifest = json.loads((folder / "gemini-extension.json").read_text(encoding="utf-8"))
-        manifest["version"] = release
-        (folder / "gemini-extension.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (folder / ".gemini-extension-install.json").write_text(json.dumps({"source": args[2], "type": "link"}),
+                                                               encoding="utf-8")
         done()
     if args == ["extensions", "uninstall", "text-to-cad"]:
         shutil.rmtree(folder)
@@ -193,18 +212,12 @@ elif tool == "grok":
     if args[:2] == ["plugin", "uninstall"]:
         state["plugins"] = [plugin for plugin in state["plugins"] if plugin["name"] != args[2]]
         done()
-elif tool == "git":
-    if args[0] == "clone":
-        plugin_folder(Path(args[-1]), release, args[args.index("--branch") + 1])
-        done()
-    if args[0] == "-C" and args[2:3] == ["pull"]:
-        plugin_folder(Path(args[1]), release, "latest")
-        done()
-elif tool == "npx" and args[:2] == ["-y", "skills@latest"]:
+elif tool == "npx" and args[:3] == ["--prefer-offline", "-y", "skills@latest"]:
     # The Skills CLI: `add` copies every skill into each named agent's folder, `remove` takes them out.
     agents = [args[index + 1] for index, word in enumerate(args) if word == "-a"]
     folders = world["skills_folders"]
-    if args[2] == "add":
+    if args[3] == "add":
+        assert os.path.isdir(args[4]), "the skills are added from the plugin folder's skills/"
         for agent in agents:
             for name in world["skills"]:
                 skill = Path(folders[agent]) / name
@@ -213,7 +226,7 @@ elif tool == "npx" and args[:2] == ["-y", "skills@latest"]:
                                                 encoding="utf-8")
         print(json.dumps([{"name": name, "status": "installed", "agents": agents} for name in world["skills"]]))
         done()
-    if args[2] == "remove":
+    if args[3] == "remove":
         for agent in agents:
             for name in args[args.index("-s") + 1:args.index("-y")]:
                 shutil.rmtree(Path(folders[agent]) / name, ignore_errors=True)
@@ -222,8 +235,24 @@ refuse("unknown command " + said)
 '''
 
 
+def make_plugin_folder(folder: Path, version: str) -> Path:
+    """The plugin folder as the server writes it, as far as the apps read it: its catalog, each host's
+    manifest at ``version``, and a skill."""
+    for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json",
+                     "gemini-extension.json"):
+        (folder / relative).parent.mkdir(parents=True, exist_ok=True)
+        (folder / relative).write_text(json.dumps({"name": "text-to-cad", "version": version}), encoding="utf-8")
+    (folder / ".claude-plugin" / "marketplace.json").write_text(json.dumps(
+        {"name": providers.MARKETPLACE, "plugins": [{"name": "text-to-cad", "source": "./", "version": version}]}),
+        encoding="utf-8")
+    (folder / "skills" / "cad").mkdir(parents=True, exist_ok=True)
+    (folder / "skills" / "cad" / "SKILL.md").write_text("---\nname: cad\n---\nMaintained at earthtojake/text-to-cad.\n",
+                                                        encoding="utf-8")
+    return folder
+
+
 class Home:
-    """A temporary home, its fake commands on a PATH of their own, and the world they share."""
+    """A temporary home, its plugin folder, its fake commands on a PATH of their own, and the world they share."""
 
     def __init__(self, root: Path, tools: tuple[str, ...] = (), release: str = RELEASE) -> None:
         self.root = root
@@ -231,6 +260,7 @@ class Home:
         self.home.mkdir()
         self.bin = root / "bin"
         self.bin.mkdir()
+        self.folder = make_plugin_folder(root / "state" / "plugin", release)
         self.world = root / "world.json"
         self.calls_file = root / "calls.jsonl"
         self.write_world({"release": release})
@@ -240,7 +270,7 @@ class Home:
         environ = {key: value for key, value in os.environ.items()
                    if not key.endswith("_CLI") and key not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "CLAUDE_DESKTOP_CONFIG",
                                                                "APPDATA", "UV_INSTALL_DIR", "XDG_BIN_HOME", "XDG_CONFIG_HOME",
-                                                               "HERMES_HOME", "FLATPAK_XDG_CONFIG_HOME")}
+                                                               "HERMES_HOME", "FLATPAK_XDG_CONFIG_HOME", "GEMINI_CLI_HOME")}
         environ.update({"PATH": str(self.bin), "HOME": str(self.home), "USERPROFILE": str(self.home),
                         "FAKE_WORLD": str(self.world), "FAKE_HOME": str(self.home),
                         "CLAUDE_DESKTOP_CONFIG": str(self.desktop)})
@@ -251,6 +281,10 @@ class Home:
     @property
     def desktop(self) -> Path:
         return self.home / "desktop" / "claude_desktop_config.json"
+
+    @property
+    def cursor(self) -> Path:
+        return providers.cursor_plugins(self.machine) / "text-to-cad"
 
     def tool(self, name: str, folder: Path | None = None) -> Path:
         """A command ``name`` that runs the emulator."""
@@ -275,6 +309,11 @@ class Home:
     def set(self, **changes) -> None:
         self.write_world({**self.read_world(), **changes})
 
+    def release(self, version: str) -> None:
+        """A new release: the `latest` branch's, and the plugin folder written again for it."""
+        self.set(release=version)
+        make_plugin_folder(self.folder, version)
+
     def calls(self) -> list[list[str]]:
         if not self.calls_file.is_file():
             return []
@@ -286,11 +325,11 @@ class Home:
                                                                   ["plugin", "marketplace", "list", "--json"])]
 
     def detect(self) -> dict:
-        return providers.detect(self.machine)
+        return providers.detect(self.machine, folder=self.folder)
 
     def plan(self, **options) -> list:
-        return providers.plan(self.detect(), release=options.pop("release", RELEASE), machine=self.machine,
-                              desktop_entry=options.pop("desktop_entry", ENTRY), **options)
+        return providers.plan(self.detect(), release=options.pop("release", RELEASE), folder=self.folder,
+                              machine=self.machine, desktop_entry=options.pop("desktop_entry", ENTRY), **options)
 
     def apply(self, steps: list, **options) -> list:
         records = []
@@ -312,6 +351,17 @@ class Home:
         (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\nMaintained at {provenance}.\n", encoding="utf-8")
         return skill
 
+    def clone(self, path: Path, version: str = RELEASE) -> Path:
+        """An earlier release's Cursor install: a clone of the repository's `latest` branch."""
+        (path / ".cursor-plugin").mkdir(parents=True)
+        (path / ".cursor-plugin" / "plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": version}),
+                                                             encoding="utf-8")
+        (path / ".git").mkdir()
+        (path / ".git" / "HEAD").write_text("ref: refs/heads/latest\n", encoding="utf-8")
+        (path / ".git" / "config").write_text('[remote "origin"]\n\turl = https://github.com/earthtojake/text-to-cad\n',
+                                              encoding="utf-8")
+        return path
+
 
 ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.14", "--from",
                                           f"texttocad-mcp=={RELEASE}", "cad-mcp"],
@@ -320,6 +370,10 @@ ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--p
 
 def actions(steps: list) -> list[tuple[str, str]]:
     return [(step.app, step.action) for step in steps]
+
+
+def commands(steps: list) -> dict[str, list[list[str]]]:
+    return {step.app: [argv[1:] for argv in step.commands] for step in steps if step.commands}
 
 
 class Fixture(unittest.TestCase):
@@ -339,29 +393,27 @@ class DetectionAndPlan(Fixture):
         self.assertEqual([name for name, app in apps.items() if app.present], [])
         self.assertEqual(home.plan(), [])
 
-    def test_every_app_found_gets_its_own_command_and_claude_desktop_its_server(self) -> None:
-        home = self.make(("claude", "codex", "gemini", "grok", "git"))
+    def test_every_app_is_pointed_at_the_plugin_folder_its_own_way_and_claude_desktop_gets_its_server(self) -> None:
+        home = self.make(("claude", "codex", "gemini", "grok"))
         home.desktop.parent.mkdir(parents=True)
         (home.home / ".cursor").mkdir()
+        folder = str(home.folder)
         steps = home.plan(only=["claude-desktop", "codex", "cursor", "grok", "gemini"])
         self.assertEqual(actions(steps), [("claude-desktop", "install"), ("codex", "install"), ("cursor", "install"),
                                           ("grok", "install"), ("gemini", "install")])
-        commands = {step.app: [argv[1:] for argv in step.commands] for step in steps}
-        self.assertEqual(commands["codex"], [["plugin", "marketplace", "add", "earthtojake/text-to-cad", "--ref", "latest"],
-                                             ["plugin", "add", "text-to-cad@earthtojake"]])
-        # Never --auto-update: no update arrives but the one the person asks for.
-        self.assertEqual(commands["gemini"], [["extensions", "install", "https://github.com/earthtojake/text-to-cad", "--ref",
-                                               "latest", "--consent"]])
-        self.assertEqual(commands["grok"], [["plugin", "install", "earthtojake/text-to-cad@latest", "--trust"],
-                                            ["plugin", "enable", "text-to-cad"]])
-        self.assertEqual(commands["cursor"][0][:5], ["clone", "--depth", "1", "--branch", "latest"])
+        found = commands(steps)
+        # Codex copies a local catalog's plugin; Gemini CLI links the folder, which it reads in place.
+        self.assertEqual(found["codex"], [["plugin", "marketplace", "add", folder], ["plugin", "add", ID]])
+        self.assertEqual(found["gemini"], [["extensions", "link", folder, "--consent"]])
+        self.assertEqual(found["grok"], [["plugin", "install", "earthtojake/text-to-cad@latest", "--trust"],
+                                         ["plugin", "enable", "text-to-cad"]])
+        # Cursor gets a copy, real files, in its local plugins folder.
+        self.assertEqual(steps[2].edit, {"op": "copy", "from": folder, "path": str(home.cursor)})
         self.assertEqual(steps[0].edit, {"op": "servers", "path": str(home.desktop), "set": {"cad": ENTRY}, "remove": []})
-        # Claude Code's plugin feeds Cursor and Grok Build: with it in the plan, theirs are not added.
+        # Claude Code reads a local catalog in place; its plugin feeds Cursor and Grok Build, so theirs are not added.
         steps = home.plan()
         self.assertEqual(actions(steps)[:2], [("claude", "install"), ("claude-desktop", "install")])
-        self.assertEqual([argv[1:] for argv in steps[0].commands],
-                         [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
-                          ["plugin", "install", "text-to-cad@earthtojake"]])
+        self.assertEqual(commands(steps)["claude"], [["plugin", "marketplace", "add", folder], ["plugin", "install", ID]])
         served = [step.subject for step in steps if step.app in ("cursor", "grok")]
         self.assertEqual(served, ["served by the Claude Code plugin"] * 2)
 
@@ -406,22 +458,71 @@ class DetectionAndPlan(Fixture):
         self.assertEqual(by_app["grok"], [("leave", "served by the Claude Code plugin"),
                                           ("remove duplicate", "text-to-cad 1.2.3 (from /checkout)")])
 
-    def test_a_catalog_on_another_branch_is_pointed_at_latest(self) -> None:
-        home = self.make(("claude", "codex"))
+    def test_an_earlier_release_s_copies_from_github_give_way_to_the_folder_s(self) -> None:
+        home = self.make(("claude", "codex", "gemini"))
+        github = {"name": "earthtojake", "source": "github", "repo": "earthtojake/text-to-cad", "ref": "latest"}
         home.set(claude={"plugins": [{"id": "text-to-cad@earthtojake", "version": "1.2.2", "scope": "user"}],
-                         "marketplaces": [{"name": "earthtojake", "source": "github", "repo": "earthtojake/text-to-cad"}]})
-        steps = home.plan(only=["claude"])
-        self.assertEqual(actions(steps), [("claude", "update")])
+                         "marketplaces": [github]},
+                 codex={"marketplaces": {"earthtojake": {"source_type": "git", "ref": "latest",
+                                                         "source": "https://github.com/earthtojake/text-to-cad.git"}},
+                        "plugins": {"text-to-cad@earthtojake": {"enabled": True}}})
+        (home.home / ".codex").mkdir()
+        (home.home / ".codex" / "config.toml").write_text(
+            '[marketplaces.earthtojake]\nsource_type = "git"\nsource = "https://github.com/earthtojake/text-to-cad.git"\n'
+            'ref = "latest"\n[plugins."text-to-cad@earthtojake"]\nenabled = true\n', encoding="utf-8")
+        extension = home.home / ".gemini" / "extensions" / "text-to-cad"
+        extension.mkdir(parents=True)
+        (extension / "gemini-extension.json").write_text('{"name": "text-to-cad", "version": "1.2.2"}', encoding="utf-8")
+        (extension / ".gemini-extension-install.json").write_text(json.dumps(
+            {"source": "https://github.com/earthtojake/text-to-cad", "type": "git", "ref": "latest"}), encoding="utf-8")
+        steps = home.plan(only=["claude", "codex", "gemini"])
+        folder = str(home.folder)
+        self.assertEqual(actions(steps), [("claude", "remove duplicate"), ("claude", "install"),
+                                          ("codex", "remove duplicate"), ("codex", "install"),
+                                          ("gemini", "remove duplicate"), ("gemini", "install")])
+        # The GitHub catalog goes with its plugin (Codex would fetch it again at every start).
         self.assertEqual([argv[1:] for argv in steps[0].commands],
-                         [["plugin", "marketplace", "remove", "earthtojake"],
-                          ["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
-                          ["plugin", "install", "text-to-cad@earthtojake"]])
-        # On latest, an older copy is updated in place, and the release's own is left.
-        home.set(claude={"plugins": [{"id": "text-to-cad@earthtojake", "version": "1.2.2", "scope": "user"}],
-                         "marketplaces": [{"name": "earthtojake", "repo": "earthtojake/text-to-cad", "ref": "latest"}]})
-        self.assertEqual([argv[1:] for argv in home.plan(only=["claude"])[0].commands],
-                         [["plugin", "marketplace", "update", "earthtojake"], ["plugin", "update", "text-to-cad@earthtojake"]])
-        self.assertEqual(actions(home.plan(only=["claude"], release="1.2.2")), [("claude", "leave")])
+                         [["plugin", "uninstall", "text-to-cad@earthtojake"], ["plugin", "marketplace", "remove", "earthtojake"]])
+        self.assertEqual([argv[1:] for argv in steps[2].commands],
+                         [["plugin", "remove", "text-to-cad@earthtojake"], ["plugin", "marketplace", "remove", "earthtojake"]])
+        self.assertEqual([argv[1:] for argv in steps[4].commands], [["extensions", "uninstall", "text-to-cad"]])
+        self.assertEqual([argv[1:] for argv in steps[5].commands], [["extensions", "link", folder, "--consent"]])
+        home.apply(steps)
+        apps = home.detect()
+        self.assertEqual({name: [(copy.name, copy.via) for copy in apps[name].copies] for name in ("claude", "codex", "gemini")},
+                         {"claude": [(ID, "in place")], "codex": [(ID, "copied")], "gemini": [("text-to-cad", "linked")]})
+        self.assertEqual(sorted(apps["claude"].marketplaces), [providers.MARKETPLACE])
+        self.assertEqual(sorted(apps["codex"].marketplaces), [providers.MARKETPLACE])
+        self.assertEqual({step.action for step in home.plan(only=["claude", "codex", "gemini"])}, {"leave"})
+
+    def test_a_new_release_s_folder_is_copied_again_where_an_app_keeps_a_copy(self) -> None:
+        # In dry run: the commands an update runs for Codex and Cursor, and Claude Code's cached copy.
+        home = self.make(("claude", "codex"))
+        home.apply(home.plan(only=["claude", "codex"]))
+        home.release("1.2.4")
+        steps = home.plan(release="1.2.4", only=["claude", "codex"])
+        self.assertEqual([(step.app, step.action, [argv[1:] for argv in step.commands]) for step in steps],
+                         [("claude", "update", [["plugin", "update", ID]]), ("codex", "update", [["plugin", "add", ID]])])
+        # The switch's refresh: the same, and nothing installed where the app has no copy of ours.
+        self.assertEqual(actions(providers.refresh_plan(home.detect(), release="1.2.4", folder=home.folder,
+                                                        machine=home.machine)),
+                         [("claude", "update"), ("codex", "update")])
+        home.apply(steps)
+        apps = home.detect()
+        self.assertEqual((apps["claude"].ours().recorded, apps["codex"].ours().version), ("1.2.4", "1.2.4"))
+        self.assertEqual(providers.refresh_plan(apps, release="1.2.4", folder=home.folder, machine=home.machine), [])
+
+    def test_a_catalog_of_ours_pointing_elsewhere_is_pointed_at_the_folder(self) -> None:
+        home = self.make(("claude", "codex"))
+        elsewhere = make_plugin_folder(self.root / "elsewhere", "1.2.2")
+        home.set(claude={"plugins": [{"id": ID, "version": "1.2.2", "scope": "user"}],
+                         "marketplaces": [{"name": providers.MARKETPLACE, "source": "directory", "path": str(elsewhere)}]})
+        steps = home.plan(only=["claude"])
+        self.assertEqual([(step.action, [argv[1:] for argv in step.commands]) for step in steps],
+                         [("update", [["plugin", "marketplace", "remove", providers.MARKETPLACE],
+                                      ["plugin", "marketplace", "add", str(home.folder)], ["plugin", "install", ID]])])
+        self.assertEqual(providers.refresh_plan(home.detect(), release=RELEASE, folder=home.folder, machine=home.machine),
+                         [], "a refresh points nothing: setup does")
 
     def test_the_newer_of_the_codex_on_path_and_the_app_s_own_installs(self) -> None:
         # Both write the one ~/.codex the app reads, so the newer command does: here the app's.
@@ -441,7 +542,7 @@ class DetectionAndPlan(Fixture):
 
 class ApplyReadBackAndTakeBack(Fixture):
     def test_an_install_applied_is_up_to_date_on_the_next_run_and_its_receipt_takes_it_back(self) -> None:
-        home = self.make(("claude", "codex", "gemini", "git"))
+        home = self.make(("claude", "codex", "gemini"))
         original = {"mcpServers": {"cad-dev": {"command": "/venv/bin/python", "args": ["-m", "cad_server.cli", "mcp"]},
                                    "other": {"command": "node", "args": ["server.js"]}}, "preferences": {"x": 1}}
         home.desktop.parent.mkdir(parents=True)
@@ -463,16 +564,18 @@ class ApplyReadBackAndTakeBack(Fixture):
                          {"leave"})
         self.assertEqual([call for call in home.calls()[calls:] if call in home.changing_calls()], [])
         # The receipt's replay takes back what was done, newest first: Claude Desktop's file restored
-        # whole from its .bak, each plugin and the catalogs it added removed.
-        undo = providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine)
+        # whole from its .bak, each plugin and the folder's catalog it added removed.
+        undo = providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine, folder=home.folder)
         self.assertEqual(actions(undo), [("gemini", "remove"), ("codex", "remove"), ("claude-desktop", "remove"),
                                          ("claude", "remove")])
+        self.assertEqual(commands(undo)["claude"], [["plugin", "uninstall", ID],
+                                                    ["plugin", "marketplace", "remove", providers.MARKETPLACE]])
         home.apply(undo)
         self.assertEqual(home.desktop.read_bytes(), before)
         apps = home.detect()
         self.assertEqual([copy.name for name in ("claude", "codex", "gemini") for copy in apps[name].copies], [])
         self.assertEqual(apps["claude"].marketplaces, {})
-        self.assertNotIn("earthtojake", apps["codex"].marketplaces)
+        self.assertNotIn(providers.MARKETPLACE, apps["codex"].marketplaces)
 
     def test_a_config_changed_since_loses_only_our_server(self) -> None:
         home = self.make()
@@ -504,21 +607,33 @@ class ApplyReadBackAndTakeBack(Fixture):
             providers.edit_servers(home.desktop, set_entries={"cad": ENTRY})
         self.assertEqual(home.desktop.read_bytes(), before)
 
-    def test_without_claude_code_cursor_and_grok_get_their_own_and_their_updates(self) -> None:
-        home = self.make(("grok", "git"))
+    def test_without_claude_code_cursor_gets_a_copy_and_grok_build_its_own_and_their_updates(self) -> None:
+        home = self.make(("grok",))
         (home.home / ".cursor").mkdir()
+        # An earlier release's clone of `latest` in Cursor's place gives way to the copy.
+        home.clone(home.cursor, "1.2.2")
         steps = home.plan()
-        self.assertEqual(actions(steps), [("cursor", "install"), ("grok", "install")])
+        self.assertEqual(actions(steps), [("cursor", "remove duplicate"), ("cursor", "install"), ("grok", "install")])
         records = home.apply(steps)
+        copied = sorted(path.relative_to(home.cursor).as_posix() for path in home.cursor.rglob("*") if path.is_file())
+        self.assertEqual(copied, sorted([*(path.relative_to(home.folder).as_posix() for path in home.folder.rglob("*")
+                                           if path.is_file()), providers.COPY_MARK]))
+        self.assertFalse((home.cursor / ".git").exists())
+        self.assertEqual(providers.copy_mark(home.cursor)["from"], str(home.folder))
         self.assertEqual({step.action for step in home.plan()}, {"leave"})
-        home.set(release="1.2.4")
+        home.release("1.2.4")
+        (home.folder / "skills" / "dxf").mkdir()
+        (home.folder / "skills" / "dxf" / "SKILL.md").write_text("---\nname: dxf\n---\n", encoding="utf-8")
+        (home.folder / "skills" / "cad" / "SKILL.md").unlink()
         steps = home.plan(release="1.2.4")
-        self.assertEqual([(step.app, step.action, [argv[1:] for argv in step.commands]) for step in steps],
-                         [("cursor", "update", [["-C", str(home.home / ".cursor" / "plugins" / "local" / "text-to-cad"),
-                                                 "pull", "--ff-only"]]),
-                          ("grok", "update", [["plugin", "update", "text-to-cad"]])])
+        self.assertEqual([(step.app, step.action, [argv[1:] for argv in step.commands], step.edit) for step in steps],
+                         [("cursor", "update", [], {"op": "copy", "from": str(home.folder), "path": str(home.cursor)}),
+                          ("grok", "update", [["plugin", "update", "text-to-cad"]], None)])
         home.apply(steps)
-        undo = providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine)
+        self.assertTrue((home.cursor / "skills" / "dxf" / "SKILL.md").is_file())
+        self.assertFalse((home.cursor / "skills" / "cad" / "SKILL.md").exists(), "what the folder no longer has goes")
+        self.assertEqual(home.detect()["cursor"].ours().version, "1.2.4")
+        undo = providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine, folder=home.folder)
         self.assertEqual(actions(undo), [("grok", "remove"), ("cursor", "remove")])
         home.apply(undo)
         self.assertEqual(home.detect()["cursor"].copies, [])
@@ -544,7 +659,7 @@ class ApplyReadBackAndTakeBack(Fixture):
         self.assertFalse(skill.exists())
         self.assertTrue((Path(record["to"]) / "SKILL.md").is_file())
         home.apply(home.plan())
-        undo = providers.uninstall_plan(home.detect(), None, machine=home.machine)
+        undo = providers.uninstall_plan(home.detect(), None, machine=home.machine, folder=home.folder)
         self.assertEqual([(step.app, step.action) for step in undo], [("gemini", "remove")])
 
 
@@ -560,7 +675,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         self.assertEqual(list(providers.SKILLS),
                          sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md")))
 
-    def test_installed_agents_get_the_skills_in_one_command_and_the_plugin_apps_never(self) -> None:
+    def test_installed_agents_get_the_folder_s_skills_in_one_command_and_the_plugin_apps_never(self) -> None:
         home = self.make(("claude", "codex", "npx"))
         self.agents(home, "windsurf", "goose")
         (home.home / ".gemini").mkdir()
@@ -572,9 +687,9 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         self.assertEqual([(step.label, step.action, step.subject, step.note) for step in skills],
                          [("Windsurf", "install", f"the skills, copied into {windsurf} by the Skills CLI", ""),
                           ("Goose", "install", f"the skills, copied into {goose} by the Skills CLI", "in the command above")])
-        self.assertEqual(skills[0].commands, [[home.machine.which("npx"), "-y", "skills@latest", "add",
-                                               "earthtojake/text-to-cad#latest", "-g", "-a", "windsurf", "-a", "goose",
-                                               "-s", "*", "-y", "--copy", "--json"]])
+        # Each agent by name, never --all (every agent, the apps with a plugin among them).
+        self.assertEqual(skills[0].commands, [[home.machine.which("npx"), *NPX, "add", str(home.folder / "skills"), "-g",
+                                               "-a", "windsurf", "-a", "goose", "-s", "*", "-y", "--copy", "--json"]])
         self.assertEqual(skills[0].agents, ["windsurf", "goose"])
 
     def test_without_npx_each_agent_is_left_with_why(self) -> None:
@@ -585,8 +700,8 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
 
     def test_a_loose_copy_of_ours_in_a_plugin_app_s_folder_goes_and_a_skill_only_named_like_ours_stays(self) -> None:
         home = self.make(("claude",))
-        home.set(claude={"plugins": [{"id": "text-to-cad@earthtojake", "version": RELEASE, "scope": "user"}],
-                         "marketplaces": [{"name": "earthtojake", "repo": "earthtojake/text-to-cad", "ref": "latest"}]})
+        home.set(claude={"plugins": [{"id": ID, "version": RELEASE, "scope": "user"}],
+                         "marketplaces": [{"name": providers.MARKETPLACE, "source": "directory", "path": str(home.folder)}]})
         loose = home.skill(home.home / ".claude" / "skills")
         home.skill(home.home / ".claude" / "skills", "dxf", ours=False)
         home.skill(home.home / ".claude" / "skills", "mine")  # says our repository, but no skill of ours
@@ -623,11 +738,34 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
                          [("update", f"the skills in {where}: dxf missing")])
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record, release="1.2.4")],
                          [("update", f"the skills in {where}, from text-to-cad {RELEASE} -> 1.2.4")])
+        # The switch's refresh adds them again for a release, for the agents the receipt names alone.
+        self.assertEqual(actions(providers.refresh_plan(home.detect(), release="1.2.4", folder=home.folder,
+                                                        machine=home.machine, skills=record)), [("windsurf", "update")])
         (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": record}, machine=home.machine)
-        self.assertEqual(step.commands, [[home.machine.which("npx"), "-y", "skills@latest", "remove", "-g", "-a", "windsurf",
+        self.assertEqual(step.commands, [[home.machine.which("npx"), *NPX, "remove", "-g", "-a", "windsurf",
                                           "-s", *sorted(name for name in skipped if name != "dxf"), "-y"]])
         home.apply([step])
         self.assertEqual(providers.ours_in(folder), [])
+
+
+class TheCopy(unittest.TestCase):
+    def test_a_copy_is_real_files_written_again_in_place_and_marked(self) -> None:
+        with temporary_directory(prefix="providers-copy-") as scratch:
+            root = Path(scratch)
+            source = make_plugin_folder(root / "plugin", RELEASE)
+            target = root / "copy"
+            (target / "skills" / "old").mkdir(parents=True)
+            (target / "skills" / "old" / "SKILL.md").write_text("an old skill", encoding="utf-8")
+            if os.name != "nt":
+                (target / "skills" / "cad").mkdir()
+                (target / "skills" / "cad" / "SKILL.md").symlink_to(source / "skills" / "cad" / "SKILL.md")
+            mark = providers.copy_plugin(source, target)
+            self.assertEqual((mark["from"], mark["version"]), (str(source), RELEASE))
+            files = sorted(path.relative_to(target).as_posix() for path in target.rglob("*") if path.is_file())
+            self.assertEqual(files, sorted([*(path.relative_to(source).as_posix() for path in source.rglob("*")
+                                              if path.is_file()), providers.COPY_MARK]))
+            self.assertFalse([path for path in target.rglob("*") if path.is_symlink()])
+            self.assertEqual(providers.copy_mark(target)["from"], str(source))
 
 
 if __name__ == "__main__":

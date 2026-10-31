@@ -21,6 +21,8 @@ class CompactStdoutTests(unittest.TestCase):
     STDOUT_JSON_SOURCES = (
         # The installer's --json: its plan and what it did.
         "packages/texttocad-server/src/cad_server/cli/setup.py",
+        # `cad plugin --json`: the plugin folder written, and the apps' copies brought along.
+        "packages/texttocad-server/src/cad_server/cli/plugin.py",
         # The validators' Result dataclasses.
         "packages/texttocad/src/cad/results.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result

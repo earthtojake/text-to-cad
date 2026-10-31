@@ -18,7 +18,11 @@ however recently written. Nothing is removed without ``--prune``.
 
 It says what the device runs, comparing nothing: the current installation, the release folders on
 disk (``cad_server._internal.releases``), the last update's switch, the engine running and its release,
-and each agent app's copy of the plugin and the release it pins (``cad_server._internal.providers``).
+the plugin folder every app's plugin comes from (``cad_server._internal.plugin``) and each agent app's
+copy of the plugin: the release it pins and where it comes from -- the folder read in place, linked, or
+copied, and when (``cad_server._internal.providers``) --, and the agents the Skills CLI copied the
+skills for. Registering the current installation writes the plugin folder again, so it repairs one
+that is gone.
 
 It makes the CAD kernel environment, the base every build and the engine's own kernel
 processes start from (``cad_server._internal.base``: ``texttocad[kernel]`` at this release),
@@ -115,14 +119,33 @@ def _current() -> list[str]:
     return lines
 
 
-def _apps() -> list[str]:
-    """Each agent app's copy of the plugin and the release it pins, as the app says it
-    (``cad_server._internal.providers``), comparing nothing."""
+def _plugin() -> list[str]:
+    """The plugin folder every app's plugin comes from (``cad_server._internal.plugin``): its release and
+    when it was written, or that there is none."""
     try:
-        from cad_server._internal import providers
+        from cad_server._internal import plugin
+
+        where = plugin.folder()
+        found = plugin.written(where)
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return [f"plugin   unknown ({type(error).__name__}: {error})"]
+    if found is None:
+        return [f"plugin   {_home(str(where))}: not written; `cad setup` writes it, and points the apps at it"]
+    return [f"plugin   {_home(str(where))}: text-to-cad {found['version'] or '?'}, written {found['at']}"]
+
+
+def _apps() -> list[str]:
+    """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
+    read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
+    comparing nothing; and the agents the Skills CLI copied the skills for, as the receipt says."""
+    try:
+        import json
+
+        from cad_server._internal import plugin, providers
+        from cad.engine.places import state_dir
 
         machine = providers.Machine.here()
-        found = providers.detect(machine)
+        found = providers.detect(machine, folder=plugin.folder())
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [f"apps     unknown ({type(error).__name__}: {error})"]
     lines = []
@@ -131,10 +154,21 @@ def _apps() -> list[str]:
             continue
         ours, stores = app.ours(), app.stores()
         if ours is not None:
+            origin = ours.origin(machine)
             lines.append(f"app      {app.label}: " + (f"text-to-cad {ours.version or '?'}" if name == "claude-desktop"
-                                                     else ours.words(machine)))
+                                                     else ours.words(machine)) + (f", {origin}" if origin else ""))
         elif stores:
             lines.append(f"app      {app.label}: {stores[0].words(machine)}, which its store updates")
+    try:
+        receipt = json.loads((Path(state_dir()) / "install-receipt.json").read_text(encoding="utf-8"))
+        skills = receipt.get("skills") if isinstance(receipt, dict) else None
+    except (OSError, ValueError):
+        skills = None
+    for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
+        if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
+            lines.append(f"app      {providers.label(agent)}: the skills of text-to-cad {got.get('release') or '?'}, "
+                         f"copied into {providers.shown(got.get('folder') or '?', machine)} by the Skills CLI"
+                         + (f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""))
     return lines
 
 
@@ -506,8 +540,8 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     if sharing:
         # Whether CAD's apps send usage stats, as `cad telemetry` says it.
         sys.stdout.write(f"  sharing  {sharing}\n")
-    # Each agent app's copy of the plugin, and the release it pins.
-    for line in _apps():
+    # The plugin folder, and each agent app's copy of the plugin: the release it pins and where it comes from.
+    for line in _plugin() + _apps():
         sys.stdout.write(f"  {line}\n")
     return status
 

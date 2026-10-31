@@ -51,6 +51,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
     "update": ("cad_server.cli.update", "install the newest release and set it up in every agent app here"),
     "uninstall": ("cad_server.cli.uninstall", "take text-to-cad out of every agent app here"),
+    # The folder every agent app's plugin comes from, written from the current installation.
+    "plugin": ("cad_server.cli.plugin", "write the agent apps' plugin folder and print its path"),
     # A page session on the installation engine; the launcher exits. (CAD inside an agent host's panels is
     # the shim's own command, ``cad-mcp``: the host starts that stdio peer per session.)
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the installation engine"),
@@ -222,9 +224,9 @@ def _report(error: Exception) -> None:
 
 
 # Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry` and
-# `setup` (`update`), which say it their own way; `uninstall`; and `run`, which is only the python it runs,
-# as the `cad` command's `run` is.
-_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run"})
+# `setup` (`update`), which say it their own way; `uninstall`; `run`, which is only the python it runs,
+# as the `cad` command's `run` is; and `plugin`, which a switch runs with no one to read it.
+_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin"})
 
 
 # The told commands that register this installation (``cad_server._internal.installations.setup``).

@@ -168,6 +168,27 @@ class CurrentTests(Fixture):
             installations.setup("3.0.0-dev.1", make_current=True)  # a development install of a checkout
             self.assertEqual(installations.current()["version"], "3.0.0-dev.1")
 
+    def test_the_current_release_writes_the_plugin_folder_as_it_registers_and_nothing_else_does(self) -> None:
+        from cad_server._internal import plugin
+
+        state = {"CAD_STATE_DIR": str(self.root / "state"), installations.DIR_ENV: str(self.root / "bin"),
+                 installations.NAME_ENV: ""}
+        with mock.patch.dict("os.environ", state), mock.patch.object(plugin, "write") as write, \
+                mock.patch.object(installations, "editable", return_value=False), \
+                mock.patch.object(installations, "targets", return_value=self.environment("release")):
+            installations.setup("1.0.0")  # the device's first: current, a release's, so the folder is written
+            self.assertEqual(installations.current()["version"], "1.0.0")
+            write.assert_called_once_with()
+            with mock.patch.object(installations, "targets", return_value=self.environment("other")):
+                installations.setup("2.0.0")  # registered, not current: the folder stays the current one's
+            self.assertEqual(write.call_count, 1)
+            with mock.patch.object(installations, "editable", return_value=True):
+                self.assertFalse(installations.write_plugin(), "a source tree writes it only when asked")
+            with mock.patch.dict("os.environ", {installations.NAME_ENV: "1.0.0-dev.1"}):
+                self.assertFalse(installations.write_plugin(), "a development install writes it only when asked")
+            write.side_effect = plugin.Missing("no plugin")
+            self.assertFalse(installations.write_plugin(), "never a failure of the registration it rides on")
+
     def test_a_folder_it_cannot_write_is_skipped_silently(self) -> None:
 
         blocked = self.root / "a-file"
