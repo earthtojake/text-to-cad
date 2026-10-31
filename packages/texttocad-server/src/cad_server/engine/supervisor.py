@@ -53,10 +53,12 @@ and serves that key from then on; another stands in the taker's environment. One
 binding than the latest caller's is replaced by one of the caller's, now or once it is ready.
 
 **The protocol** (``cad.engine.frames``): requests are one JSON object per line on the child's
-stdin, a request's payload ``bytes`` after its line; the child answers on its original stdout in
-frames. Its first is ``{"ready": pid, "rssMb"}``. Then, for each request, its ``log``, ``notice``
-and ``progress`` frames, which go to whoever asked (a progress frame to the requests following it
-and to ``on_progress`` too), and one answer, which may carry ``rssMb`` and ``retire``. A frame of
+stdin, a request's payload ``bytes`` after its line, each carrying the memory cap the child is held
+to (``rssCapMb``, None for none: the daemon's, never the caller's environment's); the child answers
+on its original stdout in frames. Its first is ``{"ready": pid, "rssMb"}``. Then, for each request,
+its ``log``, ``notice`` and ``progress`` frames, which go to whoever asked (a progress frame to the
+requests following it and to ``on_progress`` too), and one answer, which may carry ``rssMb`` and
+``retire``. A frame of
 one of its service's ``events`` goes to that event's hook (``on_event``), never to a request; a
 side request's answer (``question``) to its waiter, by its id. Lines that are not JSON objects
 are skipped. Whatever it prints goes to its stderr. It exits when its stdin closes; ``stop`` closes
@@ -207,11 +209,15 @@ class Process:
 
     def __init__(self, service: Service, key: str, label: str, environment: dict[str, str], popen: Any,
                  on_progress: Callable[["Process", dict[str, Any]], None] | None = None,
-                 on_event: dict[str, Callable[["Process", Any, bytes], None]] | None = None) -> None:
+                 on_event: dict[str, Callable[["Process", Any, bytes], None]] | None = None,
+                 memory: Callable[[], float | None] | None = None) -> None:
         self.service, self.key, self.label, self.environment = service, key, label, environment
         self.popen = popen
         self.on_progress = on_progress or (lambda _process, _frame: None)
         self.on_event = dict(on_event or {})
+        # The memory cap of the supervisor that started it, which each request carries (``rssCapMb``),
+        # so a process retires itself by the cap the daemon holds it to; None: started by no supervisor.
+        self.memory = memory
         self.lock = threading.Lock()  # one request at a time
         self.writing = threading.Lock()  # one frame at a time on its stdin
         self.answers: "queue.Queue[dict[str, Any] | None]" = queue.Queue()
@@ -244,10 +250,12 @@ class Process:
     @classmethod
     def start(cls, service: Service, key: str, label: str, environment: dict[str, str], cwd: str | None = None, *,
               standby: bool = False, on_progress: Callable[["Process", dict[str, Any]], None] | None = None,
-              on_event: dict[str, Callable[["Process", Any, bytes], None]] | None = None) -> "Process":
+              on_event: dict[str, Callable[["Process", Any, bytes], None]] | None = None,
+              memory: Callable[[], float | None] | None = None) -> "Process":
         """A process of ``service`` started for ``key`` (``label`` as the lease gave it) in
         ``environment``, once it has said it is ready; ``standby``: its service's standby, which
-        never makes the environment it runs in. ``Gone`` when it does not start."""
+        never makes the environment it runs in; ``memory``: the cap its requests carry. ``Gone`` when
+        it does not start."""
         if service.environment == "kernel":
             found = places.kernel(make=not standby)
             if found is None:
@@ -274,7 +282,7 @@ class Process:
             argv.extend(service.standby.args)
         popen = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                  env=env, cwd=_home(service, label, cwd), **places.windowless())
-        process = cls(service, key, label, environment, popen, on_progress, on_event)
+        process = cls(service, key, label, environment, popen, on_progress, on_event, memory)
         seconds = service.standby.ready_seconds if standby and service.standby is not None else service.ready_seconds
         process._ready(seconds)
         return process
@@ -407,9 +415,12 @@ class Process:
                 payload: bytes = b"") -> dict[str, Any]:
         """One request (``payload`` after its line) and its answer, the payload it carried as its
         ``payload``; what the request says on the way -- its log, notices and progress -- to ``sink``.
-        The answer's ``rssMb`` is the process's memory from then on, and its ``retire`` retires it
+        The request carries its supervisor's memory cap (``rssCapMb``), which the process retires itself
+        by; the answer's ``rssMb`` is the process's memory from then on, and its ``retire`` retires it
         once it is let go. ``Gone`` when the process is gone: ``during`` when it exited while the
         request waited."""
+        if self.memory is not None:
+            message = {**message, "rssCapMb": self.memory()}
         with self.lock:
             if self.service.stderr == "relay":
                 with self.tail_lock:
@@ -562,8 +573,9 @@ class Supervisor:
 
     def _launch(self, service: Service, key: str, label: str, environment: dict[str, str], cwd: str | None,
                 standby: bool) -> Process:
+        # ``memory`` looked up at each request: a test replaces the supervisor's.
         return Process.start(service, key, label, environment, cwd, standby=standby, on_progress=self.on_progress,
-                             on_event=self.on_event)
+                             on_event=self.on_event, memory=lambda: self.memory())
 
     def _key(self, service: Service, key: str) -> str:
         return os.path.normcase(key) if service.key == "path" else key

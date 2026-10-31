@@ -28,10 +28,11 @@ element never waits on a build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
-all its processes to together: ``Supervisor.shed``) is retired: its reports say so (``retired``),
-its answer says ``retire``, and the daemon, once it has taken the worker's documents from it
-(``models.Models.drain``), closes its stdin. The daemon starts a fresh one for the next build, a restart: a model whose
-xbf holds its closure unchanged is taken in seconds.
+all its processes to together: ``Supervisor.shed``; each request carries the daemon's,
+``rssCapMb``, so a run's own environment never moves it: ``request_cap``) is retired: its reports
+say so (``retired``), its answer says ``retire``, and the daemon, once it has taken the worker's
+documents from it (``models.Models.drain``), closes its stdin. The daemon starts a fresh one for
+the next build, a restart: a model whose xbf holds its closure unchanged is taken in seconds.
 
 A request may carry bytes after its line (``{"bytes": N}``, the frame's form): an export of a
 document the daemon holds and no worker does (``{"document", "name"}``: the whole document's xbf
@@ -190,12 +191,17 @@ def rss_cap_mb() -> float | None:
     return None if physical is None else max(physical / 4, 2048.0)
 
 
-def retirement(reports: list[dict[str, Any]], resident: float | None = None) -> bool:
-    """After a build: this worker's resident memory (``resident``, else measured now) against its
-    cap. Over it, each report says so (``retired``) and the worker is retired: the daemon drains
-    and stops it once it has answered, and the next build is a fresh worker's -- a restart, which
-    takes a model's xbf when nothing changed."""
-    resident, cap = resident if resident is not None else resident_mb(), rss_cap_mb()
+def request_cap(request: dict[str, Any]) -> float | None:
+    """The memory cap a request holds this process to: the daemon's, which each request of its
+    carries (``rssCapMb``; None: no cap); a request with none, this process's own (``rss_cap_mb``)."""
+    return request["rssCapMb"] if "rssCapMb" in request else rss_cap_mb()
+
+
+def retirement(reports: list[dict[str, Any]], resident: float | None, cap: float | None) -> bool:
+    """After a build: this worker's resident memory (``resident``) against its cap (``cap``,
+    ``request_cap``). Over it, each report says so (``retired``) and the worker is retired: the
+    daemon drains and stops it once it has answered, and the next build is a fresh worker's -- a
+    restart, which takes a model's xbf when nothing changed."""
     if resident is None or cap is None or resident <= cap:
         return False
     for report in reports:
@@ -204,12 +210,12 @@ def retirement(reports: list[dict[str, Any]], resident: float | None = None) -> 
     return True
 
 
-def resident_after_build() -> float | None:
+def resident_after_build(cap: float | None) -> float | None:
     """This worker's resident memory after a build (``resident_mb``), measured again after a
-    collection where it is over the cap: the cycles the build and the uncollected ones before it
-    left are not what the worker holds. Under the cap nothing is collected here: that is paid
-    once the worker is idle (the module docstring)."""
-    resident, cap = resident_mb(), rss_cap_mb()
+    collection where it is over its cap (``cap``): the cycles the build and the uncollected ones
+    before it left are not what the worker holds. Under the cap nothing is collected here: that is
+    paid once the worker is idle (the module docstring)."""
+    resident = resident_mb()
     if resident is not None and cap is not None and resident > cap:
         gc.collect()
         resident = resident_mb()
@@ -598,9 +604,10 @@ def main() -> int:
                     with building(said):
                         done = _export(request, lambda text: send({"id": ident, "log": text}))
                     said.attach(done.get("reports") or [])
-                    resident = resident_after_build()
+                    cap = request_cap(request)
+                    resident = resident_after_build(cap)
                     # Said in its reports, and to the daemon (``retire``), which retires it.
-                    retire = bool(done.get("reports")) and retirement(done["reports"], resident)
+                    retire = bool(done.get("reports")) and retirement(done["reports"], resident, cap)
                     send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
                           **({"retire": True} if retire else {})})
                 else:
@@ -638,9 +645,10 @@ def main() -> int:
                                 verify=bool(request.get("verify")), profile=bool(request.get("profile")),
                                 run=request.get("run"), cache=request.get("cache"))
             said.attach(reports)
-            resident = resident_after_build()
+            cap = request_cap(request)
+            resident = resident_after_build(cap)
             # Said in its reports, and to the daemon (``retire``), which drains it, then retires it.
-            retire = retirement(reports, resident)
+            retire = retirement(reports, resident, cap)
             # Its memory now, which the daemon's status shows (``rssMb``).
             send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
                   **({"retire": True} if retire else {})})

@@ -226,6 +226,22 @@ class WorkerLoopTest(unittest.TestCase):
         self.ask(ident, functions, run)
         return ident
 
+    def test_a_worker_retires_by_the_cap_its_request_carries_not_its_own_environment_s(self) -> None:
+        answers: dict = {}
+        for ident, cap in ((1, 1), (2, None)):  # 1 MB, then none: the daemon's (``rssCapMb``)
+            request = {"id": ident, "op": "build", "script": str(self.script), "functions": ["block"],
+                       "cwd": str(self.folder), "env": {**os.environ, "CAD_ENGINE_WORKER_RSS_MB": "100000"},
+                       "rssCapMb": cap}
+            self.worker.stdin.write((json.dumps(request) + "\n").encode())
+            self.worker.stdin.flush()
+            while ident not in answers:
+                frame = self.next()
+                if frame.get("id") == ident and ("done" in frame or "failed" in frame):
+                    answers[ident] = frame
+        self.assertTrue(answers[1].get("retire"), answers[1])
+        self.assertIn("over its 1 MB cap", answers[1]["done"][0]["retired"], "the run's 100000 MB is not the cap")
+        self.assertNotIn("retire", answers[2], "no cap at all")
+
 
 class KernelNoticeTest(unittest.TestCase):
     """A build on a worker whose kernel is not loaded loads it first, and a load that outlasts
@@ -1618,12 +1634,12 @@ if __name__ == '__main__':
                          ["XBF/block.xbf", "block.py"])
 
     def test_a_worker_over_its_memory_cap_is_retired_and_the_next_build_restarts(self) -> None:
-        capped = {**self.env, "CAD_ENGINE_WORKER_RSS_MB": "1"}
+        self.own(CAD_ENGINE_WORKER_RSS_MB="1")  # the engine's cap, which each request carries to its worker
         self.script.write_text(textwrap.dedent(MODEL.format(size=10)), encoding="utf-8")
-        report = self.built("block", env=capped)
+        report = self.built("block")
         self.assertIn("over its 1 MB cap", report["retired"])
         # The next build is a fresh worker's: a restart, which takes the file it wrote.
-        again = self.run_script("block.py", env=capped)
+        again = self.run_script("block.py")
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertTrue(again.stdout.startswith("took block.py::block cold"), again.stdout)
         self.assertIn("retired: the worker held", again.stdout)

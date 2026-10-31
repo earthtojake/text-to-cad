@@ -273,6 +273,8 @@ while (found := requests.get()) is not None:
         send({"done": op})
     elif op == "retire":
         send({"done": op, "retire": True})
+    elif op == "cap":
+        send({"done": request.get("rssCapMb", "none given")})
     elif op == "die":
         sys.stderr.write("dying words\n")
         sys.stderr.flush()
@@ -340,6 +342,18 @@ class ProtocolTest(unittest.TestCase):
         self.assertNotEqual(again.pid, process.pid)
         self.assertEqual(again.request({"op": "echo"}), {"done": "echo"})
         supervisor.release(again)
+
+    def test_each_request_carries_the_supervisor_s_memory_cap(self) -> None:
+        cap = [1234.0]
+        supervisor = Supervisor(1, (self.service(),), memory=lambda: cap[0])
+        self.addCleanup(supervisor.stop)
+        process = supervisor.lease("child", "doc", {})
+        self.assertEqual(process.request({"op": "cap"}), {"done": 1234.0})
+        cap[0] = None
+        self.assertEqual(process.request({"op": "cap"}), {"done": None}, "no cap, said as none")
+        supervisor.release(process)
+        self.assertEqual(self.start(self.service()).request({"op": "cap"}), {"done": "none given"},
+                         "a process no supervisor started is told none: its own environment's")
 
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:
         supervisor = Supervisor(1, (self.service(),))

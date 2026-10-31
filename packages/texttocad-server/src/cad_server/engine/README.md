@@ -734,7 +734,9 @@ count toward neither cap (12 processes and 3.2 GB measured with the meshing pool
 machine, below; 2.3 GB parsing a 354 MB STEP).
 
 **The protocol** (`cad.engine.frames`), every service's: requests are one JSON object per line on the
-child's stdin, a request's payload that many `bytes` after its line; the child answers on a handle of
+child's stdin, a request's payload that many `bytes` after its line, each carrying the memory cap the
+daemon holds its processes to (`rssCapMb`), which a child over it after a request retires itself by
+-- never its caller's environment's, which a worker adopts; the child answers on a handle of
 its own -- its original stdout -- in frames, a JSON object on one line and that many `bytes` after it,
 and says what it prints on its stderr, its log. Its first frame is `{"ready": pid, "rssMb"}`; then,
 for each request, its `log`, `notice` and `progress` frames, which go to whoever asked, and one

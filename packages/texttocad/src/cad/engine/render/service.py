@@ -511,7 +511,7 @@ def main() -> int:
     from cad.engine.formats import FormatError
     from cad.engine.render.context import pool
     from cad.engine.snapshot import SnapshotRefused, Still
-    from cad.engine.worker import resident_mb, rss_cap_mb
+    from cad.engine.worker import request_cap, resident_mb
 
     frames.write(protocol, {"ready": os.getpid()})
     # Collected between requests alone: nothing of a scene is let go of while one draws.
@@ -556,7 +556,7 @@ def main() -> int:
             with pool():
                 data, report = held.draw(Still.from_json(request["still"]))
             drawn += 1
-            resident, cap = resident_mb(), rss_cap_mb()
+            resident, cap = resident_mb(), request_cap(request)  # the daemon's cap, which the request carries
             measured = None if resident is None else round(resident)
             report["process"] = {"pid": os.getpid(), "frames": drawn, "rssMb": measured}
             retire = resident is not None and cap is not None and resident > cap
