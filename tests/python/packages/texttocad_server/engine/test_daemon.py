@@ -300,13 +300,14 @@ class ClientGoneTest(unittest.TestCase):
         import threading
         from types import SimpleNamespace
 
-        from cad_server.engine.daemon import Worker
+        from cad_server.engine.services import WORKER
+        from cad_server.engine.supervisor import Process
 
-        worker = object.__new__(Worker)  # its pipes stood in for: no process
-        worker.process = SimpleNamespace(stdout=io.BytesIO(stdout), stderr=io.BytesIO(stderr))
+        worker = object.__new__(Process)  # its pipes stood in for: no process
+        worker.service, worker.popen = WORKER, SimpleNamespace(stdout=io.BytesIO(stdout), stderr=io.BytesIO(stderr))
         worker.answers, worker.asked, worker.progress = queue.Queue(), {}, None
-        worker.followers = []
-        worker.stderr_tail, worker.stderr_lock = "", threading.Lock()
+        worker.followers, worker.on_event = [], {}
+        worker.tail, worker.said, worker.tail_lock = "", [], threading.Lock()
         worker.on_progress = lambda *_args: None
 
         def gone(_message: dict) -> None:
@@ -323,13 +324,13 @@ class ClientGoneTest(unittest.TestCase):
         self.assertIsNone(worker.answers.get_nowait(), "the worker's end, after its answer")
         self.assertIsNone(worker.sink, "the gone client's sink dropped")
         self.assertEqual(worker.progress, {"kind": "build", "stage": "names"})
-        self.assertTrue(worker.process.stdout.closed, "the reader closes its pipe at EOF")
+        self.assertTrue(worker.popen.stdout.closed, "the reader closes its pipe at EOF")
 
     def test_its_stderr_is_read_to_the_end_when_its_client_is_gone(self) -> None:
         worker = self.worker(b"", b"a line the model printed\nanother\n")
         worker._stderr()
         self.assertIsNone(worker.sink)
-        self.assertTrue(worker.process.stderr.closed, "the reader closes its pipe at EOF")
+        self.assertTrue(worker.popen.stderr.closed, "the reader closes its pipe at EOF")
 
 
 class WorkerFailureTest(unittest.TestCase):
@@ -340,12 +341,14 @@ class WorkerFailureTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
 
     def test_startup_failure_keeps_the_interpreters_diagnostic(self) -> None:
-        from cad_server.engine.daemon import Worker, WorkerGone
+        from cad_server.engine.services import WORKER
+        from cad_server.engine.supervisor import Gone, Process
 
         # A real interpreter startup failure, before worker.main can send ready or any client
         # has installed a log sink. The missing standard library used to be silently discarded.
-        with self.assertRaises(WorkerGone) as caught:
-            Worker(str(self.folder / "model.py"), {**os.environ, "PYTHONHOME": str(self.folder)})
+        script = str(self.folder / "model.py")
+        with self.assertRaises(Gone) as caught:
+            Process.start(WORKER, script, script, {**os.environ, "PYTHONHOME": str(self.folder)})
         self.assertIn("did not start", str(caught.exception))
         self.assertIn("encodings", str(caught.exception))
 
@@ -364,9 +367,10 @@ class WorkerFailureTest(unittest.TestCase):
     def test_where_a_build_was_is_said_before_the_stderr_tail(self) -> None:
         from types import SimpleNamespace
 
-        from cad_server.engine.daemon import WORKER_STDERR, Daemon, WorkerGone
+        from cad_server.engine.daemon import WORKER_STDERR, Daemon
+        from cad_server.engine.supervisor import Gone
 
-        error = WorkerGone(f"the worker for m.py exited (-11) during the build{WORKER_STDERR}Fatal Python error")
+        error = Gone(f"the worker for m.py exited (-11) during the build{WORKER_STDERR}Fatal Python error")
         said = Daemon._where(error, SimpleNamespace(progress={"job": "m.py::m", "stage": "body"}))
         head, _, tail = said.partition(WORKER_STDERR)
         self.assertTrue(head.startswith("the worker for m.py exited (-11) during the build, at m.py::m: "), said)
@@ -392,8 +396,10 @@ class WorkerFailureTest(unittest.TestCase):
 
     def test_failed_worker_keeps_a_bounded_fault_stack_and_releases_its_slot(self) -> None:
         from cad_server.engine import daemon
+        from cad_server.engine.services import WORKER
+        from cad_server.engine.supervisor import Gone, Supervisor
 
-        # Stand in for the kernel, leaving Worker/Pool and their pipes real. dump_traceback
+        # Stand in for the kernel, leaving Process/Supervisor and their pipes real. dump_traceback
         # exercises the same stderr output as a native fault without crashing the CI machine.
         child = '''import faulthandler, json, os, sys
 print(json.dumps({"ready": os.getpid()}), flush=True)
@@ -412,12 +418,12 @@ for line in sys.stdin:
             return popen([*command[:at], "-c", child], **kwargs)
 
         with mock.patch.object(daemon.subprocess, "Popen", side_effect=start):
-            pool = daemon.Pool(cap=1, start=daemon.Worker)
+            pool = Supervisor(1, (WORKER,))
             script, environment = str(self.folder / "model.py"), dict(os.environ)
-            worker = pool.lease(script, environment)
+            worker = pool.lease("worker", script, environment)
             self.addCleanup(worker.stop)
-            with self.assertRaises(daemon.WorkerGone) as caught:
-                worker.build({"op": "crash"}, lambda _frame: None)
+            with self.assertRaises(Gone) as caught:
+                worker.request({"op": "crash"}, lambda _frame: None)
             detail = str(caught.exception)
             self.assertIn("exited (1) during the build", detail)
             self.assertIn("fault handler enabled: True", detail)
@@ -431,10 +437,10 @@ for line in sys.stdin:
             self.assertEqual(_error(EngineError(detail), [], facts)["frames"], [])
             self.assertEqual(facts, {"died": 1})
             pool.release(worker)
-            replacement = pool.lease(script, environment)
+            replacement = pool.lease("worker", script, environment)
             self.addCleanup(replacement.stop)
             self.assertNotEqual(replacement.pid, worker.pid)
-            self.assertEqual(replacement.build({"op": "ok"}, lambda _frame: None), {"done": []})
+            self.assertEqual(replacement.request({"op": "ok"}, lambda _frame: None), {"done": []})
             pool.release(replacement)
 
 
@@ -748,12 +754,14 @@ class NoTimerTest(unittest.TestCase):
 
         engine = daemon.Daemon(cap=1)
         stopped: list[str] = []
-        worker = types.SimpleNamespace(key="/w/block.py", script="/w/block.py", pid=1, leased=False, rss=100.0,
-                                       used=time.monotonic(), alive=lambda: True, stop=lambda: stopped.append("worker"))
-        engine.pool.live[worker.key] = worker
+        engine.supervisor.launch = lambda service, key, label, environment, cwd, standby: types.SimpleNamespace(
+            service=service, key=key, label=label, environment=environment, pid=1, leased=False, retired=False,
+            rss=100.0, used=time.monotonic(), alive=lambda: True, stop=lambda: stopped.append("worker"))
+        worker = engine.lease("/w/block.py", {})
+        engine.release(worker)
         with mock.patch("time.monotonic", return_value=worker.used + 24 * 3600):
             engine.tend()  # no holder, nothing to do, a day on
-        self.assertEqual((stopped, list(engine.pool.live)), ([], [worker.key]), "its idle worker stays")
+        self.assertEqual((stopped, engine.supervisor.processes("worker")), ([], [worker]), "its idle worker stays")
         self.assertFalse(engine.stopping.is_set(), "the engine stays")
         sent: list[dict] = []
         engine.handle({"op": "stop"}, sent.append)
@@ -787,7 +795,7 @@ class BusyTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         engine = daemon.Daemon(cap=1)
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         binding, release = threading.Event(), threading.Event()
 
         def bind(*_args, **_kwargs):
@@ -822,16 +830,16 @@ class StandbyStartTest(unittest.TestCase):
         from cad.engine import places
 
         engine = daemon.Daemon()
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         asked: list[dict] = []
         root = places.engine_root()
-        with mock.patch.object(engine.pool, "stand", side_effect=asked.append), \
+        with mock.patch.object(engine.supervisor, "stand", side_effect=lambda *args: asked.append(args)), \
                 mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join((root, "/mine")),
                                              "CAD_ENGINE_STANDBY": "1"}):
             engine.stand()
-        self.assertEqual(engine.pool.spare, engine._spare)
-        self.assertEqual(len(asked), 1)
-        self.assertEqual(asked[0]["PYTHONPATH"], "/mine", "without the engine's folder its starter put first")
+        self.assertTrue(engine.supervisor.standbys["worker"].enabled)
+        self.assertEqual([service for service, _environment in asked], ["worker"])
+        self.assertEqual(asked[0][1]["PYTHONPATH"], "/mine", "without the engine's folder its starter put first")
 
     def test_with_the_switch_off_none_stands_by_and_none_replaces_one(self) -> None:
         from unittest import mock
@@ -839,12 +847,13 @@ class StandbyStartTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         engine = daemon.Daemon()
-        self.addCleanup(engine.pool.stop)
-        with mock.patch.object(engine.pool, "stand") as stand, \
+        self.addCleanup(engine.supervisor.stop)
+        with mock.patch.object(engine.supervisor, "stand") as stand, \
                 mock.patch.dict(os.environ, {"CAD_ENGINE_STANDBY": "0"}):
             engine.stand()
         stand.assert_not_called()
-        self.assertIsNone(engine.pool.spare, "no standby to start after an adoption or a fresh worker either")
+        self.assertFalse(engine.supervisor.standbys["worker"].enabled,
+                         "no standby to start after an adoption or a fresh worker either")
 
 
 class DaemonEnvironmentTest(unittest.TestCase):
@@ -875,7 +884,8 @@ class DaemonEnvironmentTest(unittest.TestCase):
 
     def test_the_daemon_and_its_workers_cache_bytecode_in_the_engine_s_folder_alone(self) -> None:
         from cad.engine import client, places
-        from cad_server.engine import daemon
+        from cad_server.engine.services import WORKER
+        from cad_server.engine.supervisor import Process
 
         cache = Path(tempfile.mkdtemp(prefix="engine-bytecode-")).resolve()
         self.addCleanup(shutil.rmtree, cache, True)
@@ -899,7 +909,8 @@ class DaemonEnvironmentTest(unittest.TestCase):
                     with self.assertRaises(Captured):
                         client._start()
                 with mock.patch.dict(os.environ, found["daemon"], clear=True), self.assertRaises(Captured):
-                    daemon.Worker(str(cache / "model.py"), dict(given))  # in the daemon, for a run in ``given``
+                    script = str(cache / "model.py")
+                    Process.start(WORKER, script, script, dict(given))  # in the daemon, for a run in ``given``
             return found
 
         ours = str(cache / places.PYCACHE / places.bytecode_tag())

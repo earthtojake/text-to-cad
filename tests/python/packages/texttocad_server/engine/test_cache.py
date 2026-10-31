@@ -538,19 +538,21 @@ class CacheTest(unittest.TestCase):
         self.assertNotEqual(self.file(ident).read_bytes(), before, "the new build's document")
 
     def test_a_build_arriving_during_a_save_waits_for_it_and_succeeds(self) -> None:
-        from cad_server.engine import daemon
+        from cad_server.engine.services import WORKER
+        from cad_server.engine.supervisor import Process
         from cad.engine import document
 
         ident = self.write("cube")
         script = str(self.project / "cube.py")
         saved: list[tuple[dict, bytes]] = []
-        worker = daemon.Worker(script, {**os.environ, "PYTHONPATH": str(SRC), "PYTHONPYCACHEPREFIX": self.bytecode},
-                               on_saved=lambda _worker, header, payload: saved.append((header, payload)))
+        worker = Process.start(WORKER, script, script,
+                               {**os.environ, "PYTHONPATH": str(SRC), "PYTHONPYCACHEPREFIX": self.bytecode},
+                               on_event={"saved": lambda _worker, header, payload: saved.append((header, payload))})
         self.addCleanup(worker.stop)
         order = {"id": 1, "op": "build", "script": script, "functions": None, "cwd": str(self.project)}
-        self.assertIn("done", worker.build(order, lambda _message: None))
-        worker.save(ident, script, "cube", "g1")
-        answer = worker.build({**order, "id": 2}, lambda _message: None)  # queued behind the save
+        self.assertIn("done", worker.request(order, lambda _message: None))
+        worker.tell({"op": "save", "ident": ident, "script": script, "name": "cube", "generation": "g1"})
+        answer = worker.request({**order, "id": 2}, lambda _message: None)  # queued behind the save
         self.assertTrue(all(report["ok"] for report in answer["done"]), answer)
         (header, payload), = await_(lambda: saved, "the save's answer")
         self.assertEqual((header["ident"], header["generation"], header.get("error")), (ident, "g1", None))

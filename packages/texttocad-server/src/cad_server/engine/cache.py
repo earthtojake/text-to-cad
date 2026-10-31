@@ -14,9 +14,9 @@ When it is written, never on the run path:
 
 - **Idle.** Each document has a timer that every build and every read of it sets again
   (``Cache.touch``). Once it has been idle ``idle()`` seconds the daemon asks the worker that holds
-  it to save it (``Worker.save``), which that worker does only when no request waits for it (a
-  build arriving meanwhile waits for the one serialisation). A document no worker holds is written
-  from the bytes the daemon holds.
+  it to save it (a ``save``, ``supervisor.Process.tell``), which that worker does only when no
+  request waits for it (a build arriving meanwhile waits for the one serialisation), answering with
+  a ``saved`` event. A document no worker holds is written from the bytes the daemon holds.
 - **At retirement.** The drain (``models.Models.drain``) hands the bytes it takes to the cache.
 - **At shutdown** (``cad stop``, a terminate): the documents whose timer has not fired yet --
   built or read in the last idle window -- are saved, best effort, within ``SHUTDOWN_SECONDS``.
@@ -238,7 +238,7 @@ class Cache:
             self.lock.notify_all()
 
     def saved(self, worker: Any, header: dict[str, Any], payload: bytes) -> None:
-        """A worker's answer to a save (``Worker.save``): written when it is the generation the
+        """A worker's answer to a save (its ``saved`` event): written when it is the generation the
         daemon holds of that worker, else dropped (a build since made a newer one)."""
         ident = str(header.get("ident"))
         if header.get("error"):
@@ -299,7 +299,9 @@ class Cache:
             with self.lock:
                 self.saving[ident] = worker
             try:
-                worker.save(ident, row["source"]["script"], row["source"]["name"], row["version"])
+                # Answered by a ``saved`` event when no other request waits for the worker (``saved``).
+                worker.tell({"op": "save", "ident": ident, "script": row["source"]["script"],
+                             "name": row["source"]["name"], "generation": row["version"]})
             except (OSError, ValueError) as error:  # its pipe closed: it is going, and is drained first
                 with self.lock:
                     self.saving.pop(ident, None)

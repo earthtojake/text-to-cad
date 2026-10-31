@@ -7,14 +7,15 @@ environment, ``adopt``). The answers are frames: a JSON object on one line and, 
 ``bytes``, exactly that many bytes after it. A build is answered by ``{"id", "log"}`` frames while it
 builds and ``{"id", "progress"}`` frames saying where it is (``progress.py``: each stage, and each
 body a build runs), then one ``{"id", "done", "rssMb"}`` (the build's reports, and the worker's
-resident memory after it, in MiB) or ``{"id", "failed"}`` (with ``kind`` where it is a refusal:
-``refusal``). A file the build writes is sent nowhere: a page serving it as a file reads it from
-the disk, as it reads any file another program wrote. What the
-model prints goes to the worker's stderr, which the daemon passes on. The worker exits when
-its stdin closes: the daemon's pool closes it to retire the worker (``daemon.Pool``). Its first
-frame, ``{"ready": pid, "rssMb"}``, says it is up and its resident memory then.
+resident memory after it, in MiB; ``"retire": true`` too when it is over its cap, ``retirement``)
+or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``). A file the build writes
+is sent nowhere: a page serving it as a file reads it from the disk, as it reads any file another
+program wrote. What the model prints goes to the worker's stderr, which the daemon passes on. The
+worker exits when its stdin closes: the daemon's supervisor closes it to retire the worker
+(``cad_server.engine.supervisor``, which speaks this protocol to every process the daemon starts).
+Its first frame, ``{"ready": pid, "rssMb"}``, says it is up and its resident memory then.
 
-A worker started with ``--standby`` is the pool's standby: it loads the kernel before it says it is
+A worker started with ``--standby`` is the daemon's standby: it loads the kernel before it says it is
 ready (``load_kernel``) and builds nothing until a build takes it, when the daemon sends
 ``{"op": "adopt", "home"}`` -- the folder a fresh worker of that script would have started in, where
 a request with no ``cwd`` runs -- and the build after it; it answers nothing to the adoption.
@@ -27,9 +28,9 @@ element never waits on a build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
-all its workers to together: ``daemon.Pool.shed``) is retired: its reports say so (``retired``),
-and the daemon, once it has taken the worker's documents from it (``models.Models.drain``),
-closes its stdin. The daemon starts a fresh one for the next build, a restart: a model whose
+all its processes to together: ``Supervisor.shed``) is retired: its reports say so (``retired``),
+its answer says ``retire``, and the daemon, once it has taken the worker's documents from it
+(``models.Models.drain``), closes its stdin. The daemon starts a fresh one for the next build, a restart: a model whose
 xbf holds its closure unchanged is taken in seconds.
 
 A request may carry bytes after its line (``{"bytes": N}``, the frame's form): an export of a
@@ -174,7 +175,7 @@ def _physical_mb() -> float | None:
 
 def rss_cap_mb() -> float | None:
     """The resident memory the daemon's workers, its standby and its render processes may hold
-    together (``daemon.Pool.shed``), and so one of them alone after a build or a frame:
+    together (``Supervisor.shed``), and so one of them alone after a build or a frame:
     ``CAD_ENGINE_WORKER_RSS_MB`` (``0`` for no cap), else a quarter of the machine's memory, at
     least 2 GiB. None: no cap."""
     given = os.environ.get("CAD_ENGINE_WORKER_RSS_MB", "").strip()
@@ -598,9 +599,10 @@ def main() -> int:
                         done = _export(request, lambda text: send({"id": ident, "log": text}))
                     said.attach(done.get("reports") or [])
                     resident = resident_after_build()
-                    if done.get("reports"):
-                        retirement(done["reports"], resident)  # said in its reports; the daemon retires it
-                    send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident)})
+                    # Said in its reports, and to the daemon (``retire``), which retires it.
+                    retire = bool(done.get("reports")) and retirement(done["reports"], resident)
+                    send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
+                          **({"retire": True} if retire else {})})
                 else:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
@@ -637,9 +639,11 @@ def main() -> int:
                                 run=request.get("run"), cache=request.get("cache"))
             said.attach(reports)
             resident = resident_after_build()
-            retirement(reports, resident)  # said in its reports: the daemon drains it, then retires it
+            # Said in its reports, and to the daemon (``retire``), which drains it, then retires it.
+            retire = retirement(reports, resident)
             # Its memory now, which the daemon's status shows (``rssMb``).
-            send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident)})
+            send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
+                  **({"retire": True} if retire else {})})
         except BuildError as error:
             send({"id": ident, "failed": str(error)})
         except BaseException as error:  # noqa: BLE001 - the worker answers every request

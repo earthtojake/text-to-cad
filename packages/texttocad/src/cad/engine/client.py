@@ -31,7 +31,7 @@ on_started: Callable[[], None] | None = None
 # app's shell sandbox, in its default mode, with its network disabled). A sandbox none names is found by the
 # daemon that cannot listen (``places.failure_path``), as fast.
 SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"),)
-# The words a worker's failure carries its stderr's tail under (``daemon.Worker``): local detail, which
+# The words a worker's failure carries its stderr's tail under (``supervisor.Process``): local detail, which
 # no observer's facts carry (``api._error``), even when a startup failure or a broken pipe has no exit
 # status to tell it from a Python traceback.
 WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"

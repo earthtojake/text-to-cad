@@ -1045,7 +1045,7 @@ _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".st
              ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
-_DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``daemon.Worker.build``)
+_DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``services.WORKER``)
 _TRACEBACK = "Traceback (most recent call last):"
 # The engine's refusals, by module and name: a verb that raised one has imported its module already.
 _REFUSALS = (("cad.engine.build", "BuildError"), ("cad.engine.export", "ExportRefused"),

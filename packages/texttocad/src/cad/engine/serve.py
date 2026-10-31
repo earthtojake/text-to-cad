@@ -1006,7 +1006,8 @@ class Server:
         self.trim_lock = threading.Lock()
         self.evictions = 0
         self.pressure = Pressure()
-        # Told after each trim under pressure: the daemon's pool sheds its workers too (``daemon.Pool.shed``).
+        # Told after each trim under pressure: the daemon's supervisor sheds its processes too
+        # (``Supervisor.shed``).
         self.pressed: Callable[[], Any] = lambda: None
         self.stopping = threading.Event()
         # What the engine knows of a document it no longer holds (``NotHeld.payload``), else None.

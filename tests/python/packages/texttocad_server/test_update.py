@@ -185,7 +185,7 @@ class DrainTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         engine = daemon.Daemon(cap=1)
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         engine.busy, engine.holders = 1, 2  # a build in flight; two held sessions, which it does not wait for
         closed: list[str] = []
         engine.door = SimpleNamespace(close=lambda: closed.append("door"))

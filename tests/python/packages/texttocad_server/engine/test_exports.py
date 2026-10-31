@@ -481,7 +481,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual((self.folder / "file.step").read_bytes(), (self.folder / "model.step").read_bytes())
         # The daemon sends a file path to the documents worker, never to the worker that wrote it.
         engine = daemon.Daemon()
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         self.assertEqual(engine._routed({"source": {"path": str(declared)}, "cwd": str(self.folder)}),
                          ("documents", str(self.folder)))
 

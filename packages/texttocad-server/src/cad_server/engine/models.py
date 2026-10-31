@@ -2,8 +2,8 @@
 
 Only metadata lives here: a document's structure and shape bytes are the server's
 (``serve.Server``). Opening a document asks its worker for them; registration never meshes or
-materializes an unviewed model. A document outlives its worker: before the pool retires a worker,
-the daemon takes from it every document of it the server does not hold yet
+materializes an unviewed model. A document outlives its worker: before a worker is retired
+(``supervisor``), the daemon takes from it every document of it the server does not hold yet
 (``drain``), and the record stays with no worker (``held``). A ``shape`` document, a
 shape a program handed over (``hand_over``), has no worker from the start: it is held as a drained
 document is, and no command builds it again. A document held nowhere is never built here: whoever
@@ -386,9 +386,9 @@ class Models:
         return record if self.where(ident) else None
 
     def _working(self, worker: Any) -> bool:
-        """Whether ``worker`` holds its documents still: live in the pool, or out of it and alive --
-        being retired, and drained (``drain``) before it goes."""
-        return worker is not None and (self.daemon.pool.holds(worker) or worker.alive())
+        """Whether ``worker`` holds its documents still: live in the supervisor, or out of it and
+        alive -- being retired, and drained (``drain``) before it goes."""
+        return worker is not None and (self.daemon.supervisor.holds(worker) or worker.alive())
 
     def rebuild(self, ident: str) -> dict[str, Any] | None:
         """What the engine knows of a model document it does not hold: its state (``unsaved``), the
@@ -477,7 +477,7 @@ class Models:
         server = self.daemon.server
         if server is None or not worker.alive():
             return
-        from cad_server.engine.daemon import WorkerGone
+        from cad_server.engine.supervisor import Gone
 
         with self.lock:
             owed = [(ident, row["version"], row["revision"]) for ident, row in self.records.items()
@@ -488,7 +488,7 @@ class Models:
                 continue
             try:
                 structure, shapes, whole = self.load(ident, worker, whole=True)
-            except WorkerGone:
+            except Gone:
                 return
             except (OSError, ValueError, KeyError):
                 continue
@@ -509,7 +509,7 @@ class Models:
 
     def load(self, ident: str, leaving: Any = None, whole: bool = False) -> tuple:
         """A model document's structure and shape bytes, asked of the worker that holds it -- through
-        the pool, or of ``leaving``, a worker being retired (``drain``), directly, and then
+        a lease, or of ``leaving``, a worker being retired (``drain``), directly, and then
         (``whole``) with the whole document's xbf bytes third. ``serve.NotHeld`` when no worker holds
         it: nothing is built to bring it back. One no worker holds whose cache file is at its revision
         is read from it, through the documents worker (``from_disk``), its xbf bytes third."""
@@ -526,15 +526,15 @@ class Models:
         if leaving is None:
             self.cache.touch(ident)  # a read: its idle timer starts again
         order = {"op": "result", "script": source["script"], "name": source["name"]}
-        if leaving is None and not whole and self.daemon.pool.holds(worker):
+        if leaving is None and not whole and self.daemon.supervisor.holds(worker):
             replies = []
             # Asked of the worker that built it (``via``): a child model's is its parent's script's.
-            self.daemon.handle({**order, "env": worker.environment, "via": worker.script}, replies.append)
+            self.daemon.handle({**order, "env": worker.environment, "via": worker.label}, replies.append)
             answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
             payload = base64.b64decode(answer.get("payload", ""))
         else:
-            # Out of the pool and still alive: being retired, and asked before it goes.
-            answer = worker.build({"id": 1, **order, "whole": whole}, lambda _message: None)
+            # Out of the supervisor and still alive: being retired, and asked before it goes.
+            answer = worker.request({"id": 1, **order, "whole": whole}, lambda _message: None)
             payload = answer.pop("payload", b"")
         if "failed" in answer:
             raise ValueError(answer["failed"])
@@ -557,8 +557,8 @@ class Models:
         with self.lock:
             for ident, row in list(self.records.items()):
                 worker = row["worker"]
-                if worker is None or worker.alive() or self.daemon.pool.holds(worker):
-                    continue  # a worker out of the pool but alive is being retired: drained first
+                if worker is None or worker.alive() or self.daemon.supervisor.holds(worker):
+                    continue  # a worker out of the supervisor but alive is being retired: drained first
                 if self.daemon.builders.get(ident) is worker:
                     del self.daemon.builders[ident]
                 row["worker"] = None

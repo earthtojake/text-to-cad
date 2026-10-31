@@ -66,7 +66,7 @@ def surface() -> dict:
         stopped: list[dict] = []
         engine.handle({"op": "stop", "drain": True}, stopped.append)
     finally:
-        engine.pool.stop()
+        engine.supervisor.stop()
     endpoint = EngineApp.endpoint(SimpleNamespace(server=SimpleNamespace(url="URL", port=1), token="TOKEN"))
 
     # What A writes and B reads.

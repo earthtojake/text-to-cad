@@ -16,7 +16,9 @@ from typing import Any, Callable
 from unittest import mock
 
 from cad.engine import client, places, reader
-from cad_server.engine import daemon
+from cad_server.engine import daemon  # noqa: F401 - the kernel environment as the daemon names it (places.KERNEL)
+from cad_server.engine.services import WORKER
+from cad_server.engine.supervisor import Process
 from cad.engine.render import service
 
 # Windows' values: ``subprocess`` names them on Windows alone.
@@ -51,7 +53,7 @@ class WindowsConsoleTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="windowless-"))
         self.addCleanup(os.rmdir, folder)
         script = str(folder / "model.py")
-        for name, start in (("worker", lambda: daemon.Worker(script, dict(os.environ))),
+        for name, start in (("worker", lambda: Process.start(WORKER, script, script, dict(os.environ))),
                             ("reader", lambda: reader.Reader()._start()),
                             ("render process", lambda: service.RenderProcess(folder / "part.xbf", dict(os.environ)))):
             with self.subTest(process=name):

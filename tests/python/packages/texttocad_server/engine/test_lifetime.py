@@ -152,7 +152,7 @@ class NotHeldRefusalTest(unittest.TestCase):
         script = folder / "cell.py"
         script.write_text("", encoding="utf-8")
         engine = daemon.Daemon()
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         ident = model_id(script, "cell")
         # Built before, its worker crashed before anything kept it: no worker, no bytes, no cache file.
         engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": "cell"}, "worker": None,
@@ -181,7 +181,7 @@ class ListingTest(unittest.TestCase):
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-listing-")))
         self.addCleanup(shutil.rmtree, folder, True)
         engine = daemon.Daemon()
-        self.addCleanup(engine.pool.stop)
+        self.addCleanup(engine.supervisor.stop)
         idents = []
         for name, files in (("plain", []), ("declares", [str(folder / "XBF" / "declares.xbf"), str(folder / "declares.step")])):
             script = folder / f"{name}.py"
