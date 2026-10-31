@@ -60,6 +60,8 @@ from typing import Any, Callable
 
 import numpy as np
 
+from cad.engine import frames
+
 __all__ = ["Held", "Renders", "draw_here", "draw_here_each", "frame_camera", "holder", "main", "matte", "picture"]
 
 
@@ -502,35 +504,6 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
 # --- the render process ------------------------------------------------------------------------------
 
 
-def _read(stream: Any) -> tuple[dict[str, Any], bytes] | None:
-    """One frame: a JSON line and the bytes it says follow; None at the end of the stream."""
-    while True:
-        line = stream.readline()
-        if not line:
-            return None
-        if line.strip().startswith(b"{"):
-            break
-    message = json.loads(line)
-    size = int(message.get("bytes") or 0)
-    chunks, left = [], size
-    while left:
-        chunk = stream.read(left)
-        if not chunk:
-            raise EOFError("the stream ended inside a frame")
-        chunks.append(chunk)
-        left -= len(chunk)
-    return message, b"".join(chunks)
-
-
-def _write(stream: Any, message: dict[str, Any], payload: bytes = b"") -> None:
-    if payload:
-        message = {**message, "bytes": len(payload)}
-    stream.write(json.dumps(message, separators=(",", ":")).encode() + b"\n")
-    if payload:
-        stream.write(payload)
-    stream.flush()
-
-
 def main() -> int:
     """The render process: one served document, held warm, drawn on request."""
     sys.dont_write_bytecode = True
@@ -542,14 +515,14 @@ def main() -> int:
     from cad.engine.snapshot import SnapshotRefused, Still
     from cad.engine.worker import resident_mb, rss_cap_mb
 
-    _write(protocol, {"ready": os.getpid()})
+    frames.write(protocol, {"ready": os.getpid()})
     # Collected between requests alone: nothing of a scene is let go of while one draws.
     gc.disable()
     held: Held | None = None
-    frames = 0
+    drawn = 0  # the pictures it has drawn
     while True:
         gc.collect()
-        found = _read(sys.stdin.buffer)
+        found = frames.read(sys.stdin.buffer)
         if found is None:
             break
         request, payload = found
@@ -565,7 +538,7 @@ def main() -> int:
                         held.close()
                     held = Held(Path(request["path"]))
                 with pool():
-                    _write(protocol, {"id": ident, "held": held.hold(request["structure"], buffers)})
+                    frames.write(protocol, {"id": ident, "held": held.hold(request["structure"], buffers)})
                 continue
             if op == "open":  # a file no document, read by its reader here
                 if held is not None:
@@ -575,29 +548,29 @@ def main() -> int:
                 with pool():
                     answer = opened.open()
                 held = opened
-                _write(protocol, {"id": ident, "opened": answer})
+                frames.write(protocol, {"id": ident, "opened": answer})
                 continue
             if op != "frame":
-                _write(protocol, {"id": ident, "failed": f"unknown request {op!r}"})
+                frames.write(protocol, {"id": ident, "failed": f"unknown request {op!r}"})
                 continue
             if held is None:
                 raise RuntimeError("the renderer holds no document")
             with pool():
                 data, report = held.draw(Still.from_json(request["still"]))
-            frames += 1
+            drawn += 1
             resident, cap = resident_mb(), rss_cap_mb()
-            report["process"] = {"pid": os.getpid(), "frames": frames, "rssMb": None if resident is None else round(resident)}
+            report["process"] = {"pid": os.getpid(), "frames": drawn, "rssMb": None if resident is None else round(resident)}
             retire = resident is not None and cap is not None and resident > cap
             if retire:
                 report["retired"] = (f"the renderer held {resident:.0f} MB after the frame, over its {cap:.0f} MB cap "
                                      "(CAD_ENGINE_WORKER_RSS_MB): the next snapshot starts a fresh one")
-            _write(protocol, {"id": ident, "done": report}, data)
+            frames.write(protocol, {"id": ident, "done": report}, data)
             if retire:
                 return 0
         except (SnapshotRefused, FormatError) as error:
-            _write(protocol, {"id": ident, "refused": str(error)})
+            frames.write(protocol, {"id": ident, "refused": str(error)})
         except Exception as error:  # noqa: BLE001 - the renderer answers every request
-            _write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
+            frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
                               "trace": traceback.format_exc()})
     return 0
 
@@ -646,7 +619,7 @@ class RenderProcess:
         self.files: dict[str, Any] = {}  # a file no document: every file its reader read, stamped
         self.said: list[str] = []  # its last lines on stderr, for a failure's report
         threading.Thread(target=self._stderr, daemon=True).start()
-        ready = _read(self.process.stdout)
+        ready = frames.read(self.process.stdout)
         if ready is None or "ready" not in ready[0]:
             raise Gone(f"the renderer for {self.path.name} did not start: {self._last()}")
         self.pid = ready[0]["ready"]
@@ -672,8 +645,8 @@ class RenderProcess:
     def ask(self, request: dict[str, Any], payload: bytes = b"") -> tuple[dict[str, Any], bytes]:
         """One request and its answer (call with ``lock`` held)."""
         try:
-            _write(self.process.stdin, request, payload)
-            found = _read(self.process.stdout)
+            frames.write(self.process.stdin, request, payload)
+            found = frames.read(self.process.stdout)
         except (OSError, ValueError, EOFError) as error:
             raise Gone(f"the renderer for {self.path.name} is gone ({error}): {self._last()}") from None
         if found is None:

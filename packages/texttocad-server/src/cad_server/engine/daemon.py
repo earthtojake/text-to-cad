@@ -73,6 +73,7 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import replace_atomic
 from cad.engine.client import WORKER_STDERR
+from cad.engine import frames
 from cad.engine import places as _places
 from cad.engine.ids import canonical, file_id, is_id
 from cad.engine.places import (BYTECODE, NAME, RESTARTS, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, folder_refusal, installation, kernel, lock, lock_path, names, port_path, pycache, windowless)
@@ -333,13 +334,8 @@ the daemon runs, its folder first on its path; one of the base imports the base'
         stream = self.process.stdout
         assert stream is not None
         try:
-            for line in iter(stream.readline, b""):
-                line = line.strip()
-                if not line.startswith(b"{"):
-                    continue
-                message = json.loads(line)
-                size = int(message.get("bytes") or 0)
-                payload = _read_exactly(stream, size) if size else b""
+            while (found := frames.read(stream)) is not None:
+                message, payload = found
                 if "log" in message:
                     self._tell({"log": message["log"]})
                 elif "notice" in message:  # said to the caller at once (``worker.kernel``)
@@ -383,15 +379,10 @@ the daemon runs, its folder first on its path; one of the base imports the base'
         return self.process.poll() is None
 
     def _write(self, request: dict[str, Any], payload: bytes = b"") -> None:
-        """One request, its ``payload`` (``bytes`` of them) after its line."""
+        """One request, its ``payload`` (``bytes`` of them) after its line (``frames.write``)."""
         assert self.process.stdin is not None
-        if payload:
-            request = {**request, "bytes": len(payload)}
         with self.writing:
-            self.process.stdin.write((json.dumps(request) + "\n").encode())
-            if payload:
-                self.process.stdin.write(payload)
-            self.process.stdin.flush()
+            frames.write(self.process.stdin, request, payload)
 
     def where(self, doc: str, key: str, kind: str, ordinal: int, timeout: float = 10.0) -> dict[str, Any] | None:
         """What made one element of a document (``doc``, its id) this worker built, as its last
@@ -471,17 +462,6 @@ def refused(error: Exception) -> dict[str, Any]:
     if isinstance(error, NotHeld):
         found.update(state=error.state, rebuild=error.rebuild)
     return found
-
-
-def _read_exactly(stream: Any, size: int) -> bytes:
-    chunks = []
-    while size:
-        chunk = stream.read(size)
-        if not chunk:
-            raise EOFError("the worker closed its pipe inside a frame")
-        chunks.append(chunk)
-        size -= len(chunk)
-    return b"".join(chunks)
 
 
 # --- the pool -----------------------------------------------------------------------------

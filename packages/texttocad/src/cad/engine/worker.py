@@ -77,6 +77,8 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
+from cad.engine import frames
+
 
 # How long the worker waits for a next request, once it has answered, before it collects.
 COLLECT_IDLE = 0.5
@@ -496,13 +498,8 @@ def main() -> int:
     lock = threading.Lock()
 
     def send(message: dict[str, Any], payload: bytes = b"") -> None:
-        if payload:
-            message = {**message, "bytes": len(payload)}
         with lock:  # a frame is whole: the build's thread and the reader's both send
-            protocol.write(json.dumps(message, separators=(",", ":")).encode() + b"\n")
-            if payload:
-                protocol.write(payload)
-            protocol.flush()
+            frames.write(protocol, message, payload)
 
     from cad.engine.build import BuildError, build, made_by
     from cad.engine.profiling import quiet
